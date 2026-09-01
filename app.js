@@ -265,6 +265,7 @@ document.addEventListener('click',e=>{
 
 /* ── NAVEGAÇÃO ─────────────────────────────────────────────────────── */
 let tabAtiva='garrafeira';
+const ORDEM_TABS=['garrafeira','detalhe','locais','consumidos','cfg'];
 function tab(nome,btn){
   tabAtiva=nome;
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));
@@ -272,6 +273,8 @@ function tab(nome,btn){
   document.querySelectorAll('.itabs .it').forEach(b=>b.classList.remove('on'));
   if(btn)btn.classList.add('on');
   try{localStorage.setItem('gf_tab',nome);}catch(e){}
+  if(nome==='garrafeira'){renderResumo();renderPesquisa();}
+  if(nome==='detalhe')renderDetalhe();
   if(nome==='locais')renderMapa();
   if(nome==='consumidos')renderConsumidos();
   if(nome==='cfg')renderCfg();
@@ -281,39 +284,130 @@ function restaurarTab(){
   let t=null;try{t=localStorage.getItem('gf_tab');}catch(e){}
   if(!t||t==='garrafeira')return;
   const bts=document.querySelectorAll('.itabs .it');
-  const i=['garrafeira','locais','consumidos','cfg'].indexOf(t);
+  const i=ORDEM_TABS.indexOf(t);
   if(i>0&&bts[i])tab(t,bts[i]);
 }
 function abrirProcura(){
   const bts=document.querySelectorAll('.itabs .it');
   if(tabAtiva!=='garrafeira')tab('garrafeira',bts[0]);
-  const c=document.getElementById('f-texto');
+  const c=document.getElementById('pesq-texto');
   c.focus();c.select();
 }
 
-/* ── ESTATÍSTICAS ──────────────────────────────────────────────────── */
-function renderStats(){
-  const ativas=db.garrafas.filter(naGarrafeira);
-  const vinhosComStock=db.vinhos.filter(v=>stockDe(v.id)>0);
-  const regioes=new Set(vinhosComStock.map(v=>v.regiao).filter(Boolean));
-  const castas=new Set();vinhosComStock.forEach(v=>(v.castas||[]).forEach(c=>castas.add(c)));
-  const noPonto=vinhosComStock.filter(v=>janelaBeber(v)==='ponto').length;
-  // Só conta o que a IA já preencheu — somar os vinhos sem preço como 0 dava
-  // um total que parecia real e estava sempre errado por baixo.
-  const comPreco=ativas.filter(g=>IDXV[g.vinho_id]&&IDXV[g.vinho_id].preco_medio!=null);
-  const valor=comPreco.reduce((s,g)=>s+Number(IDXV[g.vinho_id].preco_medio),0);
+/* ── RESUMO (ecrã inicial) ─────────────────────────────────────────
+   Só quatro números, de propósito — nada de painel cheio ao estilo do
+   Goals. Três deles abrem, ao tocar, a contagem por casta/região; tocar
+   numa linha dessa contagem mostra os vinhos. Um "acordeão" de dois
+   níveis, sem modal nenhum — os dados já estão todos em memória. */
+let RESUMO_ABERTO=null;   // 'mono' | 'regiao' | 'casta' | null
+let RESUMO_DRILL=null;    // o nome escolhido dentro do card aberto, ou null
 
-  document.getElementById('stats').innerHTML=`
-    <div class="sc"><div class="sc-l">Garrafas</div><div class="sc-v">${ativas.length}</div>
-      <div class="sc-s">${vinhosComStock.length} vinho${vinhosComStock.length===1?'':'s'} diferente${vinhosComStock.length===1?'':'s'}</div></div>
-    <div class="sc co"><div class="sc-l">Regiões</div><div class="sc-v">${regioes.size}</div>
-      <div class="sc-s">${castas.size} casta${castas.size===1?'':'s'} diferentes</div></div>
-    <div class="sc cv"><div class="sc-l">No ponto</div><div class="sc-v">${noPonto}</div>
-      <div class="sc-s">${noPonto?'prontos a abrir':'sem janela de consumo ainda'}</div></div>
-    <div class="sc cb"><div class="sc-l">Valor estimado</div><div class="sc-v" style="font-size:27px">${valor?eur(valor):'—'}</div>
-      <div class="sc-s">${comPreco.length} de ${ativas.length} garrafas com preço</div></div>`;
-  const sub=document.getElementById('hdr-sub');
-  if(sub)sub.textContent=`${ativas.length} garrafa${ativas.length===1?'':'s'} · ${vinhosComStock.length} vinhos`;
+function contarPor(lista,campoFn){
+  const m=new Map();
+  lista.forEach(v=>{
+    (campoFn(v)||[]).forEach(k=>{
+      if(!k)return;
+      m.set(k,(m.get(k)||0)+1);
+    });
+  });
+  return [...m.entries()].map(([nome,n])=>({nome,n}))
+    .sort((a,b)=>b.n-a.n||a.nome.localeCompare(b.nome,'pt'));
+}
+function resumoToggle(qual){
+  RESUMO_ABERTO=RESUMO_ABERTO===qual?null:qual;
+  RESUMO_DRILL=null;
+  renderResumo();
+}
+function resumoDrill(qual,valor){
+  RESUMO_ABERTO=qual;RESUMO_DRILL=valor;
+  renderResumo();
+}
+function resumoVoltar(){RESUMO_DRILL=null;renderResumo();}
+
+function cardEstatico(label,valor,sub){
+  return `<div class="rcard">
+    <div class="rcard-head">
+      <div>
+        <div class="rcard-l">${esc(label)}</div>
+        <div class="rcard-v">${valor}</div>
+        <div class="rcard-s">${esc(sub)}</div>
+      </div>
+    </div>
+  </div>`;
+}
+// `filtroFn` decide quem entra no drilldown; `listaBase` é de onde se filtra
+// (os vinhos monocasta para o card b, todos os com stock para c/d).
+function cardExpansivel(id,label,valor,sub,rows,filtroFn,listaBase){
+  const aberto=RESUMO_ABERTO===id;
+  let det='';
+  if(aberto){
+    if(RESUMO_DRILL){
+      const vs=listaBase.filter(filtroFn).slice().sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+      det=`<div class="rcard-det">
+        <button class="lnk" onclick="resumoVoltar()">‹ voltar</button>
+        <div class="rdet-tit">${esc(RESUMO_DRILL)} <span class="rdet-n">${vs.length}</span></div>
+        <div class="rdet-lista">${vs.map(vinhoCardHTML).join('')||'<div class="note" style="padding:8px 0">Sem vinhos.</div>'}</div>
+      </div>`;
+    }else{
+      det=`<div class="rcard-det"><div class="rdet-rows">${
+        rows.length?rows.map(r=>`<div class="rdet-row" onclick="resumoDrill('${id}','${escJs(r.nome)}')">
+          <span>${esc(r.nome)}</span><span class="rdet-n">${r.n}</span></div>`).join('')
+        :'<div class="note" style="padding:8px 0">Sem dados ainda.</div>'}</div></div>`;
+    }
+  }
+  return `<div class="rcard clic${aberto?' open':''}">
+    <div class="rcard-head" onclick="resumoToggle('${id}')">
+      <div>
+        <div class="rcard-l">${esc(label)}</div>
+        <div class="rcard-v">${valor}</div>
+        <div class="rcard-s">${esc(sub)}</div>
+      </div>
+      <div class="rcard-chev">▾</div>
+    </div>
+    ${det}
+  </div>`;
+}
+function renderResumo(){
+  const box=document.getElementById('resumo-cards');
+  if(!box)return;
+  const comStock=db.vinhos.filter(v=>stockDe(v.id)>0);
+  const totalVinhos=comStock.length;
+
+  const monoWines=comStock.filter(v=>(v.castas||[]).length===1);
+  const monoRows=contarPor(monoWines,v=>[v.castas[0]]);
+
+  const regRows=contarPor(comStock,v=>[v.regiao||'Sem região']);
+  regRows.sort((a,b)=>(a.nome==='Sem região')-(b.nome==='Sem região')||b.n-a.n||a.nome.localeCompare(b.nome,'pt'));
+  const nRegioes=new Set(comStock.map(v=>v.regiao).filter(Boolean)).size;
+
+  // Aqui o mesmo vinho conta para CADA casta que tiver — a soma das linhas
+  // pode passar o total de vinhos, e é suposto: não é o mesmo número do
+  // card da esquerda, é "em quantos vinhos aparece cada casta".
+  const casRows=contarPor(comStock,v=>v.castas||[]);
+
+  box.innerHTML=
+    cardEstatico('Vinhos',totalVinhos,totalVinhos===1?'vinho na garrafeira':'vinhos na garrafeira')+
+    cardExpansivel('mono','Monocasta',monoWines.length,totalVinhos?`de ${totalVinhos} vinhos`:'',
+      monoRows,v=>(v.castas||[])[0]===RESUMO_DRILL,monoWines)+
+    cardExpansivel('regiao','Regiões',nRegioes,'diferentes',
+      regRows,v=>(v.regiao||'Sem região')===RESUMO_DRILL,comStock)+
+    cardExpansivel('casta','Castas',casRows.length,'diferentes',
+      casRows,v=>(v.castas||[]).includes(RESUMO_DRILL),comStock);
+}
+
+/* ── PESQUISA (ecrã inicial) ───────────────────────────────────────
+   Só texto — os filtros a sério (local, tipo, ano, menção…) vivem no
+   separador Detalhe. Aqui é para encontrar depressa um vinho pelo nome. */
+function renderPesquisa(){
+  const box=document.getElementById('pesq-resultados');
+  if(!box)return;
+  const termos=chave(document.getElementById('pesq-texto').value).split(/\s+/).filter(Boolean);
+  if(!termos.length){box.innerHTML='';return;}
+  const comStock=db.vinhos.filter(v=>stockDe(v.id)>0);
+  const res=comStock.filter(v=>passaTexto(v,termos)).sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+  box.innerHTML=res.length
+    ?`<div class="fcount" style="display:block;margin:2px 2px 10px">${res.length} resultado${res.length===1?'':'s'}</div>`+res.map(vinhoCardHTML).join('')
+    :'<div class="vazio">Nada encontrado com isso.</div>';
 }
 
 /* ── FILTROS ───────────────────────────────────────────────────────
@@ -355,11 +449,11 @@ function renderFiltros(){
     sel('mencao','🏅 Menção',o.mencao)+
     sel('janela','⏱️ Maturação',[['ponto','No ponto'],['cedo','Ainda cedo'],['passou','Já passou']]);
 }
-function setFiltro(k,v){F[k]=v;renderLista();}
+function setFiltro(k,v){F[k]=v;renderDetalhe();}
 function limparFiltros(){
   Object.keys(F).forEach(k=>F[k]='');
   document.getElementById('f-texto').value='';
-  renderLista();
+  renderDetalhe();
 }
 function haFiltros(){
   return Object.values(F).some(Boolean)||!!document.getElementById('f-texto').value.trim();
@@ -396,23 +490,33 @@ function vinhosFiltrados(){
     return passaTexto(v,termos);
   });
 }
-function ordenar(lista){
-  const o=document.getElementById('f-ordem').value;
-  const porNome=(a,b)=>a.nome.localeCompare(b.nome,'pt');
-  const c={
-    nome:porNome,
-    ano:(a,b)=>(a.ano||9999)-(b.ano||9999)||porNome(a,b),
-    'ano-desc':(a,b)=>(b.ano||0)-(a.ano||0)||porNome(a,b),
-    regiao:(a,b)=>(a.regiao||'zzz').localeCompare(b.regiao||'zzz','pt')||porNome(a,b),
-    local:(a,b)=>{
-      const l=v=>{const g=garrafasDe(v.id,true)[0];return g?nomeLocal(g.local_id)+' '+String(g.prateleira).padStart(9,'0'):'zzz';};
-      return l(a).localeCompare(l(b),'pt',{numeric:true})||porNome(a,b);
-    },
-    // sem nota vai para o fim, não para o topo com 0
-    vivino:(a,b)=>(b.vivino_nota||-1)-(a.vivino_nota||-1)||porNome(a,b),
-    recente:(a,b)=>String(b.criado_em||'').localeCompare(String(a.criado_em||''))||porNome(a,b)
-  }[o]||porNome;
-  return lista.slice().sort(c);
+// Agrupa a lista já filtrada para o separador Detalhe. Por região: grupos
+// alfabéticos, e dentro de cada um o mais novo primeiro (é o que se quer ao
+// abrir uma região — ver o que há de recente). Por ano: grupos do mais
+// recente para o mais velho, cada um por nome (não faz sentido ordenar por
+// ano dentro de um grupo que já É um ano só).
+function agruparVinhos(lista,modo){
+  if(modo==='ano'){
+    const porAno={};
+    lista.forEach(v=>{const k=v.ano||'__semano';(porAno[k]=porAno[k]||[]).push(v);});
+    const anos=Object.keys(porAno).filter(k=>k!=='__semano').map(Number).sort((a,b)=>b-a);
+    const grupos=anos.map(a=>({titulo:String(a),vinhos:porAno[a].slice().sort((x,y)=>x.nome.localeCompare(y.nome,'pt'))}));
+    if(porAno['__semano'])grupos.push({titulo:'Sem ano',vinhos:porAno['__semano'].slice().sort((x,y)=>x.nome.localeCompare(y.nome,'pt'))});
+    return grupos;
+  }
+  const porReg={};
+  lista.forEach(v=>{const k=v.regiao||'__semregiao';(porReg[k]=porReg[k]||[]).push(v);});
+  const regs=Object.keys(porReg).filter(k=>k!=='__semregiao').sort((a,b)=>a.localeCompare(b,'pt'));
+  const grupos=regs.map(r=>({titulo:r,vinhos:porReg[r].slice().sort((x,y)=>(y.ano||0)-(x.ano||0)||x.nome.localeCompare(y.nome,'pt'))}));
+  if(porReg['__semregiao'])grupos.push({titulo:'Sem região',vinhos:porReg['__semregiao'].slice().sort((x,y)=>x.nome.localeCompare(y.nome,'pt'))});
+  return grupos;
+}
+let DET_AGRUPAR='regiao';
+function detAgrupar(modo){
+  DET_AGRUPAR=modo;
+  document.getElementById('seg-regiao').classList.toggle('on',modo==='regiao');
+  document.getElementById('seg-ano').classList.toggle('on',modo==='ano');
+  renderDetalhe();
 }
 
 /* ── LISTA ─────────────────────────────────────────────────────────── */
@@ -446,22 +550,39 @@ function vinhoCardHTML(v){
     </div>
   </div>`;
 }
-function renderLista(){
-  renderStats();renderFiltros();
-  const res=ordenar(vinhosFiltrados());
+// A lista completa, organizada por região ou por ano (o que o Detalhe é
+// para). Os filtros/procura são os mesmos de sempre (F + #f-texto) —
+// só o "Ordenar" antigo é que virou "Agrupar por" (detAgrupar).
+function renderDetalhe(){
+  renderFiltros();
+  const res=vinhosFiltrados();
   const total=db.vinhos.filter(v=>stockDe(v.id)>0).length;
   const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
   document.getElementById('f-count').textContent=
     res.length===total?`${total} vinhos · ${nGar} garrafas`:`${res.length} de ${total} vinhos · ${nGar} garrafas`;
   document.getElementById('f-limpar').style.display=haFiltros()?'':'none';
-  const box=document.getElementById('lista');
+  const box=document.getElementById('detalhe-grupos');
   if(!res.length){
     box.innerHTML=`<div class="vazio">${db.vinhos.length
       ?'Nada corresponde a esta procura.'
       :'A garrafeira está vazia. Toca no + para pôr o primeiro vinho — ou, se ainda não migraste o que já tinhas, vai a Definições › Dados.'}</div>`;
     return;
   }
-  box.innerHTML=res.map(vinhoCardHTML).join('');
+  const grupos=agruparVinhos(res,DET_AGRUPAR);
+  box.innerHTML=grupos.map(g=>`<div class="dgrupo">
+      <div class="dgrupo-tit">${esc(g.titulo)} <span class="dgrupo-n">${g.vinhos.length}</span></div>
+      ${g.vinhos.map(vinhoCardHTML).join('')}
+    </div>`).join('');
+}
+
+// Dispatcher chamado depois de QUALQUER mutação (guardar, apagar, consumir,
+// mover…): atualiza os três sítios que mostram vinhos, sem se preocupar com
+// qual separador está aberto — o dataset é pequeno, refazer os três é mais
+// simples e mais seguro do que tentar adivinhar o que precisa de mudar.
+function renderLista(){
+  renderResumo();
+  renderPesquisa();
+  renderDetalhe();
 }
 
 /* ── MAPA DOS LOCAIS ───────────────────────────────────────────────
@@ -640,8 +761,8 @@ function filtrarPorCasta(nome){
   limparFiltros();
   F.casta=nome;
   const bts=document.querySelectorAll('.itabs .it');
-  if(tabAtiva!=='garrafeira')tab('garrafeira',bts[0]);
-  renderLista();
+  if(tabAtiva!=='detalhe')tab('detalhe',bts[ORDEM_TABS.indexOf('detalhe')]);
+  renderDetalhe();
   toast('A mostrar vinhos com '+nome);
 }
 

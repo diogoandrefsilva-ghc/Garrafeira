@@ -109,34 +109,38 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 <div class="wrap">
   <div class="itabs">
     <button class="it on" onclick="tab('garrafeira',this)">🍷 Garrafeira</button>
+    <button class="it" onclick="tab('detalhe',this)">📋 Detalhe</button>
     <button class="it" onclick="tab('locais',this)">📍 Locais</button>
     <button class="it" onclick="tab('consumidos',this)">📖 Consumidos</button>
     <button class="it" onclick="tab('cfg',this)">⚙️ Definições</button>
   </div>
 
-  <!-- ═══ GARRAFEIRA ═══ -->
+  <!-- ═══ GARRAFEIRA (ecrã inicial: resumo + procura) ═══ -->
   <section class="sec on" id="s-garrafeira">
-    <div class="g4" id="stats"></div>
+    <div id="resumo-cards"></div>
 
+    <div class="pesq-box">
+      <input type="search" id="pesq-texto" placeholder="Procurar por nome, produtor, casta, região…" oninput="renderPesquisa()">
+    </div>
+    <div id="pesq-resultados"></div>
+  </section>
+
+  <!-- ═══ DETALHE (lista completa, organizável) ═══ -->
+  <section class="sec" id="s-detalhe">
     <div class="filtros">
-      <input type="search" id="f-texto" placeholder="Procurar por nome, produtor, casta, região…" oninput="renderLista()">
+      <input type="search" id="f-texto" placeholder="Procurar por nome, produtor, casta, região…" oninput="renderDetalhe()">
       <div class="fchips" id="f-selects"></div>
       <div class="fbar">
         <span class="fcount" id="f-count"></span>
-        <select id="f-ordem" onchange="renderLista()">
-          <option value="nome">Ordenar: nome</option>
-          <option value="ano">Ordenar: ano (mais velho)</option>
-          <option value="ano-desc">Ordenar: ano (mais novo)</option>
-          <option value="regiao">Ordenar: região</option>
-          <option value="local">Ordenar: local</option>
-          <option value="vivino">Ordenar: nota Vivino</option>
-          <option value="recente">Ordenar: adicionado há menos tempo</option>
-        </select>
+        <div class="segbtns">
+          <button class="segbtn on" id="seg-regiao" onclick="detAgrupar('regiao')">Região</button>
+          <button class="segbtn" id="seg-ano" onclick="detAgrupar('ano')">Ano</button>
+        </div>
         <button class="lnk" id="f-limpar" onclick="limparFiltros()" style="display:none">limpar filtros</button>
       </div>
     </div>
 
-    <div id="lista"></div>
+    <div id="detalhe-grupos"></div>
   </section>
 
   <!-- ═══ LOCAIS ═══ -->

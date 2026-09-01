@@ -8,16 +8,43 @@ parte e isolado: `garrafeira`.
 
 ## Estrutura
 - `index.html` — só markup: os três ecrãs de autenticação (`page-login`,
-  `page-nova-pass`, `page-sem-acesso`), o splash, os 4 separadores e os 5
+  `page-nova-pass`, `page-sem-acesso`), o splash, os 5 separadores e os 5
   modais (que são preenchidos por JS, vazios no HTML).
-- `app.js` — **toda a lógica** (~1900 linhas). Secções (`grep` pelo título,
+- `app.js` — **toda a lógica** (~2000 linhas). Secções (`grep` pelo título,
   não leias o ficheiro todo):
   Sessão Supabase (`sbHeaders`/`sbFetch`/`sbReq`/`sbRpc`) · Permissões ·
-  **DB** (`carregar`) · Índices e cálculos · Navegação · Estatísticas ·
-  Filtros · Lista · Mapa dos locais · Consumidos · **Modal do vinho** ·
+  **DB** (`carregar`) · Índices e cálculos · Navegação · **Resumo** (ecrã
+  inicial) · Pesquisa (ecrã inicial) · Filtros · **Detalhe** (lista
+  organizada) · Mapa dos locais · Consumidos · **Modal do vinho** ·
   Modal editar/novo · Consumir garrafa · Modal da garrafa · **IA** ·
   Auth (Supabase) · Definições · Locais · **Utilizadores (admin)** ·
   **Migração dos dados antigos** · Exportar · Diagnóstico · Init.
+
+## Os cinco separadores (o ecrã inicial não é a lista)
+`Garrafeira` (resumo) · `Detalhe` · `Locais` · `Consumidos` · `Definições`.
+
+O ecrã inicial (`Garrafeira`) é **só isto**: quatro cards — vinhos,
+monocasta, regiões, castas — e uma caixa de procura por texto, com os
+resultados por baixo. De propósito: a primeira versão desta app copiou
+demasiado do Goals (painel cheio de números logo à entrada) e ficou
+carregada para o que é. Três dos quatro cards abrem, ao tocar, uma
+contagem — casta a casta ou região a região (`renderResumo`,
+`cardExpansivel`, `contarPor`) — e tocar numa linha dessa contagem mostra os
+vinhos (`resumoDrill`). É um acordeão de dois níveis, sem modal nenhum: os
+dados já estão todos em `db`, não há pedido nenhum ao Supabase a abrir um
+card.
+
+A **lista completa**, com os filtros todos (local/tipo/região/casta/
+monocasta/ano/menção/maturação) e a procura de texto, vive em `Detalhe`
+(`renderDetalhe`) — organizada por região ou por ano (`agruparVinhos`,
+`detAgrupar`), nunca uma lista solta. Um clique numa casta no modal do
+vinho (`filtrarPorCasta`) leva a `Detalhe` com esse filtro já aplicado, não
+ao ecrã inicial.
+
+`renderLista()` ficou como o despachante chamado depois de QUALQUER
+mutação (guardar, apagar, consumir, mover): atualiza resumo + pesquisa +
+detalhe de uma vez, sem tentar adivinhar qual separador está aberto — o
+dataset é pequeno, refazer os três é mais simples e mais seguro.
 - `style.css` — todo o CSS.
 - `sw.js` — service worker (cache PWA).
 - `vinho-info.ts` — a Edge Function que procura a ficha do vinho na net

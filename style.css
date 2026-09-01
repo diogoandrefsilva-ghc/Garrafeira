@@ -95,6 +95,42 @@ header{background:linear-gradient(160deg,var(--vhd) 0%,var(--vh) 58%,#a33556 130
 .fbar select{padding:6px 9px;border:1px solid var(--bo);border-radius:8px;font-size:12px;font-family:inherit;background:var(--bg)}
 .lnk{background:none;border:none;color:var(--vh);font-size:12px;font-family:inherit;cursor:pointer;text-decoration:underline}
 
+/* ── RESUMO (ecrã inicial) ──────────────────────────────────────── */
+.resumo-cards{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
+.rcard{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);overflow:hidden}
+.rcard-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;-webkit-tap-highlight-color:transparent}
+.rcard.clic .rcard-head{cursor:pointer;transition:background .13s}
+.rcard.clic .rcard-head:hover{background:var(--bg)}
+.rcard-l{font-size:10.5px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--mu);margin-bottom:6px}
+.rcard-v{font-family:'Bebas Neue',sans-serif;font-size:34px;line-height:1;color:var(--vh)}
+.rcard-s{font-size:11px;color:var(--mu);margin-top:3px}
+.rcard-chev{font-size:12px;color:var(--mu);transition:transform .18s;flex-shrink:0}
+.rcard.open .rcard-chev{transform:rotate(180deg)}
+.rcard-det{padding:0 16px 16px;border-top:1px solid var(--bo);margin-top:2px}
+.rdet-rows{margin-top:10px}
+.rdet-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 4px;border-bottom:1px solid var(--bo);
+  cursor:pointer;font-size:13.5px;transition:background .13s;-webkit-tap-highlight-color:transparent}
+.rdet-row:last-child{border-bottom:none}
+.rdet-row:hover{background:var(--vhp)}
+.rdet-n{font-size:11.5px;font-weight:700;color:var(--vh);background:var(--vhp);padding:2px 9px;border-radius:99px;flex-shrink:0}
+.rdet-tit{font-size:14px;font-weight:700;margin:10px 0 8px;display:flex;align-items:center;gap:8px}
+.rdet-lista{display:flex;flex-direction:column;gap:9px}
+
+/* ── PESQUISA (ecrã inicial) ────────────────────────────────────── */
+.pesq-box{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:13px 14px;margin-bottom:14px}
+.pesq-box input[type=search]{width:100%;padding:11px 13px;border:1px solid var(--bo);border-radius:9px;font-size:14.5px;
+  font-family:inherit;background:var(--bg);-webkit-appearance:none}
+.pesq-box input[type=search]:focus{outline:none;border-color:var(--vh);background:#fff}
+
+/* ── DETALHE (organizado por região/ano) ────────────────────────── */
+.segbtns{display:flex;border:1px solid var(--bo);border-radius:99px;overflow:hidden}
+.segbtn{padding:6px 13px;font-size:12px;font-family:inherit;border:none;background:#fff;color:var(--mu);cursor:pointer;font-weight:600}
+.segbtn.on{background:var(--vh);color:#fff}
+.dgrupo{margin-bottom:20px}
+.dgrupo-tit{font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--vh);
+  display:flex;align-items:center;gap:8px;padding-bottom:7px;margin-bottom:9px;border-bottom:2px solid var(--vhp)}
+.dgrupo-n{font-size:11px;font-weight:700;color:var(--mu);background:var(--bg);padding:2px 8px;border-radius:99px;text-transform:none;letter-spacing:0}
+
 /* ── CARTÃO DE VINHO ────────────────────────────────────────────── */
 .vcard{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:13px 15px;margin-bottom:9px;
   cursor:pointer;transition:box-shadow .15s,transform .1s;-webkit-tap-highlight-color:transparent}
