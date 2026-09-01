@@ -23,23 +23,30 @@ parte e isolado: `garrafeira`.
 ## Os cinco separadores (o ecrã inicial não é a lista)
 `Garrafeira` (resumo) · `Detalhe` · `Locais` · `Consumidos` · `Definições`.
 
-O ecrã inicial (`Garrafeira`) é **só isto**: quatro cards — vinhos,
-monocasta, regiões, castas — e uma caixa de procura por texto, com os
-resultados por baixo. De propósito: a primeira versão desta app copiou
-demasiado do Goals (painel cheio de números logo à entrada) e ficou
-carregada para o que é. Três dos quatro cards abrem, ao tocar, uma
-contagem — casta a casta ou região a região (`renderResumo`,
-`cardExpansivel`, `contarPor`) — e tocar numa linha dessa contagem mostra os
-vinhos (`resumoDrill`). É um acordeão de dois níveis, sem modal nenhum: os
-dados já estão todos em `db`, não há pedido nenhum ao Supabase a abrir um
-card.
+O ecrã inicial (`Garrafeira`) é **resumo + procura**: quatro cards —
+vinhos, monocasta, regiões, castas — e, por baixo, a procura com os filtros
+todos (texto, local, tipo, região, casta, monocasta, ano, menção,
+maturação). De propósito: a primeira versão copiou demasiado do Goals
+(painel cheio de números **e** a lista toda logo à entrada) e ficou
+carregada para o que é.
 
-A **lista completa**, com os filtros todos (local/tipo/região/casta/
-monocasta/ano/menção/maturação) e a procura de texto, vive em `Detalhe`
-(`renderDetalhe`) — organizada por região ou por ano (`agruparVinhos`,
-`detAgrupar`), nunca uma lista solta. Um clique numa casta no modal do
-vinho (`filtrarPorCasta`) leva a `Detalhe` com esse filtro já aplicado, não
-ao ecrã inicial.
+Os cards são os `.sc` de sempre, na grelha 2×2 — não mudes isso para uma
+lista vertical, já se tentou e ficou pobre. Três deles abrem, ao tocar, uma
+contagem casta a casta ou região a região (`renderResumo`, `scCard`,
+`resumoPainel`, `contarPor`); tocar numa linha dessa contagem mostra os
+vinhos (`resumoDrill`). O painel (`.sc-det`) abre **por baixo da grelha
+toda**, com `grid-column:1/-1` — pô-lo logo a seguir ao card aberto partia a
+grelha ao meio e deixava buracos.
+
+A lista só aparece quando há alguma coisa filtrada (`haFiltros()`): sem
+isso o ecrã inicial voltava a ser a lista toda, que é o que se quis tirar
+daqui. Um clique numa casta no modal do vinho (`filtrarPorCasta`) volta ao
+ecrã inicial com esse filtro aplicado — é lá que os filtros vivem.
+
+`Detalhe` (`renderDetalhe`) é a **lista completa sem filtro nenhum**, só
+organizada por região ou por ano (`agruparVinhos`, `detAgrupar`). Não lhe
+metas procura nem filtros: isso é a Garrafeira, e ter os dois sítios a
+filtrar era ter duas verdades sobre o que está a ser mostrado.
 
 `renderLista()` ficou como o despachante chamado depois de QUALQUER
 mutação (guardar, apagar, consumir, mover): atualiza resumo + pesquisa +

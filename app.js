@@ -290,7 +290,7 @@ function restaurarTab(){
 function abrirProcura(){
   const bts=document.querySelectorAll('.itabs .it');
   if(tabAtiva!=='garrafeira')tab('garrafeira',bts[0]);
-  const c=document.getElementById('pesq-texto');
+  const c=document.getElementById('f-texto');
   c.focus();c.select();
 }
 
@@ -324,47 +324,38 @@ function resumoDrill(qual,valor){
 }
 function resumoVoltar(){RESUMO_DRILL=null;renderResumo();}
 
-function cardEstatico(label,valor,sub){
-  return `<div class="rcard">
-    <div class="rcard-head">
-      <div>
-        <div class="rcard-l">${esc(label)}</div>
-        <div class="rcard-v">${valor}</div>
-        <div class="rcard-s">${esc(sub)}</div>
-      </div>
-    </div>
+// Um card da grelha, no formato de sempre (.sc, com a barra de cor à
+// esquerda). Com `id` fica clicável e ganha o chevron; sem `id` é só um
+// número (o card dos Vinhos).
+function scCard(cor,label,valor,sub,id){
+  const aberto=id&&RESUMO_ABERTO===id;
+  return `<div class="sc ${cor}${id?' sc-click':''}${aberto?' open':''}"${id?` onclick="resumoToggle('${id}')"`:''}>
+    ${id?'<div class="sc-chev">▾</div>':''}
+    <div class="sc-l">${esc(label)}</div>
+    <div class="sc-v">${valor}</div>
+    <div class="sc-s">${esc(sub)}</div>
   </div>`;
 }
-// `filtroFn` decide quem entra no drilldown; `listaBase` é de onde se filtra
-// (os vinhos monocasta para o card b, todos os com stock para c/d).
-function cardExpansivel(id,label,valor,sub,rows,filtroFn,listaBase){
-  const aberto=RESUMO_ABERTO===id;
-  let det='';
-  if(aberto){
-    if(RESUMO_DRILL){
-      const vs=listaBase.filter(filtroFn).slice().sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
-      det=`<div class="rcard-det">
-        <button class="lnk" onclick="resumoVoltar()">‹ voltar</button>
-        <div class="rdet-tit">${esc(RESUMO_DRILL)} <span class="rdet-n">${vs.length}</span></div>
-        <div class="rdet-lista">${vs.map(vinhoCardHTML).join('')||'<div class="note" style="padding:8px 0">Sem vinhos.</div>'}</div>
-      </div>`;
-    }else{
-      det=`<div class="rcard-det"><div class="rdet-rows">${
-        rows.length?rows.map(r=>`<div class="rdet-row" onclick="resumoDrill('${id}','${escJs(r.nome)}')">
-          <span>${esc(r.nome)}</span><span class="rdet-n">${r.n}</span></div>`).join('')
-        :'<div class="note" style="padding:8px 0">Sem dados ainda.</div>'}</div></div>`;
-    }
+/* O painel que abre por baixo da grelha. Dois estados: a contagem
+   (casta a casta, região a região) e, depois de se tocar numa linha, os
+   vinhos dessa linha. `filtroFn` decide quem entra nessa lista e
+   `listaBase` é de onde se filtra — os monocasta para o card do meio,
+   todos os com stock para os outros dois. */
+function resumoPainel(id,titulo,rows,filtroFn,listaBase){
+  if(RESUMO_DRILL){
+    const vs=listaBase.filter(filtroFn).slice().sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+    return `<div class="sc-det">
+      <button class="lnk" onclick="resumoVoltar()">‹ voltar</button>
+      <div class="rdet-tit">${esc(RESUMO_DRILL)} <span class="rdet-n">${vs.length}</span></div>
+      <div class="rdet-lista">${vs.map(vinhoCardHTML).join('')||'<div class="note" style="padding:8px 0">Sem vinhos.</div>'}</div>
+    </div>`;
   }
-  return `<div class="rcard clic${aberto?' open':''}">
-    <div class="rcard-head" onclick="resumoToggle('${id}')">
-      <div>
-        <div class="rcard-l">${esc(label)}</div>
-        <div class="rcard-v">${valor}</div>
-        <div class="rcard-s">${esc(sub)}</div>
-      </div>
-      <div class="rcard-chev">▾</div>
-    </div>
-    ${det}
+  return `<div class="sc-det">
+    <div class="rdet-cab">${esc(titulo)}</div>
+    <div class="rdet-rows">${rows.length
+      ?rows.map(r=>`<div class="rdet-row" onclick="resumoDrill('${id}','${escJs(r.nome)}')">
+        <span>${esc(r.nome)}</span><span class="rdet-n">${r.n}</span></div>`).join('')
+      :'<div class="note" style="padding:8px 0">Sem dados ainda.</div>'}</div>
   </div>`;
 }
 function renderResumo(){
@@ -382,32 +373,50 @@ function renderResumo(){
 
   // Aqui o mesmo vinho conta para CADA casta que tiver — a soma das linhas
   // pode passar o total de vinhos, e é suposto: não é o mesmo número do
-  // card da esquerda, é "em quantos vinhos aparece cada casta".
+  // primeiro card, é "em quantos vinhos aparece cada casta".
   const casRows=contarPor(comStock,v=>v.castas||[]);
 
-  box.innerHTML=
-    cardEstatico('Vinhos',totalVinhos,totalVinhos===1?'vinho na garrafeira':'vinhos na garrafeira')+
-    cardExpansivel('mono','Monocasta',monoWines.length,totalVinhos?`de ${totalVinhos} vinhos`:'',
-      monoRows,v=>(v.castas||[])[0]===RESUMO_DRILL,monoWines)+
-    cardExpansivel('regiao','Regiões',nRegioes,'diferentes',
-      regRows,v=>(v.regiao||'Sem região')===RESUMO_DRILL,comStock)+
-    cardExpansivel('casta','Castas',casRows.length,'diferentes',
-      casRows,v=>(v.castas||[]).includes(RESUMO_DRILL),comStock);
+  // Os quatro cards ficam sempre juntos na grelha 2×2 e o painel abre a
+  // seguir, a toda a largura (`grid-column:1/-1`). Pô-lo logo a seguir ao
+  // card aberto partia a grelha ao meio e deixava buracos.
+  let html=
+    scCard('','Vinhos',totalVinhos,totalVinhos===1?'vinho na garrafeira':'vinhos na garrafeira',null)+
+    scCard('co','Monocasta',monoWines.length,totalVinhos?`de ${totalVinhos} vinhos`:'','mono')+
+    scCard('cv','Regiões',nRegioes,'diferentes','regiao')+
+    scCard('cb','Castas',casRows.length,'diferentes','casta');
+
+  if(RESUMO_ABERTO==='mono')
+    html+=resumoPainel('mono','Vinhos monocasta, por casta',monoRows,v=>(v.castas||[])[0]===RESUMO_DRILL,monoWines);
+  if(RESUMO_ABERTO==='regiao')
+    html+=resumoPainel('regiao','Vinhos por região',regRows,v=>(v.regiao||'Sem região')===RESUMO_DRILL,comStock);
+  if(RESUMO_ABERTO==='casta')
+    html+=resumoPainel('casta','Vinhos por casta',casRows,v=>(v.castas||[]).includes(RESUMO_DRILL),comStock);
+
+  box.innerHTML=html;
 }
 
 /* ── PESQUISA (ecrã inicial) ───────────────────────────────────────
-   Só texto — os filtros a sério (local, tipo, ano, menção…) vivem no
-   separador Detalhe. Aqui é para encontrar depressa um vinho pelo nome. */
+   A procura com os filtros todos — texto, local, tipo, região, casta,
+   monocasta, ano, menção e maturação. Só mostra a lista quando há alguma
+   coisa a filtrar: sem isso, o ecrã inicial voltava a ser a lista toda,
+   que é o que se quis tirar daqui. */
 function renderPesquisa(){
   const box=document.getElementById('pesq-resultados');
   if(!box)return;
-  const termos=chave(document.getElementById('pesq-texto').value).split(/\s+/).filter(Boolean);
-  if(!termos.length){box.innerHTML='';return;}
-  const comStock=db.vinhos.filter(v=>stockDe(v.id)>0);
-  const res=comStock.filter(v=>passaTexto(v,termos)).sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+  renderFiltros();
+  const fc=document.getElementById('f-count');
+  const fl=document.getElementById('f-limpar');
+  if(!haFiltros()){
+    fl.style.display='none';fc.textContent='';box.innerHTML='';
+    return;
+  }
+  fl.style.display='';
+  const res=vinhosFiltrados().sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+  const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
+  fc.textContent=`${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'}`;
   box.innerHTML=res.length
-    ?`<div class="fcount" style="display:block;margin:2px 2px 10px">${res.length} resultado${res.length===1?'':'s'}</div>`+res.map(vinhoCardHTML).join('')
-    :'<div class="vazio">Nada encontrado com isso.</div>';
+    ?res.map(vinhoCardHTML).join('')
+    :'<div class="vazio">Nada corresponde a esta procura.</div>';
 }
 
 /* ── FILTROS ───────────────────────────────────────────────────────
@@ -449,11 +458,11 @@ function renderFiltros(){
     sel('mencao','🏅 Menção',o.mencao)+
     sel('janela','⏱️ Maturação',[['ponto','No ponto'],['cedo','Ainda cedo'],['passou','Já passou']]);
 }
-function setFiltro(k,v){F[k]=v;renderDetalhe();}
+function setFiltro(k,v){F[k]=v;renderPesquisa();}
 function limparFiltros(){
   Object.keys(F).forEach(k=>F[k]='');
   document.getElementById('f-texto').value='';
-  renderDetalhe();
+  renderPesquisa();
 }
 function haFiltros(){
   return Object.values(F).some(Boolean)||!!document.getElementById('f-texto').value.trim();
@@ -550,22 +559,17 @@ function vinhoCardHTML(v){
     </div>
   </div>`;
 }
-// A lista completa, organizada por região ou por ano (o que o Detalhe é
-// para). Os filtros/procura são os mesmos de sempre (F + #f-texto) —
-// só o "Ordenar" antigo é que virou "Agrupar por" (detAgrupar).
+// A lista COMPLETA, sem filtros nenhuns — só organizada por região ou por
+// ano. Filtrar e procurar é na Garrafeira; aqui é para percorrer tudo.
 function renderDetalhe(){
-  renderFiltros();
-  const res=vinhosFiltrados();
-  const total=db.vinhos.filter(v=>stockDe(v.id)>0).length;
-  const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
-  document.getElementById('f-count').textContent=
-    res.length===total?`${total} vinhos · ${nGar} garrafas`:`${res.length} de ${total} vinhos · ${nGar} garrafas`;
-  document.getElementById('f-limpar').style.display=haFiltros()?'':'none';
   const box=document.getElementById('detalhe-grupos');
+  if(!box)return;
+  const res=db.vinhos.filter(v=>stockDe(v.id)>0);
+  const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
+  document.getElementById('det-count').textContent=
+    `${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'}`;
   if(!res.length){
-    box.innerHTML=`<div class="vazio">${db.vinhos.length
-      ?'Nada corresponde a esta procura.'
-      :'A garrafeira está vazia. Toca no + para pôr o primeiro vinho — ou, se ainda não migraste o que já tinhas, vai a Definições › Dados.'}</div>`;
+    box.innerHTML='<div class="vazio">A garrafeira está vazia. Toca no + para pôr o primeiro vinho — ou, se ainda não migraste o que já tinhas, vai a Definições › Dados.</div>';
     return;
   }
   const grupos=agruparVinhos(res,DET_AGRUPAR);
@@ -761,8 +765,8 @@ function filtrarPorCasta(nome){
   limparFiltros();
   F.casta=nome;
   const bts=document.querySelectorAll('.itabs .it');
-  if(tabAtiva!=='detalhe')tab('detalhe',bts[ORDEM_TABS.indexOf('detalhe')]);
-  renderDetalhe();
+  if(tabAtiva!=='garrafeira')tab('garrafeira',bts[0]);
+  renderPesquisa();
   toast('A mostrar vinhos com '+nome);
 }
 

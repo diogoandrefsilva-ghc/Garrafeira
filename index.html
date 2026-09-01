@@ -115,28 +115,29 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
     <button class="it" onclick="tab('cfg',this)">⚙️ Definições</button>
   </div>
 
-  <!-- ═══ GARRAFEIRA (ecrã inicial: resumo + procura) ═══ -->
+  <!-- ═══ GARRAFEIRA (ecrã inicial: resumo + procura com filtros) ═══ -->
   <section class="sec on" id="s-garrafeira">
-    <div id="resumo-cards"></div>
+    <div class="g4" id="resumo-cards"></div>
 
-    <div class="pesq-box">
-      <input type="search" id="pesq-texto" placeholder="Procurar por nome, produtor, casta, região…" oninput="renderPesquisa()">
-    </div>
-    <div id="pesq-resultados"></div>
-  </section>
-
-  <!-- ═══ DETALHE (lista completa, organizável) ═══ -->
-  <section class="sec" id="s-detalhe">
     <div class="filtros">
-      <input type="search" id="f-texto" placeholder="Procurar por nome, produtor, casta, região…" oninput="renderDetalhe()">
+      <input type="search" id="f-texto" placeholder="Procurar por nome, produtor, casta, região…" oninput="renderPesquisa()">
       <div class="fchips" id="f-selects"></div>
       <div class="fbar">
         <span class="fcount" id="f-count"></span>
-        <div class="segbtns">
-          <button class="segbtn on" id="seg-regiao" onclick="detAgrupar('regiao')">Região</button>
-          <button class="segbtn" id="seg-ano" onclick="detAgrupar('ano')">Ano</button>
-        </div>
         <button class="lnk" id="f-limpar" onclick="limparFiltros()" style="display:none">limpar filtros</button>
+      </div>
+    </div>
+
+    <div id="pesq-resultados"></div>
+  </section>
+
+  <!-- ═══ DETALHE (lista completa, só organizada) ═══ -->
+  <section class="sec" id="s-detalhe">
+    <div class="dbar">
+      <span class="fcount" id="det-count"></span>
+      <div class="segbtns">
+        <button class="segbtn on" id="seg-regiao" onclick="detAgrupar('regiao')">Região</button>
+        <button class="segbtn" id="seg-ano" onclick="detAgrupar('ano')">Ano</button>
       </div>
     </div>
 
