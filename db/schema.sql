@@ -134,6 +134,13 @@ CREATE TABLE IF NOT EXISTS garrafeira.vinhos (
   estagio_meses integer,                       -- estágio em barrica/madeira
   estagio_texto text NOT NULL DEFAULT '',      -- "18 meses em barrica de carvalho francês"
   notas         text NOT NULL DEFAULT '',      -- notas próprias, escritas à mão
+  -- Link para a foto do rótulo. Vazio na esmagadora maioria dos vinhos: sem
+  -- link, a app DESENHA a garrafa (cor do vidro pelo `tipo`, ano no rótulo)
+  -- em SVG — não há pasta de imagens nem build nesta app, e uma garrafa
+  -- desenhada não falha offline nem depende de um link de terceiros que um
+  -- dia morre. A coluna existe para quem quiser pôr a foto de um rótulo em
+  -- particular; nada a preenche automaticamente.
+  imagem_url    text NOT NULL DEFAULT '',
 
   -- ── o que a IA/pesquisa descobriu (Edge Function `vinho-info`) ──
   -- Fica na mesma linha do vinho (e não numa tabela à parte) porque é UMA
@@ -162,6 +169,12 @@ CREATE TABLE IF NOT EXISTS garrafeira.vinhos (
   CONSTRAINT vinhos_vivino_chk CHECK (vivino_nota IS NULL OR (vivino_nota >= 0 AND vivino_nota <= 5)),
   CONSTRAINT vinhos_beber_chk CHECK (beber_ate IS NULL OR beber_de IS NULL OR beber_ate >= beber_de)
 );
+-- Numa base de dados que já existe (é o caso desta), a coluna acima entra
+-- com um ALTER — correr no SQL Editor. A app aguenta os dois estados: se a
+-- coluna não existir, o campo não aparece no formulário e não vai nas
+-- gravações (`detetarImagem()` em app.js).
+ALTER TABLE garrafeira.vinhos ADD COLUMN IF NOT EXISTS imagem_url text NOT NULL DEFAULT '';
+
 CREATE INDEX IF NOT EXISTS vinhos_nome_idx   ON garrafeira.vinhos (lower(nome));
 CREATE INDEX IF NOT EXISTS vinhos_regiao_idx ON garrafeira.vinhos (regiao);
 CREATE INDEX IF NOT EXISTS vinhos_ano_idx    ON garrafeira.vinhos (ano);

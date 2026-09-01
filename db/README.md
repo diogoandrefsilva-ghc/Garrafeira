@@ -32,6 +32,21 @@ o carimbo; `definir_admin` recusa quem não é admin **e** recusa passar a app
 a um email que não esteja em `allowed_users`; o `criado_por` dos vinhos é
 carimbado pelo trigger, não pelo cliente.
 
+### Por aplicar (layout novo)
+
+O layout alternativo acrescentou **uma** coluna: `vinhos.imagem_url` (link
+para a foto do rótulo, opcional). Correr no SQL Editor:
+
+```sql
+ALTER TABLE garrafeira.vinhos
+  ADD COLUMN IF NOT EXISTS imagem_url text NOT NULL DEFAULT '';
+```
+
+Não é urgente: a app deteta se a coluna existe (`detetarImagem()` em
+`app.js`) e, enquanto não existir, esconde o campo e não o manda nas
+gravações — em vez da foto mostra a garrafa desenhada, que é o que aparece
+na mesma para todos os vinhos sem link.
+
 **Falta o que não é SQL** — ver "Passos manuais" mais abaixo. Enquanto o
 schema não estiver exposto na API, a app dá 404 em tudo.
 

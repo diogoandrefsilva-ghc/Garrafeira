@@ -7,12 +7,15 @@ que já se bebeu.
 - **Dados e login no Supabase** (schema `garrafeira`, isolado das outras
   apps do mesmo projeto).
 - **Instalável** no telemóvel (PWA).
+- Cada vinho tem a sua **garrafa desenhada** (SVG, cor pelo tipo, ano no
+  rótulo) — ou a foto do rótulo, se lhe deres um link.
 
 ## O que faz
 
 | | |
 |---|---|
-| **Garrafeira** | tudo o que lá está, com procura por texto e filtros por local, tipo, região, **casta**, monocasta/várias castas, ano, menção e janela de maturação |
+| **Garrafeira** | resumo + procura: barra de texto sempre à vista e os filtros (local, tipo, região, **casta**, monocasta/várias castas, ano, menção, maturação) atrás do botão *Filtros* |
+| **Detalhe** | a lista toda, organizada por região ou por ano |
 | **Locais** | o mapa: cada local → cada prateleira → cada lugar |
 | **Consumidos** | o histórico — quando, onde e o que se achou de cada garrafa bebida |
 | **Definições** | conta, locais, utilizadores (admin), migração dos dados antigos, exportação e diagnóstico |
@@ -27,6 +30,9 @@ leituras automáticas entram como proposta, não como facto.
 
 1. **Base de dados:** correr no SQL Editor do Supabase, por esta ordem —
    `db/schema.sql` → `db/functions.sql` → `db/policies.sql` → `db/seed.sql`.
+   Numa base que já exista, falta só a coluna nova:
+   `ALTER TABLE garrafeira.vinhos ADD COLUMN IF NOT EXISTS imagem_url text NOT NULL DEFAULT '';`
+   (a app funciona à mesma sem ela — ver `db/README.md`).
 2. **Expor o schema:** Settings › API › *Exposed schemas* → juntar
    `garrafeira`. Sem isto todos os pedidos dão 404.
 3. **Redirect URLs:** Authentication › URL Configuration → juntar o endereço
