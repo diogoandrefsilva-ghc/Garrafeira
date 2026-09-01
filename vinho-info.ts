@@ -146,6 +146,11 @@ REGRAS, e são a sério:
    "lote" nem "várias castas" — isso é contado do lado da app.
 6. "beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que o vinho
    está no ponto. Para um vinho para beber já, "beberAte" é daqui a 2-3 anos.
+7. "imagemUrl" é o link DIRECTO de uma fotografia da garrafa ou do rótulo
+   (termina em .jpg/.jpeg/.png/.webp), de uma página que tenhas mesmo visto —
+   site do produtor ou de uma loja. Não é o link da página, é o da imagem. Se
+   não tiveres a certeza, deixa vazio: uma imagem errada é pior do que nenhuma,
+   porque quem olha para a ficha fica a pensar que é aquele o vinho.
 
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
 {
@@ -165,6 +170,7 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
   "vivinoNota": 4.1,
   "vivinoAvaliacoes": 1234,
   "vivinoUrl": "",
+  "imagemUrl": "",
   "precoMedio": 18.5,
   "beberDe": 2026,
   "beberAte": 2034,
@@ -259,6 +265,12 @@ function normalizar(raw: any, anoPedido: number | null): Record<string, unknown>
     vivino_nota: numero(raw.vivinoNota, 1, 5, 2),
     vivino_avaliacoes: (() => { const n = numero(raw.vivinoAvaliacoes, 0, 10_000_000, 0); return n === null ? null : Math.round(n); })(),
     vivino_url: /^https?:\/\//i.test(String(raw.vivinoUrl ?? "")) ? texto(raw.vivinoUrl, 300) : "",
+    // Aqui a validação é mais apertada do que no `vivino_url`: exige-se a
+    // extensão da imagem. O modelo tende a devolver o link da PÁGINA do
+    // produto em vez do da fotografia, e isso dava um <img> partido na ficha
+    // — pior do que não ter foto nenhuma.
+    imagem_url: /^https?:\/\/\S+\.(jpe?g|png|webp|avif)(\?\S*)?$/i.test(String(raw.imagemUrl ?? "").trim())
+      ? texto(raw.imagemUrl, 400) : "",
     preco_medio: numero(raw.precoMedio, 0.5, 100_000, 2),
     beber_de: beberDe,
     beber_ate: beberAte,

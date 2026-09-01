@@ -212,6 +212,10 @@ header{background:linear-gradient(160deg,var(--vhd) 0%,var(--vh) 58%,#a33556 130
 .mbox{background:var(--card);border-radius:16px;width:100%;max-width:520px;padding:20px;box-shadow:0 12px 44px rgba(0,0,0,.3);margin:auto}
 .mtop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px}
 .mtop h3{font-size:17px;font-weight:700;line-height:1.3}
+/* Foto do rótulo. `contain` porque estas imagens vêm de lojas diferentes,
+   umas em garrafa inteira e outras só o rótulo — cortar era deformar. */
+.vfoto{width:46px;height:62px;object-fit:contain;border-radius:4px;flex-shrink:0;
+  background:var(--bg);border:1px solid var(--bo)}
 .mx{background:none;border:none;font-size:22px;line-height:1;color:var(--mu);cursor:pointer;padding:0 2px;flex-shrink:0}
 .mbox label{display:block;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--mu);margin:12px 0 4px}
 .mbox input,.mbox select,.mbox textarea{width:100%;padding:10px 12px;border:1px solid var(--bo);border-radius:8px;

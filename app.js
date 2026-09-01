@@ -690,10 +690,19 @@ function vinhoDetalheHTML(v){
   const idadeInfo=v.beber_de||v.beber_ate
     ? `${v.beber_de||'?'} – ${v.beber_ate||'?'}${jan?`  <span class="bdg">${JANELA_TXT[jan]}</span>`:''}` : '';
 
+  // A imagem some-se sozinha se o link estiver morto (`onerror`): estes URLs
+  // vêm de lojas e de fichas do produtor, que mudam de sítio sem avisar, e um
+  // quadrado partido no topo da ficha é pior do que não ter foto nenhuma.
+  const foto=v.imagem_url
+    ? `<img class="vfoto" src="${esc(v.imagem_url)}" alt="" loading="lazy" onerror="this.remove()">` : '';
+
   return `<div class="mtop">
-      <div>
-        <h3>${esc(v.nome)}</h3>
-        <div class="note" style="margin-top:3px">${esc([v.produtor,v.ano,v.tipo,v.regiao].filter(Boolean).join(' · '))}</div>
+      <div style="display:flex;gap:12px;align-items:flex-start;min-width:0">
+        ${foto}
+        <div style="min-width:0">
+          <h3>${esc(v.nome)}</h3>
+          <div class="note" style="margin-top:3px">${esc([v.produtor,v.ano,v.tipo,v.regiao].filter(Boolean).join(' · '))}</div>
+        </div>
       </div>
       <button class="mx" onclick="fecharModal('modal-vinho')">✕</button>
     </div>
@@ -854,6 +863,10 @@ function abrirEditarVinho(id){
       <div><label>Nota Vivino</label><input type="text" id="e-vivino" inputmode="decimal" value="${esc(o('vivino_nota'))}" placeholder="4.1"></div>
     </div>
 
+    <label>Imagem do rótulo (link)</label>
+    <input type="url" id="e-imagem" value="${esc(o('imagem_url'))}" placeholder="https://…/rotulo.jpg">
+    <div class="note">O link da fotografia, não o da página da loja. Se ficar errado, a ficha simplesmente não mostra imagem.</div>
+
     <label>As minhas notas</label>
     <textarea id="e-notas" placeholder="Onde comprei, para que ocasião guardei, o que achei…">${esc(o('notas'))}</textarea>
 
@@ -899,6 +912,7 @@ function lerFormVinho(){
     beber_ate:inteiro(g('e-beber-ate')),
     preco_medio:num(g('e-preco')),
     vivino_nota:num(g('e-vivino')),
+    imagem_url:g('e-imagem'),
     notas:g('e-notas'),
     _castas:g('e-castas').split(',').map(s=>s.trim()).filter(Boolean)
   };
@@ -1247,7 +1261,8 @@ const IA_CAMPOS=[
   {k:'notas_prova',rot:'Notas de prova'},
   {k:'harmonizacao',rot:'Harmoniza com'},
   {k:'ai_resumo',rot:'Resumo'},
-  {k:'vivino_url',rot:'Link do Vivino'}
+  {k:'vivino_url',rot:'Link do Vivino'},
+  {k:'imagem_url',rot:'Imagem do rótulo'}
 ];
 
 function iaMostrarEspera(titulo){
@@ -1381,6 +1396,7 @@ function iaPreencherForm(res){
   por('e-teor',res.teor);
   por('e-beber-de',res.beber_de);por('e-beber-ate',res.beber_ate);
   por('e-preco',res.preco_medio);por('e-vivino',res.vivino_nota);
+  por('e-imagem',res.imagem_url);
   // O resumo e as notas de prova só entram quando o vinho for gravado (o
   // formulário não tem campos para eles) — ficam aqui à espera disso.
   _iaExtraNovo={
