@@ -142,6 +142,10 @@ CREATE TABLE IF NOT EXISTS garrafeira.vinhos (
   vivino_nota      numeric(3,2),               -- 0.00 a 5.00
   vivino_avaliacoes integer,
   vivino_url       text NOT NULL DEFAULT '',
+  -- URL de uma foto do rótulo/garrafa (site do produtor, loja, Vivino…), não
+  -- a imagem em si — guardar bytes numa coluna de texto é o que o Supabase
+  -- Storage existe para evitar. Se o link morrer, procura-se de novo.
+  imagem_url       text NOT NULL DEFAULT '',
   preco_medio      numeric(10,2),              -- EUR, garrafa de 0,75 L
   -- janela de consumo recomendada, em ANOS (não em idade): "beber entre
   -- 2026 e 2034". Guardado assim porque é o que as fichas dão e é o que
