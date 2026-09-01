@@ -6,6 +6,35 @@ outras apps (`diogoandrefsilva-personalapps-database`,
 `festasbv` e `splitbill` — tabelas, RLS e admin próprios, não toca em nada
 do que já lá está.
 
+## Estado
+
+O SQL **já foi aplicado** neste projeto (2026-09-01), como três migrações:
+`garrafeira_01_schema`, `garrafeira_02_functions` e `garrafeira_03_policies`
+(esta última inclui o `seed.sql`). Estão em `supabase_migrations` e podem
+ser vistas com `list_migrations`. Os ficheiros aqui continuam a ser a fonte
+de verdade — numa base de dados limpa correm-se pela ordem abaixo.
+
+Verificado depois de aplicar, com as sessões simuladas dentro de uma
+transação desfeita no fim:
+
+| quem | vê vinhos/garrafas | vê utilizadores | escreve |
+|---|---|---|---|
+| sem sessão (`anon`) | não | não | não |
+| autenticado sem acesso | não | não | não |
+| na lista, sem `pode_editar` | sim | só a sua linha | **não** |
+| editor | sim | só a sua linha | sim |
+| admin | sim | todos | sim |
+
+E as funções: `definir_castas` junta as grafias repetidas e apaga as castas
+que saíram da lista; `consumir_garrafa` recusa consumir a mesma garrafa duas
+vezes (a data e a nota do primeiro consumo aguentam); `repor_garrafa` limpa
+o carimbo; `definir_admin` recusa quem não é admin **e** recusa passar a app
+a um email que não esteja em `allowed_users`; o `criado_por` dos vinhos é
+carimbado pelo trigger, não pelo cliente.
+
+**Falta o que não é SQL** — ver "Passos manuais" mais abaixo. Enquanto o
+schema não estiver exposto na API, a app dá 404 em tudo.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
