@@ -1,0 +1,16 @@
+{
+  "name": "Garrafeira",
+  "short_name": "Garrafeira",
+  "description": "O que está na garrafeira, onde está, e o que já se bebeu.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#5c1630",
+  "theme_color": "#5c1630",
+  "icons": [
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "maskable" },
+    { "src": "icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

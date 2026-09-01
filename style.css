@@ -1,0 +1,235 @@
+/* Garrafeira — todo o CSS da app.
+   Estrutura herdada do Goals (mesma família de apps), paleta trocada para
+   vinho: bordô em vez de verde, dourado em vez de amarelo. */
+
+/* Bloqueia pinch-zoom e double-tap zoom (iOS PWA) */
+*{touch-action:manipulation}
+html,body{touch-action:pan-x pan-y}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --vh:#7b1f3d;--vh2:#9c2a4e;--vhp:#fbeef2;--vhd:#5c1630;
+  --ou:#b8860b;--oup:#fdf6e3;
+  --bg:#f6f3f1;--card:#fff;--tx:#1f1b1a;--mu:#6b625f;
+  --bo:#e6dfda;--dg:#c62828;--dgp:#ffebee;
+  --in:#1565c0;--inp:#e3f2fd;--vd:#2d6a4f;--vdp:#e6f2ec;
+  --r:12px;
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;-webkit-font-smoothing:antialiased}
+
+/* ── SPLASH ─────────────────────────────────────────────────────── */
+#gl-splash{position:fixed;inset:0;z-index:9999;background:linear-gradient(165deg,var(--vhd) 0%,var(--vh) 60%,#a33556 130%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity .28s ease}
+.gl-splash-logo{width:76px;height:76px;filter:drop-shadow(0 3px 10px rgba(0,0,0,.35))}
+.gl-splash-title{font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:2px;color:#fff}
+.gl-spin{width:26px;height:26px;border:3px solid rgba(255,255,255,.28);border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ── AUTENTICAÇÃO ───────────────────────────────────────────────── */
+.auth-page{display:none;position:fixed;inset:0;z-index:9000;background:var(--bg);overflow-y:auto;
+  flex-direction:column;align-items:center;justify-content:center;padding:28px 20px}
+.auth-page h2{font-family:'Bebas Neue',sans-serif;font-size:38px;letter-spacing:1.5px;color:var(--vh)}
+.auth-faixa{width:64px;height:4px;border-radius:99px;background:linear-gradient(90deg,var(--vh),var(--ou));margin:8px 0 14px}
+.auth-sub{font-size:13px;color:var(--mu);text-align:center;max-width:340px;line-height:1.55;margin-bottom:20px}
+.auth-card{background:var(--card);border:1px solid var(--bo);border-radius:16px;padding:22px;width:100%;max-width:380px;box-shadow:0 6px 24px rgba(92,22,48,.08)}
+.auth-card label{display:block;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--mu);margin:14px 0 5px}
+.auth-card input{width:100%;padding:11px 13px;border:1px solid var(--bo);border-radius:9px;font-size:15px;font-family:inherit;background:var(--bg)}
+.auth-card input:focus{outline:none;border-color:var(--vh);background:#fff}
+.auth-btn{width:100%;padding:12px;border-radius:9px;border:1px solid var(--bo);background:#fff;font-family:inherit;font-size:14px;
+  font-weight:600;cursor:pointer;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:9px;transition:all .15s}
+.auth-btn.prim{background:var(--vh);color:#fff;border-color:var(--vh)}
+.auth-btn.prim:hover{background:var(--vh2)}
+.auth-btn.ghost:hover{background:var(--vhp)}
+.auth-btn.link{border:none;background:none;color:var(--mu);font-weight:500;font-size:12.5px;text-decoration:underline;margin-top:8px}
+.auth-btn.google:hover{background:#f7f7f7}
+.auth-divider{text-align:center;font-size:11px;color:var(--mu);margin:16px 0 2px;position:relative}
+.auth-divider::before,.auth-divider::after{content:'';position:absolute;top:50%;width:33%;height:1px;background:var(--bo)}
+.auth-divider::before{left:0}.auth-divider::after{right:0}
+.auth-status{font-size:12.5px;margin-top:12px;line-height:1.5;text-align:center;color:var(--mu)}
+
+/* ── HEADER ─────────────────────────────────────────────────────── */
+header{background:linear-gradient(160deg,var(--vhd) 0%,var(--vh) 58%,#a33556 130%);color:#fff;position:sticky;top:0;z-index:100;box-shadow:0 2px 16px rgba(0,0,0,.2)}
+.hdr{max-width:1040px;margin:0 auto;padding:11px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.escudo{width:34px;height:34px;flex-shrink:0;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
+.escudo img{width:100%;height:100%;object-fit:contain;display:block}
+.brand h1{font-family:'Bebas Neue',sans-serif;font-size:23px;letter-spacing:1px;line-height:1;white-space:nowrap}
+.brand p{font-size:11px;opacity:.78;font-weight:300;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hnav{display:flex;gap:5px;flex-shrink:0}
+.hn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);color:#fff;padding:6px 12px;border-radius:8px;
+  cursor:pointer;font-size:12px;font-family:inherit;transition:all .15s;white-space:nowrap}
+.hn:hover{background:rgba(255,255,255,.2)}
+
+/* ── LAYOUT ─────────────────────────────────────────────────────── */
+.wrap{max-width:1040px;margin:0 auto;padding:18px 18px 90px}
+.sec{display:none}.sec.on{display:block}
+.itabs{position:sticky;top:57px;z-index:80;display:flex;gap:4px;margin-bottom:18px;background:#ebe6e2;padding:4px;
+  border-radius:12px;overflow-x:auto;scrollbar-width:none;box-shadow:0 0 0 18px var(--bg)}
+.itabs::-webkit-scrollbar{display:none}
+.it{background:none;border:none;padding:8px 12px;font-size:12.5px;font-family:inherit;cursor:pointer;color:var(--mu);
+  border-radius:9px;transition:all .15s;font-weight:500;white-space:nowrap;flex:1}
+.it:hover{color:var(--tx);background:rgba(255,255,255,.6)}
+.it.on{color:#fff;background:var(--vh);font-weight:600;box-shadow:0 2px 8px rgba(123,31,61,.3)}
+@media(max-width:520px){.it{padding:7px 8px;font-size:11.5px}}
+.note{font-size:12px;color:var(--mu);line-height:1.6}
+
+/* ── STAT CARDS ─────────────────────────────────────────────────── */
+.g4{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;margin-bottom:18px}
+.sc{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:14px 16px;border-left:3px solid var(--vh)}
+.sc.co{border-left-color:var(--ou)}.sc.cb{border-left-color:var(--in)}.sc.cv{border-left-color:var(--vd)}
+.sc-l{font-size:10.5px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--mu);margin-bottom:6px}
+.sc-v{font-family:'Bebas Neue',sans-serif;font-size:34px;line-height:1;color:var(--vh)}
+.sc-s{font-size:11px;color:var(--mu);margin-top:3px;line-height:1.4}
+
+/* ── FILTROS ────────────────────────────────────────────────────── */
+.filtros{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:13px 14px;margin-bottom:16px}
+.filtros input[type=search]{width:100%;padding:11px 13px;border:1px solid var(--bo);border-radius:9px;font-size:14.5px;
+  font-family:inherit;background:var(--bg);-webkit-appearance:none}
+.filtros input[type=search]:focus{outline:none;border-color:var(--vh);background:#fff}
+.fchips{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}
+.fchips select{padding:7px 9px;border:1px solid var(--bo);border-radius:99px;font-size:12px;font-family:inherit;
+  background:var(--bg);color:var(--tx);max-width:170px}
+.fchips select.ativo{background:var(--vh);color:#fff;border-color:var(--vh);font-weight:600}
+.fbar{display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap}
+.fcount{font-size:12px;color:var(--mu);flex:1;min-width:110px}
+.fbar select{padding:6px 9px;border:1px solid var(--bo);border-radius:8px;font-size:12px;font-family:inherit;background:var(--bg)}
+.lnk{background:none;border:none;color:var(--vh);font-size:12px;font-family:inherit;cursor:pointer;text-decoration:underline}
+
+/* ── CARTÃO DE VINHO ────────────────────────────────────────────── */
+.vcard{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:13px 15px;margin-bottom:9px;
+  cursor:pointer;transition:box-shadow .15s,transform .1s;-webkit-tap-highlight-color:transparent}
+.vcard:hover{box-shadow:0 3px 14px rgba(92,22,48,.09)}
+.vcard:active{transform:scale(.995)}
+.vc-top{display:flex;align-items:flex-start;gap:10px}
+.vc-cor{width:5px;align-self:stretch;border-radius:99px;background:var(--vh);flex-shrink:0}
+.vc-main{flex:1;min-width:0}
+.vc-nome{font-size:14.5px;font-weight:600;line-height:1.35}
+.vc-ano{font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--vh);line-height:1;flex-shrink:0;letter-spacing:.5px}
+.vc-sub{font-size:11.5px;color:var(--mu);margin-top:3px}
+.vc-badges{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.bdg{font-size:10.5px;padding:3px 8px;border-radius:99px;background:var(--bg);color:var(--mu);border:1px solid var(--bo);white-space:nowrap}
+.bdg.reg{background:var(--vhp);color:var(--vh);border-color:#f2d6de}
+.bdg.cas{background:var(--vdp);color:var(--vd);border-color:#cde4d8}
+.bdg.mono{background:var(--oup);color:#8a6508;border-color:#f0e2b8;font-weight:600}
+.bdg.men{background:var(--oup);color:#8a6508;border-color:#f0e2b8}
+.bdg.loc{background:var(--inp);color:var(--in);border-color:#cfe2f7}
+.bdg.viv{background:#fff4e5;color:#a35c00;border-color:#ffe0b2;font-weight:600}
+.bdg.qtd{background:var(--vh);color:#fff;border-color:var(--vh);font-weight:600}
+.vazio{text-align:center;padding:36px 16px;color:var(--mu);font-size:13px;font-style:italic}
+
+/* ── MAPA DOS LOCAIS ────────────────────────────────────────────── */
+.mloc{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:14px 16px;margin-bottom:12px}
+.mloc h3{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+.mloc h3 .pip{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.mloc-sub{font-size:11.5px;color:var(--mu);margin-top:2px}
+.mprat{margin-top:12px}
+.mprat-t{font-size:10.5px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--mu);margin-bottom:6px}
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:6px}
+.mcell{background:var(--bg);border:1px solid var(--bo);border-radius:8px;padding:7px 9px;cursor:pointer;
+  font-size:11.5px;line-height:1.35;transition:all .13s;-webkit-tap-highlight-color:transparent}
+.mcell:hover{background:var(--vhp);border-color:var(--vh)}
+.mcell b{display:block;font-family:'Bebas Neue',sans-serif;font-size:14px;color:var(--vh);letter-spacing:.5px}
+.mcell span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mu)}
+
+/* ── CONSUMIDOS ─────────────────────────────────────────────────── */
+.ccard{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:13px 15px;margin-bottom:9px;border-left:3px solid var(--ou)}
+.cc-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.cc-nome{font-size:14px;font-weight:600}
+.cc-data{font-size:11.5px;color:var(--mu);white-space:nowrap}
+.cc-onde{font-size:12.5px;color:var(--tx);margin-top:5px}
+.cc-nota{font-size:12px;color:var(--mu);font-style:italic;margin-top:4px;line-height:1.55}
+.estrelas{color:var(--ou);font-size:12px;letter-spacing:1px}
+
+/* ── DEFINIÇÕES ─────────────────────────────────────────────────── */
+.fcard{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:16px 18px;margin-bottom:14px}
+.fcard h3{font-size:14px;font-weight:700;margin-bottom:8px}
+.fcard h4{font-size:12.5px;font-weight:700;margin-bottom:6px}
+.fcard label{display:block;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--mu);margin:10px 0 4px}
+.fcard input,.fcard select,.fcard textarea{width:100%;padding:9px 11px;border:1px solid var(--bo);border-radius:8px;
+  font-size:14px;font-family:inherit;background:var(--bg)}
+.fcard input:focus,.fcard select:focus,.fcard textarea:focus{outline:none;border-color:var(--vh);background:#fff}
+.btn{padding:9px 14px;border-radius:9px;border:1px solid var(--bo);background:#fff;font-family:inherit;font-size:13px;
+  font-weight:600;cursor:pointer;transition:all .15s;margin-top:10px}
+.btn.prim{background:var(--vh);color:#fff;border-color:var(--vh)}
+.btn.prim:hover{background:var(--vh2)}
+.btn.ghost:hover{background:var(--vhp)}
+.btn.danger{background:var(--dgp);color:var(--dg);border-color:#f3c6c6}
+.btn:disabled{opacity:.55;cursor:default}
+.btn.full{width:100%}
+.linha-add{display:flex;gap:7px;flex-wrap:wrap;align-items:flex-end;margin-top:10px}
+.linha-add input,.linha-add select{flex:1;min-width:130px;padding:9px 11px;border:1px solid var(--bo);border-radius:8px;font-size:13.5px;font-family:inherit;background:var(--bg)}
+.linha-add .btn{margin-top:0}
+.ua-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bo);font-size:13px}
+.ua-row:last-child{border-bottom:none}
+.ua-row span.em{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ua-row .tagme{font-size:10px;background:var(--vhp);color:var(--vh);padding:2px 7px;border-radius:99px;white-space:nowrap}
+.jdel{background:none;border:none;font-size:15px;cursor:pointer;color:var(--dg);padding:3px 6px;line-height:1}
+.chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;white-space:nowrap}
+.chk input{width:auto;margin:0}
+.diag-l{font-size:11px;font-family:ui-monospace,Menlo,monospace;padding:6px 0;border-bottom:1px solid var(--bo);line-height:1.5;word-break:break-word}
+
+/* ── FAB ────────────────────────────────────────────────────────── */
+.fab{position:fixed;right:18px;bottom:20px;width:56px;height:56px;border-radius:50%;border:none;background:var(--vh);
+  color:#fff;font-size:30px;line-height:1;cursor:pointer;box-shadow:0 5px 20px rgba(123,31,61,.45);z-index:90;
+  display:flex;align-items:center;justify-content:center;transition:transform .13s}
+.fab:active{transform:scale(.93)}
+
+/* ── MODAIS ─────────────────────────────────────────────────────── */
+.modal{display:none;position:fixed;inset:0;z-index:200;background:rgba(28,12,18,.55);backdrop-filter:blur(2px);
+  overflow-y:auto;padding:20px 14px;align-items:flex-start;justify-content:center}
+.modal.on{display:flex}
+.mbox{background:var(--card);border-radius:16px;width:100%;max-width:520px;padding:20px;box-shadow:0 12px 44px rgba(0,0,0,.3);margin:auto}
+.mtop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px}
+.mtop h3{font-size:17px;font-weight:700;line-height:1.3}
+.mx{background:none;border:none;font-size:22px;line-height:1;color:var(--mu);cursor:pointer;padding:0 2px;flex-shrink:0}
+.mbox label{display:block;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--mu);margin:12px 0 4px}
+.mbox input,.mbox select,.mbox textarea{width:100%;padding:10px 12px;border:1px solid var(--bo);border-radius:8px;
+  font-size:14.5px;font-family:inherit;background:var(--bg)}
+.mbox input:focus,.mbox select:focus,.mbox textarea:focus{outline:none;border-color:var(--vh);background:#fff}
+.mbox textarea{resize:vertical;min-height:64px;line-height:1.5}
+.mrow{display:flex;gap:9px}
+.mrow>div{flex:1;min-width:0}
+.macoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.macoes .btn{margin-top:0;flex:1;min-width:118px}
+.mdet{margin-top:14px}
+.mdl{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--bo);font-size:13px;line-height:1.5}
+.mdl:last-child{border-bottom:none}
+.mdl b{flex:0 0 108px;font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.mdl span{flex:1;min-width:0}
+.msec{font-size:11px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--vh);margin:18px 0 2px;
+  padding-bottom:5px;border-bottom:2px solid var(--vhp)}
+.mgar{background:var(--bg);border:1px solid var(--bo);border-radius:9px;padding:9px 11px;margin-top:7px;
+  display:flex;align-items:center;gap:9px;font-size:12.5px}
+.mgar .g-onde{flex:1;min-width:0}
+.mgar .g-onde b{display:block;font-size:13px;font-weight:600;color:var(--tx);text-transform:none;letter-spacing:0}
+.mgar .g-onde i{font-size:11px;color:var(--mu);font-style:normal}
+.mini{padding:5px 9px;font-size:11.5px;border-radius:7px;border:1px solid var(--bo);background:#fff;font-family:inherit;
+  cursor:pointer;white-space:nowrap;font-weight:600}
+.mini.p{background:var(--vh);color:#fff;border-color:var(--vh)}
+.mini.o{background:var(--oup);color:#8a6508;border-color:#f0e2b8}
+.ia-linha{display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--bo)}
+.ia-linha:last-child{border-bottom:none}
+.ia-linha input[type=checkbox]{width:auto;margin-top:3px;flex-shrink:0}
+.ia-campo{flex:1;min-width:0;font-size:13px;line-height:1.5}
+.ia-campo b{display:block;font-size:10.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--mu)}
+.ia-antes{color:var(--mu);text-decoration:line-through;font-size:12px}
+.ia-fontes{font-size:11px;color:var(--mu);margin-top:12px;line-height:1.7;word-break:break-word}
+.ia-fontes a{color:var(--in)}
+.aviso{background:var(--oup);border:1px solid #f0e2b8;border-radius:9px;padding:10px 12px;font-size:12px;color:#7a5a06;line-height:1.55;margin-top:12px}
+.erro{background:var(--dgp);border:1px solid #f3c6c6;border-radius:9px;padding:10px 12px;font-size:12.5px;color:var(--dg);line-height:1.55;margin-top:12px}
+
+/* ── TOAST ──────────────────────────────────────────────────────── */
+.toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,80px);background:var(--tx);color:#fff;
+  padding:11px 18px;border-radius:99px;font-size:13px;z-index:400;opacity:0;transition:all .28s;pointer-events:none;
+  max-width:88vw;text-align:center;line-height:1.4}
+.toast.on{transform:translate(-50%,0);opacity:1}
+.toast.err{background:var(--dg)}
+
+/* ── PERMISSÕES ─────────────────────────────────────────────────────
+   Duas classes, duas fronteiras diferentes:
+     .ro-hide    esconde-se de quem NÃO pode editar (body.readonly)
+     .admin-hide esconde-se de quem NÃO é admin     (body.naoadmin)
+   Isto é só a UI. Quem manda é a RLS (is_editor()/is_admin() em
+   db/policies.sql) — esconder um botão nunca foi proteção nenhuma. */
+body.readonly .ro-hide{display:none!important}
+body.naoadmin .admin-hide{display:none!important}

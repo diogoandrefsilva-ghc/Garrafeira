@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Garrafeira 🍷</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Garrafeira">
+<meta name="theme-color" content="#5c1630">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
+<div id="gl-splash">
+  <img class="gl-splash-logo" src="icone.svg" alt="">
+  <div class="gl-splash-title">Garrafeira</div>
+  <div class="gl-spin"></div>
+</div>
+<script>
+window.glEsconderSplash = function(){
+  var s = document.getElementById('gl-splash');
+  if (s && s.style.display !== 'none') { s.style.opacity = '0'; setTimeout(function(){ if (s) s.style.display = 'none'; }, 280); }
+};
+setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }, 6000);
+</script>
+
+<!-- ═══ Páginas de autenticação (Supabase) ═══ -->
+<div class="auth-page" id="page-login">
+  <h2>Garrafeira</h2>
+  <div class="auth-faixa"></div>
+  <div class="auth-sub">O que está na garrafeira, onde está, e o que já se bebeu. Inicia sessão para continuar.</div>
+  <div class="auth-card">
+    <button class="auth-btn google" onclick="sbLoginGoogle()">
+      <svg width="17" height="17" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+      Entrar com Google
+    </button>
+    <div class="auth-divider">ou com email</div>
+    <label>Email</label>
+    <input type="email" id="login-email" autocomplete="email" placeholder="email@exemplo.com">
+    <label>Password</label>
+    <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••••">
+    <button class="auth-btn prim" onclick="sbLoginEmail()">Entrar</button>
+    <button class="auth-btn ghost" onclick="sbRegistarEmail()">Criar conta</button>
+    <button class="auth-btn link" onclick="sbRecuperarPassword()">Esqueci-me da password</button>
+    <div class="auth-status" id="login-status"></div>
+    <!-- Saída para quando o link do email não presta (gasto pelos scanners de
+         segurança do email antes de a pessoa lá chegar) -->
+    <div id="login-codigo" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--bo)">
+      <label style="margin-top:0">Código do email</label>
+      <input type="text" id="login-cod" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000">
+      <button class="auth-btn prim" id="btn-login-cod" onclick="sbVerificarCodigo()">Confirmar código</button>
+    </div>
+  </div>
+</div>
+
+<!-- Nova password (aberto pelo link do email de recuperação: #type=recovery) -->
+<div class="auth-page" id="page-nova-pass">
+  <h2>Nova password</h2>
+  <div class="auth-faixa"></div>
+  <div class="auth-sub" id="nova-pass-sub">Escolhe uma password nova para esta conta.</div>
+  <div class="auth-card">
+    <div id="nova-pass-campos">
+      <label style="margin-top:0">Nova password</label>
+      <input type="password" id="nova-pass-1" autocomplete="new-password" placeholder="••••••••">
+      <label>Repetir password</label>
+      <input type="password" id="nova-pass-2" autocomplete="new-password" placeholder="••••••••">
+      <button class="auth-btn prim" id="btn-nova-pass" onclick="sbDefinirNovaPassword()">Guardar password</button>
+      <button class="auth-btn ghost" onclick="sbLogout()">Cancelar</button>
+    </div>
+    <button class="auth-btn prim" id="btn-nova-pass-entrar" style="display:none" onclick="sbAposLogin()">Entrar na app</button>
+    <div class="auth-status" id="nova-pass-status"></div>
+  </div>
+</div>
+
+<div class="auth-page" id="page-sem-acesso">
+  <h2>Sem acesso</h2>
+  <div class="auth-faixa"></div>
+  <div class="auth-sub" id="sem-acesso-email"></div>
+  <div class="auth-card" style="text-align:center">
+    <button class="auth-btn prim" id="btn-solicitar" onclick="sbSolicitarAcesso()">Solicitar acesso</button>
+    <button class="auth-btn prim" id="btn-verificar" style="display:none" onclick="sbVerificarAcesso()">🔄 Verificar acesso</button>
+    <div class="auth-status" id="solicitar-status"></div>
+    <button class="auth-btn ghost" onclick="sbLogout()" style="margin-top:10px">Terminar sessão</button>
+  </div>
+</div>
+
+<header>
+  <div class="hdr">
+    <div class="brand">
+      <div class="escudo"><img src="icone.svg" alt=""></div>
+      <div>
+        <h1>Garrafeira</h1>
+        <p id="hdr-sub">&nbsp;</p>
+      </div>
+    </div>
+    <nav class="hnav">
+      <button class="hn" onclick="abrirProcura()" title="Procurar">🔍</button>
+      <button class="hn" onclick="sbLogout()" title="Terminar sessão">Sair</button>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="itabs">
+    <button class="it on" onclick="tab('garrafeira',this)">🍷 Garrafeira</button>
+    <button class="it" onclick="tab('locais',this)">📍 Locais</button>
+    <button class="it" onclick="tab('consumidos',this)">📖 Consumidos</button>
+    <button class="it" onclick="tab('cfg',this)">⚙️ Definições</button>
+  </div>
+
+  <!-- ═══ GARRAFEIRA ═══ -->
+  <section class="sec on" id="s-garrafeira">
+    <div class="g4" id="stats"></div>
+
+    <div class="filtros">
+      <input type="search" id="f-texto" placeholder="Procurar por nome, produtor, casta, região…" oninput="renderLista()">
+      <div class="fchips" id="f-selects"></div>
+      <div class="fbar">
+        <span class="fcount" id="f-count"></span>
+        <select id="f-ordem" onchange="renderLista()">
+          <option value="nome">Ordenar: nome</option>
+          <option value="ano">Ordenar: ano (mais velho)</option>
+          <option value="ano-desc">Ordenar: ano (mais novo)</option>
+          <option value="regiao">Ordenar: região</option>
+          <option value="local">Ordenar: local</option>
+          <option value="vivino">Ordenar: nota Vivino</option>
+          <option value="recente">Ordenar: adicionado há menos tempo</option>
+        </select>
+        <button class="lnk" id="f-limpar" onclick="limparFiltros()" style="display:none">limpar filtros</button>
+      </div>
+    </div>
+
+    <div id="lista"></div>
+  </section>
+
+  <!-- ═══ LOCAIS ═══ -->
+  <section class="sec" id="s-locais">
+    <div class="note">O mapa da garrafeira: cada local, cada prateleira, cada lugar. Toca num lugar para abrir o vinho.</div>
+    <div id="mapa"></div>
+  </section>
+
+  <!-- ═══ CONSUMIDOS ═══ -->
+  <section class="sec" id="s-consumidos">
+    <div class="g4" id="stats-consumo"></div>
+    <div id="consumidos"></div>
+  </section>
+
+  <!-- ═══ DEFINIÇÕES ═══ -->
+  <section class="sec" id="s-cfg">
+    <div class="fcard">
+      <h3>Conta</h3>
+      <div class="note" id="conta-email"></div>
+      <div class="note" id="conta-papel" style="margin-top:4px"></div>
+      <button class="btn ghost" onclick="toggleAdmPass()">Alterar a minha password</button>
+      <div id="adm-pass-box" style="display:none;margin-top:10px">
+        <label>Nova password</label>
+        <input type="password" id="adm-pass-1" autocomplete="new-password" placeholder="••••••••">
+        <label>Repetir</label>
+        <input type="password" id="adm-pass-2" autocomplete="new-password" placeholder="••••••••">
+        <button class="btn prim" onclick="sbAlterarPassword()">Guardar</button>
+        <div class="note" id="adm-pass-status"></div>
+      </div>
+      <button class="btn ghost" onclick="sbLogout()" style="margin-top:10px">Terminar sessão</button>
+    </div>
+
+    <div class="fcard ro-hide" id="fcard-locais">
+      <h3>Locais da garrafeira</h3>
+      <div class="note">Onde as garrafas moram. As prateleiras escrevem-se em cada garrafa — aqui só ficam os sítios.</div>
+      <div id="cfg-locais"></div>
+      <button class="btn ghost" onclick="novoLocal()">+ Novo local</button>
+    </div>
+
+    <div class="fcard admin-hide" id="fcard-utilizadores">
+      <h3>Utilizadores</h3>
+      <div class="note">Pedidos de acesso à espera:</div>
+      <div id="adm-pedidos-list"></div>
+      <div class="note" style="margin-top:14px">Com acesso — marca <b>Editor</b> a quem também pode mexer nas garrafas:</div>
+      <div id="adm-users-list"></div>
+      <div class="linha-add">
+        <input type="email" id="adm-user-novo" placeholder="email@exemplo.com">
+        <button class="btn prim" onclick="admAdicionarUtilizador()">Dar acesso</button>
+      </div>
+
+      <h4 style="margin-top:18px">Password temporária</h4>
+      <div class="note">Este projeto Supabase não tem email próprio configurado. Em vez de depender do "esqueci-me da password", gera aqui uma password, dita-a à pessoa, e ela troca-a em Definições › Conta.</div>
+      <div class="linha-add">
+        <select id="adm-pt-email"></select>
+        <input type="text" id="adm-pt-pass" placeholder="mínimo 8 caracteres">
+        <button class="btn ghost" onclick="admGerarPassTemp()">Gerar</button>
+      </div>
+      <div class="note" id="adm-pt-status"></div>
+
+      <h4 style="margin-top:18px">Passar a app a outra pessoa</h4>
+      <div class="note">O admin é quem manda em quem tem acesso. Passar a app a alguém tira-te esse poder — quem escolheres tem de já estar na lista acima.</div>
+      <div class="linha-add">
+        <select id="adm-dono-email"></select>
+        <button class="btn danger" onclick="admPassarAdmin()">Passar a app</button>
+      </div>
+      <div class="note" id="adm-dono-status"></div>
+    </div>
+
+    <div class="fcard ro-hide" id="fcard-dados">
+      <h3>Dados</h3>
+      <div class="note">Cópia de segurança do que está na app, em JSON. Só download — a app lê sempre do Supabase.</div>
+      <button class="btn ghost" onclick="exportarJSON()">⬇️ Exportar JSON</button>
+      <div id="mig-box" style="margin-top:16px"></div>
+    </div>
+
+    <div class="fcard admin-hide" id="fcard-diag">
+      <h3>Diagnóstico</h3>
+      <div class="note">Últimas procuras à IA (browser → Edge Function → Gemini). Do lado do browser vê-se sempre "502"; a causa está aqui.</div>
+      <button class="btn ghost" onclick="renderDiag()">🔄 Ver últimas</button>
+      <div id="diag-box"></div>
+    </div>
+
+    <div class="fcard">
+      <h3>Sobre</h3>
+      <div class="note" id="sobre-box"></div>
+    </div>
+  </section>
+</div>
+
+<button class="fab ro-hide" onclick="abrirNovoVinho()" title="Adicionar vinho">+</button>
+
+<!-- ═══ MODAIS ═══ -->
+<div class="modal" id="modal-vinho"><div class="mbox" id="modal-vinho-in"></div></div>
+<div class="modal" id="modal-edit"><div class="mbox" id="modal-edit-in"></div></div>
+<div class="modal" id="modal-consumir"><div class="mbox" id="modal-consumir-in"></div></div>
+<div class="modal" id="modal-garrafa"><div class="mbox" id="modal-garrafa-in"></div></div>
+<div class="modal" id="modal-ia"><div class="mbox" id="modal-ia-in"></div></div>
+
+<div class="toast" id="toast"></div>
+
+<script src="dados-iniciais.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

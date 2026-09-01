@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180" role="img" aria-label="Garrafeira">
+  <rect width="180" height="180" rx="40" fill="#5c1630"/>
+  <!-- bojo: um segmento de circunferência (rebordo direito em cima), a prova
+       lá dentro, e depois o pé e a base -->
+  <path d="M56.1 46 A36 36 0 0 0 123.9 46 Z" fill="#f7e7c8"/>
+  <path d="M60.5 64 A33 33 0 0 0 119.5 64 Z" fill="#a3123f"/>
+  <rect x="86" y="92" width="8" height="40" rx="3" fill="#f7e7c8"/>
+  <ellipse cx="90" cy="136" rx="31" ry="7" fill="#f7e7c8"/>
+</svg>
