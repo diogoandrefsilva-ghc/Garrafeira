@@ -181,6 +181,7 @@ async function carregar(){
 
   await detetarImagem();
   await detetarLinks();
+  await detetarAtualizado();
   await assinarImagens();
   reindexar();
   aplicarPermissoes();
@@ -211,6 +212,16 @@ async function detetarLinks(){
   if(db.vinhos.length){TEM_LINKS=('links' in db.vinhos[0]);return;}
   try{await sbReq('GET','vinhos?select=links&limit=1');TEM_LINKS=true;}
   catch(e){TEM_LINKS=false;}
+}
+
+// `vinhos.atualizado_em` é coluna NOVA (ver db/schema.sql) — mesmo padrão.
+// Enquanto a migração não corre, `guardarVinho()` não a manda no PATCH/POST
+// e a página do vinho usa `criado_em` como recurso.
+let TEM_ATUALIZADO=false;
+async function detetarAtualizado(){
+  if(db.vinhos.length){TEM_ATUALIZADO=('atualizado_em' in db.vinhos[0]);return;}
+  try{await sbReq('GET','vinhos?select=atualizado_em&limit=1');TEM_ATUALIZADO=true;}
+  catch(e){TEM_ATUALIZADO=false;}
 }
 
 /* ── ÍNDICES E CÁLCULOS ────────────────────────────────────────────── */
@@ -1282,23 +1293,32 @@ function vinhoDetalheHTML(v){
       ${Array.isArray(v.ai_fontes)&&v.ai_fontes.length
         ? '<br>Fontes: '+v.ai_fontes.map(f=>`<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo||f.url)}</a>`).join(' · ')
         : ''}
-      ${v.vivino_url?`<br><a href="${esc(v.vivino_url)}" target="_blank" rel="noopener">Ver no Vivino</a>`:''}
-      <br><i>Vem de uma pesquisa automática — vale como ponto de partida, não como certeza.</i>
     </div>`:''}
 
-    ${TEM_LINKS?`<div class="msec">Links</div>
-      ${(v.links||[]).length
+    ${(TEM_LINKS||v.vivino_url)?`<div class="msec">Links</div>
+      ${v.vivino_url?`<div class="mgar">
+          <div class="g-onde"><b><a href="${esc(v.vivino_url)}" target="_blank" rel="noopener">Ver no Vivino</a></b></div>
+        </div>`:''}
+      ${TEM_LINKS?((v.links||[]).length
         ? (v.links||[]).map((l,i)=>`<div class="mgar">
             <div class="g-onde"><b><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.titulo||l.url)}</a></b></div>
             <button class="mini ro-hide" onclick="removerLink(${v.id},${i})">✕</button>
           </div>`).join('')
-        : '<div class="note" style="padding:8px 0">Sem links guardados.</div>'}
-      <button class="btn ghost ro-hide" onclick="adicionarLink(${v.id})">+ Acrescentar link</button>`:''}
+        : (v.vivino_url?'':'<div class="note" style="padding:8px 0">Sem links guardados.</div>'))
+        :''}
+      ${TEM_LINKS?`<button class="btn ghost ro-hide" onclick="adicionarLink(${v.id})">+ Acrescentar link</button>`:''}`:''}
 
     ${bebidas.length?`<div class="msec">Já bebidas (${bebidas.length})</div>
       ${bebidas.sort((a,b)=>String(b.consumido_em).localeCompare(String(a.consumido_em))).map(g=>`
         <div class="mgar"><div class="g-onde"><b>${dataPT(g.consumido_em)}${g.consumo_local?' · '+esc(g.consumo_local):''}</b>
           <i>${g.consumo_avaliacao?estrelas(g.consumo_avaliacao)+' ':''}${esc(g.consumo_nota||'')}</i></div></div>`).join('')}`:''}
+
+    <div class="msec">Atualizações</div>
+    <div class="mdet">
+      ${linha('Pesquisa com IA',v.ai_atualizado_em&&/^gemini/i.test(String(v.ai_modelo||''))
+        ?dataHoraLocal(v.ai_atualizado_em):'Ainda não')}
+      ${linha('Atualização manual',dataHoraLocal(TEM_ATUALIZADO?(v.atualizado_em||v.criado_em):v.criado_em))}
+    </div>
 
     <div class="macoes">
       <button class="btn ghost" onclick="fecharModal('modal-vinho')">Fechar</button>
@@ -1619,6 +1639,10 @@ async function guardarVinho(id){
   // a procura da IA deixou-os em `_iaExtraNovo` e é aqui que se juntam. Só na
   // CRIAÇÃO — a editar, quem manda nesses campos é o painel de confirmação.
   if(!id&&_iaExtraNovo)Object.assign(f,_iaExtraNovo);
+  // Carimbo da gravação à mão — separado do carimbo da IA (`ai_atualizado_em`),
+  // que só muda ao aceitar-se uma pesquisa. Só entra se a coluna existir
+  // (ver `detetarAtualizado`).
+  if(TEM_ATUALIZADO)f.atualizado_em=new Date().toISOString();
 
   const btn=document.getElementById('e-guardar');
   btn.disabled=true;btn.textContent='A guardar…';
@@ -2042,8 +2066,8 @@ function iaConfirmarRepetir(vinhoId,ult){
       ? 'Utilizaste a pesquisa para este vinho pela última vez em'
       : 'A pesquisa para este vinho foi utilizada pela última vez em'}
       <b>${esc(dataHoraLocal(ult.quando))}</b>. Pretendes fazer novamente a pesquisa?</div>
-    <div class="note" style="margin-top:8px">Cada procura é uma pesquisa na net paga. A ficha de um
-      vinho raramente muda de um mês para o outro — se foi há pouco, é provável que volte o mesmo.</div>
+    <div class="note" style="margin-top:8px">A ficha de um vinho raramente muda de um mês para o
+      outro — se foi há pouco, é provável que volte o mesmo.</div>
 
     <div class="macoes">
       <button class="btn prim" onclick="iaArrancar(${vinhoId})">Procurar à mesma</button>

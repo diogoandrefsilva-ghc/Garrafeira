@@ -176,6 +176,11 @@ CREATE TABLE IF NOT EXISTS garrafeira.vinhos (
 
   criado_em     timestamptz NOT NULL DEFAULT now(),
   criado_por    text NOT NULL DEFAULT '',
+  -- Carimbada pela app a cada gravação manual (criar ou editar o vinho no
+  -- formulário) — separada de `ai_atualizado_em` de propósito: aquela é
+  -- quando se aceitou uma pesquisa da IA, esta é quando uma pessoa mexeu na
+  -- ficha à mão. É o que o separador "Atualizações" da página do vinho mostra.
+  atualizado_em timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT vinhos_pkey PRIMARY KEY (id),
   CONSTRAINT vinhos_ano_chk CHECK (ano IS NULL OR (ano BETWEEN 1900 AND 2100)),
   CONSTRAINT vinhos_vivino_chk CHECK (vivino_nota IS NULL OR (vivino_nota >= 0 AND vivino_nota <= 5)),
