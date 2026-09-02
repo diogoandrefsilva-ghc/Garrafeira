@@ -1105,15 +1105,15 @@ function verVinho(id){
   abrirModal('modal-vinho');
   const p=pgVinho();
   p.scrollTop=0;              // é uma página nova, começa em cima
-  pgCabecalho();              // e com o cabeçalho por inteiro
+  pgMedirEncolhe();           // e com o cabeçalho por inteiro
   pgEntrarHistoria();
 }
 function refrescarVinhoAberto(){
   if(VINHO_ABERTO!=null&&document.getElementById('modal-vinho').classList.contains('on')){
     const v=IDXV[VINHO_ABERTO];
-    // Refazer o HTML deita fora o cabeçalho (e com ele o `.compacta`),
-    // mas o scroll fica onde estava — daí o acerto a seguir.
-    if(v){document.getElementById('modal-vinho-in').innerHTML=vinhoDetalheHTML(v);pgCabecalho();}
+    // Refazer o HTML deita fora o cabeçalho (e com ele as medidas do
+    // encolher), mas o scroll fica onde estava — daí o acerto a seguir.
+    if(v){document.getElementById('modal-vinho-in').innerHTML=vinhoDetalheHTML(v);pgMedirEncolhe();}
   }
 }
 
@@ -1123,12 +1123,68 @@ function refrescarVinhoAberto(){
    telemóvel e o arrastar de lado para sair. */
 function pgVinho(){return document.getElementById('modal-vinho');}
 
-// O cabeçalho encolhe assim que se sai do topo. 54px é pouco mais do que
-// um toque de scroll: mais do que isso e a barra só encolhia a meio da
-// ficha, que é quando já não interessa.
+/* O cabeçalho não tem dois estados, tem um cursor: `--pg` vai de 0 (por
+   inteiro) a 1 (a barra encolhida) ao longo do scroll, e o style.css
+   desenha cada medida com `calc()`. Uma classe ligada a partir de um
+   limiar dava o mesmo resultado num salto só — que é exatamente o que se
+   sentia.
+
+   As duas alturas do cabeçalho são MEDIDAS e não números à sorte:
+   dependem do nome do vinho (uma linha ou três). Servem para duas coisas.
+
+   Primeira: o scroll que se gasta a encolher é exatamente o que o
+   cabeçalho liberta (`PG_H0-PG_H1`), por isso a ficha por baixo fica
+   QUIETA enquanto ele fecha, em vez de subir ao dobro da velocidade do
+   dedo.
+
+   Segunda: a altura é IMPOSTA a cada passo, em vez de sair do que estiver
+   lá dentro. Sem isso a curva não era linear — o nome a passar de três
+   linhas para duas, ou as duas pastilhas a caberem finalmente na mesma
+   linha, tiravam 30px de uma vez a meio do caminho, e sentia-se. Com a
+   altura imposta, o que reflui lá dentro fica escondido pelo
+   `overflow:hidden` e centrado pelo `justify-content` — a moldura desce
+   sempre ao mesmo ritmo. Custa dois `offsetHeight` por vinho aberto. */
+let PG_H0=200,PG_H1=70,PG_LINHAS=1,PG_TAB=[];
+function pgMedirEncolhe(){
+  const h=pgVinho().querySelector('.mhero');
+  if(!h)return;
+  const t=h.querySelector('h3');
+  const alturaCom=(n,pg)=>{
+    if(t)t.style.webkitLineClamp=n?String(n):'';
+    h.style.setProperty('--pg',pg);
+    return h.offsetHeight;
+  };
+  h.style.height='';
+  PG_TAB=[];
+  // Quantas linhas ocupa este nome por inteiro, e quanto mede o cabeçalho
+  // com cada número de linhas, aberto e fechado. São meia dúzia de
+  // medições por vinho aberto e poupam a `pgCabecalho()` de adivinhar.
+  alturaCom(0,'0');
+  const lh=t?(parseFloat(getComputedStyle(t).lineHeight)||25):25;
+  PG_LINHAS=t?Math.max(1,Math.round(t.offsetHeight/lh)):1;
+  for(let n=1;n<=PG_LINHAS;n++)PG_TAB[n]=[alturaCom(n,'0'),alturaCom(n,'1')];
+  PG_H0=PG_TAB[PG_LINHAS][0];   // por inteiro: todas as linhas do nome
+  PG_H1=PG_TAB[1][1];           // barra: uma linha só
+  pgCabecalho();
+}
 function pgCabecalho(){
   const p=pgVinho(),h=p.querySelector('.mhero');
-  if(h)h.classList.toggle('compacta',p.scrollTop>54);
+  if(!h||!PG_TAB.length)return;
+  const percurso=Math.max(60,PG_H0-PG_H1);
+  const v=Math.min(1,Math.max(0,p.scrollTop/percurso));
+  const caixa=PG_H0-(PG_H0-PG_H1)*v;
+  h.style.setProperty('--pg',v.toFixed(3));
+  h.style.height=caixa.toFixed(1)+'px';
+  // O nome fica com as linhas que CABEM na moldura de agora — nem a mais
+  // (texto cortado) nem a menos (um vazio bordô a meio do caminho).
+  const t=h.querySelector('h3');
+  if(!t)return;
+  let n=1;
+  for(let k=PG_LINHAS;k>1;k--){
+    const [a,b]=PG_TAB[k];
+    if(a+(b-a)*v<=caixa+0.5){n=k;break;}
+  }
+  t.style.webkitLineClamp=String(n);
 }
 
 /* Um passo na história por página aberta: no telemóvel (e no gesto de
@@ -2929,6 +2985,11 @@ function ajustarSticky(){
   if(h)document.querySelector('.itabs').style.top=h.offsetHeight+'px';
 }
 window.addEventListener('resize',ajustarSticky);
+// Noutra largura o nome do vinho quebra noutro sítio: as alturas medidas
+// deixam de servir e o cabeçalho ficava com a altura do ecrã anterior.
+window.addEventListener('resize',()=>{
+  if(document.getElementById('modal-vinho').classList.contains('on'))pgMedirEncolhe();
+});
 
 // Enter no campo de procura fecha o teclado do telemóvel (em vez de
 // submeter coisa nenhuma, que era o que o browser tentava fazer).

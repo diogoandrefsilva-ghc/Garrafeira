@@ -533,9 +533,9 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
    cabeçalho do vinho COLADO ao topo — quem rola até "já bebidas"
    continua a ver de que vinho está a falar.
 
-   Colado, mas não do tamanho todo: ao rolar ganha `.compacta` (é o
-   `pgCabecalho()` no app.js) e encolhe para uma barra — garrafa pequena,
-   nome numa linha. Fixo em tamanho grande comia meio telemóvel.
+   Colado, mas não do tamanho todo: encolhe para uma barra ao rolar —
+   garrafa pequena, nome numa linha. Fixo em tamanho grande comia meio
+   telemóvel.
 
    Continua a ser o MESMO `#modal-vinho`, só com outra pele. É de
    propósito: os `fecharModal('modal-vinho')` espalhados pelo app.js, os
@@ -555,31 +555,67 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
   overscroll-behavior:contain;
   /* o gesto de sair é nosso (ver `pgSwipe`); o vertical fica do browser */
   touch-action:pan-y}
-.modal.pagina .mbox{max-width:620px;max-height:none;overflow:visible;margin:0 auto;min-height:100%;
+/* `overflow-anchor:none` é obrigatório: o cabeçalho a encolher tira
+   altura ao topo do conteúdo e o browser, a tentar ser simpático,
+   corrigia o scroll na mesma medida — o cabeçalho voltava a abrir
+   sozinho e ficava aos saltos entre aberto e fechado. */
+.modal.pagina .mbox{max-width:620px;max-height:none;overflow:visible;margin:0 auto;min-height:100%;overflow-anchor:none;
   border-radius:0;padding-top:0;padding-bottom:calc(26px + env(safe-area-inset-bottom,0px));
   box-shadow:0 0 50px -14px rgba(30,8,16,.22);animation:pgentrar .22s cubic-bezier(.2,.8,.3,1) both}
 @keyframes pgentrar{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
 
-.modal.pagina .mhero{position:sticky;top:0;z-index:5;margin:0 -20px 4px;border-radius:0;
-  transition:padding .18s ease}
-.modal.pagina .mhero-in{padding:0 40px;transition:gap .18s ease}
-.modal.pagina .mhero-g,.modal.pagina .mhero h3{transition:width .18s ease,height .18s ease,font-size .18s ease}
-/* ‹ à esquerda e ✕ à direita — o mesmo par do painel do resumo
-   (`.rdet-bar`). O ‹ só existe em página; num modal não havia "atrás". */
-.mvolta{display:none}
-.modal.pagina .mhero .mvolta{display:flex;left:12px;right:auto;font-size:21px;padding-bottom:3px}
-.modal.pagina .mhero.compacta .mx{top:50%;transform:translateY(-50%)}
-.modal.pagina .mhero.compacta{padding-top:8px;padding-bottom:8px}
-.modal.pagina .mhero.compacta .mhero-in{gap:11px}
-.modal.pagina .mhero.compacta .mhero-g{width:36px;height:54px}
-.modal.pagina .mhero.compacta .mhero-g svg{max-height:48px;padding:2px}
-.modal.pagina .mhero.compacta .mhero-k,.modal.pagina .mhero.compacta .mhero-n{display:none}
-.modal.pagina .mhero.compacta h3{font-size:15.5px;margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.modal.pagina .mhero.compacta .mhero-s{font-size:11px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* `--pg` é o quanto o cabeçalho já encolheu: 0 por inteiro, 1 na barra.
+   Quem lhe mexe é o `pgCabecalho()` a cada scroll — daí para baixo é
+   tudo `calc()`, e é isso que faz a passagem acompanhar o dedo em vez de
+   dar um salto a meio caminho. O valor por defeito TEM de estar aqui:
+   sem ele, `var(--pg)` não resolve e cada `calc()` cai por inválido. */
+.modal.pagina .mhero{--pg:0;position:sticky;top:0;z-index:5;margin:0 -20px 4px;border-radius:0;
+  /* a altura vem do `pgCabecalho()`; o conteúdo fica centrado no que
+     sobrar, que é o que esconde as quebras de linha lá dentro */
+  display:flex;flex-direction:column;justify-content:center;
+  padding:calc(18px - 10px*var(--pg)) 18px calc(16px - 8px*var(--pg));
+  box-shadow:0 8px 22px -14px rgba(30,8,16,calc(.75*var(--pg)))}
+.modal.pagina .mhero-in{padding:0 40px;gap:calc(14px - 3px*var(--pg))}
+/* `font-size:0` no bloco de texto e não nos filhos: os espaços em branco
+   ENTRE as pastilhas contam como texto e, com elas encolhidas a zero,
+   deixavam na barra uma linha fantasma de 21px (a altura da letra
+   herdada) que nada preenchia. Cada filho aqui dentro põe o seu tamanho
+   — se acrescentares texto solto a `.mhero-tx`, dá-lhe um. */
+.modal.pagina .mhero-tx{font-size:0}
+.modal.pagina .mhero-g{width:calc(64px - 28px*var(--pg));height:calc(104px - 50px*var(--pg))}
+.modal.pagina .mhero-g svg{max-height:calc(94px - 46px*var(--pg));padding:calc(5px - 3px*var(--pg)) calc(3px - 1px*var(--pg))}
+/* O nome encolhe de 21 para 15,5px e vai perdendo LINHAS pelo caminho —
+   inteiras e com reticências (`-webkit-line-clamp`, posto pelo
+   `pgCabecalho()`), nunca a régua a meio das letras: com um `max-height`
+   contínuo via-se o "Reserva" cortado ao meio da altura. */
+.modal.pagina .mhero h3{font-size:calc(21px - 5.5px*var(--pg));margin-top:calc(4px*(1 - var(--pg)));
+  display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+.modal.pagina .mhero-s{margin-top:calc(4px - 3px*var(--pg))}
+/* O que desaparece pelo caminho não usa `display:none` (isso é o salto):
+   a letra encolhe até 0 e leva a caixa atrás — margens, padding e borda
+   incluídos, senão ficava lá o esqueleto do crachá. A opacidade vai ao
+   triplo da velocidade para já não se ler nada enquanto ainda encolhe.
+
+   E vão-se ao DOBRO da velocidade do resto (`--pg2`): os extras saem
+   primeiro, o nome fica até ao fim. Não é só gosto — a moldura encolhe a
+   direito e, sem isto, o conteúdo ficava para trás no início e sobrava
+   uns pixéis para fora dela. */
+.modal.pagina .mhero{--pg2:clamp(0,calc(2*var(--pg)),1)}
+.modal.pagina .mhero-k{font-size:calc(10px*(1 - var(--pg2)));opacity:clamp(0,calc(1 - 3*var(--pg)),1)}
+.modal.pagina .mhero-n{font-size:calc(11px*(1 - var(--pg2)));opacity:clamp(0,calc(1 - 3*var(--pg)),1);
+  margin-top:calc(8px*(1 - var(--pg2)));padding:calc(3px*(1 - var(--pg2))) calc(10px*(1 - var(--pg2)));
+  border-width:calc(1px*(1 - var(--pg2)));gap:calc(5px*(1 - var(--pg2)))}
 /* Encolhido fica o nome e o ANO: a origem cortava-se a meio ("Douro ·
    Cima Corgo · …") e levava o ano atrás, que é o que se quer saber
-   quando já não se vê a garrafa. */
-.modal.pagina .mhero.compacta .mhero-o{display:none}
+   quando já não se vê a garrafa. Encolhe pela letra, como o resto, e é
+   isso que faz o ano deslizar para a esquerda em vez de saltar. */
+.modal.pagina .mhero-o{font-size:calc(12px*(1 - var(--pg)));opacity:clamp(0,calc(1 - 2.5*var(--pg)),1)}
+/* ‹ à esquerda e ✕ à direita — o mesmo par do painel do resumo
+   (`.rdet-bar`). O ‹ só existe em página; num modal não havia "atrás".
+   Os 12→20px são o que os deixa centrados na barra já encolhida. */
+.mvolta{display:none}
+.modal.pagina .mhero .mx{top:calc(12px + 8px*var(--pg))}
+.modal.pagina .mhero .mvolta{display:flex;left:12px;right:auto;font-size:21px;padding-bottom:3px}
 
 /* Arrastar de lado para sair: a folha segue o dedo (sem transição, senão
    ia sempre atrás dele) e, se não chegar ao ponto de sair, volta ao

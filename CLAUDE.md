@@ -153,11 +153,35 @@ Tocar num vinho não abre uma folha por cima da lista: entra-se numa
 **página** (`verVinho`, secção "PÁGINA DO VINHO" no app.js e no style.css).
 Ecrã inteiro, papel do princípio ao fim, e o **cabeçalho do vinho colado ao
 topo** — quem rola até "já bebidas" continua a ver de que vinho se trata.
-Colado mas não do tamanho todo: ao sair do topo ganha `.compacta`
-(`pgCabecalho()`, a partir de 54px) e encolhe para uma barra com a garrafa
-pequena, o nome numa linha e o ano. Fixo em tamanho grande comia meio
+Colado mas não do tamanho todo: ao rolar encolhe até uma barra com a
+garrafa pequena, o nome e o ano. Fixo em tamanho grande comia meio
 telemóvel; e no encolhido é a **origem** que desaparece, não o ano
 (`.mhero-o`) — sem a garrafa à vista, o ano é o que falta saber.
+
+**O encolher não tem dois estados, tem um cursor** (`pgCabecalho`): `--pg`
+vai de 0 a 1 ao longo do scroll e o `style.css` desenha cada medida com
+`calc()` a partir dele — letra, garrafa, espaçamentos, a sombra que
+aparece por baixo da barra. Uma classe ligada num limiar (era o que estava)
+faz a mesma coisa num salto só, e sente-se. O que desaparece pelo caminho
+encolhe a letra até 0 em vez de `display:none`, senão a caixa ia-se de uma
+vez. Três coisas que isto obriga e que não são opcionais:
+- **a altura é imposta** (`PG_H0`→`PG_H1`, ambos medidos, não adivinhados),
+  senão a curva não é linear: o nome a mudar de três linhas para duas, ou
+  as pastilhas a caberem finalmente na mesma linha, tiravam 30px de uma vez
+  a meio do caminho. Com a altura imposta, o que reflui lá dentro fica
+  escondido pelo `overflow:hidden` e centrado pelo `justify-content`;
+- **o percurso é o próprio encolher** (`PG_H0-PG_H1`): o scroll que se
+  gasta é o que o cabeçalho liberta, por isso a ficha por baixo fica quieta
+  enquanto ele fecha, em vez de subir ao dobro da velocidade do dedo;
+- **`overflow-anchor:none` na `.mbox`**: o cabeçalho a encolher tira altura
+  ao topo do conteúdo e o browser corrigia o scroll na mesma medida — ele
+  reabria sozinho e ficava aos saltos entre aberto e fechado.
+
+O nome perde LINHAS pelo caminho, inteiras e com reticências
+(`-webkit-line-clamp`), e são as que cabem na moldura de agora — daí a
+tabelinha `PG_TAB` (quanto mede o cabeçalho com 1, 2, 3 linhas, aberto e
+fechado), medida uma vez por vinho aberto. Com um `max-height` contínuo
+via-se o "Reserva" cortado a meio da altura das letras.
 
 Por baixo continua a ser o **mesmo `#modal-vinho`**, só com outra pele
 (`.pagina`). É de propósito e é o que mantém isto pequeno: os
