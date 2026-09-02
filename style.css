@@ -417,6 +417,13 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 /* A posição na prateleira é a SEGUNDA linha: o sítio primeiro, depois o
    nível e o lugar. Numa linha só, o nome do local partia-se a meio. */
 .mgar .g-onde .g-pos{display:block;font-size:12px;color:var(--tx);margin-top:1px}
+/* Links do vinho: pequenos, seguidos por vírgula, numa linha só (em vez
+   de uma caixa `.mgar` por link) — o ✕ de remover cola-se ao nome, não
+   fica num botão à parte. */
+.mlinks{margin-top:8px;font-size:12.5px;line-height:1.7}
+.mlinks a{color:var(--in)}
+.mlink-x{border:none;background:none;padding:0 0 0 3px;font-size:10px;color:var(--mu);cursor:pointer;font-family:inherit;vertical-align:middle}
+.mlink-x:hover{color:var(--vh)}
 .mini{padding:6px 11px;font-size:11.5px;border-radius:99px;border:1px solid var(--bo2);background:#fff;font-family:inherit;
   cursor:pointer;white-space:nowrap;font-weight:600;transition:all .15s}
 .mini:hover{border-color:var(--vh);color:var(--vh)}

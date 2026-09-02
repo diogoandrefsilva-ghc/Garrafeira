@@ -1222,6 +1222,15 @@ function vinhoDetalheHTML(v){
   const img=imagemDe(v);
   const origem=[v.produtor,v.regiao,v.sub_regiao].filter(Boolean).map(esc).join(' · ');
 
+  // Links pequenos, seguidos por vírgula: o Vivino primeiro (se houver),
+  // depois os do utilizador, cada um com o seu ✕ para remover colado a
+  // seguir ao nome — não em caixas separadas, que ocupavam uma linha cada.
+  const linkItens=[];
+  if(v.vivino_url)linkItens.push(`<a href="${esc(v.vivino_url)}" target="_blank" rel="noopener">Ver no Vivino</a>`);
+  if(TEM_LINKS)(v.links||[]).forEach((l,i)=>{
+    linkItens.push(`<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.titulo||l.url)}</a><button class="mlink-x ro-hide" onclick="removerLink(${v.id},${i})" title="Remover">✕</button>`);
+  });
+
   return `<div class="mhero">
       <button class="mx mvolta" onclick="fecharModal('modal-vinho')" title="Voltar">‹</button>
       <button class="mx" onclick="fecharModal('modal-vinho')">✕</button>
@@ -1288,24 +1297,14 @@ function vinhoDetalheHTML(v){
 
     ${v.ai_resumo?`<div class="msec">O que se sabe</div>
       <div class="note" style="margin-top:8px;font-size:12.5px">${esc(v.ai_resumo)}</div>`:''}
-    ${v.ai_atualizado_em?`<div class="ia-fontes">
-      Informação procurada em ${dataPT(v.ai_atualizado_em)}${v.ai_modelo?' · '+esc(v.ai_modelo):''}.
-      ${Array.isArray(v.ai_fontes)&&v.ai_fontes.length
-        ? '<br>Fontes: '+v.ai_fontes.map(f=>`<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo||f.url)}</a>`).join(' · ')
-        : ''}
+    ${Array.isArray(v.ai_fontes)&&v.ai_fontes.length?`<div class="ia-fontes">
+      Fontes: ${v.ai_fontes.map(f=>`<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo||f.url)}</a>`).join(' · ')}
     </div>`:''}
 
     ${(TEM_LINKS||v.vivino_url)?`<div class="msec">Links</div>
-      ${v.vivino_url?`<div class="mgar">
-          <div class="g-onde"><b><a href="${esc(v.vivino_url)}" target="_blank" rel="noopener">Ver no Vivino</a></b></div>
-        </div>`:''}
-      ${TEM_LINKS?((v.links||[]).length
-        ? (v.links||[]).map((l,i)=>`<div class="mgar">
-            <div class="g-onde"><b><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.titulo||l.url)}</a></b></div>
-            <button class="mini ro-hide" onclick="removerLink(${v.id},${i})">✕</button>
-          </div>`).join('')
-        : (v.vivino_url?'':'<div class="note" style="padding:8px 0">Sem links guardados.</div>'))
-        :''}
+      ${linkItens.length
+        ? `<div class="mlinks">${linkItens.join(', ')}</div>`
+        : '<div class="note" style="padding:8px 0">Sem links guardados.</div>'}
       ${TEM_LINKS?`<button class="btn ghost ro-hide" onclick="adicionarLink(${v.id})">+ Acrescentar link</button>`:''}`:''}
 
     ${bebidas.length?`<div class="msec">Já bebidas (${bebidas.length})</div>
@@ -1314,10 +1313,10 @@ function vinhoDetalheHTML(v){
           <i>${g.consumo_avaliacao?estrelas(g.consumo_avaliacao)+' ':''}${esc(g.consumo_nota||'')}</i></div></div>`).join('')}`:''}
 
     <div class="msec">Atualizações</div>
-    <div class="mdet">
-      ${linha('Pesquisa com IA',v.ai_atualizado_em&&/^gemini/i.test(String(v.ai_modelo||''))
-        ?dataHoraLocal(v.ai_atualizado_em):'Ainda não')}
-      ${linha('Atualização manual',dataHoraLocal(TEM_ATUALIZADO?(v.atualizado_em||v.criado_em):v.criado_em))}
+    <div class="ia-fontes">
+      Pesquisa com IA: ${v.ai_atualizado_em&&/^gemini/i.test(String(v.ai_modelo||''))
+        ?dataHoraLocal(v.ai_atualizado_em):'ainda não'}<br>
+      Atualização manual: ${dataHoraLocal(TEM_ATUALIZADO?(v.atualizado_em||v.criado_em):v.criado_em)}
     </div>
 
     <div class="macoes">
