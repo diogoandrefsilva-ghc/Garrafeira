@@ -108,17 +108,21 @@ famílias de cor lado a lado no mesmo cartão e nenhuma queria dizer nada.
 
 **O cartão do vinho tem três zonas e é a POSIÇÃO que diz o que a coisa é:**
 1. a **garrafa** (a imagem, com a quantidade ao canto);
-2. a **identidade** — nome, ano (com a classificação e a nota do Vivino por
-   baixo, em `.vc-anobadges`), produtor/tipo/região, castas, menção, preço
-   médio;
+2. a **identidade** — nome, ano (com a nota do Vivino por baixo, em
+   `.vc-anofloat`), produtor/tipo/região, castas, menção, preço médio. A
+   classificação (DOC/Vinho Regional) não vem aqui — já está na ficha do
+   vinho, e cabia pouco para repetir nos dois sítios;
 3. depois de um filete, o **rodapé do que é físico** — onde está a garrafa e
    se está no ponto de beber.
 Um crachá novo entra numa destas zonas; não há uma quarta.
 
-`.vc-anobadges` é uma **linha própria**, a seguir ao `.vc-head` — não uma
-coluna ao lado do nome. Lá dentro, a altura da linha do nome ficava presa à
-altura da classificação+nota, e um nome de vinho curto (uma linha só)
-sobrava com um espaço em branco por baixo antes do resto da ficha começar.
+`.vc-anofloat` é um **float** (`float:right`), não uma coluna flex ao lado
+do nome: com flex, a altura da linha do nome ficava presa à do lado do
+ano+nota, e um nome de vinho curto (ou que quebrasse para a segunda linha)
+sobrava com um espaço em branco antes do resto da ficha começar. Com float,
+o nome contorna a caixa do ano+nota em vez de esperar por ela — sobe para o
+lado dela. `.vc-main` é `display:flow-root` (não `flex`) de propósito: um
+item de flex ignora `float`, é a própria spec do CSS.
 
 ## A imagem de cada vinho
 `garrafaSVG(v)` desenha a garrafa em SVG inline: o vidro toma a cor do
