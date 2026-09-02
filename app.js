@@ -529,7 +529,8 @@ const FALTAS=[
   {k:'Sem imagem do rótulo',tem:v=>!!String(v.imagem_url||'').trim()},
   {k:'Sem castas',          tem:v=>(v.castas||[]).length>0},
   {k:'Sem preço médio',     tem:v=>v.preco_medio!=null},
-  {k:'Sem classificação',   tem:v=>!!v.classificacao}
+  {k:'Sem classificação',   tem:v=>!!v.classificacao},
+  {k:'Sem nota Vivino',     tem:v=>v.vivino_nota!=null}
 ];
 function faltasDe(v){return FALTAS.filter(f=>!f.tem(v)).map(f=>f.k);}
 
@@ -629,7 +630,21 @@ function renderPesquisa(){
    Os valores possíveis de cada filtro saem SEMPRE dos dados que lá estão
    (não de listas fixas): assim uma região nova aparece no filtro sozinha,
    e nunca fica um filtro a apontar para coisa nenhuma. */
-let F={local:'',tipo:'',regiao:'',casta:'',ano:'',mencao:'',castaN:'',janela:''};
+let F={local:'',tipo:'',regiao:'',casta:'',ano:'',mencao:'',castaN:'',janela:'',vivino:''};
+
+// Intervalos da nota do Vivino, do mesmo jeito que FAIXAS_PRECO: a pergunta
+// não é "qual é a nota exata" (isso o cartão já mostra), é "está bem
+// cotado ou não" — por isso intervalo, não valor a valor. `faixaVivinoIndice`
+// devolve sempre o mesmo intervalo para a mesma nota.
+const FAIXAS_VIVINO=[
+  {nome:'4,5 ★ ou mais',min:4.5},
+  {nome:'4,0 a 4,5 ★',min:4},
+  {nome:'3,5 a 4,0 ★',min:3.5},
+  {nome:'Abaixo de 3,5 ★',min:0}
+];
+function faixaVivinoIndice(nota){
+  return FAIXAS_VIVINO.findIndex(f=>nota>=f.min);
+}
 
 function opcoesFiltro(){
   const comStock=db.vinhos.filter(v=>stockDe(v.id)>0);
@@ -656,7 +671,8 @@ function opcoesFiltro(){
    "pastilhas" do que está a filtrar agora, cada uma com o seu ✕ — antes
    só havia "limpar filtros", tudo ou nada. */
 const F_META={local:['📍','Local'],tipo:['🍷','Tipo'],regiao:['🗺️','Região'],casta:['🍇','Casta'],
-  castaN:['🧬','Nº de castas'],ano:['📅','Ano'],mencao:['🏅','Menção'],janela:['⏱️','Maturação']};
+  castaN:['🧬','Nº de castas'],ano:['📅','Ano'],mencao:['🏅','Menção'],janela:['⏱️','Maturação'],
+  vivino:['★','Vivino']};
 let FILTROS_ABERTOS=false;
 function toggleFiltros(){
   FILTROS_ABERTOS=!FILTROS_ABERTOS;
@@ -670,6 +686,7 @@ function listasFiltro(){
   const o=opcoesFiltro();
   o.castaN=[['1','Monocasta'],['2','Várias castas'],['0','Sem castas registadas']];
   o.janela=[['ponto','No ponto'],['cedo','Ainda cedo'],['passou','Já passou']];
+  o.vivino=FAIXAS_VIVINO.map((f,i)=>[String(i),f.nome]);
   return o;
 }
 function rotuloFiltro(listas,k){
@@ -730,6 +747,7 @@ function vinhosFiltrados(){
     if(F.ano&&String(v.ano)!==F.ano)return false;
     if(F.mencao&&v.mencao!==F.mencao)return false;
     if(F.janela&&janelaBeber(v)!==F.janela)return false;
+    if(F.vivino&&(v.vivino_nota==null||String(faixaVivinoIndice(v.vivino_nota))!==F.vivino))return false;
     if(F.castaN){
       const n=(v.castas||[]).length;
       if(F.castaN==='1'&&n!==1)return false;
