@@ -320,6 +320,19 @@ descoberta de modelo, mesma escada de variantes, mesmos fallbacks.
   função usa-a para (a) dizer ao modelo em que se concentrar e (b) cortar da
   resposta o que não foi pedido. Pedir os 22 campos de uma vez faz o modelo
   andar atrás de tudo e voltar com meia dúzia de coisas mornas.
+- **Não se procura duas vezes o mesmo sem perguntar** (`iaUltimaProcura`,
+  `iaConfirmarRepetir`, `IA_AVISO_DIAS=30`). Cada procura é uma chamada paga
+  ao Gemini com pesquisa Google, e a ficha de um vinho não muda de semana
+  para semana. Ao carregar em "Procurar" vê-se quando é que este vinho foi
+  procurado pela última vez; se foi há menos de 30 dias, o modal passa a
+  perguntar "…pela última vez em AAAA-MM-DD hh:mm. Pretendes fazer novamente
+  a pesquisa?" antes de gastar. A data sai da mais recente de duas: a linha
+  em `analises` (o registo exato de CADA procura, mas a RLS só deixa ver as
+  minhas — o admin vê todas) e `vinhos.ai_atualizado_em` (só fica quando se
+  aceitou alguma coisa, mas vê-se seja de quem for — é o que apanha a procura
+  de OUTRO editor). Se a consulta falhar, não se avisa e procura-se na mesma:
+  um soluço de rede não pode impedir alguém de procurar. No formulário de
+  **vinho novo** não há aviso nenhum — ainda não há vinho para ter história.
 - **Nada é gravado sem confirmação.** O resultado abre campo a campo
   (`iaMostrarResultado`), com o que está agora ao lado do que a IA propõe.
   Vêm marcados **só os campos vazios**: substituir o que alguém escreveu à
