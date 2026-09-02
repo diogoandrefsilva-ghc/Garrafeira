@@ -15,7 +15,7 @@ parte e isolado: `garrafeira`.
   Sessão Supabase (`sbHeaders`/`sbFetch`/`sbReq`/`sbRpc`) · Permissões ·
   **DB** (`carregar`) · Índices e cálculos · Navegação · **Resumo** (ecrã
   inicial) · Pesquisa (Detalhe + Locais) · Filtros · **Detalhe** (lista
-  organizada) · Mapa dos locais · Consumidos · **Modal do vinho** ·
+  organizada) · Mapa dos locais · Consumidos · **Página do vinho** ·
   Modal editar/novo · Consumir garrafa · Modal da garrafa · **IA** ·
   Auth (Supabase) · Definições · Locais · **Utilizadores (admin)** ·
   Exportar · Diagnóstico · Init.
@@ -81,7 +81,7 @@ era um link solto no meio do conteúdo e não havia como fechar sem ir outra
 vez ao card lá em cima. O card aberto fica preenchido e com o chevron
 virado — é o que liga o painel ao sítio de onde saiu.
 
-Um clique numa casta no modal do vinho (`filtrarPorCasta`) muda para o
+Um clique numa casta na página do vinho (`filtrarPorCasta`) muda para o
 separador `Detalhe` já com esse filtro aplicado — é lá (e em `Locais`) que
 os filtros vivem agora.
 
@@ -148,6 +148,50 @@ mutação (guardar, apagar, consumir, mover): chama `renderResumo()` e
 adivinhar qual separador está aberto — o dataset é pequeno, refazer tudo é
 mais simples e mais seguro.
 
+## O detalhe do vinho é uma PÁGINA, não um modal
+Tocar num vinho não abre uma folha por cima da lista: entra-se numa
+**página** (`verVinho`, secção "PÁGINA DO VINHO" no app.js e no style.css).
+Ecrã inteiro, papel do princípio ao fim, e o **cabeçalho do vinho colado ao
+topo** — quem rola até "já bebidas" continua a ver de que vinho se trata.
+Colado mas não do tamanho todo: ao sair do topo ganha `.compacta`
+(`pgCabecalho()`, a partir de 54px) e encolhe para uma barra com a garrafa
+pequena, o nome numa linha e o ano. Fixo em tamanho grande comia meio
+telemóvel; e no encolhido é a **origem** que desaparece, não o ano
+(`.mhero-o`) — sem a garrafa à vista, o ano é o que falta saber.
+
+Por baixo continua a ser o **mesmo `#modal-vinho`**, só com outra pele
+(`.pagina`). É de propósito e é o que mantém isto pequeno: os
+`fecharModal('modal-vinho')` espalhados pelo app.js, os modais que abrem
+POR CIMA da página (editar, consumir, foto, IA) e o `refrescarVinhoAberto()`
+continuam a funcionar sem saber de nada disto. Uma `.sec` a sério — com o
+`tab()` a mandar — obrigava a mexer nos cinco separadores, no
+`posicionarFiltros` e em todos os pontos de saída, para o mesmo resultado.
+Se um dia isso for preciso, é aqui que se paga.
+
+Sai-se por **cinco** caminhos, e todos passam por `fecharModal` para
+gastarem o mesmo passo de história:
+- **‹** à esquerda do cabeçalho e **✕** à direita — o mesmo par do painel
+  do resumo (`.rdet-bar`);
+- **Escape**;
+- o **voltar do telemóvel/browser**: abrir a página faz `history.pushState`
+  e o `popstate` fecha-a (e o que estiver aberto por cima — é tudo o mesmo
+  contexto, este vinho). Quem sai pelo ‹/✕ faz `history.back()`. Os dois
+  caminhos põem `PG_HIST` a falso ANTES de mexer na história, que é o que
+  impede o pingue-pongue entre um e o outro;
+- **arrastar o dedo de lado** (`pgSwipe`). Segue o dedo nos **dois**
+  sentidos — pediu-se para a esquerda, mas quem vem do iOS/Android arrasta
+  para a direita, e travar um dos lados era ensinar uma regra nova sem
+  necessidade. Sai a um quarto do ecrã (ou 110px); menos do que isso volta
+  ao lugar. Só pega se o gesto for claramente horizontal (senão roubava o
+  scroll), nunca começa dentro de um campo/link/botão e desliga-se se
+  houver um modal por cima. Precisa de `touch-action:pan-y` na página —
+  sem isso o browser fica com o gesto e o `preventDefault` chega tarde.
+
+Clicar **na margem não fecha** (ao contrário dos modais): numa página
+ninguém espera sair por tocar ao lado. E `.modal.pagina.on` é `display:block`
+e não `flex` — um item de flex não cresce com o que tem dentro, e a folha
+parava à altura do ecrã com a ficha a continuar por cima do papel.
+
 ## A linguagem visual (o "charme")
 Duas famílias e uma regra de cor. **Fraunces** (serifa) para o que se lê
 devagar — nomes de vinhos, anos, números, títulos; **Inter** para a
@@ -185,7 +229,8 @@ morto, ficando a garrafa desenhada em vez de um quadrado vazio.
 É desenhada e não uma pasta de imagens porque **não há build nem servidor
 de imagens aqui**: assim não custa um pedido à rede, não falha offline e
 não depende de um link de terceiros que um dia morre. A garrafa aparece
-também no mapa dos locais (versão `mini`, sem rótulo) e na capa do modal.
+também no mapa dos locais (versão `mini`, sem rótulo) e na capa da página
+do vinho.
 
 ### Duas origens, uma ordem
 Um vinho pode ter DUAS imagens e a ordem nunca muda:
@@ -318,7 +363,7 @@ descoberta de modelo, mesma escada de variantes, mesmos fallbacks.
   `iaConfirmarRepetir`, `IA_AVISO_DIAS=30`). Cada procura é uma chamada paga
   ao Gemini com pesquisa Google, e a ficha de um vinho não muda de semana
   para semana. Ao carregar em "Procurar" vê-se quando é que este vinho foi
-  procurado pela última vez; se foi há menos de 30 dias, o modal passa a
+  procurado pela última vez; se foi há menos de 30 dias, a janela passa a
   perguntar "…pela última vez em AAAA-MM-DD hh:mm. Pretendes fazer novamente
   a pesquisa?" antes de gastar. A data sai da mais recente de duas: a linha
   em `analises` (o registo exato de CADA procura, mas a RLS só deixa ver as
