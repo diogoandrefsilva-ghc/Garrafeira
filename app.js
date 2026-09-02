@@ -782,17 +782,20 @@ function detAgrupar(modo){
    O cartão tem TRÊS zonas, sempre pela mesma ordem, e é a posição (não a
    cor) que diz o que cada coisa é:
      1. a garrafa — a imagem do vinho, com a quantidade ao canto;
-     2. a identidade — nome, ano (com classificação e nota do Vivino por
-        baixo, em `.vc-anobadges`), produtor/tipo/região, castas, menção e
-        preço médio;
+     2. a identidade — nome, ano (com a nota do Vivino por baixo, em
+        `.vc-anofloat`), produtor/tipo/região, castas, menção e preço médio.
+        A classificação (DOC/Vinho Regional) já não vem aqui — cabe pouco e
+        já está na ficha do vinho; não precisa de estar nos dois sítios;
      3. o rodapé, depois de um filete — o que é FÍSICO: onde está e se está
         no ponto de beber.
-   `.vc-anobadges` é uma LINHA PRÓPRIA a seguir ao `.vc-head`, não uma coluna
-   dentro dele: se ficasse dentro do `.vc-head` (nome ao lado de ano+crachás),
-   a altura da linha passava a ser a do lado mais alto, e um nome de vinho
-   curto e de uma linha só ficava com um espaço em branco por baixo antes do
-   resto da ficha começar. Como linha à parte, a altura é sempre a mesma,
-   venha o nome curto ou comprido.
+   `.vc-anofloat` é um FLOAT (`float:right`), não uma coluna flex ao lado do
+   nome: com flex, a altura da linha do nome ficava presa à do lado do
+   ano+nota, e um nome de uma linha só sobrava com um espaço em branco por
+   baixo antes do resto da ficha começar. Com float, o nome (e o resto, se
+   for preciso) contorna a caixa do ano+nota em vez de esperar por ela —
+   sobe para o lado dela em vez de ficar parado por baixo. `.vc-main` passa
+   a `display:flow-root` (não `flex`) precisamente para os filhos poderem
+   flutuar: um item de flex ignora `float` (é a própria spec do CSS).
    Antes vinha tudo no mesmo monte de crachás, cada um com a sua cor: sete
    cores ao lado umas das outras não são hierarquia nenhuma, e o olho não
    sabia onde pousar. Agora só o dourado (menção/nota) e o pip do local têm
@@ -816,14 +819,11 @@ function vinhoCardHTML(v){
     <div class="vc-top">
       ${vinhoThumb(v,gs.length)}
       <div class="vc-main">
-        <div class="vc-head">
-          <div class="vc-nome">${esc(v.nome)}</div>
+        <div class="vc-anofloat">
           <div class="vc-ano">${v.ano||'s/a'}</div>
-        </div>
-        <div class="vc-anobadges">
-          ${v.classificacao?`<span class="bdg">${esc(v.classificacao)}</span>`:''}
           ${v.vivino_nota?`<span class="bdg viv">★ ${Number(v.vivino_nota).toFixed(1)}</span>`:''}
         </div>
+        <div class="vc-nome">${esc(v.nome)}</div>
         <div class="vc-sub">${esc([v.produtor,[v.tipo,v.estilo].filter(Boolean).join(' '),v.regiao].filter(Boolean).join(' · '))}</div>
         <div class="vc-badges">
           ${castasTxt?`<span class="bdg cas">🍇 ${esc(castasTxt)}</span>`:''}
