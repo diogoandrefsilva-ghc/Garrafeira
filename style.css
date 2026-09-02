@@ -297,19 +297,18 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
   color:var(--mu);margin-bottom:8px}
 .mprat-t::after{content:'';flex:1;height:1px;background:var(--bo)}
 .mprat-n{font-family:var(--fd);font-size:12px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--vh);flex-shrink:0;order:3}
-.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(136px,1fr));gap:7px}
-.mcell{display:flex;align-items:flex-start;gap:8px;background:var(--bg);border:1px solid var(--bo);border-radius:10px;
+.mgrid{display:grid;grid-template-columns:1fr;gap:7px}
+.mcell{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--bo);border-radius:10px;
   padding:7px 9px;cursor:pointer;font-size:11.5px;line-height:1.35;text-align:left;font-family:inherit;
   transition:all .15s;-webkit-tap-highlight-color:transparent;min-width:0}
 .mcell:hover{background:#fff;border-color:var(--vh);box-shadow:var(--sh);transform:translateY(-1px)}
 .mcell svg{flex-shrink:0;display:block;width:15px;height:auto}
-.mcell-tx{min-width:0;flex:1}
-.mcell b{font-family:var(--fd);font-weight:600;font-size:13px;line-height:1.25;color:var(--tx);letter-spacing:.2px;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.mcell span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mu);font-size:10.5px}
-.mcell .lug{position:absolute}
+.mcell-tx{min-width:0;flex:1;display:flex;align-items:baseline;gap:7px;overflow:hidden}
+.mcell-tx b{font-family:var(--fd);font-weight:600;font-size:13px;color:var(--tx);letter-spacing:.2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.mcell-tx span{flex-shrink:0;color:var(--mu);font-size:10.5px;white-space:nowrap}
 .mlug{font-size:9.5px;font-weight:700;color:var(--vh);background:var(--vhp);border-radius:5px;padding:1px 5px;
-  flex-shrink:0;letter-spacing:.3px;align-self:flex-start}
+  flex-shrink:0;letter-spacing:.3px}
 
 /* ── CONSUMIDOS ─────────────────────────────────────────────────── */
 .ccard{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:13px 15px;margin-bottom:10px;
