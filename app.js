@@ -2555,7 +2555,12 @@ function exportarPDF(){
       <thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>
       <tbody>${linhas}</tbody>
     </table>`;
-  window.print();
+  // Chamar print() logo a seguir ao innerHTML apanha o Safari a meio do
+  // layout da tabela nova: a pré-visualização aparece e fecha-se sozinha,
+  // e a tentativa seguinte vem bloqueada ("impedido de imprimir
+  // automaticamente"). Dois requestAnimationFrame dão tempo à página para
+  // desenhar a tabela antes do print(), sem sair do gesto do utilizador.
+  requestAnimationFrame(()=>requestAnimationFrame(()=>window.print()));
 }
 // A tabela só serve a impressão — depois de imprimir não vale a pena
 // continuar a segurar umas centenas de linhas no DOM.

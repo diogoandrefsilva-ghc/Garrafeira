@@ -533,7 +533,10 @@ body.naodono .dono-hide{display:none!important}
    bordô, os separadores e o botão flutuante por cima da lista. */
 #print-area{display:none}
 @media print{
-  @page{size:A4 landscape;margin:9mm}
+  /* Dimensões explícitas (não a palavra "landscape") — no Safari/iOS o
+     modificador de orientação é ignorado em alguns AirPrint, as dimensões
+     não. */
+  @page{size:297mm 210mm;margin:9mm}
   body{background:#fff!important;background-image:none!important}
   body>*{display:none!important}
   body>#print-area{display:block!important}
@@ -548,7 +551,7 @@ body.naodono .dono-hide{display:none!important}
   #print-area tr{page-break-inside:avoid;break-inside:avoid}
   #print-area th{text-align:left;font-size:6.6pt;text-transform:uppercase;letter-spacing:.4pt;
     color:#7b1f3d;border-bottom:1px solid #7b1f3d;padding:3pt 4pt}
-  #print-area td{padding:3pt 4pt;border-bottom:.4pt solid #ddd;vertical-align:top}
+  #print-area td{padding:3pt 4pt;border-bottom:.6pt solid #ccc;vertical-align:top}
   #print-area .pnome{font-family:var(--fd);font-weight:600;font-size:8.2pt}
   #print-area .pc{text-align:center;white-space:nowrap}
   #print-area .pgrupo td{font-family:var(--fd);font-weight:600;font-size:8.6pt;color:#7b1f3d;
