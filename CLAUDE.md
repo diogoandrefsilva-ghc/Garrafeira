@@ -108,11 +108,17 @@ famílias de cor lado a lado no mesmo cartão e nenhuma queria dizer nada.
 
 **O cartão do vinho tem três zonas e é a POSIÇÃO que diz o que a coisa é:**
 1. a **garrafa** (a imagem, com a quantidade ao canto);
-2. a **identidade** — nome, ano (com a classificação por baixo, em
-   `.vc-anowrap`), produtor/tipo/região, castas, menção, nota;
+2. a **identidade** — nome, ano (com a classificação e a nota do Vivino por
+   baixo, em `.vc-anobadges`), produtor/tipo/região, castas, menção, preço
+   médio;
 3. depois de um filete, o **rodapé do que é físico** — onde está a garrafa e
    se está no ponto de beber.
 Um crachá novo entra numa destas zonas; não há uma quarta.
+
+`.vc-anobadges` é uma **linha própria**, a seguir ao `.vc-head` — não uma
+coluna ao lado do nome. Lá dentro, a altura da linha do nome ficava presa à
+altura da classificação+nota, e um nome de vinho curto (uma linha só)
+sobrava com um espaço em branco por baixo antes do resto da ficha começar.
 
 ## A imagem de cada vinho
 `garrafaSVG(v)` desenha a garrafa em SVG inline: o vidro toma a cor do
