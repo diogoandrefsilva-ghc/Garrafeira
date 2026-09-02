@@ -358,6 +358,15 @@ function dataPT(d){
   const [a,m,x]=String(d).slice(0,10).split('-');
   return `${x}/${m}/${a}`;
 }
+// "AAAA-MM-DD hh:mm", na hora de quem está a ver (os `timestamptz` vêm em
+// UTC). Aqui a hora conta — é para dizer quando é que se gastou a procura.
+function dataHoraLocal(iso){
+  if(!iso)return '';
+  const d=new Date(iso);
+  if(isNaN(d))return String(iso);
+  const p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 function eur(v){
   if(v==null||v==='')return '';
   return Number(v).toLocaleString('pt-PT',{style:'currency',currency:'EUR',maximumFractionDigits:2});
@@ -1732,7 +1741,11 @@ async function apagarGarrafa(gid){
 
    NADA é gravado sem confirmação: o resultado abre num painel campo a campo,
    com o que está agora ao lado do que a IA propõe, e só entra o que ficar
-   marcado. As datas e os preços mexem em decisões — e a leitura é de uma IA. */
+   marcado. As datas e os preços mexem em decisões — e a leitura é de uma IA.
+
+   E nada é procurado DUAS vezes sem confirmação: se já se procurou este
+   vinho nos últimos 30 dias, pergunta-se antes de gastar outra chamada
+   (`iaUltimaProcura`/`iaConfirmarRepetir`). */
 
 const IA_TIMEOUT_MS=150000;   // desistir de esperar (a função tem 110s de orçamento)
 const IA_INTERVALO_MS=2500;
@@ -1848,17 +1861,89 @@ function iaEscContar(){
   if(b){b.disabled=!n;b.textContent=n?`🔎 Procurar ${n===tot?'tudo':n+(n===1?' campo':' campos')}`:'Escolhe pelo menos um';}
 }
 
+/* ── JÁ SE PROCUROU ISTO HÁ POUCO? ─────────────────────────────────
+   Cada procura é uma chamada ao Gemini com pesquisa Google ligada — custa
+   dinheiro de verdade, e a ficha de um vinho não muda de semana para
+   semana. Por isso, antes de repetir a procura ao MESMO vinho dentro de
+   `IA_AVISO_DIAS`, pergunta-se se é mesmo isso que se quer.
+
+   Onde está escrito que já se procurou (fica a data mais recente das duas):
+   · `analises` — a linha de CADA procura, mesmo quando não se aceitou nada
+     no fim. É o registo exato do que se gastou, mas a RLS só deixa ver as
+     MINHAS (o admin vê todas), por isso não chega sozinha;
+   · `vinhos.ai_atualizado_em` — o carimbo que fica quando alguém aceitou
+     alguma coisa. Vê-se sempre, seja de quem for: é o que apanha a procura
+     feita por OUTRO editor.
+   Se a consulta falhar, não se avisa e segue-se em frente — um soluço de
+   rede não pode ser o que impede alguém de procurar. */
+const IA_AVISO_DIAS=30;
+
+async function iaUltimaProcura(vinhoId){
+  const v=IDXV[vinhoId]||{};
+  const cands=[];
+  try{
+    const rows=await sbReq('GET',`analises?vinho_id=eq.${vinhoId}&estado=eq.concluido`+
+      `&select=criado_em,quem&order=criado_em.desc&limit=1`);
+    const a=(rows||[])[0];
+    if(a&&a.criado_em)cands.push({quando:a.criado_em,
+      minha:String(a.quem||'').toLowerCase()===String(EU.email||'').toLowerCase()});
+  }catch(e){}
+  if(v.ai_atualizado_em)cands.push({quando:v.ai_atualizado_em,minha:false});
+  if(!cands.length)return null;
+  cands.sort((x,y)=>new Date(y.quando)-new Date(x.quando));
+  const u=cands[0];
+  const dias=(Date.now()-new Date(u.quando).getTime())/86400000;
+  return dias<IA_AVISO_DIAS?u:null;
+}
+
+function iaConfirmarRepetir(vinhoId,ult){
+  const v=IDXV[vinhoId]||{};
+  document.getElementById('modal-ia-in').innerHTML=`
+    <div class="mtop"><div><h3>Já se procurou este vinho</h3>
+      <div class="note" style="margin-top:3px">${esc(v.nome||'')} ${v.ano||''}</div></div>
+      <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
+
+    <div class="aviso">${ult.minha
+      ? 'Utilizaste a pesquisa para este vinho pela última vez em'
+      : 'A pesquisa para este vinho foi utilizada pela última vez em'}
+      <b>${esc(dataHoraLocal(ult.quando))}</b>. Pretendes fazer novamente a pesquisa?</div>
+    <div class="note" style="margin-top:8px">Cada procura é uma pesquisa na net paga. A ficha de um
+      vinho raramente muda de um mês para o outro — se foi há pouco, é provável que volte o mesmo.</div>
+
+    <div class="macoes">
+      <button class="btn prim" onclick="iaArrancar(${vinhoId})">Procurar à mesma</button>
+      <button class="btn ghost" onclick="fecharModal('modal-ia')">Cancelar</button>
+    </div>`;
+  abrirModal('modal-ia');
+}
+
+// Os campos escolhidos no seletor, guardados enquanto se responde ao aviso:
+// nessa altura o seletor já não está no ecrã para se lhe perguntar outra vez.
+let IA_ESC=null;
+
 async function iaProcurar(vinhoId){
   if(roGuard())return;
   const v=IDXV[vinhoId];if(!v)return;
   // Se o seletor está aberto, é dele que vem a lista; se alguém chamar isto
   // de outro sítio, procura-se tudo (que era o comportamento de sempre).
   const escolhidos=iaEscSelecionados();
-  const campos=escolhidos.length&&escolhidos.length<IA_CAMPOS.length?escolhidos:null;
+  IA_ESC=escolhidos.length&&escolhidos.length<IA_CAMPOS.length?escolhidos:null;
+  const btn=document.getElementById('ia-esc-btn');
+  if(btn){btn.disabled=true;btn.textContent='A ver…';}
+  const ult=await iaUltimaProcura(vinhoId);
+  if(ult){iaConfirmarRepetir(vinhoId,ult);return;}
+  iaArrancar(vinhoId);
+}
+
+// A procura em si. Separada do botão porque pelo meio pode entrar o aviso
+// de "já se procurou isto há pouco" — e é daí que ela volta a arrancar.
+async function iaArrancar(vinhoId){
+  if(roGuard())return;
+  const v=IDXV[vinhoId];if(!v)return;
   iaMostrarEspera(v.nome+(v.ano?' '+v.ano:''));
   try{
     const pedido={nome:v.nome,ano:v.ano,produtor:v.produtor,regiao:v.regiao};
-    if(campos)pedido.campos=campos;
+    if(IA_ESC)pedido.campos=IA_ESC;
     const res=await iaPedir(pedido,vinhoId);
     iaMostrarResultado(res,vinhoId);
   }catch(e){iaMostrarErro(e.message);}
