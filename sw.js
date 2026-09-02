@@ -3,7 +3,7 @@
 // REGRA: se mexeres em app.js, style.css, index.html ou dados-iniciais.js,
 // SOBE o CACHE_NAME (v1 -> v2). Sem isso, o browser fica com a versão velha
 // e não há aviso nenhum.
-const CACHE_NAME = 'garrafeira-v5';
+const CACHE_NAME = 'garrafeira-v6';
 
 self.addEventListener('install', () => self.skipWaiting());
 

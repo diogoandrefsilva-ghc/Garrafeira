@@ -171,6 +171,7 @@ async function carregar(){
   db.vinhos.forEach(v=>{v.castas=(porVinho[v.id]||[]).filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt'));});
 
   await detetarImagem();
+  await assinarImagens();
   reindexar();
   aplicarPermissoes();
 }
@@ -179,11 +180,17 @@ async function carregar(){
    funcionar antes de alguém correr o ALTER TABLE no Supabase: se a coluna
    não existir, o campo não aparece no formulário e não vai no PATCH — que
    de outra forma rebentava com 400 em TODAS as gravações. */
-let TEM_IMAGEM=false;
+let TEM_IMAGEM=false, TEM_IMAGEM_PATH=false;
 async function detetarImagem(){
-  if(db.vinhos.length){TEM_IMAGEM=('imagem_url' in db.vinhos[0]);return;}
+  if(db.vinhos.length){
+    TEM_IMAGEM=('imagem_url' in db.vinhos[0]);
+    TEM_IMAGEM_PATH=('imagem_path' in db.vinhos[0]);
+    return;
+  }
   try{await sbReq('GET','vinhos?select=imagem_url&limit=1');TEM_IMAGEM=true;}
   catch(e){TEM_IMAGEM=false;}
+  try{await sbReq('GET','vinhos?select=imagem_path&limit=1');TEM_IMAGEM_PATH=true;}
+  catch(e){TEM_IMAGEM_PATH=false;}
 }
 
 /* ── ÍNDICES E CÁLCULOS ────────────────────────────────────────────── */
@@ -237,11 +244,56 @@ function garrafaSVG(v,mini){
       fill="#4e1228">${esc(ano)}</text>`}
   </svg>`;
 }
+/* QUAL imagem é que se mostra. Há duas origens e a ordem é sempre esta:
+     1. `imagem_path` — a MINHA foto, no bucket privado. Ganha sempre: quem
+        tem a garrafa na mão sabe melhor do que a IA qual é o rótulo.
+     2. `imagem_url` — o link que a procura encontrou numa loja.
+     3. nenhuma — fica a garrafa desenhada.
+   Apagar a minha faz reaparecer a de baixo; ela nunca é deitada fora. */
+const BUCKET='garrafeira-rotulos';
+let IMG_ASSINADA={};        // vinho_id -> URL assinado (válido umas horas)
+function imagemDe(v){
+  if(!v)return '';
+  if(String(v.imagem_path||'').trim()&&IMG_ASSINADA[v.id])return IMG_ASSINADA[v.id];
+  return String(v.imagem_url||'').trim();
+}
+function imagemPropria(v){return !!String((v||{}).imagem_path||'').trim();}
+
+/* O bucket é PRIVADO, por isso um <img src> não lhe chega com o JWT — o
+   browser não manda cabeçalhos numa imagem. A saída são links assinados:
+   pedem-se TODOS de uma vez ao carregar (um pedido, não um por vinho) e
+   duram uma semana, que é muito mais do que uma sessão. */
+async function assinarImagens(){
+  IMG_ASSINADA={};
+  const comFoto=db.vinhos.filter(imagemPropria);
+  if(!comFoto.length)return;
+  try{
+    const r=await sbFetch(`${SB_URL}/storage/v1/object/sign/${BUCKET}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':SB_KEY},
+      body:JSON.stringify({expiresIn:604800,paths:comFoto.map(v=>v.imagem_path)})
+    });
+    if(!r.ok)return;
+    const lista=await r.json();
+    // A API já devolveu isto como `signedURL` e como `signedUrl` conforme a
+    // versão, e o `path` ora vem com barra à frente ora sem. Em vez de
+    // apostar numa forma, aceitam-se as duas e, se o `path` não bater,
+    // casa-se pela ORDEM — a resposta vem na ordem em que se pediu.
+    (lista||[]).forEach((x,i)=>{
+      const url=x&&(x.signedURL||x.signedUrl);
+      if(!url)return;
+      const caminho=String((x&&x.path)||'').replace(/^\/+/,'');
+      const v=comFoto.find(w=>w.imagem_path===caminho)||comFoto[i];
+      if(v)IMG_ASSINADA[v.id]=url.startsWith('http')?url:`${SB_URL}/storage/v1${url.startsWith('/')?'':'/'}${url}`;
+    });
+  }catch(e){/* sem link assinado fica a foto da net, ou a garrafa desenhada */}
+}
+
 // A miniatura do cartão: garrafa desenhada por baixo, foto por cima quando
 // existe. Se a foto falhar (link partido), o `onerror` tira-a e fica a
 // garrafa — nunca um quadrado vazio.
 function vinhoThumb(v,qtd){
-  const img=String(v.imagem_url||'').trim();
+  const img=imagemDe(v);
   return `<div class="vc-thumb">${garrafaSVG(v)}
     ${img?`<img src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()">`:''}
     ${qtd>1?`<span class="vc-qtd">\u00d7${qtd}</span>`:''}</div>`;
@@ -891,13 +943,16 @@ function vinhoDetalheHTML(v){
   const estagio=v.estagio_texto||(v.estagio_meses?`${v.estagio_meses} meses`:'');
   const idadeInfo=v.beber_de||v.beber_ate
     ? `${v.beber_de||'?'} – ${v.beber_ate||'?'}${jan?`  <span class="bdg jan ${jan}">${JANELA_TXT[jan]}</span>`:''}` : '';
-  const img=String(v.imagem_url||'').trim();
+  const img=imagemDe(v);
   const origem=[v.produtor,v.regiao,v.sub_regiao].filter(Boolean).map(esc).join(' · ');
 
   return `<div class="mhero">
       <button class="mx" onclick="fecharModal('modal-vinho')">✕</button>
       <div class="mhero-in">
-        <div class="mhero-g">${garrafaSVG(v)}${img?`<img src="${esc(img)}" alt="" onerror="this.remove()">`:''}</div>
+        <button class="mhero-g" onclick="abrirFoto(${v.id})" title="Ver a imagem em grande">
+          ${garrafaSVG(v)}${img?`<img src="${esc(img)}" alt="" onerror="this.remove()">`:''}
+          <span class="mhero-lupa">⤢</span>
+        </button>
         <div class="mhero-tx">
           <div class="mhero-k">${esc([v.tipo,v.estilo,v.classificacao].filter(Boolean).join(' · '))||'&nbsp;'}</div>
           <h3>${esc(v.nome)}</h3>
@@ -975,6 +1030,127 @@ function vinhoDetalheHTML(v){
       <button class="btn danger ro-hide" onclick="apagarVinho(${v.id})">🗑 Apagar vinho</button>
     </div>`;
 }
+/* ── A IMAGEM DO VINHO: ver em grande e trocar pela minha ───────────
+   Toca-se na imagem da capa e ela abre aqui em grande, com o botão de
+   substituir. A fotografia sai do telemóvel (câmara ou galeria — é o
+   `accept="image/*"` que dá as duas opções no iOS) e é ENCOLHIDA no browser
+   antes de subir: uma foto de telemóvel são 4 MB e o que interessa de um
+   rótulo cabe em ~120 KB. Subir os 4 MB era encher o bucket e fazer a app
+   arrastar-se em cada carregamento, para nada.
+
+   A minha imagem NÃO apaga a que a IA encontrou: fica por cima
+   (`imagem_path` ganha ao `imagem_url`). Tirar a minha faz reaparecer a
+   outra — por isso é que são duas colunas e não uma. */
+let FOTO_VINHO=null;
+function abrirFoto(vinhoId){
+  const v=IDXV[vinhoId];if(!v)return;
+  FOTO_VINHO=vinhoId;
+  const img=imagemDe(v), minha=imagemPropria(v);
+  const fonte=minha?'A tua fotografia'
+    :(img?'Encontrada na net pela procura':'Garrafa desenhada pela app');
+  document.getElementById('modal-foto-in').innerHTML=`
+    <div class="mtop"><div><h3>${esc(v.nome)}</h3>
+      <div class="note" style="margin-top:3px">${esc(fonte)}</div></div>
+      <button class="mx" onclick="fecharModal('modal-foto')">✕</button></div>
+
+    <div class="foto-palco">
+      <div class="foto-svg">${garrafaSVG(v)}</div>
+      ${img?`<img src="${esc(img)}" alt="" onerror="this.remove()">`:''}
+    </div>
+
+    <div class="note" id="foto-estado"></div>
+
+    <div class="macoes ro-hide">
+      <label class="btn prim" style="text-align:center;cursor:pointer;margin:0">
+        📷 ${minha?'Trocar a imagem':'Carregar uma imagem'}
+        <input type="file" accept="image/*" style="display:none" onchange="enviarFoto(this)">
+      </label>
+      ${minha?`<button class="btn danger" onclick="apagarFotoPropria()">Remover a minha</button>`:''}
+    </div>
+    <div class="note" style="margin-top:10px">${minha
+      ? 'Se removeres a tua, volta a aparecer a imagem que a procura encontrou (ou a garrafa desenhada).'
+      : 'A tua imagem fica guardada na garrafeira e passa a ser a que aparece em todo o lado.'}</div>`;
+  abrirModal('modal-foto');
+}
+
+/* Encolher no browser. `createImageBitmap` com `imageOrientation:'from-image'`
+   trata do EXIF — sem isso as fotos tiradas na vertical apareciam deitadas,
+   que é o clássico de quem carrega fotos de telemóvel. */
+async function encolherImagem(file,max=1000,q=0.85){
+  let bmp;
+  try{bmp=await createImageBitmap(file,{imageOrientation:'from-image'});}
+  catch(e){bmp=await createImageBitmap(file);}
+  const escala=Math.min(1,max/Math.max(bmp.width,bmp.height));
+  const w=Math.round(bmp.width*escala), h=Math.round(bmp.height*escala);
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  c.getContext('2d').drawImage(bmp,0,0,w,h);
+  bmp.close&&bmp.close();
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',q));
+  if(!blob)throw new Error('não consegui ler essa imagem');
+  return blob;
+}
+
+async function enviarFoto(input){
+  if(roGuard())return;
+  const file=(input.files||[])[0];
+  if(!file)return;
+  input.value='';                          // deixa escolher a MESMA foto outra vez
+  const v=IDXV[FOTO_VINHO];if(!v)return;
+  if(!TEM_IMAGEM_PATH){toast('A base de dados ainda não tem a coluna imagem_path',1);return;}
+  const est=document.getElementById('foto-estado');
+  est.textContent='A preparar a imagem…';
+  try{
+    const blob=await encolherImagem(file);
+    // Nome novo em cada envio: um caminho fixo ficava preso à cache do
+    // browser e da CDN, e a imagem trocada só aparecia horas depois.
+    const caminho=`v${v.id}/${Date.now().toString(36)}${Math.random().toString(36).slice(2,8)}.jpg`;
+    est.textContent=`A enviar (${Math.round(blob.size/1024)} KB)…`;
+    const r=await sbFetch(`${SB_URL}/storage/v1/object/${BUCKET}/${caminho}`,{
+      method:'POST',
+      headers:{'apikey':SB_KEY,'Content-Type':'image/jpeg','x-upsert':'true'},
+      body:blob
+    });
+    if(!r.ok){
+      let m='HTTP '+r.status;try{m=(await r.json()).message||m;}catch(_){}
+      throw new Error(m);
+    }
+    const antigo=String(v.imagem_path||'').trim();
+    await sbReq('PATCH',`vinhos?id=eq.${v.id}`,{imagem_path:caminho});
+    v.imagem_path=caminho;
+    // A anterior deixa de servir para alguma coisa — fica lixo pago no
+    // bucket. Falhar a apagá-la não estraga nada, por isso não trava.
+    if(antigo&&antigo!==caminho)apagarObjeto(antigo);
+    await assinarImagens();
+    est.textContent='';
+    renderLista();refrescarVinhoAberto();abrirFoto(v.id);
+    if(tabAtiva==='locais')renderMapa();
+    toast('Imagem guardada ✓');
+  }catch(e){
+    est.innerHTML=`<span style="color:var(--dg)">Não foi possível: ${esc(e.message)}</span>`;
+  }
+}
+async function apagarObjeto(caminho){
+  try{
+    await sbFetch(`${SB_URL}/storage/v1/object/${BUCKET}/${caminho}`,
+      {method:'DELETE',headers:{'apikey':SB_KEY}});
+  }catch(e){}
+}
+async function apagarFotoPropria(){
+  if(roGuard())return;
+  const v=IDXV[FOTO_VINHO];if(!v)return;
+  const caminho=String(v.imagem_path||'').trim();
+  if(!caminho)return;
+  if(!confirm('Remover a tua imagem deste vinho?\n\nVolta a aparecer a que a procura encontrou, ou a garrafa desenhada.'))return;
+  try{
+    await sbReq('PATCH',`vinhos?id=eq.${v.id}`,{imagem_path:''});
+    v.imagem_path='';delete IMG_ASSINADA[v.id];
+    apagarObjeto(caminho);
+    renderLista();refrescarVinhoAberto();abrirFoto(v.id);
+    if(tabAtiva==='locais')renderMapa();
+    toast('Imagem removida');
+  }catch(e){toast('Não foi possível: '+e.message,1);}
+}
+
 function filtrarPorCasta(nome){
   fecharModal('modal-vinho');
   limparFiltros();
@@ -991,7 +1167,9 @@ async function apagarVinho(id){
   const n=garrafasDe(id,false).length;
   if(!confirm(`Apagar "${v.nome}"?\n\nLeva com ele ${n} garrafa${n===1?'':'s'}, incluindo o registo de quando e onde foram bebidas. Isto não se desfaz.`))return;
   try{
+    const foto=String(v.imagem_path||'').trim();
     await sbReq('DELETE',`vinhos?id=eq.${id}`);
+    if(foto)apagarObjeto(foto);        // senão ficava um ficheiro órfão no bucket
     db.vinhos=db.vinhos.filter(x=>x.id!==id);
     db.garrafas=db.garrafas.filter(g=>g.vinho_id!==id);   // ON DELETE CASCADE do lado da BD
     reindexar();fecharModal('modal-vinho');renderLista();

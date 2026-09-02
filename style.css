@@ -423,6 +423,30 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .mhero-n{display:inline-flex;align-items:center;gap:5px;margin-top:8px;background:rgba(255,255,255,.12);
   border:1px solid rgba(255,255,255,.22);border-radius:99px;padding:3px 10px;font-size:11px;font-weight:600;color:#f6dfa8}
 
+/* A imagem em grande (toca-se na capa do modal do vinho). O palco tem
+   altura fixa e a imagem entra em `contain`: umas fotos são da garrafa
+   inteira, outras só do rótulo — cortar era deformar. */
+.mhero-g{border:none;background:none;padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mhero-lupa{position:absolute;right:-4px;bottom:-2px;width:20px;height:20px;border-radius:50%;
+  background:rgba(255,255,255,.9);color:var(--vhd);font-size:10px;display:flex;align-items:center;
+  justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+/* A garrafa desenhada fica SEMPRE por baixo e a fotografia por cima. Assim
+   não há palco vazio enquanto a imagem carrega (nem se o link estiver
+   morto — aí o `onerror` tira-a e fica a garrafa). É o mesmo que o cartão
+   faz na miniatura. */
+.foto-palco{position:relative;margin-top:14px;background:var(--bg);border:1px solid var(--bo);border-radius:12px;
+  height:min(52vh,420px);display:flex;align-items:center;justify-content:center;overflow:hidden;padding:10px}
+.foto-palco img{position:absolute;inset:10px;width:calc(100% - 20px);height:calc(100% - 20px);
+  object-fit:contain;display:block;border-radius:6px;background:var(--bg)}
+.foto-svg{height:100%;display:flex;align-items:center;justify-content:center}
+.foto-svg svg{height:100%;width:auto;max-height:100%;filter:drop-shadow(0 6px 14px rgba(43,10,22,.25))}
+#foto-estado:empty{display:none}
+#foto-estado{margin-top:10px}
+/* O botão de carregar é um <label> (é ele que abre o seletor de ficheiros),
+   e `.mbox label` põe tudo em maiúsculas a 10px — daí a especificidade. */
+.mbox label.btn{text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;margin:0;
+  display:flex;align-items:center;justify-content:center;gap:7px}
+
 /* Estrelas de avaliação (consumo) — em vez do <select>, que ninguém
    percebia ser uma nota. */
 .stars{display:flex;gap:5px;margin-top:5px}

@@ -146,3 +146,30 @@ CREATE POLICY sync_log_ins ON garrafeira.sync_log
 DROP POLICY IF EXISTS sync_log_del ON garrafeira.sync_log;
 CREATE POLICY sync_log_del ON garrafeira.sync_log
   FOR DELETE TO authenticated USING (garrafeira.is_admin());
+
+-- ---------------------------------------------------------------------
+-- storage.objects — as fotos dos rótulos (bucket `garrafeira-rotulos`)
+-- ---------------------------------------------------------------------
+-- As mesmas três fronteiras do resto da app: vê quem tem acesso, mexe quem
+-- é editor. Todas as policies são presas ao `bucket_id` — sem isso davam
+-- acesso aos buckets de TODAS as outras apps deste projeto Supabase.
+DROP POLICY IF EXISTS garrafeira_rotulos_sel ON storage.objects;
+CREATE POLICY garrafeira_rotulos_sel ON storage.objects
+  FOR SELECT TO authenticated
+  USING (bucket_id = 'garrafeira-rotulos' AND garrafeira.is_allowed());
+
+DROP POLICY IF EXISTS garrafeira_rotulos_ins ON storage.objects;
+CREATE POLICY garrafeira_rotulos_ins ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'garrafeira-rotulos' AND garrafeira.is_editor());
+
+DROP POLICY IF EXISTS garrafeira_rotulos_upd ON storage.objects;
+CREATE POLICY garrafeira_rotulos_upd ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (bucket_id = 'garrafeira-rotulos' AND garrafeira.is_editor())
+  WITH CHECK (bucket_id = 'garrafeira-rotulos' AND garrafeira.is_editor());
+
+DROP POLICY IF EXISTS garrafeira_rotulos_del ON storage.objects;
+CREATE POLICY garrafeira_rotulos_del ON storage.objects
+  FOR DELETE TO authenticated
+  USING (bucket_id = 'garrafeira-rotulos' AND garrafeira.is_editor());

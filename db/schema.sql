@@ -149,6 +149,13 @@ CREATE TABLE IF NOT EXISTS garrafeira.vinhos (
   -- obrigado a pôr uma à mão) — sem ela, a app DESENHA a garrafa em SVG
   -- (cor do vidro pelo `tipo`, ano no rótulo) em vez de deixar um vazio.
   imagem_url       text NOT NULL DEFAULT '',
+  -- A MINHA imagem, quando existe: o caminho dentro do bucket
+  -- `garrafeira-rotulos` (ex.: 'v12/abc123.jpg'). Não é um URL — o bucket é
+  -- privado e o link é assinado na hora (`assinarImagens()` em app.js).
+  -- Quando está preenchida GANHA ao `imagem_url`: a fotografia de quem tem
+  -- a garrafa na mão vale mais do que a que a IA encontrou numa loja. Apagar
+  -- esta faz reaparecer a de baixo, que nunca se perde.
+  imagem_path      text NOT NULL DEFAULT '',
   preco_medio      numeric(10,2),              -- EUR, garrafa de 0,75 L
   -- janela de consumo recomendada, em ANOS (não em idade): "beber entre
   -- 2026 e 2034". Guardado assim porque é o que as fichas dão e é o que
@@ -299,3 +306,19 @@ ALTER TABLE garrafeira.vinho_castas    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE garrafeira.garrafas        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE garrafeira.analises        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE garrafeira.sync_log        ENABLE ROW LEVEL SECURITY;
+
+-- ---------------------------------------------------------------------
+-- Storage: as fotografias dos rótulos tiradas por quem tem a garrafa
+-- ---------------------------------------------------------------------
+-- PRIVADO, como todo o resto desta app: os links são assinados na hora e
+-- só quem tem acesso os consegue pedir. As fotos são tiradas em casa e
+-- muitas vezes apanham a prateleira à volta — não é coisa para ficar num
+-- URL público que qualquer um adivinha.
+--
+-- A app encolhe a imagem no browser antes de a enviar (lado maior 1000px,
+-- JPEG) — uma foto de telemóvel são 4 MB, o rótulo chega com ~120 KB. O
+-- limite abaixo é a rede de segurança, não o normal.
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('garrafeira-rotulos', 'garrafeira-rotulos', false, 5242880,
+        ARRAY['image/jpeg','image/png','image/webp'])
+ON CONFLICT (id) DO NOTHING;

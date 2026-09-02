@@ -110,6 +110,30 @@ de imagens aqui**: assim não custa um pedido à rede, não falha offline e
 não depende de um link de terceiros que um dia morre. A garrafa aparece
 também no mapa dos locais (versão `mini`, sem rótulo) e na capa do modal.
 
+### Duas origens, uma ordem
+Um vinho pode ter DUAS imagens e a ordem nunca muda:
+1. **`imagem_path`** — a MINHA fotografia, no bucket privado
+   `garrafeira-rotulos`. Ganha sempre: quem tem a garrafa na mão sabe melhor
+   do que a IA qual é o rótulo.
+2. **`imagem_url`** — o link que a procura encontrou numa loja.
+3. nenhuma — fica a garrafa desenhada.
+
+São duas colunas e não uma de propósito: tirar a minha faz **reaparecer** a
+que a IA encontrou, em vez de deixar o vinho sem nada. Quem decide é
+`imagemDe(v)` — usa-se esse, nunca `v.imagem_url` à mão.
+
+O bucket é **privado** (as fotos são tiradas em casa e apanham a prateleira
+à volta), por isso um `<img src>` não lhe chega com o JWT. A saída são links
+assinados: `assinarImagens()` pede-os TODOS num pedido só ao carregar e
+guarda-os em `IMG_ASSINADA` por vinho.
+
+A app **encolhe a imagem no browser** antes de a enviar (`encolherImagem`,
+lado maior 1000px, JPEG): uma foto de telemóvel são 4 MB e o rótulo cabe em
+~120 KB. O `imageOrientation:'from-image'` trata do EXIF — sem isso as fotos
+tiradas na vertical apareciam deitadas. Cada envio gera um nome novo (um
+caminho fixo ficava preso à cache do browser e da CDN) e apaga o anterior;
+apagar o vinho leva a foto atrás, senão ficava lixo pago no bucket.
+
 `vinhos.imagem_url` já está aplicada no Supabase deste projeto — a
 `vinho-info` (Edge Function) também tenta trazê-la na procura da IA (link
 DIRETO da fotografia, não o da página; ver `vinho-info.ts`). Mesmo assim a

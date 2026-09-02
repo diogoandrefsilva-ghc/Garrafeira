@@ -45,6 +45,15 @@ A app não depende de a coluna existir para funcionar: deteta-o sozinha
 o manda nas gravações — em vez da foto mostra a garrafa desenhada, que é o
 que aparece na mesma para todos os vinhos sem link.
 
+### `vinhos.imagem_path` + bucket `garrafeira-rotulos` (já aplicados)
+
+A fotografia do rótulo tirada por quem tem a garrafa. Aplicado como a
+migração `garrafeira_04_imagem_propria`: a coluna, o bucket **privado**
+(5 MB, só jpeg/png/webp) e quatro policies em `storage.objects` presas ao
+`bucket_id` — vê quem tem acesso, mexe quem é editor. É o primeiro bucket
+deste projeto Supabase; as policies têm de ficar sempre presas ao bucket,
+senão davam acesso aos buckets das outras apps.
+
 **Falta o que não é SQL** — ver "Passos manuais" mais abaixo. Enquanto o
 schema não estiver exposto na API, a app dá 404 em tudo.
 

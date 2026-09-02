@@ -8,7 +8,8 @@ que já se bebeu.
   apps do mesmo projeto).
 - **Instalável** no telemóvel (PWA).
 - Cada vinho tem a sua **garrafa desenhada** (SVG, cor pelo tipo, ano no
-  rótulo) — ou a foto do rótulo, se lhe deres um link.
+  rótulo), a foto que a procura encontrou, ou **uma fotografia tua** — toca
+  na imagem da ficha para a ver em grande e trocar.
 
 ## O que faz
 
