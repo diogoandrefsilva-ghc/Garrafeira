@@ -110,31 +110,12 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
     <button class="it so-ic" onclick="tab('cfg',this)" title="Definições" aria-label="Definições">⚙️</button>
   </div>
 
-  <!-- ═══ GARRAFEIRA (ecrã inicial: resumo + procura com filtros) ═══ -->
+  <!-- ═══ GARRAFEIRA (ecrã inicial: só o resumo) ═══ -->
   <section class="sec on" id="s-garrafeira">
     <div class="g4" id="resumo-cards"></div>
-
-    <!-- Procura: a barra sozinha à vista; os filtros abrem no botão
-         "Filtros", que traz o número dos que estão ligados. -->
-    <div class="filtros" id="filtros">
-      <div class="fsearch">
-        <span class="fsearch-i">🔍</span>
-        <input type="search" id="f-texto" placeholder="Procurar vinho, produtor, casta, região…" oninput="renderPesquisa()">
-        <button class="fsearch-x" id="f-texto-x" onclick="limparTexto()" title="Limpar">✕</button>
-      </div>
-      <div class="fbar">
-        <button class="ftoggle" onclick="toggleFiltros()">Filtros <span class="fn" id="f-n"></span> <span class="fchev">▾</span></button>
-        <span class="fcount" id="f-count"></span>
-        <button class="lnk" id="f-limpar" onclick="limparFiltros()" style="display:none">limpar</button>
-      </div>
-      <div class="fchips" id="f-selects"></div>
-      <div class="factivos" id="f-activos"></div>
-    </div>
-
-    <div id="pesq-resultados"></div>
   </section>
 
-  <!-- ═══ DETALHE (lista completa, só organizada) ═══ -->
+  <!-- ═══ DETALHE (lista completa, organizada, com a procura) ═══ -->
   <section class="sec" id="s-detalhe">
     <div class="dbar">
       <span class="fcount" id="det-count"></span>
@@ -147,12 +128,32 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       </div>
     </div>
 
+    <!-- A mesma procura vive aqui e em Locais (posicionarFiltros move este
+         nó de sítio ao trocar de separador). Colapsada é só uma linha: a
+         caixa de texto e, à direita, o botão que abre os outros filtros. -->
+    <div class="filtros" id="filtros">
+      <div class="fsearch">
+        <div class="fsearch-box">
+          <span class="fsearch-i">🔍</span>
+          <input type="search" id="f-texto" placeholder="Procurar vinho, produtor, casta, região…" oninput="renderFiltrados()">
+          <button class="fsearch-x" id="f-texto-x" onclick="limparTexto()" title="Limpar">✕</button>
+        </div>
+        <button class="ftoggle" onclick="toggleFiltros()">Filtros <span class="fn" id="f-n"></span> <span class="fchev">▾</span></button>
+      </div>
+      <div class="fbar" id="fbar-info" style="display:none">
+        <span class="fcount" id="f-count"></span>
+        <button class="lnk" id="f-limpar" onclick="limparFiltros()" style="display:none">limpar</button>
+      </div>
+      <div class="fchips" id="f-selects"></div>
+      <div class="factivos" id="f-activos"></div>
+    </div>
+
     <div id="detalhe-grupos"></div>
   </section>
 
   <!-- ═══ LOCAIS ═══ -->
   <section class="sec" id="s-locais">
-    <div class="note" style="margin-bottom:14px">O mapa da garrafeira: cada local, cada prateleira, cada lugar. Toca num lugar para abrir o vinho.</div>
+    <div class="note" style="margin-bottom:14px">O mapa da garrafeira: cada local, cada prateleira, cada lugar. Toca num lugar para abrir o vinho, ou procura para ver só onde estão certos vinhos.</div>
     <div id="mapa"></div>
   </section>
 

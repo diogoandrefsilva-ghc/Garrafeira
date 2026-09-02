@@ -401,9 +401,8 @@ function tab(nome,btn){
   document.querySelectorAll('.itabs .it').forEach(b=>b.classList.remove('on'));
   if(btn)btn.classList.add('on');
   try{localStorage.setItem('gf_tab',nome);}catch(e){}
-  if(nome==='garrafeira'){renderResumo();renderPesquisa();}
-  if(nome==='detalhe')renderDetalhe();
-  if(nome==='locais')renderMapa();
+  if(nome==='garrafeira')renderResumo();
+  if(nome==='detalhe'||nome==='locais'){posicionarFiltros(nome);renderFiltrados();}
   if(nome==='consumidos')renderConsumidos();
   if(nome==='cfg')renderCfg();
   window.scrollTo({top:0,behavior:'instant'});
@@ -414,6 +413,21 @@ function restaurarTab(){
   const bts=document.querySelectorAll('.itabs .it');
   const i=ORDEM_TABS.indexOf(t);
   if(i>0&&bts[i])tab(t,bts[i]);
+}
+// A procura é UM nó só (o mesmo <input>, o mesmo estado), que se muda de
+// sítio consoante o separador — não duas cópias com ids repetidos. Fica em
+// Detalhe por defeito no HTML; ao entrar em Locais sobe para lá, e volta
+// quando se regressa a Detalhe.
+function posicionarFiltros(nome){
+  const f=document.getElementById('filtros');
+  if(!f)return;
+  if(nome==='detalhe'){
+    const box=document.getElementById('detalhe-grupos');
+    if(box&&f.nextSibling!==box)box.parentNode.insertBefore(f,box);
+  }else if(nome==='locais'){
+    const box=document.getElementById('mapa');
+    if(box&&f.nextSibling!==box)box.parentNode.insertBefore(f,box);
+  }
 }
 
 /* ── RESUMO (ecrã inicial) ─────────────────────────────────────────
@@ -456,6 +470,17 @@ function scCard(cor,label,valor,sub,id){
     ${id?'<div class="sc-chev">▾</div>':''}
     <div class="sc-l">${esc(label)}</div>
     <div class="sc-v">${valor}</div>
+    <div class="sc-s">${esc(sub)}</div>
+  </div>`;
+}
+// Os dois cards DOURADOS ("Região preferida", "Casta preferida") — a região
+// e a casta com mais vinhos na garrafeira agora. Tocam no mesmo painel de
+// sempre (resumoDrill), já aberto na linha certa: são um atalho para a
+// pergunta mais óbvia, não uma contagem nova.
+function scCardFav(rotulo,nome,sub,qual){
+  return `<div class="sc sc-fav" onclick="resumoDrill('${qual}','${escJs(nome)}')">
+    <div class="sc-l">${esc(rotulo)}</div>
+    <div class="sc-fav-nome">${esc(nome)}</div>
     <div class="sc-s">${esc(sub)}</div>
   </div>`;
 }
@@ -571,11 +596,23 @@ function renderResumo(){
   const falRows=FALTAS.map(f=>({nome:f.k,n:comStock.filter(v=>!f.tem(v)).length}))
     .filter(r=>r.n>0).sort((a,b)=>b.n-a.n);
 
+  // PREFERIDAS: a região e a casta com mais vinhos agora mesmo — não é
+  // guardado em lado nenhum, é sempre o topo de regRows/casRows.
+  const topRegiao=regRows.length&&regRows[0].nome!=='Sem região'?regRows[0]:null;
+  const topCasta=casRows.length?casRows[0]:null;
+  const topCastaMono=topCasta?(monoRows.find(m=>m.nome===topCasta.nome)||{n:0}).n:0;
+  let favHtml='';
+  if(topRegiao)favHtml+=scCardFav('Região preferida',topRegiao.nome,
+    `${topRegiao.n} vinho${topRegiao.n===1?'':'s'}`,'regiao');
+  if(topCasta)favHtml+=scCardFav('Casta preferida',topCasta.nome,
+    `${topCasta.n} vinho${topCasta.n===1?'':'s'}${topCastaMono?`, ${topCastaMono} monocasta`:''}`,'casta');
+
   let html=
     scCard('','Vinhos',totalVinhos,totalVinhos===1?'vinho na garrafeira':'vinhos na garrafeira',null)+
     scCard('co','Monocasta',monoWines.length,totalVinhos?`de ${totalVinhos} vinhos`:'','mono')+
     scCard('cv','Regiões',nRegioes,'diferentes','regiao')+
     scCard('cb','Castas',casRows.length,'diferentes','casta')+
+    favHtml+
     scCard('co','Valor estimado',`<span class="sc-eur">${esc(eur0(valorTotal))}</span>`,
       comPreco.length===ativas.length?`${ativas.length} garrafa${ativas.length===1?'':'s'}`
         :`${comPreco.length} de ${ativas.length} garrafas com preço`,'valor')+
@@ -600,30 +637,29 @@ function renderResumo(){
   box.innerHTML=html;
 }
 
-/* ── PESQUISA (ecrã inicial) ───────────────────────────────────────
-   A procura com os filtros todos — texto, local, tipo, região, casta,
-   monocasta, ano, menção e maturação. Só mostra a lista quando há alguma
-   coisa a filtrar: sem isso, o ecrã inicial voltava a ser a lista toda,
-   que é o que se quis tirar daqui. */
-function renderPesquisa(){
-  const box=document.getElementById('pesq-resultados');
-  if(!box)return;
+/* ── PESQUISA (Detalhe + Locais) ────────────────────────────────────
+   A mesma procura — texto, local, tipo, região, casta, monocasta, ano,
+   menção e maturação — filtra os dois separadores onde vive: a lista
+   organizada do Detalhe e o mapa dos Locais. Já não está no ecrã inicial:
+   com os dois separadores a ganhá-la, ter uma terceira cópia era ter três
+   sítios com a mesma pergunta. */
+function renderFiltrados(){
   renderFiltros();
   const fc=document.getElementById('f-count');
   const fl=document.getElementById('f-limpar');
+  const info=document.getElementById('fbar-info');
   const tx=document.getElementById('f-texto');
   document.getElementById('f-texto-x').classList.toggle('on',!!tx.value);
   if(!haFiltros()){
-    fl.style.display='none';fc.textContent='';box.innerHTML='';
-    return;
+    info.style.display='none';fl.style.display='none';fc.textContent='';
+  }else{
+    info.style.display='';fl.style.display='';
+    const res=vinhosFiltrados();
+    const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
+    fc.textContent=`${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'}`;
   }
-  fl.style.display='';
-  const res=vinhosFiltrados().sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
-  const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
-  fc.textContent=`${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'}`;
-  box.innerHTML=res.length
-    ?res.map(vinhoCardHTML).join('')
-    :'<div class="vazio"><b>Nada encontrado</b>Nenhum vinho corresponde a esta procura.</div>';
+  renderDetalhe();
+  renderMapa();
 }
 
 /* ── FILTROS ───────────────────────────────────────────────────────
@@ -680,7 +716,7 @@ function toggleFiltros(){
 }
 function limparTexto(){
   const c=document.getElementById('f-texto');
-  c.value='';renderPesquisa();c.focus();
+  c.value='';renderFiltrados();c.focus();
 }
 function listasFiltro(){
   const o=opcoesFiltro();
@@ -715,11 +751,11 @@ function renderFiltros(){
     `<span class="fpill">${F_META[k][0]} ${esc(rotuloFiltro(listas,k))}
       <button onclick="setFiltro('${k}','')" title="Tirar este filtro">✕</button></span>`).join('');
 }
-function setFiltro(k,v){F[k]=v;renderPesquisa();}
+function setFiltro(k,v){F[k]=v;renderFiltrados();}
 function limparFiltros(){
   Object.keys(F).forEach(k=>F[k]='');
   document.getElementById('f-texto').value='';
-  renderPesquisa();
+  renderFiltrados();
 }
 function haFiltros(){
   return Object.values(F).some(Boolean)||!!document.getElementById('f-texto').value.trim();
@@ -868,17 +904,21 @@ function vinhoCardHTML(v){
     </div>
   </article>`;
 }
-// A lista COMPLETA, sem filtros nenhuns — só organizada por região ou por
-// ano. Filtrar e procurar é na Garrafeira; aqui é para percorrer tudo.
+// A lista completa, organizada por região, ano ou casta — e, quando a
+// procura tem alguma coisa ligada, só os vinhos que passam nela (a mesma
+// organização, com menos vinhos dentro).
 function renderDetalhe(){
   const box=document.getElementById('detalhe-grupos');
   if(!box)return;
-  const res=db.vinhos.filter(v=>stockDe(v.id)>0);
+  const filtrando=haFiltros();
+  const res=filtrando?vinhosFiltrados():db.vinhos.filter(v=>stockDe(v.id)>0);
   const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
   document.getElementById('det-count').textContent=
     `${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'}`;
   if(!res.length){
-    box.innerHTML='<div class="vazio"><b>Ainda sem vinhos</b>Toca no + para pôr o primeiro.</div>';
+    box.innerHTML=filtrando
+      ?'<div class="vazio"><b>Nada encontrado</b>Nenhum vinho corresponde a esta procura.</div>'
+      :'<div class="vazio"><b>Ainda sem vinhos</b>Toca no + para pôr o primeiro.</div>';
     return;
   }
   const grupos=agruparVinhos(res,DET_AGRUPAR);
@@ -894,8 +934,7 @@ function renderDetalhe(){
 // simples e mais seguro do que tentar adivinhar o que precisa de mudar.
 function renderLista(){
   renderResumo();
-  renderPesquisa();
-  renderDetalhe();
+  renderFiltrados();
 }
 
 /* ── MAPA DOS LOCAIS ───────────────────────────────────────────────
@@ -909,8 +948,19 @@ function renderLista(){
    desenhada, o nome do vinho e o lugar em destaque. */
 function renderMapa(){
   const box=document.getElementById('mapa');
-  const ativas=db.garrafas.filter(naGarrafeira);
-  if(!ativas.length){box.innerHTML='<div class="vazio"><b>Garrafeira vazia</b>Ainda não há garrafas arrumadas.</div>';return;}
+  if(!box)return;
+  const filtrando=haFiltros();
+  let ativas=db.garrafas.filter(naGarrafeira);
+  if(filtrando){
+    const okV=new Set(vinhosFiltrados().map(v=>v.id));
+    ativas=ativas.filter(g=>okV.has(g.vinho_id)&&(!F.local||String(g.local_id)===F.local));
+  }
+  if(!ativas.length){
+    box.innerHTML=filtrando
+      ?'<div class="vazio"><b>Nada encontrado</b>Nenhuma garrafa corresponde a esta procura.</div>'
+      :'<div class="vazio"><b>Garrafeira vazia</b>Ainda não há garrafas arrumadas.</div>';
+    return;
+  }
 
   // Garrafas sem local (o local foi apagado, ou nunca foi escolhido) não
   // podem sumir do mapa — é aí que se vê que estão por arrumar.
@@ -1271,8 +1321,8 @@ function filtrarPorCasta(nome){
   limparFiltros();
   F.casta=nome;
   const bts=document.querySelectorAll('.itabs .it');
-  if(tabAtiva!=='garrafeira')tab('garrafeira',bts[0]);
-  renderPesquisa();
+  if(tabAtiva!=='detalhe')tab('detalhe',bts[1]);
+  else renderFiltrados();
   toast('A mostrar vinhos com '+nome);
 }
 
