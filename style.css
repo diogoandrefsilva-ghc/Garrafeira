@@ -247,7 +247,7 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
 .fsearch{display:flex;align-items:center;gap:8px}
 .fsearch-box{position:relative;flex:1;min-width:0;display:flex;align-items:center}
 .fsearch-i{position:absolute;left:13px;font-size:14px;opacity:.55;pointer-events:none;line-height:1}
-.filtros input[type=search]{width:100%;padding:12px 38px 12px 38px;border:1px solid var(--bo);border-radius:99px;font-size:15px;
+.filtros input[type=search]{width:100%;padding:12px 38px 12px 38px;border:1px solid var(--bo);border-radius:99px;font-size:13px;
   font-family:inherit;background:var(--bg);-webkit-appearance:none;transition:all .18s}
 .filtros input[type=search]::-webkit-search-cancel-button{display:none}
 .filtros input[type=search]:focus{outline:none;border-color:var(--vh);background:#fff;box-shadow:0 0 0 3px var(--vhp)}

@@ -647,8 +647,9 @@ function renderResumo(){
 }
 
 /* ── PESQUISA (Detalhe + Locais) ────────────────────────────────────
-   A mesma procura — texto, local, tipo, região, casta, monocasta, ano,
-   menção e maturação — filtra os dois separadores onde vive: a lista
+   A mesma procura — texto, local, tipo, região, casta, produtor, monocasta,
+   ano, menção, preço, grau alcoólico e maturação — filtra os dois
+   separadores onde vive: a lista
    organizada do Detalhe e o mapa dos Locais. Já não está no ecrã inicial:
    com os dois separadores a ganhá-la, ter uma terceira cópia era ter três
    sítios com a mesma pergunta. */
@@ -675,7 +676,7 @@ function renderFiltrados(){
    Os valores possíveis de cada filtro saem SEMPRE dos dados que lá estão
    (não de listas fixas): assim uma região nova aparece no filtro sozinha,
    e nunca fica um filtro a apontar para coisa nenhuma. */
-let F={local:'',tipo:'',regiao:'',casta:'',ano:'',mencao:'',castaN:'',janela:'',vivino:''};
+let F={local:'',tipo:'',regiao:'',casta:'',produtor:'',ano:'',mencao:'',castaN:'',preco:'',teor:'',janela:'',vivino:''};
 
 // Intervalos da nota do Vivino, do mesmo jeito que FAIXAS_PRECO: a pergunta
 // não é "qual é a nota exata" (isso o cartão já mostra), é "está bem
@@ -691,6 +692,18 @@ function faixaVivinoIndice(nota){
   return FAIXAS_VIVINO.findIndex(f=>nota>=f.min);
 }
 
+// Grau alcoólico (`teor`, % vol.) em faixas, do mesmo jeito que o preço —
+// a pergunta é "é um vinho leve ou encorpado", não o valor exato.
+const FAIXAS_TEOR=[
+  {nome:'Até 12%',max:12},
+  {nome:'12% a 13%',max:13},
+  {nome:'13% a 14%',max:14},
+  {nome:'Acima de 14%',max:Infinity}
+];
+function faixaTeorIndice(valor){
+  return FAIXAS_TEOR.findIndex(f=>valor<=f.max);
+}
+
 function opcoesFiltro(){
   const comStock=db.vinhos.filter(v=>stockDe(v.id)>0);
   const set=(arr)=>[...new Set(arr.filter(x=>x!==''&&x!=null))];
@@ -701,6 +714,7 @@ function opcoesFiltro(){
     tipo:set(comStock.map(v=>v.tipo)).sort().map(x=>[x,x]),
     regiao:set(comStock.map(v=>v.regiao)).sort((a,b)=>a.localeCompare(b,'pt')).map(x=>[x,x]),
     casta:castas.map(x=>[x,x]),
+    produtor:set(comStock.map(v=>v.produtor)).sort((a,b)=>a.localeCompare(b,'pt')).map(x=>[x,x]),
     ano:set(comStock.map(v=>v.ano)).sort((a,b)=>b-a).map(x=>[String(x),String(x)]),
     mencao:set(comStock.map(v=>v.mencao)).sort((a,b)=>a.localeCompare(b,'pt')).map(x=>[x,x])
   };
@@ -716,8 +730,8 @@ function opcoesFiltro(){
    "pastilhas" do que está a filtrar agora, cada uma com o seu ✕ — antes
    só havia "limpar filtros", tudo ou nada. */
 const F_META={local:['📍','Local'],tipo:['🍷','Tipo'],regiao:['🗺️','Região'],casta:['🍇','Casta'],
-  castaN:['🧬','Nº de castas'],ano:['📅','Ano'],mencao:['🏅','Menção'],janela:['⏱️','Maturação'],
-  vivino:['★','Vivino']};
+  produtor:['🏭','Produtor'],castaN:['🧬','Nº de castas'],ano:['📅','Ano'],mencao:['🏅','Menção'],
+  preco:['💶','Preço'],teor:['🌡️','Grau alcoólico'],janela:['⏱️','Maturação'],vivino:['★','Vivino']};
 let FILTROS_ABERTOS=false;
 function toggleFiltros(){
   FILTROS_ABERTOS=!FILTROS_ABERTOS;
@@ -732,6 +746,8 @@ function listasFiltro(){
   o.castaN=[['1','Monocasta'],['2','Várias castas'],['0','Sem castas registadas']];
   o.janela=[['ponto','No ponto'],['cedo','Ainda cedo'],['passou','Já passou']];
   o.vivino=FAIXAS_VIVINO.map((f,i)=>[String(i),f.nome]);
+  o.preco=FAIXAS_PRECO.map((f,i)=>[String(i),f.nome]);
+  o.teor=FAIXAS_TEOR.map((f,i)=>[String(i),f.nome]);
   return o;
 }
 function rotuloFiltro(listas,k){
@@ -789,10 +805,13 @@ function vinhosFiltrados(){
     if(F.tipo&&v.tipo!==F.tipo)return false;
     if(F.regiao&&v.regiao!==F.regiao)return false;
     if(F.casta&&!(v.castas||[]).includes(F.casta))return false;
+    if(F.produtor&&v.produtor!==F.produtor)return false;
     if(F.ano&&String(v.ano)!==F.ano)return false;
     if(F.mencao&&v.mencao!==F.mencao)return false;
     if(F.janela&&janelaBeber(v)!==F.janela)return false;
     if(F.vivino&&(v.vivino_nota==null||String(faixaVivinoIndice(v.vivino_nota))!==F.vivino))return false;
+    if(F.preco&&(v.preco_medio==null||String(faixaIndice(v.preco_medio))!==F.preco))return false;
+    if(F.teor&&(v.teor==null||String(faixaTeorIndice(v.teor))!==F.teor))return false;
     if(F.castaN){
       const n=(v.castas||[]).length;
       if(F.castaN==='1'&&n!==1)return false;

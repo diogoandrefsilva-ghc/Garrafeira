@@ -19,6 +19,15 @@ parte e isolado: `garrafeira`.
   Modal editar/novo · Consumir garrafa · Modal da garrafa · **IA** ·
   Auth (Supabase) · Definições · Locais · **Utilizadores (admin)** ·
   Exportar · Diagnóstico · Init.
+- `style.css` — todo o CSS. Ver **"A linguagem visual"** mais abaixo antes
+  de lhe mexer: as cores e os tipos de letra são um sistema, não gosto.
+- `sw.js` — service worker (cache PWA).
+- `vinho-info.ts` — a Edge Function que procura a ficha do vinho na net
+  (deploy à parte: `supabase functions deploy vinho-info`).
+- `db/` — `schema.sql` → `functions.sql` → `policies.sql` → `seed.sql`
+  (+ `README.md` com os passos manuais no painel do Supabase). Fonte de
+  verdade do schema.
+- Não mexer à mão: `apple-touch-icon.png` (é gerado — ver "Ícones").
 
 ## Os cinco separadores (o ecrã inicial não é a lista)
 `Garrafeira` (resumo) · `Detalhe` · `Locais` · `Consumidos` · `Definições`.
@@ -92,7 +101,18 @@ linhas sempre visíveis (a barra de procura e, por baixo, a barra do botão).
 `renderFiltrados()` é o despachante desta procura: atualiza os chips/
 pastilhas e volta a desenhar **Detalhe e Locais os dois**, sem tentar
 adivinhar qual dos dois está aberto (o mesmo raciocínio do `renderLista()`,
-ver abaixo).
+ver abaixo). O texto da caixa vem em letra pequena de propósito — é uma
+linha de trabalho, não conteúdo para se ler devagar.
+
+Os filtros são texto livre, local, tipo, região, casta, produtor, nº de
+castas, ano, menção, **preço** e **grau alcoólico** (`FAIXAS_PRECO`/
+`FAIXAS_TEOR`, o mesmo desenho por intervalo do card do Valor), maturação e
+Vivino (`F`/`F_META`/`opcoesFiltro`). Cada um é um chip desenhado por nós
+com o `<select>` **nativo por cima, invisível** (`opacity:0;inset:0`): o
+desenho é nosso, o seletor continua a ser o do telemóvel — um dropdown
+feito à mão em JS era mais código e pior no iOS. O que está ligado aparece
+em pastilhas com ✕ próprio (`.factivos`), escondidas quando o painel está
+aberto para não dizer a mesma coisa duas vezes.
 
 `Locais` (`renderMapa`) é cada local como uma estante: cabeçalho com a cor
 do sítio e **duas contagens em serifa, com a palavra à frente** — "9 vinhos"
@@ -198,32 +218,6 @@ app **deteta** se a coluna existe (`detetarImagem()`) e, se um dia faltar
 numa base nova antes do `db/schema.sql` correr, esconde o campo e não o
 manda nas gravações — sem isso um PATCH rebentava **todas** as gravações
 com 400.
-
-## A procura (o ecrã inicial)
-A barra de procura está sempre à vista; os **filtros vivem atrás do botão
-"Filtros"**, que traz o número dos que estão ligados. Com nove caixas
-abertas de uma vez, o ecrã inicial era uma parede cinzenta.
-
-Cada filtro é um chip desenhado por nós com o `<select>` **nativo por cima,
-invisível** (`opacity:0;inset:0`). O desenho é nosso, o seletor continua a
-ser o do telemóvel — um dropdown feito à mão em JS era mais código e pior no
-iOS. O que está ligado aparece em pastilhas com ✕ próprio (`.factivos`),
-escondidas quando o painel está aberto para não dizer a mesma coisa duas
-vezes.
-
-Sem procura nenhuma não aparece lista nenhuma — o que preenche o ecrã são
-os cards do resumo. Houve aqui uns atalhos ("no ponto de beber", "já
-passaram", "monocasta") que foram tirados: faziam o que os filtros já
-fazem, e o ecrã inicial não precisa de dois sítios para a mesma coisa.
-- `style.css` — todo o CSS. Ver **"A linguagem visual"** mais abaixo antes
-  de lhe mexer: as cores e os tipos de letra são um sistema, não gosto.
-- `sw.js` — service worker (cache PWA).
-- `vinho-info.ts` — a Edge Function que procura a ficha do vinho na net
-  (deploy à parte: `supabase functions deploy vinho-info`).
-- `db/` — `schema.sql` → `functions.sql` → `policies.sql` → `seed.sql`
-  (+ `README.md` com os passos manuais no painel do Supabase). Fonte de
-  verdade do schema.
-- Não mexer à mão: `apple-touch-icon.png` (é gerado — ver "Ícones").
 
 ## Vinho ≠ garrafa (é a decisão que segura o resto)
 Um **vinho** é a referência: nome, ano, produtor, castas, e tudo o que a IA
