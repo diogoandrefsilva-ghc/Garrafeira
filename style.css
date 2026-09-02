@@ -520,6 +520,66 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
   .vc-nome{font-size:15px}
 }
 
+/* ── PÁGINA DO VINHO ───────────────────────────────────────────────
+   O detalhe de um vinho deixou de ser uma folha por cima da lista e
+   passou a ser uma PÁGINA: ecrã inteiro, papel do princípio ao fim, e o
+   cabeçalho do vinho COLADO ao topo — quem rola até "já bebidas"
+   continua a ver de que vinho está a falar.
+
+   Colado, mas não do tamanho todo: ao rolar ganha `.compacta` (é o
+   `pgCabecalho()` no app.js) e encolhe para uma barra — garrafa pequena,
+   nome numa linha. Fixo em tamanho grande comia meio telemóvel.
+
+   Continua a ser o MESMO `#modal-vinho`, só com outra pele. É de
+   propósito: os `fecharModal('modal-vinho')` espalhados pelo app.js, os
+   modais que abrem POR CIMA (editar, consumir, foto, IA) e o
+   `refrescarVinhoAberto()` continuam a funcionar sem saber de nada
+   disto. Se um dia isto for uma `.sec` a sério, é aí que se paga.
+
+   Nota de ordem: esta secção vem DEPOIS do `@media(max-width:560px)`
+   dos modais e ganha-lhe por especificidade (`.modal.pagina .mbox`) —
+   no telemóvel a folha sobe de baixo e é a `.mbox` que rola; aqui não,
+   quem rola é a página inteira (é isso que faz o `sticky` pegar). */
+.modal.pagina.on{display:block}   /* bloco e não flex: um item de flex não CRESCE
+     com o que tem dentro — a folha parava à altura do ecrã e a ficha
+     continuava por cima do papel, sem cartão por baixo */
+.modal.pagina{padding:0;background:var(--bg);backdrop-filter:none;
+  background-image:radial-gradient(circle at 1px 1px,rgba(78,18,40,.045) 1px,transparent 0);background-size:22px 22px;
+  overscroll-behavior:contain;
+  /* o gesto de sair é nosso (ver `pgSwipe`); o vertical fica do browser */
+  touch-action:pan-y}
+.modal.pagina .mbox{max-width:620px;max-height:none;overflow:visible;margin:0 auto;min-height:100%;
+  border-radius:0;padding-top:0;padding-bottom:calc(26px + env(safe-area-inset-bottom,0px));
+  box-shadow:0 0 50px -14px rgba(30,8,16,.22);animation:pgentrar .22s cubic-bezier(.2,.8,.3,1) both}
+@keyframes pgentrar{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+
+.modal.pagina .mhero{position:sticky;top:0;z-index:5;margin:0 -20px 4px;border-radius:0;
+  transition:padding .18s ease}
+.modal.pagina .mhero-in{padding:0 40px;transition:gap .18s ease}
+.modal.pagina .mhero-g,.modal.pagina .mhero h3{transition:width .18s ease,height .18s ease,font-size .18s ease}
+/* ‹ à esquerda e ✕ à direita — o mesmo par do painel do resumo
+   (`.rdet-bar`). O ‹ só existe em página; num modal não havia "atrás". */
+.mvolta{display:none}
+.modal.pagina .mhero .mvolta{display:flex;left:12px;right:auto;font-size:21px;padding-bottom:3px}
+.modal.pagina .mhero.compacta .mx{top:50%;transform:translateY(-50%)}
+.modal.pagina .mhero.compacta{padding-top:8px;padding-bottom:8px}
+.modal.pagina .mhero.compacta .mhero-in{gap:11px}
+.modal.pagina .mhero.compacta .mhero-g{width:36px;height:54px}
+.modal.pagina .mhero.compacta .mhero-g svg{max-height:48px;padding:2px}
+.modal.pagina .mhero.compacta .mhero-k,.modal.pagina .mhero.compacta .mhero-n{display:none}
+.modal.pagina .mhero.compacta h3{font-size:15.5px;margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.modal.pagina .mhero.compacta .mhero-s{font-size:11px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Encolhido fica o nome e o ANO: a origem cortava-se a meio ("Douro ·
+   Cima Corgo · …") e levava o ano atrás, que é o que se quer saber
+   quando já não se vê a garrafa. */
+.modal.pagina .mhero.compacta .mhero-o{display:none}
+
+/* Arrastar de lado para sair: a folha segue o dedo (sem transição, senão
+   ia sempre atrás dele) e, se não chegar ao ponto de sair, volta ao
+   lugar com uma. */
+.modal.pagina.a-arrastar .mbox{animation:none;transition:none}
+.modal.pagina.a-soltar .mbox{animation:none;transition:transform .2s ease,opacity .2s ease}
+
 /* ── TOAST ──────────────────────────────────────────────────────── */
 .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,80px);background:var(--tx);color:#fff;
   padding:12px 20px;border-radius:99px;font-size:13px;z-index:400;opacity:0;transition:all .28s;pointer-events:none;

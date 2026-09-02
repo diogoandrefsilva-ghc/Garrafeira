@@ -243,7 +243,11 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 <button class="fab ro-hide" onclick="abrirNovoVinho()" title="Adicionar vinho">+</button>
 
 <!-- ═══ MODAIS ═══ -->
-<div class="modal" id="modal-vinho"><div class="mbox" id="modal-vinho-in"></div></div>
+<!-- O detalhe do vinho é o mesmo `.modal` de sempre, mas com pele de
+     PÁGINA (`.pagina`): ecrã inteiro, cabeçalho do vinho fixo em cima e
+     saída por ‹ / ✕ / Escape / voltar do telemóvel / arrastar de lado.
+     Ver "PÁGINA DO VINHO" no style.css e no app.js. -->
+<div class="modal pagina" id="modal-vinho"><div class="mbox" id="modal-vinho-in"></div></div>
 <div class="modal" id="modal-edit"><div class="mbox" id="modal-edit-in"></div></div>
 <div class="modal" id="modal-consumir"><div class="mbox" id="modal-consumir-in"></div></div>
 <div class="modal" id="modal-garrafa"><div class="mbox" id="modal-garrafa-in"></div></div>

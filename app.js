@@ -5,7 +5,7 @@
    Secções (procura pelo título, não leias o ficheiro todo):
      Sessão Supabase · Permissões · DB (carregar) · Índices e cálculos ·
      Navegação · Estatísticas · Filtros · Lista · Mapa dos locais ·
-     Consumidos · Modal do vinho · Modal editar/novo · Consumir garrafa ·
+     Consumidos · Página do vinho · Modal editar/novo · Consumir garrafa ·
      Modal da garrafa · IA (procurar informação) · Auth (Supabase) ·
      Utilizadores (admin) · Locais (config) · Exportar · Diagnóstico · Init
 */
@@ -394,10 +394,21 @@ function toast(msg,erro){
   clearTimeout(_toastT);_toastT=setTimeout(()=>t.classList.remove('on'),erro?4200:2600);
 }
 function abrirModal(id){document.getElementById(id).classList.add('on');}
-function fecharModal(id){document.getElementById(id).classList.remove('on');}
-// Fechar tocando no fundo (mas não ao arrastar de dentro para fora)
+function fecharModal(id){
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.classList.remove('on');
+  // A página do vinho tem um passo próprio na história do browser (é o que
+  // faz o "voltar" do telemóvel fechá-la em vez de sair da app). Sair por
+  // aqui tem de o gastar, senão ficava um voltar que não fazia nada.
+  if(id==='modal-vinho')pgSairHistoria();
+}
+// Fechar tocando no fundo (mas não ao arrastar de dentro para fora).
+// A página do vinho não entra: aí o "fundo" são as margens da folha, e
+// numa página ninguém espera sair por lhe tocar ao lado.
 document.addEventListener('click',e=>{
-  if(e.target.classList&&e.target.classList.contains('modal'))e.target.classList.remove('on');
+  if(e.target.classList&&e.target.classList.contains('modal')&&!e.target.classList.contains('pagina'))
+    fecharModal(e.target.id);
 });
 
 /* ── NAVEGAÇÃO ─────────────────────────────────────────────────────── */
@@ -1065,9 +1076,11 @@ function renderConsumidos(){
   }).join('');
 }
 
-/* ── MODAL DO VINHO ────────────────────────────────────────────────
+/* ── PÁGINA DO VINHO ───────────────────────────────────────────────
    O detalhe. É daqui que saem as ações todas sobre um vinho: procurar
-   informação na net/IA, consumir uma garrafa, editar, acrescentar garrafas. */
+   informação na net/IA, consumir uma garrafa, editar, acrescentar garrafas.
+   Por baixo continua a ser o `#modal-vinho` — o que mudou foi a pele
+   (`.pagina`) e a saída (voltar do browser, Escape, ‹/✕, arrastar). */
 // O que a procura da IA trouxe e o formulário de vinho novo não tem onde
 // mostrar (resumo, notas de prova, link do Vivino). Vive só entre a procura
 // e o gravar do MESMO formulário.
@@ -1079,21 +1092,116 @@ function verVinho(id){
   VINHO_ABERTO=id;
   document.getElementById('modal-vinho-in').innerHTML=vinhoDetalheHTML(v);
   abrirModal('modal-vinho');
+  const p=pgVinho();
+  p.scrollTop=0;              // é uma página nova, começa em cima
+  pgCabecalho();              // e com o cabeçalho por inteiro
+  pgEntrarHistoria();
 }
 function refrescarVinhoAberto(){
   if(VINHO_ABERTO!=null&&document.getElementById('modal-vinho').classList.contains('on')){
     const v=IDXV[VINHO_ABERTO];
-    if(v)document.getElementById('modal-vinho-in').innerHTML=vinhoDetalheHTML(v);
+    // Refazer o HTML deita fora o cabeçalho (e com ele o `.compacta`),
+    // mas o scroll fica onde estava — daí o acerto a seguir.
+    if(v){document.getElementById('modal-vinho-in').innerHTML=vinhoDetalheHTML(v);pgCabecalho();}
   }
+}
+
+/* ── A PÁGINA DO VINHO (comportamento) ─────────────────────────────
+   A pele está no style.css ("PÁGINA DO VINHO"); aqui está o que se
+   mexe: o cabeçalho a encolher ao rolar, o botão de voltar do
+   telemóvel e o arrastar de lado para sair. */
+function pgVinho(){return document.getElementById('modal-vinho');}
+
+// O cabeçalho encolhe assim que se sai do topo. 54px é pouco mais do que
+// um toque de scroll: mais do que isso e a barra só encolhia a meio da
+// ficha, que é quando já não interessa.
+function pgCabecalho(){
+  const p=pgVinho(),h=p.querySelector('.mhero');
+  if(h)h.classList.toggle('compacta',p.scrollTop>54);
+}
+
+/* Um passo na história por página aberta: no telemóvel (e no gesto de
+   voltar do iOS) "atrás" fecha a ficha em vez de sair da app. Quem sai
+   pelo ‹/✕/Escape gasta o passo em `fecharModal`; quem sai pelo voltar
+   do browser cai no `popstate` — os dois caminhos põem `PG_HIST` a
+   falso ANTES de mexer na história, que é o que impede o pingue-pongue
+   entre um e outro. */
+let PG_HIST=false;
+function pgEntrarHistoria(){
+  if(PG_HIST)return;
+  try{history.pushState({gfVinho:1},'');PG_HIST=true;}catch(e){}
+}
+function pgSairHistoria(){
+  if(!PG_HIST)return;
+  PG_HIST=false;
+  try{history.back();}catch(e){}
+}
+window.addEventListener('popstate',()=>{
+  if(!PG_HIST)return;
+  PG_HIST=false;
+  // Voltar fecha a página e o que estiver aberto POR CIMA dela (editar,
+  // consumir, foto): são todos o mesmo contexto — este vinho.
+  document.querySelectorAll('.modal.on').forEach(m=>m.classList.remove('on'));
+});
+
+/* Arrastar de lado para sair. Segue o dedo nos DOIS sentidos: pediu-se
+   para a esquerda, mas quem vem do iOS/Android arrasta para a direita —
+   travar um dos lados era ensinar uma regra nova sem necessidade.
+   Só pega se o gesto for claramente horizontal (senão roubava o scroll)
+   e nunca começa dentro de um campo ou de um link. */
+let _pgSw=null;
+function pgSwipe(){
+  const p=pgVinho();
+  const box=()=>p.querySelector('.mbox');
+  p.addEventListener('touchstart',e=>{
+    _pgSw=null;
+    if(e.touches.length!==1||!p.classList.contains('on'))return;
+    if(document.querySelectorAll('.modal.on').length>1)return;   // há coisa por cima
+    if(e.target.closest('input,textarea,select,a,button'))return;
+    p.classList.remove('a-soltar');
+    _pgSw={x:e.touches[0].clientX,y:e.touches[0].clientY,dx:0,pegou:false};
+  },{passive:true});
+  p.addEventListener('touchmove',e=>{
+    if(!_pgSw||e.touches.length!==1)return;
+    const dx=e.touches[0].clientX-_pgSw.x, dy=e.touches[0].clientY-_pgSw.y;
+    if(!_pgSw.pegou){
+      if(Math.abs(dy)>Math.abs(dx)){_pgSw=null;return;}           // é scroll, deixa passar
+      if(Math.abs(dx)<14)return;                                   // ainda não se sabe
+      _pgSw.pegou=true;p.classList.add('a-arrastar');
+    }
+    _pgSw.dx=dx;
+    const b=box();
+    if(b){
+      b.style.transform='translateX('+dx.toFixed(1)+'px)';
+      b.style.opacity=String(Math.max(.35,1-Math.abs(dx)/(window.innerWidth*.9)));
+    }
+    if(e.cancelable)e.preventDefault();
+  },{passive:false});
+  const largar=()=>{
+    if(!_pgSw)return;
+    const dx=_pgSw.dx,pegou=_pgSw.pegou,b=box();_pgSw=null;
+    p.classList.remove('a-arrastar');
+    if(b){b.style.transform='';b.style.opacity='';}
+    if(!pegou)return;
+    // Um quarto do ecrã (ou 110px) é o ponto de não voltar atrás.
+    if(Math.abs(dx)>Math.min(110,window.innerWidth*.28)){fecharModal('modal-vinho');return;}
+    p.classList.add('a-soltar');
+    setTimeout(()=>p.classList.remove('a-soltar'),220);
+  };
+  p.addEventListener('touchend',largar);
+  p.addEventListener('touchcancel',largar);
+  p.addEventListener('scroll',pgCabecalho,{passive:true});
 }
 function linha(rot,val){
   return val?`<div class="mdl"><b>${esc(rot)}</b><span>${val}</span></div>`:'';
 }
-/* O modal do vinho ganhou CAPA: a garrafa (ou a foto do rótulo), o nome e
-   a origem sobre o bordô, com a nota do Vivino e a maturação já lá em
-   cima. O resto — ficha, onde está, o que se bebeu — fica em papel por
-   baixo, com as secções separadas por filete. No telemóvel o modal sobe de
-   baixo como uma folha (ver style.css) em vez de aterrar no meio do ecrã. */
+/* A capa do vinho: a garrafa (ou a foto do rótulo), o nome e a origem
+   sobre o bordô, com a nota do Vivino e a maturação já lá em cima. O
+   resto — ficha, onde está, o que se bebeu — fica em papel por baixo,
+   com as secções separadas por filete.
+   Esta capa é também a BARRA da página: fica colada ao topo e encolhe ao
+   rolar (ver "PÁGINA DO VINHO"), por isso tem dois botões — ‹ à esquerda
+   e ✕ à direita, o mesmo par do painel do resumo. */
 function vinhoDetalheHTML(v){
   const ativas=garrafasDe(v.id,true), bebidas=garrafasDe(v.id,false).filter(g=>g.estado==='consumida');
   const cl=castaLabel(v), jan=janelaBeber(v);
@@ -1104,6 +1212,7 @@ function vinhoDetalheHTML(v){
   const origem=[v.produtor,v.regiao,v.sub_regiao].filter(Boolean).map(esc).join(' · ');
 
   return `<div class="mhero">
+      <button class="mx mvolta" onclick="fecharModal('modal-vinho')" title="Voltar">‹</button>
       <button class="mx" onclick="fecharModal('modal-vinho')">✕</button>
       <div class="mhero-in">
         <button class="mhero-g" onclick="abrirFoto(${v.id})" title="Ver a imagem em grande">
@@ -1113,7 +1222,7 @@ function vinhoDetalheHTML(v){
         <div class="mhero-tx">
           <div class="mhero-k">${esc([v.tipo,v.estilo,v.classificacao].filter(Boolean).join(' · '))||'&nbsp;'}</div>
           <h3>${esc(v.nome)}</h3>
-          <div class="mhero-s">${origem}${origem&&v.ano?' · ':''}${v.ano?`<b>${v.ano}</b>`:''}</div>
+          <div class="mhero-s"><span class="mhero-o">${origem}${origem&&v.ano?' · ':''}</span>${v.ano?`<b>${v.ano}</b>`:''}</div>
           ${v.vivino_nota?`<span class="mhero-n">★ ${Number(v.vivino_nota).toFixed(2)} Vivino${v.vivino_avaliacoes?` · ${v.vivino_avaliacoes}`:''}</span>`:''}
           ${jan?`<span class="mhero-n">${JANELA_TXT[jan]}</span>`:''}
         </div>
@@ -2802,7 +2911,7 @@ window.addEventListener('resize',ajustarSticky);
 // submeter coisa nenhuma, que era o que o browser tentava fazer).
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target.id==='f-texto'){e.preventDefault();e.target.blur();}
-  if(e.key==='Escape')document.querySelectorAll('.modal.on').forEach(m=>m.classList.remove('on'));
+  if(e.key==='Escape')document.querySelectorAll('.modal.on').forEach(m=>fecharModal(m.id));
 });
 
 if('serviceWorker' in navigator){
@@ -2813,4 +2922,5 @@ if('serviceWorker' in navigator){
 // chegarem — em que quem só pode VER tinha o botão de apagar à frente.
 document.body.classList.add('readonly','naoadmin','naodono');
 ajustarSticky();
+pgSwipe();
 sbInit();
