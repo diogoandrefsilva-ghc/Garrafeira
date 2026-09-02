@@ -1892,7 +1892,13 @@ function iaEscContar(){
      MINHAS (o admin vê todas), por isso não chega sozinha;
    · `vinhos.ai_atualizado_em` — o carimbo que fica quando alguém aceitou
      alguma coisa. Vê-se sempre, seja de quem for: é o que apanha a procura
-     feita por OUTRO editor.
+     feita por OUTRO editor. Mas só vale quando foi a APP a escrevê-lo, e
+     isso lê-se no `ai_modelo`: a app só lá põe o que a Edge Function
+     devolve (`gemini-…`). Os outros valores que essa coluna tem vieram da
+     importação à mão ("pesquisa web (Claude) + complemento (ChatGPT)",
+     "…confirmação no rótulo (Barrona)") — ficha preenchida, sim, mas sem
+     um cêntimo gasto em Gemini. Sem esta condição o aviso aparecia nos 85
+     vinhos logo no primeiro dia, e um aviso que aparece sempre não se lê.
    Se a consulta falhar, não se avisa e segue-se em frente — um soluço de
    rede não pode ser o que impede alguém de procurar. */
 const IA_AVISO_DIAS=30;
@@ -1907,7 +1913,8 @@ async function iaUltimaProcura(vinhoId){
     if(a&&a.criado_em)cands.push({quando:a.criado_em,
       minha:String(a.quem||'').toLowerCase()===String(EU.email||'').toLowerCase()});
   }catch(e){}
-  if(v.ai_atualizado_em)cands.push({quando:v.ai_atualizado_em,minha:false});
+  if(v.ai_atualizado_em&&/^gemini/i.test(String(v.ai_modelo||'')))
+    cands.push({quando:v.ai_atualizado_em,minha:false});
   if(!cands.length)return null;
   cands.sort((x,y)=>new Date(y.quando)-new Date(x.quando));
   const u=cands[0];

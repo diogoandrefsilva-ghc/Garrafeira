@@ -324,7 +324,12 @@ descoberta de modelo, mesma escada de variantes, mesmos fallbacks.
   em `analises` (o registo exato de CADA procura, mas a RLS só deixa ver as
   minhas — o admin vê todas) e `vinhos.ai_atualizado_em` (só fica quando se
   aceitou alguma coisa, mas vê-se seja de quem for — é o que apanha a procura
-  de OUTRO editor). Se a consulta falhar, não se avisa e procura-se na mesma:
+  de OUTRO editor). Este segundo **só conta com `ai_modelo` a começar por
+  `gemini`**: é o único valor que a app escreve ali. O resto do que está
+  nessa coluna ("pesquisa web (Claude) + complemento (ChatGPT)", "…confirmação
+  no rótulo (Barrona)") veio da importação à mão — ficha cheia, mas sem
+  nenhuma chamada paga por trás. Sem essa condição o aviso disparava nos 85
+  vinhos no primeiro dia, e um aviso que aparece sempre não se lê. Se a consulta falhar, não se avisa e procura-se na mesma:
   um soluço de rede não pode impedir alguém de procurar. No formulário de
   **vinho novo** não há aviso nenhum — ainda não há vinho para ter história.
 - **Nada é gravado sem confirmação.** O resultado abre campo a campo
