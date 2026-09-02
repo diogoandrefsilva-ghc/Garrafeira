@@ -290,6 +290,13 @@ function eur(v){
   if(v==null||v==='')return '';
   return Number(v).toLocaleString('pt-PT',{style:'currency',currency:'EUR',maximumFractionDigits:2});
 }
+// Sem cêntimos, para os cards e para os totais: "1620 €" cabe onde
+// "1 620,00 €" não cabia, e a precisão ao cêntimo num valor ESTIMADO era
+// uma exatidão a fingir.
+function eur0(v){
+  if(v==null||v==='')return '';
+  return Number(v).toLocaleString('pt-PT',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+}
 function num(v){const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?null:n;}
 function inteiro(v){const n=parseInt(String(v),10);return isNaN(n)?null:n;}
 function estrelas(n){return n?'★'.repeat(n)+'☆'.repeat(5-n):'';}
@@ -399,7 +406,7 @@ function scCard(cor,label,valor,sub,id){
 
    `filtroFn` decide quem entra na lista e `listaBase` é de onde se filtra:
    os monocasta para o card do meio, todos os com stock para os outros. */
-const RESUMO_NOME={mono:'Monocasta',regiao:'Regiões',casta:'Castas'};
+const RESUMO_NOME={mono:'Monocasta',regiao:'Regiões',casta:'Castas',valor:'Valor',falta:'A completar'};
 function resumoPainel(id,titulo,rows,filtroFn,listaBase){
   const fechar=`<button class="rdet-x" onclick="resumoFechar()" title="Fechar">✕</button>`;
   if(RESUMO_DRILL){
@@ -417,10 +424,34 @@ function resumoPainel(id,titulo,rows,filtroFn,listaBase){
     <div class="rdet-bar"><div class="rdet-cab">${esc(titulo)}</div>${fechar}</div>
     <div class="rdet-rows">${rows.length
       ?rows.map(r=>`<div class="rdet-row" onclick="resumoDrill('${id}','${escJs(r.nome)}')">
-        <span>${esc(r.nome)}</span><span class="rdet-n">${r.n}</span></div>`).join('')
+        <span>${esc(r.nome)}</span><span class="rdet-n">${esc(r.txt!=null?r.txt:String(r.n))}</span></div>`).join('')
       :'<div class="note" style="padding:8px 0">Sem dados ainda.</div>'}</div>
   </div>`;
 }
+/* O VALOR da garrafeira é uma ESTIMATIVA e diz-se isso: vale o que se
+   pagou (`preco_compra`) quando se sabe, e o preço médio do vinho quando
+   não se sabe. Garrafas sem nenhum dos dois não contam — inventar um preço
+   para elas era pôr no cartão um número que ninguém podia conferir. */
+function valorGarrafa(g){
+  if(g.preco_compra!=null)return Number(g.preco_compra);
+  const v=IDXV[g.vinho_id];
+  return v&&v.preco_medio!=null?Number(v.preco_medio):null;
+}
+function valorVinho(v){
+  return garrafasDe(v.id,true).reduce((s,g)=>{const x=valorGarrafa(g);return x==null?s:s+x;},0);
+}
+
+/* O que falta preencher num vinho. É a lista do que a app mostra e a
+   procura usa — sem casta não há filtro por casta, sem preço não há valor,
+   sem imagem o cartão fica com a garrafa desenhada em vez do rótulo. */
+const FALTAS=[
+  {k:'Sem imagem do rótulo',tem:v=>!!String(v.imagem_url||'').trim()},
+  {k:'Sem castas',          tem:v=>(v.castas||[]).length>0},
+  {k:'Sem preço médio',     tem:v=>v.preco_medio!=null},
+  {k:'Sem classificação',   tem:v=>!!v.classificacao}
+];
+function faltasDe(v){return FALTAS.filter(f=>!f.tem(v)).map(f=>f.k);}
+
 function renderResumo(){
   const box=document.getElementById('resumo-cards');
   if(!box)return;
@@ -442,11 +473,35 @@ function renderResumo(){
   // Os quatro cards ficam sempre juntos na grelha 2×2 e o painel abre a
   // seguir, a toda a largura (`grid-column:1/-1`). Pô-lo logo a seguir ao
   // card aberto partia a grelha ao meio e deixava buracos.
+  // VALOR: por local, que é a pergunta que se faz a seguir ("quanto é que
+  // está guardado ali?"). As garrafas sem preço nenhum ficam de fora e
+  // dizem-se no subtítulo, para o número não parecer mais certo do que é.
+  const ativas=db.garrafas.filter(naGarrafeira);
+  const comPreco=ativas.filter(g=>valorGarrafa(g)!=null);
+  const valorTotal=comPreco.reduce((s,g)=>s+valorGarrafa(g),0);
+  const porLocal=new Map();
+  comPreco.forEach(g=>{
+    const k=nomeLocal(g.local_id);
+    porLocal.set(k,(porLocal.get(k)||0)+valorGarrafa(g));
+  });
+  const valRows=[...porLocal.entries()].map(([nome,v])=>({nome,n:v,txt:eur0(v)}))
+    .sort((a,b)=>b.n-a.n);
+
+  // A COMPLETAR: os vinhos a quem falta alguma coisa que a app usa.
+  const faltosos=comStock.filter(v=>faltasDe(v).length);
+  const falRows=FALTAS.map(f=>({nome:f.k,n:comStock.filter(v=>!f.tem(v)).length}))
+    .filter(r=>r.n>0).sort((a,b)=>b.n-a.n);
+
   let html=
     scCard('','Vinhos',totalVinhos,totalVinhos===1?'vinho na garrafeira':'vinhos na garrafeira',null)+
     scCard('co','Monocasta',monoWines.length,totalVinhos?`de ${totalVinhos} vinhos`:'','mono')+
     scCard('cv','Regiões',nRegioes,'diferentes','regiao')+
-    scCard('cb','Castas',casRows.length,'diferentes','casta');
+    scCard('cb','Castas',casRows.length,'diferentes','casta')+
+    scCard('co','Valor estimado',`<span class="sc-eur">${esc(eur0(valorTotal))}</span>`,
+      comPreco.length===ativas.length?`${ativas.length} garrafa${ativas.length===1?'':'s'}`
+        :`${comPreco.length} de ${ativas.length} garrafas com preço`,'valor')+
+    scCard('cb','A completar',faltosos.length,
+      faltosos.length?'vinhos com dados em falta':'está tudo preenchido','falta');
 
   if(RESUMO_ABERTO==='mono')
     html+=resumoPainel('mono','Vinhos monocasta, por casta',monoRows,v=>(v.castas||[])[0]===RESUMO_DRILL,monoWines);
@@ -454,6 +509,12 @@ function renderResumo(){
     html+=resumoPainel('regiao','Vinhos por região',regRows,v=>(v.regiao||'Sem região')===RESUMO_DRILL,comStock);
   if(RESUMO_ABERTO==='casta')
     html+=resumoPainel('casta','Vinhos por casta',casRows,v=>(v.castas||[]).includes(RESUMO_DRILL),comStock);
+  if(RESUMO_ABERTO==='valor')
+    html+=resumoPainel('valor','Valor estimado, por local',valRows,
+      v=>garrafasDe(v.id,true).some(g=>nomeLocal(g.local_id)===RESUMO_DRILL&&valorGarrafa(g)!=null),comStock);
+  if(RESUMO_ABERTO==='falta')
+    html+=resumoPainel('falta','O que falta preencher',falRows,
+      v=>faltasDe(v).includes(RESUMO_DRILL),comStock);
 
   box.innerHTML=html;
 }
@@ -472,7 +533,7 @@ function renderPesquisa(){
   const tx=document.getElementById('f-texto');
   document.getElementById('f-texto-x').classList.toggle('on',!!tx.value);
   if(!haFiltros()){
-    fl.style.display='none';fc.textContent='';box.innerHTML=sugestoesHTML();
+    fl.style.display='none';fc.textContent='';box.innerHTML='';
     return;
   }
   fl.style.display='';
@@ -482,30 +543,6 @@ function renderPesquisa(){
   box.innerHTML=res.length
     ?res.map(vinhoCardHTML).join('')
     :'<div class="vazio"><b>Nada encontrado</b>Nenhum vinho corresponde a esta procura.</div>';
-}
-
-/* Sem procura nenhuma, o ecrã inicial ficava com meio metro de vazio por
-   baixo dos cards — a lista toda só aparece quando se filtra, e isso é de
-   propósito. Em vez do vazio, três atalhos para as perguntas que se fazem
-   a uma garrafeira ("o que é que está no ponto?"). Não são filtros novos:
-   carregam nos que já existem. Só aparece o atalho que tem alguma coisa. */
-function sugestoesHTML(){
-  const comStock=db.vinhos.filter(v=>stockDe(v.id)>0);
-  if(!comStock.length)return '';
-  const conta=fn=>comStock.filter(fn).length;
-  const atalhos=[
-    ['janela','ponto','🍷','No ponto de beber',conta(v=>janelaBeber(v)==='ponto')],
-    ['janela','passou','⚠️','Já passaram do ponto',conta(v=>janelaBeber(v)==='passou')],
-    ['castaN','1','🍇','Monocasta',conta(v=>(v.castas||[]).length===1)]
-  ].filter(a=>a[4]>0);
-  if(!atalhos.length)return '';
-  return `<div class="sugestao">
-    <div class="sug-t">Por onde começar</div>
-    ${atalhos.map(([k,v,ico,txt,n])=>
-      `<button class="sug" onclick="setFiltro('${k}','${v}')">
-        <span class="sug-i">${ico}</span><span class="sug-x">${esc(txt)}</span><b>${n}</b></button>`).join('')}
-    <div class="note" style="margin-top:10px">Ou abre os <b>Filtros</b> para procurar por local, região, casta, ano ou menção.</div>
-  </div>`;
 }
 
 /* ── FILTROS ───────────────────────────────────────────────────────
@@ -878,19 +915,25 @@ function vinhoDetalheHTML(v){
     </div>
 
     <div class="macoes ro-hide">
-      <button class="btn prim" onclick="iaProcurar(${v.id})">🔎 Procurar informação</button>
-      ${ativas.length?`<button class="btn ghost" onclick="abrirConsumir(${v.id})">🍾 Consumir garrafa</button>`:''}
+      <button class="btn prim" onclick="iaEscolher(${v.id})">🔎 Procurar informação</button>
       <button class="btn ghost" onclick="abrirEditarVinho(${v.id})">✏️ Editar</button>
     </div>
 
     <div class="msec">Onde está</div>
     ${ativas.length
-      ? ativas.map(g=>`<div class="mgar">
-          <div class="g-onde"><b>${esc(ondeEsta(g))}</b>
-            <i>${esc(g.formato||'')}${g.preco_compra!=null?' · comprada por '+eur(g.preco_compra):''}${g.comprado_em?' · '+dataPT(g.comprado_em):''}</i></div>
+      ? ativas.map(g=>{
+          const pos=[g.prateleira,g.lugar?'lugar '+g.lugar:''].filter(Boolean).join(' · ');
+          const meta=[g.formato||'',g.preco_compra!=null?'comprada por '+eur(g.preco_compra):'',
+                      g.comprado_em?dataPT(g.comprado_em):''].filter(Boolean).join(' · ');
+          return `<div class="mgar">
+          <div class="g-onde">
+            <b>📍 ${esc(nomeLocal(g.local_id))}</b>
+            ${pos?`<span class="g-pos">${esc(pos)}</span>`:''}
+            ${meta?`<i>${esc(meta)}</i>`:''}
+          </div>
           <button class="mini ro-hide" onclick="abrirGarrafa(${g.id})">Mover</button>
           <button class="mini o ro-hide" onclick="abrirConsumir(${v.id},${g.id})">Consumir</button>
-        </div>`).join('')
+        </div>`;}).join('')
       : `<div class="note" style="padding:8px 0">Não há garrafas deste vinho na garrafeira${bebidas.length?' — já foram todas bebidas':''}.</div>`}
     <button class="btn ghost ro-hide" onclick="abrirGarrafa(0,${v.id})">+ Acrescentar garrafa</button>
 
@@ -1399,12 +1442,77 @@ async function iaEsperar(id){
 }
 
 // Do detalhe de um vinho que já existe.
+/* ESCOLHER O QUE PROCURAR, antes de procurar.
+   Pedir os 22 campos de uma vez faz o modelo andar atrás de tudo e voltar
+   com meia dúzia de coisas mornas; pedir só o que falta concentra a
+   pesquisa (e a função corta do JSON o que não foi pedido, por isso o ecrã
+   de confirmação também fica só com isso).
+
+   Vêm marcados os campos VAZIOS — a mesma regra do ecrã de confirmação:
+   o que já lá está só se mexe por decisão de quem está a ver. */
+function iaValorAtual(v,k){
+  if(k==='castas')return (v.castas||[]).length?v.castas.join(', '):'';
+  return v[k]==null||v[k]===''?'':String(v[k]);
+}
+function iaEscolher(vinhoId){
+  if(roGuard())return;
+  const v=IDXV[vinhoId];if(!v)return;
+  const linhas=IA_CAMPOS.map(c=>{
+    const tem=!!iaValorAtual(v,c.k);
+    return `<label class="ia-esc">
+      <input type="checkbox" class="ia-esc-c" value="${esc(c.k)}"${tem?'':' checked'}>
+      <span>${esc(c.rot)}${tem?'<i>já tem</i>':''}</span>
+    </label>`;
+  }).join('');
+  document.getElementById('modal-ia-in').innerHTML=`
+    <div class="mtop"><div><h3>🔎 Procurar informação</h3>
+      <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
+      <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
+
+    <div class="aviso">Escolhe o que queres procurar. <b>Quanto menos pedires, melhor a procura</b> —
+      o modelo concentra-se nisso em vez de andar atrás de tudo. Já vêm marcados os campos vazios.</div>
+
+    <div class="ia-escbar">
+      <button class="mini" onclick="iaEscTodos(true)">Marcar tudo</button>
+      <button class="mini" onclick="iaEscTodos(false)">Desmarcar</button>
+      <span class="note" id="ia-esc-n"></span>
+    </div>
+    <div class="ia-escs" onchange="iaEscContar()">${linhas}</div>
+
+    <div class="macoes">
+      <button class="btn prim" id="ia-esc-btn" onclick="iaProcurar(${vinhoId})">Procurar</button>
+      <button class="btn ghost" onclick="fecharModal('modal-ia')">Cancelar</button>
+    </div>`;
+  abrirModal('modal-ia');
+  iaEscContar();
+}
+function iaEscTodos(marcar){
+  document.querySelectorAll('.ia-esc-c').forEach(e=>e.checked=marcar);
+  iaEscContar();
+}
+function iaEscSelecionados(){
+  return [...document.querySelectorAll('.ia-esc-c:checked')].map(e=>e.value);
+}
+function iaEscContar(){
+  const n=iaEscSelecionados().length, tot=IA_CAMPOS.length;
+  const et=document.getElementById('ia-esc-n');
+  if(et)et.textContent=n===tot?'todos os campos':`${n} de ${tot} campos`;
+  const b=document.getElementById('ia-esc-btn');
+  if(b){b.disabled=!n;b.textContent=n?`🔎 Procurar ${n===tot?'tudo':n+(n===1?' campo':' campos')}`:'Escolhe pelo menos um';}
+}
+
 async function iaProcurar(vinhoId){
   if(roGuard())return;
   const v=IDXV[vinhoId];if(!v)return;
+  // Se o seletor está aberto, é dele que vem a lista; se alguém chamar isto
+  // de outro sítio, procura-se tudo (que era o comportamento de sempre).
+  const escolhidos=iaEscSelecionados();
+  const campos=escolhidos.length&&escolhidos.length<IA_CAMPOS.length?escolhidos:null;
   iaMostrarEspera(v.nome+(v.ano?' '+v.ano:''));
   try{
-    const res=await iaPedir({nome:v.nome,ano:v.ano,produtor:v.produtor,regiao:v.regiao},vinhoId);
+    const pedido={nome:v.nome,ano:v.ano,produtor:v.produtor,regiao:v.regiao};
+    if(campos)pedido.campos=campos;
+    const res=await iaPedir(pedido,vinhoId);
     iaMostrarResultado(res,vinhoId);
   }catch(e){iaMostrarErro(e.message);}
 }
@@ -2156,6 +2264,74 @@ async function migrarDados(){
 }
 
 /* ── EXPORTAR ──────────────────────────────────────────────────────── */
+/* ── EXPORTAR A LISTA PARA PDF ─────────────────────────────────────
+   Sem biblioteca nenhuma: monta-se uma tabela num `#print-area` que só
+   existe para a impressão e chama-se `window.print()` — quem imprime
+   escolhe "Guardar como PDF" (no iOS é o próprio menu de partilha). Uma
+   biblioteca de PDF eram centenas de KB num sítio onde não há build, e o
+   resultado seria pior do que o que o browser já sabe fazer.
+
+   A folha vai na HORIZONTAL (`@page landscape`) porque são doze colunas —
+   em retrato os nomes dos vinhos partiam-se todos. Os grupos são os mesmos
+   que estão no ecrã (região ou ano), para o papel bater certo com a app. */
+function exportarPDF(){
+  const res=db.vinhos.filter(v=>stockDe(v.id)>0);
+  if(!res.length){toast('Não há vinhos para exportar',1);return;}
+  const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
+  const grupos=agruparVinhos(res,DET_AGRUPAR);
+
+  const onde=v=>garrafasDe(v.id,true).map(g=>{
+    const p=[nomeLocal(g.local_id)];
+    if(g.prateleira)p.push(g.prateleira);
+    if(g.lugar)p.push('lugar '+g.lugar);
+    return p.join(' · ');
+  }).join('; ');
+  const janela=v=>{
+    if(!v.beber_de&&!v.beber_ate)return '';
+    return `${v.beber_de||'?'}–${v.beber_ate||'?'}`;
+  };
+
+  const cols=['Vinho','Ano','Produtor','Tipo','Região','Castas','Menção / Class.',
+              '% Álc.','Preço méd.','Beber','Onde está','Gar.'];
+  const linhas=grupos.map(g=>`
+    <tr class="pgrupo"><td colspan="${cols.length}">${esc(g.titulo)} — ${g.vinhos.length} vinho${g.vinhos.length===1?'':'s'}</td></tr>
+    ${g.vinhos.map(v=>`<tr>
+      <td class="pnome">${esc(v.nome)}</td>
+      <td class="pc">${v.ano||''}</td>
+      <td>${esc(v.produtor)}</td>
+      <td>${esc([v.tipo,v.estilo].filter(Boolean).join(' · '))}</td>
+      <td>${esc([v.regiao,v.sub_regiao].filter(Boolean).join(' · '))}</td>
+      <td>${esc((v.castas||[]).join(', '))}</td>
+      <td>${esc([v.mencao,v.classificacao].filter(Boolean).join(' · '))}</td>
+      <td class="pc">${v.teor!=null&&v.teor!==''?esc(v.teor):''}</td>
+      <td class="pc">${v.preco_medio!=null?eur(v.preco_medio):''}</td>
+      <td class="pc">${janela(v)}</td>
+      <td>${esc(onde(v))}</td>
+      <td class="pc">${stockDe(v.id)}</td>
+    </tr>`).join('')}`).join('');
+
+  let box=document.getElementById('print-area');
+  if(!box){box=document.createElement('div');box.id='print-area';document.body.appendChild(box);}
+  box.innerHTML=`
+    <div class="pcab">
+      <div><h1>Garrafeira</h1>
+        <div class="psub">${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'} ·
+          por ${DET_AGRUPAR==='ano'?'ano':'região'}</div></div>
+      <div class="pdata">${dataPT(hoje())}</div>
+    </div>
+    <table>
+      <thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>
+      <tbody>${linhas}</tbody>
+    </table>`;
+  window.print();
+}
+// A tabela só serve a impressão — depois de imprimir não vale a pena
+// continuar a segurar umas centenas de linhas no DOM.
+window.addEventListener('afterprint',()=>{
+  const box=document.getElementById('print-area');
+  if(box)box.innerHTML='';
+});
+
 function exportarJSON(){
   const dados={
     exportadoEm:new Date().toISOString(),

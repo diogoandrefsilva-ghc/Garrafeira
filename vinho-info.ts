@@ -120,13 +120,36 @@ const MENCOES = ["", "Reserva", "Grande Reserva", "Garrafeira", "Colheita Seleci
   "Vinhas Velhas", "Superior", "Grande Escolha"];
 const CLASSIF = ["", "DOC", "Vinho Regional", "Vinho"];
 
-const prompt = (nome: string, ano: number | null, produtor: string, regiao: string, hoje: string) => `
+/* Os campos que a app pode pedir à letra (`campos` no corpo do pedido),
+   com o nome que têm no JSON da resposta. Serve para duas coisas: escrever
+   no prompt o que é que interessa procurar, e cortar da resposta o que não
+   foi pedido. Pedir os 22 de uma vez faz o modelo andar atrás de tudo e
+   voltar com meia dúzia de coisas mornas — pedir três dá três boas. */
+const CAMPOS: Record<string, string> = {
+  produtor: "produtor", ano: "ano", tipo: "tipo", estilo: "estilo",
+  regiao: "regiao", sub_regiao: "subRegiao", mencao: "mencao",
+  classificacao: "classificacao", castas: "castas", teor: "teor",
+  estagio_meses: "estagioMeses", estagio_texto: "estagioTexto",
+  vivino_nota: "vivinoNota", vivino_avaliacoes: "vivinoAvaliacoes",
+  vivino_url: "vivinoUrl", imagem_url: "imagemUrl", preco_medio: "precoMedio",
+  beber_de: "beberDe", beber_ate: "beberAte", notas_prova: "notasProva",
+  harmonizacao: "harmonizacao", ai_resumo: "resumo",
+};
+
+const prompt = (nome: string, ano: number | null, produtor: string, regiao: string, hoje: string,
+                campos: string[] | null) => `
 És um enólogo a preencher a ficha de um vinho para a garrafeira de uma casa particular.
 
 VINHO A IDENTIFICAR:
   Nome: ${nome}
 ${ano ? `  Ano (colheita): ${ano}\n` : ""}${produtor ? `  Produtor indicado: ${produtor}\n` : ""}${regiao ? `  Região indicada: ${regiao}\n` : ""}
 Hoje é ${hoje}.
+${campos && campos.length ? `
+SÓ INTERESSAM ESTES CAMPOS: ${campos.map((k) => CAMPOS[k]).join(", ")}.
+Concentra a pesquisa NELES. Os outros campos do JSON deixa-os fora da
+resposta — não vale a pena gastar procura com o que já está preenchido do
+lado de cá.
+` : ""}
 
 PROCURA na internet e responde com o que ENCONTRARES. Fontes boas: o site do
 produtor, Vivino, Wine.com.pt, Garrafeira Nacional, Adegga, revistas de vinho
@@ -228,7 +251,7 @@ function daLista(v: unknown, lista: string[]): string {
   const achado = lista.find((x) => x && x.toLowerCase() === t.toLowerCase());
   return achado ?? "";
 }
-function normalizar(raw: any, anoPedido: number | null): Record<string, unknown> | null {
+function normalizar(raw: any, anoPedido: number | null, campos: string[] | null = null): Record<string, unknown> | null {
   if (!raw || typeof raw !== "object") return null;
   if (raw.encontrado === false) return null;
 
@@ -286,6 +309,14 @@ function normalizar(raw: any, anoPedido: number | null): Record<string, unknown>
     const v = out[k];
     if (v === null || v === "" || (Array.isArray(v) && !v.length)) delete out[k];
   });
+  /* Pediram só alguns campos: o resto sai daqui, mesmo que o modelo o tenha
+     mandado à mesma. Sem isto, o ecrã de confirmação da app voltava a
+     encher-se de campos que ninguém pediu — e um deles, aceite por
+     distração, escrevia por cima do que estava certo. O `aviso` fica sempre:
+     é onde o modelo diz o que não conseguiu confirmar. */
+  if (campos && campos.length) {
+    Object.keys(out).forEach((k) => { if (k !== "aviso" && !campos.includes(k)) delete out[k]; });
+  }
   return Object.keys(out).length ? out : null;
 }
 
@@ -378,11 +409,12 @@ type Res = { ok: true; corpo: Record<string, unknown> } | { ok: false; status: n
 async function produzirFicha(
   nome: string, ano: number | null, produtor: string, regiao: string,
   quem: string | null, signal: AbortSignal, budgetMs: number,
+  campos: string[] | null = null,
 ): Promise<Res> {
   const inicio = Date.now();
   const restante = () => budgetMs - (Date.now() - inicio) - 2_000;
   const searchMs = Math.max(15_000, budgetMs - 14_000);
-  const texto0 = prompt(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10));
+  const texto0 = prompt(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos);
 
   /* Cada variante é a mesma pergunta pedida de outra maneira. A ordem
      depende do ORÇAMENTO: em segundo plano há tempo para o modelo pensar e
@@ -478,7 +510,7 @@ async function produzirFicha(
     await registar("erro", { passo: "json", modelo: model, pesquisa: comPesquisa, amostra: bruto.slice(0, 800) }, quem);
     return { ok: false, status: 502, erro: "resposta ilegível do modelo" };
   }
-  const ficha = normalizar(parsed, ano);
+  const ficha = normalizar(parsed, ano, campos);
   if (!ficha) {
     await registar("erro", { passo: "vazio", modelo: model, pesquisa: comPesquisa, nome, amostra: bruto.slice(0, 500) }, quem);
     // Sem pesquisa o modelo só conhece o que aprendeu no treino, e um vinho
@@ -543,6 +575,14 @@ Deno.serve(async (req) => {
     const produtor = texto(body?.produtor, 90);
     const regiao = texto(body?.regiao, 60);
     const vinhoId = typeof body?.vinhoId === "number" ? body.vinhoId : null;
+    /* `campos`: a app diz o que quer que se procure. Só se aceitam nomes
+       conhecidos — um nome inventado aqui era um campo a menos no prompt e,
+       pior, um filtro que deitava fora a resposta toda lá no fim. Pedir
+       todos é o mesmo que não pedir nenhum: procura-se tudo. */
+    const campos: string[] | null = Array.isArray(body?.campos)
+      ? [...new Set<string>(body.campos.map((c: unknown) => String(c)).filter((c: string) => c in CAMPOS))]
+      : null;
+    const camposPedidos = campos && campos.length && campos.length < Object.keys(CAMPOS).length ? campos : null;
 
     /* ── MODO ASSÍNCRONO ──
        Responde já com o `id` e faz o trabalho depois, com muito mais tempo
@@ -550,7 +590,7 @@ Deno.serve(async (req) => {
        existir, `criarAnalise` devolve null e cai-se no modo síncrono em vez
        de rebentar. */
     if (body?.assincrono === true) {
-      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao }, vinhoId, quem!, ctrl.signal);
+      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, campos: camposPedidos }, vinhoId, quem!, ctrl.signal);
       if (analiseId != null) {
         const dono = quem!;
         // NÃO faz await: o trabalho pesado sobrevive ao pedido original.
@@ -558,7 +598,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-            const res = await produzirFicha(nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS);
+            const res = await produzirFicha(nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -576,7 +616,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = await produzirFicha(nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS);
+    const res = await produzirFicha(nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";

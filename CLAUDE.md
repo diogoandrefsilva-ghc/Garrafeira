@@ -23,18 +23,28 @@ parte e isolado: `garrafeira`.
 ## Os cinco separadores (o ecrã inicial não é a lista)
 `Garrafeira` (resumo) · `Detalhe` · `Locais` · `Consumidos` · `Definições`.
 
-O ecrã inicial (`Garrafeira`) é **resumo + procura**: quatro cards —
-vinhos, monocasta, regiões, castas — e, por baixo, a procura com os filtros
-todos (texto, local, tipo, região, casta, monocasta, ano, menção,
+O ecrã inicial (`Garrafeira`) é **resumo + procura**: os cards em cima e,
+por baixo, a procura com os filtros todos (texto, local, tipo, região, casta, monocasta, ano, menção,
 maturação). De propósito: a primeira versão copiou demasiado do Goals
 (painel cheio de números **e** a lista toda logo à entrada) e ficou
 carregada para o que é.
 
-Os cards são os `.sc` de sempre, na grelha 2×2 — não mudes isso para uma
-lista vertical, já se tentou e ficou pobre. Três deles abrem, ao tocar, uma
-contagem casta a casta ou região a região (`renderResumo`, `scCard`,
-`resumoPainel`, `contarPor`); tocar numa linha dessa contagem mostra os
-vinhos (`resumoDrill`). O painel (`.sc-det`) abre **por baixo da grelha
+Os cards são os `.sc` de sempre, na grelha (2 colunas no telemóvel) — não
+mudes isso para uma lista vertical, já se tentou e ficou pobre. São **seis**:
+vinhos, monocasta, regiões, castas, **valor estimado** e **a completar**.
+
+O **valor** é uma estimativa e diz-se isso no subtítulo: vale o que se pagou
+(`preco_compra`) quando se sabe, e o `preco_medio` do vinho quando não se
+sabe; garrafas sem nenhum dos dois não entram na conta (inventar um preço
+era pôr no cartão um número que ninguém podia conferir). Abre por local.
+
+**A completar** são os vinhos a quem falta alguma coisa que a app usa —
+imagem, castas, preço médio ou classificação (`FALTAS`/`faltasDe`).
+
+Cinco dos seis abrem ao tocar (`renderResumo`, `scCard`, `resumoPainel`,
+`contarPor`): uma contagem casta a casta, região a região, local a local ou
+falta a falta; tocar numa linha dessa contagem mostra os vinhos
+(`resumoDrill`). O painel (`.sc-det`) abre **por baixo da grelha
 toda**, com `grid-column:1/-1` — pô-lo logo a seguir ao card aberto partia a
 grelha ao meio e deixava buracos.
 
@@ -60,6 +70,12 @@ destaque.
 organizada por região ou por ano (`agruparVinhos`, `detAgrupar`). Não lhe
 metas procura nem filtros: isso é a Garrafeira, e ter os dois sítios a
 filtrar era ter duas verdades sobre o que está a ser mostrado.
+
+O **Detalhe** exporta a lista para PDF (`exportarPDF`): monta uma tabela num
+`#print-area` que só existe na impressão e chama `window.print()` — quem
+imprime escolhe "Guardar como PDF". Sem biblioteca nenhuma, que aqui não há
+build; a folha vai na horizontal porque são doze colunas, e os grupos são os
+mesmos que estão no ecrã.
 
 `renderLista()` ficou como o despachante chamado depois de QUALQUER
 mutação (guardar, apagar, consumir, mover): atualiza resumo + pesquisa +
@@ -114,9 +130,10 @@ iOS. O que está ligado aparece em pastilhas com ✕ próprio (`.factivos`),
 escondidas quando o painel está aberto para não dizer a mesma coisa duas
 vezes.
 
-Sem procura nenhuma, em vez do vazio ficam três atalhos (`sugestoesHTML`)
-que carregam nos filtros que já existem — "no ponto de beber", "já
-passaram", "monocasta" — e só aparecem se tiverem alguma coisa.
+Sem procura nenhuma não aparece lista nenhuma — o que preenche o ecrã são
+os cards do resumo. Houve aqui uns atalhos ("no ponto de beber", "já
+passaram", "monocasta") que foram tirados: faziam o que os filtros já
+fazem, e o ecrã inicial não precisa de dois sítios para a mesma coisa.
 - `style.css` — todo o CSS. Ver **"A linguagem visual"** mais abaixo antes
   de lhe mexer: as cores e os tipos de letra são um sistema, não gosto.
 - `sw.js` — service worker (cache PWA).
@@ -211,6 +228,11 @@ descoberta de modelo, mesma escada de variantes, mesmos fallbacks.
   a app faz polling (`iaEsperar`). É preciso porque a pesquisa demora mais
   do que um pedido HTTP aguenta (o browser/iOS corta perto dos 60s) e, no
   telemóvel, bloquear o ecrã a meio matava a chamada.
+- **Escolhe-se o que procurar antes de procurar** (`iaEscolher`): a lista
+  dos campos, com os VAZIOS já marcados. Vai no pedido como `campos`, e a
+  função usa-a para (a) dizer ao modelo em que se concentrar e (b) cortar da
+  resposta o que não foi pedido. Pedir os 22 campos de uma vez faz o modelo
+  andar atrás de tudo e voltar com meia dúzia de coisas mornas.
 - **Nada é gravado sem confirmação.** O resultado abre campo a campo
   (`iaMostrarResultado`), com o que está agora ao lado do que a IA propõe.
   Vêm marcados **só os campos vazios**: substituir o que alguém escreveu à

@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Garrafeira">
-<meta name="theme-color" content="#5c1630">
+<meta name="theme-color" content="#4e1228">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icone.svg" type="image/svg+xml">
@@ -96,10 +96,7 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
   <div class="hdr">
     <div class="brand">
       <div class="escudo"><img src="icone.svg" alt=""></div>
-      <div>
-        <h1>Garrafeira</h1>
-        <p id="hdr-sub">&nbsp;</p>
-      </div>
+      <h1>Garrafeira</h1>
     </div>
     <nav class="hnav">
       <button class="hn" onclick="abrirProcura()" title="Procurar">🔍</button>
@@ -110,11 +107,11 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 
 <div class="wrap">
   <div class="itabs">
-    <button class="it on" onclick="tab('garrafeira',this)">🍷 Garrafeira</button>
-    <button class="it" onclick="tab('detalhe',this)">📋 Detalhe</button>
-    <button class="it" onclick="tab('locais',this)">📍 Locais</button>
-    <button class="it" onclick="tab('consumidos',this)">📖 Consumidos</button>
-    <button class="it" onclick="tab('cfg',this)">⚙️ Definições</button>
+    <button class="it on" onclick="tab('garrafeira',this)"><span class="ic">🍷</span> Garrafeira</button>
+    <button class="it" onclick="tab('detalhe',this)"><span class="ic">📋</span> Detalhe</button>
+    <button class="it" onclick="tab('locais',this)"><span class="ic">📍</span> Locais</button>
+    <button class="it" onclick="tab('consumidos',this)"><span class="ic">📖</span> Consumidos</button>
+    <button class="it so-ic" onclick="tab('cfg',this)" title="Definições" aria-label="Definições">⚙️</button>
   </div>
 
   <!-- ═══ GARRAFEIRA (ecrã inicial: resumo + procura com filtros) ═══ -->
@@ -145,9 +142,12 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
   <section class="sec" id="s-detalhe">
     <div class="dbar">
       <span class="fcount" id="det-count"></span>
-      <div class="segbtns">
-        <button class="segbtn on" id="seg-regiao" onclick="detAgrupar('regiao')">Região</button>
-        <button class="segbtn" id="seg-ano" onclick="detAgrupar('ano')">Ano</button>
+      <div class="dbar-a">
+        <div class="segbtns">
+          <button class="segbtn on" id="seg-regiao" onclick="detAgrupar('regiao')">Região</button>
+          <button class="segbtn" id="seg-ano" onclick="detAgrupar('ano')">Ano</button>
+        </div>
+        <button class="mini" onclick="exportarPDF()" title="Exportar a lista para PDF">⬇︎ PDF</button>
       </div>
     </div>
 
