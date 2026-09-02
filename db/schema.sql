@@ -134,6 +134,11 @@ CREATE TABLE IF NOT EXISTS garrafeira.vinhos (
   estagio_meses integer,                       -- estágio em barrica/madeira
   estagio_texto text NOT NULL DEFAULT '',      -- "18 meses em barrica de carvalho francês"
   notas         text NOT NULL DEFAULT '',      -- notas próprias, escritas à mão
+  -- Links à mão, escolhidos por quem usa a app: [{titulo,url}]. É diferente
+  -- de `ai_fontes` (mais abaixo) — esse é o que a IA encontrou na última
+  -- procura e é substituído por inteiro na procura seguinte; isto é do
+  -- utilizador e a IA nunca lhe mexe.
+  links         jsonb NOT NULL DEFAULT '[]'::jsonb,
 
   -- ── o que a IA/pesquisa descobriu (Edge Function `vinho-info`) ──
   -- Fica na mesma linha do vinho (e não numa tabela à parte) porque é UMA

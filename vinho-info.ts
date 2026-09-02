@@ -159,8 +159,13 @@ REGRAS, e são a sério:
 1. NÃO INVENTES. Um campo que não consigas confirmar fica FORA do JSON (ou a
    null). Uma ficha com metade dos campos certos vale mais do que uma cheia
    com metade inventada — quem lê isto vai decidir o que abre ao jantar.
-2. A nota do Vivino e o preço têm de vir de uma página que tenhas mesmo
-   visto. Se não a viste, não os ponhas.
+2. A nota do Vivino, o número de avaliações e o "vivinoUrl" têm de vir da
+   MESMA página do Vivino, que tenhas mesmo visto. Confirma que essa página é
+   DESTE vinho exato (mesmo produtor, ano e região) e não a de um homónimo —
+   há vários vinhos com nomes parecidos, de produtores diferentes, e uma
+   pesquisa por texto pode trazer a página errada. Se tiveres qualquer dúvida
+   de que é o mesmo vinho, deixa "vivinoUrl" e "vivinoNota" vazios em vez de
+   arriscar.
 3. Se houver DÚVIDA entre dois vinhos com nome parecido, escolhe o que bate
    certo com o ano e a região dados, e diz a hesitação no campo "aviso".
 4. O preço é o de UMA garrafa de 0,75 L, em EUROS, em Portugal.
@@ -287,7 +292,12 @@ function normalizar(raw: any, anoPedido: number | null, campos: string[] | null 
     estagio_texto: texto(raw.estagioTexto, 160),
     vivino_nota: numero(raw.vivinoNota, 1, 5, 2),
     vivino_avaliacoes: (() => { const n = numero(raw.vivinoAvaliacoes, 0, 10_000_000, 0); return n === null ? null : Math.round(n); })(),
-    vivino_url: /^https?:\/\//i.test(String(raw.vivinoUrl ?? "")) ? texto(raw.vivinoUrl, 300) : "",
+    // Exige-se o domínio do Vivino (não basta ser um http qualquer): reduz o
+    // risco de o link vir de uma loja ou do site do produtor por engano. Não
+    // chega para apanhar um link de um vinho HOMÓNIMO — isso é a regra 2, no
+    // prompt — mas evita pelo menos um link que nem é do Vivino.
+    vivino_url: /^https?:\/\/([a-z0-9-]+\.)*vivino\.com\//i.test(String(raw.vivinoUrl ?? "").trim())
+      ? texto(raw.vivinoUrl, 300) : "",
     // Aqui a validação é mais apertada do que no `vivino_url`: exige-se a
     // extensão da imagem. O modelo tende a devolver o link da PÁGINA do
     // produto em vez do da fotografia, e isso dava um <img> partido na ficha

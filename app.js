@@ -180,6 +180,7 @@ async function carregar(){
   db.vinhos.forEach(v=>{v.castas=(porVinho[v.id]||[]).filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt'));});
 
   await detetarImagem();
+  await detetarLinks();
   await assinarImagens();
   reindexar();
   aplicarPermissoes();
@@ -200,6 +201,16 @@ async function detetarImagem(){
   catch(e){TEM_IMAGEM=false;}
   try{await sbReq('GET','vinhos?select=imagem_path&limit=1');TEM_IMAGEM_PATH=true;}
   catch(e){TEM_IMAGEM_PATH=false;}
+}
+
+// `vinhos.links` é coluna NOVA (ver db/schema.sql) — mesmo padrão do
+// `detetarImagem()`: a app tem de funcionar antes de alguém correr o ALTER
+// TABLE no Supabase.
+let TEM_LINKS=false;
+async function detetarLinks(){
+  if(db.vinhos.length){TEM_LINKS=('links' in db.vinhos[0]);return;}
+  try{await sbReq('GET','vinhos?select=links&limit=1');TEM_LINKS=true;}
+  catch(e){TEM_LINKS=false;}
 }
 
 /* ── ÍNDICES E CÁLCULOS ────────────────────────────────────────────── */
@@ -1070,6 +1081,15 @@ function vinhoDetalheHTML(v){
       <br><i>Vem de uma pesquisa automática — vale como ponto de partida, não como certeza.</i>
     </div>`:''}
 
+    ${TEM_LINKS?`<div class="msec">Links</div>
+      ${(v.links||[]).length
+        ? (v.links||[]).map((l,i)=>`<div class="mgar">
+            <div class="g-onde"><b><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.titulo||l.url)}</a></b></div>
+            <button class="mini ro-hide" onclick="removerLink(${v.id},${i})">✕</button>
+          </div>`).join('')
+        : '<div class="note" style="padding:8px 0">Sem links guardados.</div>'}
+      <button class="btn ghost ro-hide" onclick="adicionarLink(${v.id})">+ Acrescentar link</button>`:''}
+
     ${bebidas.length?`<div class="msec">Já bebidas (${bebidas.length})</div>
       ${bebidas.sort((a,b)=>String(b.consumido_em).localeCompare(String(a.consumido_em))).map(g=>`
         <div class="mgar"><div class="g-onde"><b>${dataPT(g.consumido_em)}${g.consumo_local?' · '+esc(g.consumo_local):''}</b>
@@ -1079,6 +1099,33 @@ function vinhoDetalheHTML(v){
       <button class="btn ghost" onclick="fecharModal('modal-vinho')">Fechar</button>
       <button class="btn danger ro-hide" onclick="apagarVinho(${v.id})">🗑 Apagar vinho</button>
     </div>`;
+}
+// Diferente de `ai_fontes` (o que a IA encontrou, substituído por inteiro a
+// cada procura): isto é do utilizador — a corrigir um link errado que a IA
+// trouxe (ex.: Vivino a apontar para outro vinho) ou a acrescentar um que
+// lhe faça sentido. `prompt()` para não pedir um modal só para dois campos —
+// mesmo padrão de `abrirNovoLocal()`.
+async function adicionarLink(id){
+  if(roGuard())return;
+  const v=IDXV[id];if(!v)return;
+  const url=prompt('Link (endereço completo, com https://)');
+  if(!url)return;
+  if(!/^https?:\/\//i.test(url.trim())){toast('Isso não parece um link',1);return;}
+  const titulo=prompt('Título (ex.: "Loja onde comprei")','')||'';
+  const links=(v.links||[]).concat([{titulo:titulo.trim(),url:url.trim()}]);
+  try{
+    await sbReq('PATCH',`vinhos?id=eq.${id}`,{links});
+    v.links=links;refrescarVinhoAberto();
+  }catch(e){toast('Não foi possível guardar: '+e.message,1);}
+}
+async function removerLink(id,i){
+  if(roGuard())return;
+  const v=IDXV[id];if(!v||!Array.isArray(v.links))return;
+  const links=v.links.slice();links.splice(i,1);
+  const antes=v.links;
+  v.links=links;refrescarVinhoAberto();
+  try{await sbReq('PATCH',`vinhos?id=eq.${id}`,{links});}
+  catch(e){v.links=antes;refrescarVinhoAberto();toast('Não foi possível apagar: '+e.message,1);}
 }
 /* ── A IMAGEM DO VINHO: ver em grande e trocar pela minha ───────────
    Toca-se na imagem da capa e ela abre aqui em grande, com o botão de
@@ -1296,6 +1343,8 @@ function abrirEditarVinho(id){
       <div><label>Preço médio (€)</label><input type="text" id="e-preco" inputmode="decimal" value="${esc(o('preco_medio'))}" placeholder="18.50"></div>
       <div><label>Nota Vivino</label><input type="text" id="e-vivino" inputmode="decimal" value="${esc(o('vivino_nota'))}" placeholder="4.1"></div>
     </div>
+    <label>Link do Vivino</label>
+    <input type="url" id="e-vivino-url" value="${esc(o('vivino_url'))}" placeholder="https://www.vivino.com/…">
 
     ${TEM_IMAGEM?`<label>Imagem do rótulo <span style="text-transform:none;font-weight:400">— link (opcional)</span></label>
     <input type="url" id="e-imagem" value="${esc(o('imagem_url'))}" placeholder="https://…/rotulo.jpg">
@@ -1346,6 +1395,7 @@ function lerFormVinho(){
     beber_ate:inteiro(g('e-beber-ate')),
     preco_medio:num(g('e-preco')),
     vivino_nota:num(g('e-vivino')),
+    vivino_url:g('e-vivino-url'),
     notas:g('e-notas'),
     _castas:g('e-castas').split(',').map(s=>s.trim()).filter(Boolean)
   };
