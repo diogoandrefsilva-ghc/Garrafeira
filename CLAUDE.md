@@ -14,7 +14,7 @@ parte e isolado: `garrafeira`.
   não leias o ficheiro todo):
   Sessão Supabase (`sbHeaders`/`sbFetch`/`sbReq`/`sbRpc`) · Permissões ·
   **DB** (`carregar`) · Índices e cálculos · Navegação · **Resumo** (ecrã
-  inicial) · Pesquisa (ecrã inicial) · Filtros · **Detalhe** (lista
+  inicial) · Pesquisa (Detalhe + Locais) · Filtros · **Detalhe** (lista
   organizada) · Mapa dos locais · Consumidos · **Modal do vinho** ·
   Modal editar/novo · Consumir garrafa · Modal da garrafa · **IA** ·
   Auth (Supabase) · Definições · Locais · **Utilizadores (admin)** ·
@@ -23,15 +23,18 @@ parte e isolado: `garrafeira`.
 ## Os cinco separadores (o ecrã inicial não é a lista)
 `Garrafeira` (resumo) · `Detalhe` · `Locais` · `Consumidos` · `Definições`.
 
-O ecrã inicial (`Garrafeira`) é **resumo + procura**: os cards em cima e,
-por baixo, a procura com os filtros todos (texto, local, tipo, região, casta, monocasta, ano, menção,
-maturação). De propósito: a primeira versão copiou demasiado do Goals
+O ecrã inicial (`Garrafeira`) é **só o resumo** — nada de procura aqui. Já
+teve os cards em cima e a procura por baixo, mas com a procura a viver
+também em Detalhe e Locais (ver abaixo), ter uma terceira cópia era ter três
+sítios com a mesma pergunta; o ecrã inicial ficou só para o retrato de
+conjunto. De propósito: a primeira versão copiou demasiado do Goals
 (painel cheio de números **e** a lista toda logo à entrada) e ficou
 carregada para o que é.
 
 Os cards são os `.sc` de sempre, na grelha (2 colunas no telemóvel) — não
-mudes isso para uma lista vertical, já se tentou e ficou pobre. São **seis**:
-vinhos, monocasta, regiões, castas, **valor estimado** e **a completar**.
+mudes isso para uma lista vertical, já se tentou e ficou pobre. São **oito**:
+vinhos, monocasta, regiões, castas, os dois **dourados** de preferência
+(região e casta preferida — ver abaixo), **valor estimado** e **a completar**.
 
 O **valor** é uma estimativa e diz-se isso no subtítulo: vale o que se pagou
 (`preco_compra`) quando se sabe, e o `preco_medio` do vinho quando não se
@@ -46,10 +49,20 @@ já tem o total).
 **A completar** são os vinhos a quem falta alguma coisa que a app usa —
 imagem, castas, preço médio ou classificação (`FALTAS`/`faltasDe`).
 
-Cinco dos seis abrem ao tocar (`renderResumo`, `scCard`, `resumoPainel`,
-`contarPor`): uma contagem casta a casta, região a região, faixa de preço a
-faixa de preço ou falta a falta; tocar numa linha dessa contagem mostra os
-vinhos (`resumoDrill`). O painel (`.sc-det`) abre **por baixo da grelha
+Os dois cards **dourados** (`scCardFav`) vêm logo a seguir aos de Regiões e
+Castas: **Região preferida** e **Casta preferida**, cada um com a região/
+casta com mais vinhos agora — "Douro · 10 vinhos", "Syrah · 15 vinhos, 6
+monocasta". Não é guardado em lado nenhum, é sempre o topo de `regRows`/
+`casRows` (as mesmas contagens do card de Regiões/Castas). Dourado porque é
+a cor da distinção nesta app (ver "A linguagem visual"), e um topo é
+exatamente isso — não mais um número, um destaque.
+
+Sete dos oito abrem ao tocar (`renderResumo`, `scCard`, `scCardFav`,
+`resumoPainel`, `contarPor`): uma contagem casta a casta, região a região,
+faixa de preço a faixa de preço ou falta a falta; tocar numa linha dessa
+contagem mostra os vinhos (`resumoDrill`). Os dois dourados vão direto à
+linha do topo — tocar neles é o mesmo que abrir o card de Regiões/Castas e
+já tocar na primeira linha. O painel (`.sc-det`) abre **por baixo da grelha
 toda**, com `grid-column:1/-1` — pô-lo logo a seguir ao card aberto partia a
 grelha ao meio e deixava buracos.
 
@@ -59,22 +72,40 @@ era um link solto no meio do conteúdo e não havia como fechar sem ir outra
 vez ao card lá em cima. O card aberto fica preenchido e com o chevron
 virado — é o que liga o painel ao sítio de onde saiu.
 
-A lista só aparece quando há alguma coisa filtrada (`haFiltros()`): sem
-isso o ecrã inicial voltava a ser a lista toda, que é o que se quis tirar
-daqui. Um clique numa casta no modal do vinho (`filtrarPorCasta`) volta ao
-ecrã inicial com esse filtro aplicado — é lá que os filtros vivem.
+Um clique numa casta no modal do vinho (`filtrarPorCasta`) muda para o
+separador `Detalhe` já com esse filtro aplicado — é lá (e em `Locais`) que
+os filtros vivem agora.
+
+## A procura vive em dois sítios, é a MESMA procura
+`Detalhe` e `Locais` partilham literalmente **o mesmo nó** `#filtros` (texto
++ chips + pastilhas) — não duas cópias com ids repetidos, que não davam em
+HTML válido nem em `getElementById` a funcionar nos dois. `posicionarFiltros`
+muda-o de sítio dentro do `tab()`: fica dentro de `#s-detalhe` por defeito no
+HTML (depois da organização/ordenação — texto que se lê antes de agrupar) e
+sobe para `#s-locais` (antes do `#mapa`) quando se entra lá; ao voltar a
+Detalhe, desce outra vez. Por ser o mesmo `<input>`, o texto e os filtros
+ligados não se perdem ao trocar de separador.
+
+Colapsada ocupa **uma linha só**: a caixa de texto e, à direita, o botão
+"Filtros" que abre o resto (chips, pastilhas) por baixo — antes eram duas
+linhas sempre visíveis (a barra de procura e, por baixo, a barra do botão).
+`renderFiltrados()` é o despachante desta procura: atualiza os chips/
+pastilhas e volta a desenhar **Detalhe e Locais os dois**, sem tentar
+adivinhar qual dos dois está aberto (o mesmo raciocínio do `renderLista()`,
+ver abaixo).
 
 `Locais` (`renderMapa`) é cada local como uma estante: cabeçalho com a cor
 do sítio e **duas contagens em serifa, com a palavra à frente** — "9 vinhos"
 e "12 garrafas". São mesmo coisas diferentes (12 garrafas podem ser 9
 vinhos), e um número solto ao canto não dizia de quê. Cada lugar é uma
 célula com a garrafinha desenhada, o nome (até duas linhas) e o lugar em
-destaque.
+destaque. Com a procura ligada, só aparecem os locais e lugares com garrafas
+que passam nela — é a resposta a "onde estão as minhas garrafas de Syrah".
 
-`Detalhe` (`renderDetalhe`) é a **lista completa sem filtro nenhum**, só
-organizada por região, por ano ou por casta (`agruparVinhos`, `detAgrupar`).
-Não lhe metas procura nem filtros: isso é a Garrafeira, e ter os dois sítios
-a filtrar era ter duas verdades sobre o que está a ser mostrado.
+`Detalhe` (`renderDetalhe`) é a lista organizada por região, por ano ou por
+casta (`agruparVinhos`, `detAgrupar`) — **sem filtro nenhum** por defeito
+(a lista toda), e com a mesma organização mas só os vinhos que passam na
+procura quando ela tem alguma coisa ligada (`haFiltros()`).
 
 Por **casta** vêm primeiro os monocasta, um grupo por casta ("100% Syrah",
 "100% Touriga Nacional", por ordem alfabética), e só no fim "Várias Castas"
@@ -92,9 +123,10 @@ estão no ecrã (a organização escolhida em Detalhe, mesmo exportando a
 partir de Definições).
 
 `renderLista()` ficou como o despachante chamado depois de QUALQUER
-mutação (guardar, apagar, consumir, mover): atualiza resumo + pesquisa +
-detalhe de uma vez, sem tentar adivinhar qual separador está aberto — o
-dataset é pequeno, refazer os três é mais simples e mais seguro.
+mutação (guardar, apagar, consumir, mover): chama `renderResumo()` e
+`renderFiltrados()` (que por sua vez refaz Detalhe e Locais), sem tentar
+adivinhar qual separador está aberto — o dataset é pequeno, refazer tudo é
+mais simples e mais seguro.
 
 ## A linguagem visual (o "charme")
 Duas famílias e uma regra de cor. **Fraunces** (serifa) para o que se lê
