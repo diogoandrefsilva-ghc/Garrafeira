@@ -533,10 +533,12 @@ body.naodono .dono-hide{display:none!important}
    bordô, os separadores e o botão flutuante por cima da lista. */
 #print-area{display:none}
 @media print{
-  /* Dimensões explícitas (não a palavra "landscape") — no Safari/iOS o
-     modificador de orientação é ignorado em alguns AirPrint, as dimensões
-     não. */
-  @page{size:297mm 210mm;margin:9mm}
+  /* No iOS a "Orientação" do ecrã de impressão é do próprio sistema, não
+     desta folha de estilos — o toggle Vertical/Horizontal não obedece a
+     nenhum @page (chegou a testar-se com dimensões explícitas em mm e
+     piorou: a página saía em branco). Fica o pedido padrão; quem imprimir
+     no iOS tem de tocar no ícone horizontal no ecrã de Opções. */
+  @page{size:A4 landscape;margin:9mm}
   body{background:#fff!important;background-image:none!important}
   body>*{display:none!important}
   body>#print-area{display:block!important}
