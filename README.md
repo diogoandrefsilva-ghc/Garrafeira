@@ -7,12 +7,15 @@ que já se bebeu.
 - **Dados e login no Supabase** (schema `garrafeira`, isolado das outras
   apps do mesmo projeto).
 - **Instalável** no telemóvel (PWA).
+- Cada vinho tem a sua **garrafa desenhada** (SVG, cor pelo tipo, ano no
+  rótulo) — ou a foto do rótulo, se lhe deres um link.
 
 ## O que faz
 
 | | |
 |---|---|
-| **Garrafeira** | tudo o que lá está, com procura por texto e filtros por local, tipo, região, **casta**, monocasta/várias castas, ano, menção e janela de maturação |
+| **Garrafeira** | resumo + procura: barra de texto sempre à vista e os filtros (local, tipo, região, **casta**, monocasta/várias castas, ano, menção, maturação) atrás do botão *Filtros* |
+| **Detalhe** | a lista toda, organizada por região ou por ano |
 | **Locais** | o mapa: cada local → cada prateleira → cada lugar |
 | **Consumidos** | o histórico — quando, onde e o que se achou de cada garrafa bebida |
 | **Definições** | conta, locais, utilizadores (admin), migração dos dados antigos, exportação e diagnóstico |
@@ -20,8 +23,9 @@ que já se bebeu.
 Em cada vinho há um botão **Procurar informação**: uma Edge Function
 pergunta a um modelo *com pesquisa Google ligada* e traz castas, região,
 tipo, nota do Vivino, preço médio, estágio, janela de consumo, notas de
-prova e harmonização. **Nada é gravado sem confirmação campo a campo** — as
-leituras automáticas entram como proposta, não como facto.
+prova, harmonização e, quando encontra uma fotografia fiável, a imagem do
+rótulo. **Nada é gravado sem confirmação campo a campo** — as leituras
+automáticas entram como proposta, não como facto.
 
 ## Pôr a andar
 

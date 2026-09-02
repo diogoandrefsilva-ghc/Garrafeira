@@ -32,6 +32,19 @@ o carimbo; `definir_admin` recusa quem não é admin **e** recusa passar a app
 a um email que não esteja em `allowed_users`; o `criado_por` dos vinhos é
 carimbado pelo trigger, não pelo cliente.
 
+### `vinhos.imagem_url` (já aplicada)
+
+Link para uma foto do rótulo/garrafa — a `vinho-info` (Edge Function) tenta
+trazê-lo na procura da IA, e também se pode escrever à mão no formulário.
+Já está no Supabase deste projeto (`ALTER TABLE` corrido diretamente no SQL
+Editor); `db/schema.sql` tem a definição na `CREATE TABLE` para uma base
+nova.
+
+A app não depende de a coluna existir para funcionar: deteta-o sozinha
+(`detetarImagem()` em `app.js`) e, se um dia faltar, esconde o campo e não
+o manda nas gravações — em vez da foto mostra a garrafa desenhada, que é o
+que aparece na mesma para todos os vinhos sem link.
+
 **Falta o que não é SQL** — ver "Passos manuais" mais abaixo. Enquanto o
 schema não estiver exposto na API, a app dá 404 em tudo.
 

@@ -38,10 +38,23 @@ vinhos (`resumoDrill`). O painel (`.sc-det`) abre **por baixo da grelha
 toda**, com `grid-column:1/-1` — pô-lo logo a seguir ao card aberto partia a
 grelha ao meio e deixava buracos.
 
+O painel tem **barra própria** (`.rdet-bar`): ‹ voltar à esquerda, a migalha
+do sítio onde se está no meio, ✕ à direita (`resumoFechar`). Antes o voltar
+era um link solto no meio do conteúdo e não havia como fechar sem ir outra
+vez ao card lá em cima. O card aberto fica preenchido e com o chevron
+virado — é o que liga o painel ao sítio de onde saiu.
+
 A lista só aparece quando há alguma coisa filtrada (`haFiltros()`): sem
 isso o ecrã inicial voltava a ser a lista toda, que é o que se quis tirar
 daqui. Um clique numa casta no modal do vinho (`filtrarPorCasta`) volta ao
 ecrã inicial com esse filtro aplicado — é lá que os filtros vivem.
+
+`Locais` (`renderMapa`) é cada local como uma estante: cabeçalho com a cor
+do sítio e **duas contagens em serifa, com a palavra à frente** — "9 vinhos"
+e "12 garrafas". São mesmo coisas diferentes (12 garrafas podem ser 9
+vinhos), e um número solto ao canto não dizia de quê. Cada lugar é uma
+célula com a garrafinha desenhada, o nome (até duas linhas) e o lugar em
+destaque.
 
 `Detalhe` (`renderDetalhe`) é a **lista completa sem filtro nenhum**, só
 organizada por região ou por ano (`agruparVinhos`, `detAgrupar`). Não lhe
@@ -52,7 +65,60 @@ filtrar era ter duas verdades sobre o que está a ser mostrado.
 mutação (guardar, apagar, consumir, mover): atualiza resumo + pesquisa +
 detalhe de uma vez, sem tentar adivinhar qual separador está aberto — o
 dataset é pequeno, refazer os três é mais simples e mais seguro.
-- `style.css` — todo o CSS.
+
+## A linguagem visual (o "charme")
+Duas famílias e uma regra de cor. **Fraunces** (serifa) para o que se lê
+devagar — nomes de vinhos, anos, números, títulos; **Inter** para a
+interface. A cor é informação, não decoração: **bordô** = a app, **dourado**
+= distinção (menção portuguesa e nota do Vivino), e o resto vive em tons de
+papel. O fundo tem uma textura de pontos em CSS puro (nada de imagens).
+
+Não voltes a dar cor própria a cada crachá: a versão anterior tinha sete
+famílias de cor lado a lado no mesmo cartão e nenhuma queria dizer nada.
+
+**O cartão do vinho tem três zonas e é a POSIÇÃO que diz o que a coisa é:**
+1. a **garrafa** (a imagem, com a quantidade ao canto);
+2. a **identidade** — nome, ano, produtor/tipo/região, castas, menção, nota;
+3. depois de um filete, o **rodapé do que é físico** — onde está a garrafa e
+   se está no ponto de beber.
+Um crachá novo entra numa destas zonas; não há uma quarta.
+
+## A imagem de cada vinho
+`garrafaSVG(v)` desenha a garrafa em SVG inline: o vidro toma a cor do
+`tipo` (`VIDRO`), o rótulo leva o ano. Se o vinho tiver `imagem_url` (foto
+do rótulo), essa vai por cima — e o `onerror` tira-a se o link estiver
+morto, ficando a garrafa desenhada em vez de um quadrado vazio.
+
+É desenhada e não uma pasta de imagens porque **não há build nem servidor
+de imagens aqui**: assim não custa um pedido à rede, não falha offline e
+não depende de um link de terceiros que um dia morre. A garrafa aparece
+também no mapa dos locais (versão `mini`, sem rótulo) e na capa do modal.
+
+`vinhos.imagem_url` já está aplicada no Supabase deste projeto — a
+`vinho-info` (Edge Function) também tenta trazê-la na procura da IA (link
+DIRETO da fotografia, não o da página; ver `vinho-info.ts`). Mesmo assim a
+app **deteta** se a coluna existe (`detetarImagem()`) e, se um dia faltar
+numa base nova antes do `db/schema.sql` correr, esconde o campo e não o
+manda nas gravações — sem isso um PATCH rebentava **todas** as gravações
+com 400.
+
+## A procura (o ecrã inicial)
+A barra de procura está sempre à vista; os **filtros vivem atrás do botão
+"Filtros"**, que traz o número dos que estão ligados. Com nove caixas
+abertas de uma vez, o ecrã inicial era uma parede cinzenta.
+
+Cada filtro é um chip desenhado por nós com o `<select>` **nativo por cima,
+invisível** (`opacity:0;inset:0`). O desenho é nosso, o seletor continua a
+ser o do telemóvel — um dropdown feito à mão em JS era mais código e pior no
+iOS. O que está ligado aparece em pastilhas com ✕ próprio (`.factivos`),
+escondidas quando o painel está aberto para não dizer a mesma coisa duas
+vezes.
+
+Sem procura nenhuma, em vez do vazio ficam três atalhos (`sugestoesHTML`)
+que carregam nos filtros que já existem — "no ponto de beber", "já
+passaram", "monocasta" — e só aparecem se tiverem alguma coisa.
+- `style.css` — todo o CSS. Ver **"A linguagem visual"** mais abaixo antes
+  de lhe mexer: as cores e os tipos de letra são um sistema, não gosto.
 - `sw.js` — service worker (cache PWA).
 - `vinho-info.ts` — a Edge Function que procura a ficha do vinho na net
   (deploy à parte: `supabase functions deploy vinho-info`).
@@ -190,6 +256,16 @@ ler as fontes e porquê.
 - **Escapar HTML:** `esc()` para conteúdo; `escJs()` para o que vai dentro
   de `onclick="…('…')"` — há vinhos com plica no nome ("Clefs D'or") e sem
   isso partiam o atributo.
+- **`body>header`, nunca `header` solto no CSS.** O cabeçalho da app é um
+  `<header>`, mas os cartões do mapa também tiveram cabeçalhos: com o
+  seletor solto herdavam o bordô, o `position:sticky` e o texto branco — o
+  nome do local ficava branco sobre branco. `ajustarSticky()` procura pelo
+  mesmo `body>header`.
+- **`input[type=date]` precisa de `min-width:0` e `-webkit-appearance:none`.**
+  No iOS o campo de data não encolhe sozinho e saía pela borda do modal
+  fora. A regra está no `style.css` uma vez, para todos.
+- **Modais são folhas no telemóvel** (`@media(max-width:560px)`): sobem de
+  baixo e é a `.mbox` que faz scroll, não a página por trás.
 - Faz **edições cirúrgicas** (diffs pequenos).
 
 ## Ícones

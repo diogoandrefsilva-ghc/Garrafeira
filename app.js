@@ -170,8 +170,20 @@ async function carregar(){
   });
   db.vinhos.forEach(v=>{v.castas=(porVinho[v.id]||[]).filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt'));});
 
+  await detetarImagem();
   reindexar();
   aplicarPermissoes();
+}
+
+/* `vinhos.imagem_url` é uma coluna NOVA (ver db/schema.sql). A app tem de
+   funcionar antes de alguém correr o ALTER TABLE no Supabase: se a coluna
+   não existir, o campo não aparece no formulário e não vai no PATCH — que
+   de outra forma rebentava com 400 em TODAS as gravações. */
+let TEM_IMAGEM=false;
+async function detetarImagem(){
+  if(db.vinhos.length){TEM_IMAGEM=('imagem_url' in db.vinhos[0]);return;}
+  try{await sbReq('GET','vinhos?select=imagem_url&limit=1');TEM_IMAGEM=true;}
+  catch(e){TEM_IMAGEM=false;}
 }
 
 /* ── ÍNDICES E CÁLCULOS ────────────────────────────────────────────── */
@@ -197,6 +209,43 @@ function castaLabel(v){
   return n===1?'Monocasta':'Várias castas';
 }
 function nomeLocal(id){return (IDXL[id]||{}).nome||'Sem local';}
+
+/* A IMAGEM DE CADA VINHO.
+   Se o vinho tiver `imagem_url` (foto do rótulo), é essa que manda. Sem
+   ela — que é o caso da esmagadora maioria — desenha-se a garrafa: o vidro
+   toma a cor do TIPO, o rótulo leva o ano. Foi o que substituiu a barrinha
+   de cor à esquerda do cartão: aquela barra dizia o local (informação que
+   ninguém lia numa risca de 5px) e a imagem diz o que a coisa é ao longe.
+   O local passou para o pip colorido do rodapé, ao lado do sítio escrito.
+
+   É SVG inline e não <img>: não há build nem pasta de imagens nesta app, e
+   assim a garrafa não custa um pedido à rede nem falha offline. */
+const VIDRO={Tinto:'#5e1226',Branco:'#8b9a45','Rosé':'#cd7d95',
+  Espumante:'#3a5140',Licoroso:'#7b4213',Frisante:'#7d9b6e'};
+function corVinho(v){return VIDRO[(v||{}).tipo]||VIDRO.Tinto;}
+function garrafaSVG(v,mini){
+  const c=corVinho(v);
+  const cap=(v.tipo==='Espumante'||v.tipo==='Licoroso')?'#a9832f':'#33202a';
+  const ano=v.ano?String(v.ano):'';
+  return `<svg viewBox="0 0 40 74" aria-hidden="true" focusable="false">
+    <rect x="14.5" y="1" width="11" height="8" rx="2" fill="${cap}"/>
+    <path d="M15.5 4h9v11.5q0 3.5 4.6 7Q33 27 33 34.5V64q0 6-6 6H13q-6 0-6-6V34.5q0-7.5 3.9-12Q15.5 19 15.5 15.5z" fill="${c}"/>
+    <rect x="17" y="6" width="2.4" height="12" rx="1.2" fill="#fff" opacity=".22"/>
+    ${mini?'':`<rect x="9.5" y="43" width="21" height="17" rx="2" fill="#f8f2e6"/>
+    <rect x="9.5" y="43" width="21" height="3" fill="${c}" opacity=".6"/>
+    <text x="20" y="56" text-anchor="middle" font-family="Fraunces,Georgia,serif" font-size="9.5"
+      fill="#4e1228">${esc(ano)}</text>`}
+  </svg>`;
+}
+// A miniatura do cartão: garrafa desenhada por baixo, foto por cima quando
+// existe. Se a foto falhar (link partido), o `onerror` tira-a e fica a
+// garrafa — nunca um quadrado vazio.
+function vinhoThumb(v,qtd){
+  const img=String(v.imagem_url||'').trim();
+  return `<div class="vc-thumb">${garrafaSVG(v)}
+    ${img?`<img src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()">`:''}
+    ${qtd>1?`<span class="vc-qtd">\u00d7${qtd}</span>`:''}</div>`;
+}
 
 // "Nível 2" tem de vir antes de "Nível 10" — a ordenação alfabética punha o
 // 10 primeiro, e o mapa da garrafeira ficava com os níveis baralhados.
@@ -323,6 +372,7 @@ function resumoDrill(qual,valor){
   renderResumo();
 }
 function resumoVoltar(){RESUMO_DRILL=null;renderResumo();}
+function resumoFechar(){RESUMO_ABERTO=null;RESUMO_DRILL=null;renderResumo();}
 
 // Um card da grelha, no formato de sempre (.sc, com a barra de cor à
 // esquerda). Com `id` fica clicável e ganha o chevron; sem `id` é só um
@@ -338,20 +388,33 @@ function scCard(cor,label,valor,sub,id){
 }
 /* O painel que abre por baixo da grelha. Dois estados: a contagem
    (casta a casta, região a região) e, depois de se tocar numa linha, os
-   vinhos dessa linha. `filtroFn` decide quem entra nessa lista e
-   `listaBase` é de onde se filtra — os monocasta para o card do meio,
-   todos os com stock para os outros dois. */
+   vinhos dessa linha.
+
+   O que mudou: o "voltar" era um link azul solto no meio do painel e não
+   havia forma de FECHAR sem ir outra vez ao card lá em cima. Agora o
+   painel tem barra própria — ‹ voltar à esquerda, a migalha do sítio onde
+   se está no meio, e o ✕ que fecha tudo à direita. O card que está aberto
+   fica preenchido e com o chevron virado, para se perceber de onde é que
+   este painel saiu.
+
+   `filtroFn` decide quem entra na lista e `listaBase` é de onde se filtra:
+   os monocasta para o card do meio, todos os com stock para os outros. */
+const RESUMO_NOME={mono:'Monocasta',regiao:'Regiões',casta:'Castas'};
 function resumoPainel(id,titulo,rows,filtroFn,listaBase){
+  const fechar=`<button class="rdet-x" onclick="resumoFechar()" title="Fechar">✕</button>`;
   if(RESUMO_DRILL){
     const vs=listaBase.filter(filtroFn).slice().sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
     return `<div class="sc-det">
-      <button class="lnk" onclick="resumoVoltar()">‹ voltar</button>
-      <div class="rdet-tit">${esc(RESUMO_DRILL)} <span class="rdet-n">${vs.length}</span></div>
-      <div class="rdet-lista">${vs.map(vinhoCardHTML).join('')||'<div class="note" style="padding:8px 0">Sem vinhos.</div>'}</div>
+      <div class="rdet-bar">
+        <button class="rdet-back" onclick="resumoVoltar()">‹ ${esc(RESUMO_NOME[id]||'Voltar')}</button>
+        <div class="rdet-cab">${esc(RESUMO_DRILL)} <i>· ${vs.length} vinho${vs.length===1?'':'s'}</i></div>
+        ${fechar}
+      </div>
+      <div class="rdet-lista">${vs.map(vinhoCardHTML).join('')||'<div class="note">Sem vinhos.</div>'}</div>
     </div>`;
   }
   return `<div class="sc-det">
-    <div class="rdet-cab">${esc(titulo)}</div>
+    <div class="rdet-bar"><div class="rdet-cab">${esc(titulo)}</div>${fechar}</div>
     <div class="rdet-rows">${rows.length
       ?rows.map(r=>`<div class="rdet-row" onclick="resumoDrill('${id}','${escJs(r.nome)}')">
         <span>${esc(r.nome)}</span><span class="rdet-n">${r.n}</span></div>`).join('')
@@ -406,8 +469,10 @@ function renderPesquisa(){
   renderFiltros();
   const fc=document.getElementById('f-count');
   const fl=document.getElementById('f-limpar');
+  const tx=document.getElementById('f-texto');
+  document.getElementById('f-texto-x').classList.toggle('on',!!tx.value);
   if(!haFiltros()){
-    fl.style.display='none';fc.textContent='';box.innerHTML='';
+    fl.style.display='none';fc.textContent='';box.innerHTML=sugestoesHTML();
     return;
   }
   fl.style.display='';
@@ -416,7 +481,31 @@ function renderPesquisa(){
   fc.textContent=`${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'}`;
   box.innerHTML=res.length
     ?res.map(vinhoCardHTML).join('')
-    :'<div class="vazio">Nada corresponde a esta procura.</div>';
+    :'<div class="vazio"><b>Nada encontrado</b>Nenhum vinho corresponde a esta procura.</div>';
+}
+
+/* Sem procura nenhuma, o ecrã inicial ficava com meio metro de vazio por
+   baixo dos cards — a lista toda só aparece quando se filtra, e isso é de
+   propósito. Em vez do vazio, três atalhos para as perguntas que se fazem
+   a uma garrafeira ("o que é que está no ponto?"). Não são filtros novos:
+   carregam nos que já existem. Só aparece o atalho que tem alguma coisa. */
+function sugestoesHTML(){
+  const comStock=db.vinhos.filter(v=>stockDe(v.id)>0);
+  if(!comStock.length)return '';
+  const conta=fn=>comStock.filter(fn).length;
+  const atalhos=[
+    ['janela','ponto','🍷','No ponto de beber',conta(v=>janelaBeber(v)==='ponto')],
+    ['janela','passou','⚠️','Já passaram do ponto',conta(v=>janelaBeber(v)==='passou')],
+    ['castaN','1','🍇','Monocasta',conta(v=>(v.castas||[]).length===1)]
+  ].filter(a=>a[4]>0);
+  if(!atalhos.length)return '';
+  return `<div class="sugestao">
+    <div class="sug-t">Por onde começar</div>
+    ${atalhos.map(([k,v,ico,txt,n])=>
+      `<button class="sug" onclick="setFiltro('${k}','${v}')">
+        <span class="sug-i">${ico}</span><span class="sug-x">${esc(txt)}</span><b>${n}</b></button>`).join('')}
+    <div class="note" style="margin-top:10px">Ou abre os <b>Filtros</b> para procurar por local, região, casta, ano ou menção.</div>
+  </div>`;
 }
 
 /* ── FILTROS ───────────────────────────────────────────────────────
@@ -439,24 +528,58 @@ function opcoesFiltro(){
     mencao:set(comStock.map(v=>v.mencao)).sort((a,b)=>a.localeCompare(b,'pt')).map(x=>[x,x])
   };
 }
-function renderFiltros(){
+/* Cada filtro é um chip DESENHADO por nós com o <select> nativo por cima,
+   invisível (opacity:0, inset:0). O desenho passa a ser nosso — texto do
+   valor escolhido, estado ligado/desligado, tudo pill — e quem abre a lista
+   continua a ser o seletor do telemóvel, que é o que uma pessoa sabe usar.
+   Um dropdown feito à mão em JS era mais código e pior no iOS.
+
+   E deixam de estar todos à vista: escondem-se atrás do botão "Filtros",
+   que traz o número dos que estão ligados. O que fica sempre visível são as
+   "pastilhas" do que está a filtrar agora, cada uma com o seu ✕ — antes
+   só havia "limpar filtros", tudo ou nada. */
+const F_META={local:['📍','Local'],tipo:['🍷','Tipo'],regiao:['🗺️','Região'],casta:['🍇','Casta'],
+  castaN:['🧬','Nº de castas'],ano:['📅','Ano'],mencao:['🏅','Menção'],janela:['⏱️','Maturação']};
+let FILTROS_ABERTOS=false;
+function toggleFiltros(){
+  FILTROS_ABERTOS=!FILTROS_ABERTOS;
+  document.getElementById('filtros').classList.toggle('aberto',FILTROS_ABERTOS);
+}
+function limparTexto(){
+  const c=document.getElementById('f-texto');
+  c.value='';renderPesquisa();c.focus();
+}
+function listasFiltro(){
   const o=opcoesFiltro();
-  const sel=(id,label,pares,extra)=>{
-    const vals=(extra||[]).concat(pares);
-    return `<select id="fs-${id}" class="${F[id]?'ativo':''}" onchange="setFiltro('${id}',this.value)">
-      <option value="">${esc(label)}</option>
-      ${vals.map(([v,t])=>`<option value="${esc(v)}"${F[id]===v?' selected':''}>${esc(t)}</option>`).join('')}
-    </select>`;
-  };
-  document.getElementById('f-selects').innerHTML=
-    sel('local','📍 Local',o.local)+
-    sel('tipo','🍷 Tipo',o.tipo)+
-    sel('regiao','🗺️ Região',o.regiao)+
-    sel('casta','🍇 Casta',o.casta)+
-    sel('castaN','Monocasta?',[['1','Monocasta'],['2','Várias castas'],['0','Sem castas registadas']])+
-    sel('ano','📅 Ano',o.ano)+
-    sel('mencao','🏅 Menção',o.mencao)+
-    sel('janela','⏱️ Maturação',[['ponto','No ponto'],['cedo','Ainda cedo'],['passou','Já passou']]);
+  o.castaN=[['1','Monocasta'],['2','Várias castas'],['0','Sem castas registadas']];
+  o.janela=[['ponto','No ponto'],['cedo','Ainda cedo'],['passou','Já passou']];
+  return o;
+}
+function rotuloFiltro(listas,k){
+  const par=(listas[k]||[]).find(p=>p[0]===F[k]);
+  return par?par[1]:F[k];
+}
+function renderFiltros(){
+  const listas=listasFiltro();
+  document.getElementById('f-selects').innerHTML=Object.keys(F_META).map(k=>{
+    const [ico,nome]=F_META[k];
+    const pares=listas[k]||[];
+    const txt=F[k]?rotuloFiltro(listas,k):nome;
+    return `<label class="fchip${F[k]?' ativo':''}">
+      <span>${ico} ${esc(txt)}</span><span class="fchev">▾</span>
+      <select onchange="setFiltro('${k}',this.value)">
+        <option value="">${esc(nome)} — todos</option>
+        ${pares.map(([v,t])=>`<option value="${esc(v)}"${F[k]===v?' selected':''}>${esc(t)}</option>`).join('')}
+      </select>
+    </label>`;
+  }).join('');
+
+  const ativos=Object.keys(F_META).filter(k=>F[k]);
+  const n=document.getElementById('f-n');
+  n.textContent=ativos.length;n.classList.toggle('on',!!ativos.length);
+  document.getElementById('f-activos').innerHTML=ativos.map(k=>
+    `<span class="fpill">${F_META[k][0]} ${esc(rotuloFiltro(listas,k))}
+      <button onclick="setFiltro('${k}','')" title="Tirar este filtro">✕</button></span>`).join('');
 }
 function setFiltro(k,v){F[k]=v;renderPesquisa();}
 function limparFiltros(){
@@ -528,36 +651,54 @@ function detAgrupar(modo){
   renderDetalhe();
 }
 
-/* ── LISTA ─────────────────────────────────────────────────────────── */
+/* ── LISTA ───────────────────────────────────────────────────────────
+   O cartão tem TRÊS zonas, sempre pela mesma ordem, e é a posição (não a
+   cor) que diz o que cada coisa é:
+     1. a garrafa — a imagem do vinho, com a quantidade ao canto;
+     2. a identidade — nome, ano, produtor/tipo/região, castas e menção;
+     3. o rodapé, depois de um filete — o que é FÍSICO: onde está, se está
+        no ponto de beber, e a nota do Vivino.
+   Antes vinha tudo no mesmo monte de crachás, cada um com a sua cor: sete
+   cores ao lado umas das outras não são hierarquia nenhuma, e o olho não
+   sabia onde pousar. Agora só o dourado (menção/nota) e o pip do local têm
+   cor própria. */
 function vinhoCardHTML(v){
   const gs=garrafasDe(v.id,true);
   const cl=castaLabel(v);
   const jan=janelaBeber(v);
-  // Duas garrafas do mesmo vinho no MESMO sítio não valem dois crachás
-  const sitios=[...new Set(gs.map(g=>nomeLocal(g.local_id)+(g.prateleira?' · '+g.prateleira:'')))];
-  const cor=(IDXL[(gs[0]||{}).local_id]||{}).cor||'var(--vh)';
-  return `<div class="vcard" onclick="verVinho(${v.id})">
+  const castas=v.castas||[];
+  const castasTxt=castas.length
+    ? castas.slice(0,2).join(' · ')+(castas.length>2?' +'+(castas.length-2):'')
+    : '';
+  // Duas garrafas do mesmo vinho no MESMO sítio não valem duas linhas. Cada
+  // sítio leva o pip com a cor do local — é o que restou da barra de cor.
+  const sitios=[];
+  gs.forEach(g=>{
+    const txt=nomeLocal(g.local_id)+(g.prateleira?' · '+g.prateleira:'');
+    if(!sitios.some(x=>x.txt===txt))sitios.push({txt,cor:(IDXL[g.local_id]||{}).cor||'#7b1f3d'});
+  });
+  return `<article class="vcard" onclick="verVinho(${v.id})">
     <div class="vc-top">
-      <div class="vc-cor" style="background:${esc(cor)}"></div>
+      ${vinhoThumb(v,gs.length)}
       <div class="vc-main">
-        <div style="display:flex;gap:9px;align-items:baseline;justify-content:space-between">
+        <div class="vc-head">
           <div class="vc-nome">${esc(v.nome)}</div>
           <div class="vc-ano">${v.ano||'s/a'}</div>
         </div>
-        <div class="vc-sub">${esc([v.produtor,v.tipo,v.regiao].filter(Boolean).join(' · '))}</div>
+        <div class="vc-sub">${esc([v.produtor,[v.tipo,v.estilo].filter(Boolean).join(' '),v.regiao].filter(Boolean).join(' · '))}</div>
         <div class="vc-badges">
-          ${gs.length>1?`<span class="bdg qtd">${gs.length} garrafas</span>`:''}
-          ${v.mencao?`<span class="bdg men">${esc(v.mencao)}</span>`:''}
+          ${castasTxt?`<span class="bdg cas">🍇 ${esc(castasTxt)}</span>`:''}
           ${cl?`<span class="bdg mono">${esc(cl)}</span>`:''}
-          ${(v.castas||[]).slice(0,3).map(c=>`<span class="bdg cas">${esc(c)}</span>`).join('')}
-          ${(v.castas||[]).length>3?`<span class="bdg cas">+${v.castas.length-3}</span>`:''}
+          ${v.mencao?`<span class="bdg men">${esc(v.mencao)}</span>`:''}
           ${v.vivino_nota?`<span class="bdg viv">★ ${Number(v.vivino_nota).toFixed(1)}</span>`:''}
-          ${jan?`<span class="bdg">${JANELA_TXT[jan]}</span>`:''}
-          ${sitios.map(s=>`<span class="bdg loc">📍 ${esc(s)}</span>`).join('')}
+        </div>
+        <div class="vc-foot">
+          ${sitios.map(x=>`<span class="vc-l"><span class="vc-pip" style="background:${esc(x.cor)}"></span><b>${esc(x.txt)}</b></span>`).join('')}
+          ${jan?`<span class="bdg jan ${jan}">${JANELA_TXT[jan]}</span>`:''}
         </div>
       </div>
     </div>
-  </div>`;
+  </article>`;
 }
 // A lista COMPLETA, sem filtros nenhuns — só organizada por região ou por
 // ano. Filtrar e procurar é na Garrafeira; aqui é para percorrer tudo.
@@ -569,7 +710,7 @@ function renderDetalhe(){
   document.getElementById('det-count').textContent=
     `${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'}`;
   if(!res.length){
-    box.innerHTML='<div class="vazio">A garrafeira está vazia. Toca no + para pôr o primeiro vinho — ou, se ainda não migraste o que já tinhas, vai a Definições › Dados.</div>';
+    box.innerHTML='<div class="vazio"><b>Ainda sem vinhos</b>Toca no + para pôr o primeiro — ou, se ainda não migraste o que já tinhas, vai a Definições › Dados.</div>';
     return;
   }
   const grupos=agruparVinhos(res,DET_AGRUPAR);
@@ -590,12 +731,18 @@ function renderLista(){
 }
 
 /* ── MAPA DOS LOCAIS ───────────────────────────────────────────────
-   O desenho da garrafeira: local → prateleira → lugares. Só garrafas que
-   lá estão — o histórico dos consumos vive no separador próprio. */
+   O desenho da garrafeira: local -> prateleira -> lugares. Só garrafas que
+   lá estão — o histórico dos consumos vive no separador próprio.
+
+   Os contadores: continuam lá, mas em serifa e COM A PALAVRA à frente —
+   "9 vinhos", "12 garrafas". Um número solto num canto não diz de quê, e
+   aqui as duas contagens são mesmo coisas diferentes: 12 garrafas podem
+   ser 9 vinhos (há repetidos). Cada lugar é uma célula com a garrafinha
+   desenhada, o nome do vinho e o lugar em destaque. */
 function renderMapa(){
   const box=document.getElementById('mapa');
   const ativas=db.garrafas.filter(naGarrafeira);
-  if(!ativas.length){box.innerHTML='<div class="vazio">Ainda não há garrafas arrumadas.</div>';return;}
+  if(!ativas.length){box.innerHTML='<div class="vazio"><b>Garrafeira vazia</b>Ainda não há garrafas arrumadas.</div>';return;}
 
   // Garrafas sem local (o local foi apagado, ou nunca foi escolhido) não
   // podem sumir do mapa — é aí que se vê que estão por arrumar.
@@ -605,22 +752,35 @@ function renderMapa(){
 
   box.innerHTML=grupos.map(([l,gs])=>{
     const prats=[...new Set(gs.map(g=>g.prateleira||''))].sort(ordPrateleira);
-    return `<div class="mloc">
-      <h3><span class="pip" style="background:${esc(l.cor||'#7b1f3d')}"></span>${esc(l.nome)}</h3>
-      <div class="mloc-sub">${esc(l.descricao||'')}${l.descricao?' · ':''}${gs.length} garrafa${gs.length===1?'':'s'}</div>
+    const nv=new Set(gs.map(g=>g.vinho_id)).size;
+    return `<section class="mloc">
+      <div class="mloc-head" style="--lc:${esc(l.cor||'#7b1f3d')}">
+        <div class="mloc-id">
+          <h3><span class="pip" style="background:${esc(l.cor||'#7b1f3d')}"></span>${esc(l.nome)}</h3>
+          ${l.descricao?`<div class="mloc-sub">${esc(l.descricao)}</div>`:''}
+        </div>
+        <div class="mloc-n">
+          <b>${nv}</b><span class="u">${nv===1?'vinho':'vinhos'}</span>
+          <span>${gs.length} ${gs.length===1?'garrafa':'garrafas'}</span>
+        </div>
+      </div>
       ${prats.map(p=>{
         const cel=gs.filter(g=>(g.prateleira||'')===p)
           .sort((a,b)=>String(a.lugar).localeCompare(String(b.lugar),'pt',{numeric:true}));
         return `<div class="mprat">
-          <div class="mprat-t">${esc(p||'Sem prateleira')} — ${cel.length}</div>
+          <div class="mprat-t">${esc(p||'Sem prateleira')}
+            <span class="mprat-n">${cel.length} ${cel.length===1?'garrafa':'garrafas'}</span></div>
           <div class="mgrid">${cel.map(g=>{
             const v=IDXV[g.vinho_id]||{nome:'?'};
-            return `<div class="mcell" onclick="verVinho(${g.vinho_id})" title="${esc(v.nome)} ${v.ano||''}">
-              <b>${esc(g.lugar||'—')}</b><span>${esc(v.nome)}</span><span>${v.ano||''}</span></div>`;
+            return `<button class="mcell" onclick="verVinho(${g.vinho_id})" title="${esc(v.nome)} ${v.ano||''}">
+              ${garrafaSVG(v,1)}
+              <span class="mcell-tx"><b>${esc(v.nome)}</b><span>${v.ano||'s/ ano'}</span></span>
+              ${g.lugar?`<span class="mlug">${esc(g.lugar)}</span>`:''}
+            </button>`;
           }).join('')}</div>
         </div>`;
       }).join('')}
-    </div>`;
+    </section>`;
   }).join('');
 }
 
@@ -641,7 +801,7 @@ function renderConsumidos(){
       <div class="sc-s">${notas.length} avaliada${notas.length===1?'':'s'}</div></div>`;
 
   const box=document.getElementById('consumidos');
-  if(!gs.length){box.innerHTML='<div class="vazio">Ainda não se bebeu nada — ou ainda não se registou.</div>';return;}
+  if(!gs.length){box.innerHTML='<div class="vazio"><b>Nada bebido ainda</b>Ou ainda não se registou. Cada garrafa que se abre fica aqui com a data, o sítio e o que se achou.</div>';return;}
   box.innerHTML=gs.map(g=>{
     const v=IDXV[g.vinho_id]||{nome:'(vinho apagado)'};
     return `<div class="ccard">
@@ -683,35 +843,38 @@ function refrescarVinhoAberto(){
 function linha(rot,val){
   return val?`<div class="mdl"><b>${esc(rot)}</b><span>${val}</span></div>`:'';
 }
+/* O modal do vinho ganhou CAPA: a garrafa (ou a foto do rótulo), o nome e
+   a origem sobre o bordô, com a nota do Vivino e a maturação já lá em
+   cima. O resto — ficha, onde está, o que se bebeu — fica em papel por
+   baixo, com as secções separadas por filete. No telemóvel o modal sobe de
+   baixo como uma folha (ver style.css) em vez de aterrar no meio do ecrã. */
 function vinhoDetalheHTML(v){
   const ativas=garrafasDe(v.id,true), bebidas=garrafasDe(v.id,false).filter(g=>g.estado==='consumida');
   const cl=castaLabel(v), jan=janelaBeber(v);
   const estagio=v.estagio_texto||(v.estagio_meses?`${v.estagio_meses} meses`:'');
   const idadeInfo=v.beber_de||v.beber_ate
-    ? `${v.beber_de||'?'} – ${v.beber_ate||'?'}${jan?`  <span class="bdg">${JANELA_TXT[jan]}</span>`:''}` : '';
+    ? `${v.beber_de||'?'} – ${v.beber_ate||'?'}${jan?`  <span class="bdg jan ${jan}">${JANELA_TXT[jan]}</span>`:''}` : '';
+  const img=String(v.imagem_url||'').trim();
+  const origem=[v.produtor,v.regiao,v.sub_regiao].filter(Boolean).map(esc).join(' · ');
 
-  // A imagem some-se sozinha se o link estiver morto (`onerror`): estes URLs
-  // vêm de lojas e de fichas do produtor, que mudam de sítio sem avisar, e um
-  // quadrado partido no topo da ficha é pior do que não ter foto nenhuma.
-  const foto=v.imagem_url
-    ? `<img class="vfoto" src="${esc(v.imagem_url)}" alt="" loading="lazy" onerror="this.remove()">` : '';
-
-  return `<div class="mtop">
-      <div style="display:flex;gap:12px;align-items:flex-start;min-width:0">
-        ${foto}
-        <div style="min-width:0">
+  return `<div class="mhero">
+      <button class="mx" onclick="fecharModal('modal-vinho')">✕</button>
+      <div class="mhero-in">
+        <div class="mhero-g">${garrafaSVG(v)}${img?`<img src="${esc(img)}" alt="" onerror="this.remove()">`:''}</div>
+        <div class="mhero-tx">
+          <div class="mhero-k">${esc([v.tipo,v.estilo,v.classificacao].filter(Boolean).join(' · '))||'&nbsp;'}</div>
           <h3>${esc(v.nome)}</h3>
-          <div class="note" style="margin-top:3px">${esc([v.produtor,v.ano,v.tipo,v.regiao].filter(Boolean).join(' · '))}</div>
+          <div class="mhero-s">${origem}${origem&&v.ano?' · ':''}${v.ano?`<b>${v.ano}</b>`:''}</div>
+          ${v.vivino_nota?`<span class="mhero-n">★ ${Number(v.vivino_nota).toFixed(2)} Vivino${v.vivino_avaliacoes?` · ${v.vivino_avaliacoes}`:''}</span>`:''}
+          ${jan?`<span class="mhero-n">${JANELA_TXT[jan]}</span>`:''}
         </div>
       </div>
-      <button class="mx" onclick="fecharModal('modal-vinho')">✕</button>
     </div>
 
-    <div class="vc-badges" style="margin-top:10px">
+    <div class="vc-badges" style="margin-top:14px">
       ${v.mencao?`<span class="bdg men">${esc(v.mencao)}</span>`:''}
       ${cl?`<span class="bdg mono">${esc(cl)}</span>`:''}
-      ${(v.castas||[]).map(c=>`<span class="bdg cas" onclick="filtrarPorCasta('${escJs(c)}')" style="cursor:pointer" title="Ver tudo com esta casta">${esc(c)}</span>`).join('')}
-      ${v.vivino_nota?`<span class="bdg viv">★ ${Number(v.vivino_nota).toFixed(2)} Vivino${v.vivino_avaliacoes?` (${v.vivino_avaliacoes})`:''}</span>`:''}
+      ${(v.castas||[]).map(c=>`<span class="bdg cas" onclick="filtrarPorCasta('${escJs(c)}')" style="cursor:pointer" title="Ver tudo com esta casta">🍇 ${esc(c)}</span>`).join('')}
     </div>
 
     <div class="macoes ro-hide">
@@ -863,9 +1026,9 @@ function abrirEditarVinho(id){
       <div><label>Nota Vivino</label><input type="text" id="e-vivino" inputmode="decimal" value="${esc(o('vivino_nota'))}" placeholder="4.1"></div>
     </div>
 
-    <label>Imagem do rótulo (link)</label>
+    ${TEM_IMAGEM?`<label>Imagem do rótulo <span style="text-transform:none;font-weight:400">— link (opcional)</span></label>
     <input type="url" id="e-imagem" value="${esc(o('imagem_url'))}" placeholder="https://…/rotulo.jpg">
-    <div class="note">O link da fotografia, não o da página da loja. Se ficar errado, a ficha simplesmente não mostra imagem.</div>
+    <div class="note">O link da fotografia, não o da página da loja — e sem nenhum, a app desenha a garrafa com a cor do tipo e o ano no rótulo.</div>`:''}
 
     <label>As minhas notas</label>
     <textarea id="e-notas" placeholder="Onde comprei, para que ocasião guardei, o que achei…">${esc(o('notas'))}</textarea>
@@ -895,7 +1058,7 @@ function abrirEditarVinho(id){
 
 function lerFormVinho(){
   const g=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
-  return {
+  const f={
     nome:g('e-nome'),
     ano:inteiro(g('e-ano')),
     produtor:g('e-produtor'),
@@ -912,10 +1075,12 @@ function lerFormVinho(){
     beber_ate:inteiro(g('e-beber-ate')),
     preco_medio:num(g('e-preco')),
     vivino_nota:num(g('e-vivino')),
-    imagem_url:g('e-imagem'),
     notas:g('e-notas'),
     _castas:g('e-castas').split(',').map(s=>s.trim()).filter(Boolean)
   };
+  // Só entra no PATCH/POST se a coluna existir na BD (ver detetarImagem).
+  if(TEM_IMAGEM)f.imagem_url=g('e-imagem');
+  return f;
 }
 
 async function guardarVinho(id){
@@ -993,24 +1158,35 @@ function abrirConsumir(vinhoId,garrafaId){
   if(!gs.length){toast('Já não há garrafas deste vinho',1);return;}
   const escolhida=garrafaId||gs[0].id;
   document.getElementById('modal-consumir-in').innerHTML=`
-    <div class="mtop"><div><h3>🍾 Consumir</h3>
-      <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
-      <button class="mx" onclick="fecharModal('modal-consumir')">✕</button></div>
+    <div class="mhero">
+      <button class="mx" onclick="fecharModal('modal-consumir')">✕</button>
+      <div class="mhero-in">
+        <div class="mhero-g">${garrafaSVG(v)}</div>
+        <div class="mhero-tx">
+          <div class="mhero-k">Dar saída</div>
+          <h3>${esc(v.nome)}</h3>
+          <div class="mhero-s">${esc([v.produtor,v.ano,v.regiao].filter(Boolean).join(' · '))}</div>
+        </div>
+      </div>
+    </div>
 
     ${gs.length>1?`<label>Qual garrafa</label>
       <select id="c-garrafa">${gs.map(g=>`<option value="${g.id}"${g.id===escolhida?' selected':''}>${esc(ondeEsta(g))}</option>`).join('')}</select>`
       :`<input type="hidden" id="c-garrafa" value="${escolhida}">
-        <div class="note" style="margin-top:8px">📍 ${esc(ondeEsta(gs[0]))}</div>`}
+        <div class="mgar" style="margin-top:14px"><div class="g-onde"><b>📍 ${esc(ondeEsta(gs[0]))}</b></div></div>`}
 
     <label>Quando</label>
     <input type="date" id="c-data" value="${hoje()}">
     <label>Onde / com quem</label>
     <input type="text" id="c-local" placeholder="Jantar de anos, lá em casa">
+
     <label>Que tal era</label>
-    <select id="c-aval">
-      <option value="">— sem nota —</option>
-      ${[5,4,3,2,1].map(n=>`<option value="${n}">${estrelas(n)}</option>`).join('')}
-    </select>
+    <input type="hidden" id="c-aval" value="">
+    <div class="stars" id="c-stars">
+      ${[1,2,3,4,5].map(n=>`<button type="button" class="star" onclick="setAval(${n})" title="${n}">★</button>`).join('')}
+    </div>
+    <div class="stars-l" id="c-stars-l">Sem nota — toca numa estrela (e outra vez na mesma para tirar).</div>
+
     <label>Observações</label>
     <textarea id="c-nota" placeholder="Estava no ponto, ainda aguentava mais uns anos…"></textarea>
 
@@ -1019,6 +1195,19 @@ function abrirConsumir(vinhoId,garrafaId){
       <button class="btn ghost" onclick="fecharModal('modal-consumir')">Cancelar</button>
     </div>`;
   abrirModal('modal-consumir');
+}
+/* As estrelas escrevem num <input type=hidden> com o id de sempre
+   (`c-aval`), por isso `confirmarConsumo` não muda: continua a ler o
+   `.value`. Antes isto era um <select> com "★★★☆☆" nas opções — dava uma
+   lista de texto no telemóvel e ninguém percebia que era a nota. */
+const AVAL_TXT=['','Fraquinho','Assim-assim','Bom','Muito bom','Do outro mundo'];
+function setAval(n){
+  const inp=document.getElementById('c-aval');
+  const novo=(String(inp.value)===String(n))?'':String(n);
+  inp.value=novo;
+  document.querySelectorAll('#c-stars .star').forEach((b,i)=>b.classList.toggle('on',!!novo&&i<Number(novo)));
+  document.getElementById('c-stars-l').textContent=
+    novo?estrelas(Number(novo))+'  '+AVAL_TXT[Number(novo)]:'Sem nota — toca numa estrela (e outra vez na mesma para tirar).';
 }
 async function confirmarConsumo(vinhoId){
   if(roGuard())return;
@@ -2030,7 +2219,7 @@ async function sbInit(){
 // dava um buraco (ou uma sobreposição) assim que o subtítulo mudava de
 // tamanho — por isso mede-se.
 function ajustarSticky(){
-  const h=document.querySelector('header');
+  const h=document.querySelector('body>header');
   if(h)document.querySelector('.itabs').style.top=h.offsetHeight+'px';
 }
 window.addEventListener('resize',ajustarSticky);

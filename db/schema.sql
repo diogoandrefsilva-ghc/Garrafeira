@@ -144,7 +144,10 @@ CREATE TABLE IF NOT EXISTS garrafeira.vinhos (
   vivino_url       text NOT NULL DEFAULT '',
   -- URL de uma foto do rótulo/garrafa (site do produtor, loja, Vivino…), não
   -- a imagem em si — guardar bytes numa coluna de texto é o que o Supabase
-  -- Storage existe para evitar. Se o link morrer, procura-se de novo.
+  -- Storage existe para evitar. Se o link morrer, procura-se de novo. Vazia
+  -- na maioria dos vinhos (a IA nem sempre encontra uma, e ninguém é
+  -- obrigado a pôr uma à mão) — sem ela, a app DESENHA a garrafa em SVG
+  -- (cor do vidro pelo `tipo`, ano no rótulo) em vez de deixar um vazio.
   imagem_url       text NOT NULL DEFAULT '',
   preco_medio      numeric(10,2),              -- EUR, garrafa de 0,75 L
   -- janela de consumo recomendada, em ANOS (não em idade): "beber entre

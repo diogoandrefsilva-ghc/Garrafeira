@@ -12,7 +12,9 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icone.svg" type="image/svg+xml">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -119,13 +121,21 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
   <section class="sec on" id="s-garrafeira">
     <div class="g4" id="resumo-cards"></div>
 
-    <div class="filtros">
-      <input type="search" id="f-texto" placeholder="Procurar por nome, produtor, casta, região…" oninput="renderPesquisa()">
-      <div class="fchips" id="f-selects"></div>
-      <div class="fbar">
-        <span class="fcount" id="f-count"></span>
-        <button class="lnk" id="f-limpar" onclick="limparFiltros()" style="display:none">limpar filtros</button>
+    <!-- Procura: a barra sozinha à vista; os filtros abrem no botão
+         "Filtros", que traz o número dos que estão ligados. -->
+    <div class="filtros" id="filtros">
+      <div class="fsearch">
+        <span class="fsearch-i">🔍</span>
+        <input type="search" id="f-texto" placeholder="Procurar vinho, produtor, casta, região…" oninput="renderPesquisa()">
+        <button class="fsearch-x" id="f-texto-x" onclick="limparTexto()" title="Limpar">✕</button>
       </div>
+      <div class="fbar">
+        <button class="ftoggle" onclick="toggleFiltros()">Filtros <span class="fn" id="f-n"></span> <span class="fchev">▾</span></button>
+        <span class="fcount" id="f-count"></span>
+        <button class="lnk" id="f-limpar" onclick="limparFiltros()" style="display:none">limpar</button>
+      </div>
+      <div class="fchips" id="f-selects"></div>
+      <div class="factivos" id="f-activos"></div>
     </div>
 
     <div id="pesq-resultados"></div>
@@ -146,7 +156,7 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 
   <!-- ═══ LOCAIS ═══ -->
   <section class="sec" id="s-locais">
-    <div class="note">O mapa da garrafeira: cada local, cada prateleira, cada lugar. Toca num lugar para abrir o vinho.</div>
+    <div class="note" style="margin-bottom:14px">O mapa da garrafeira: cada local, cada prateleira, cada lugar. Toca num lugar para abrir o vinho.</div>
     <div id="mapa"></div>
   </section>
 
