@@ -782,9 +782,17 @@ function detAgrupar(modo){
    O cartão tem TRÊS zonas, sempre pela mesma ordem, e é a posição (não a
    cor) que diz o que cada coisa é:
      1. a garrafa — a imagem do vinho, com a quantidade ao canto;
-     2. a identidade — nome, ano, produtor/tipo/região, castas e menção;
-     3. o rodapé, depois de um filete — o que é FÍSICO: onde está, se está
-        no ponto de beber, e a nota do Vivino.
+     2. a identidade — nome, ano (com classificação e nota do Vivino por
+        baixo, em `.vc-anobadges`), produtor/tipo/região, castas, menção e
+        preço médio;
+     3. o rodapé, depois de um filete — o que é FÍSICO: onde está e se está
+        no ponto de beber.
+   `.vc-anobadges` é uma LINHA PRÓPRIA a seguir ao `.vc-head`, não uma coluna
+   dentro dele: se ficasse dentro do `.vc-head` (nome ao lado de ano+crachás),
+   a altura da linha passava a ser a do lado mais alto, e um nome de vinho
+   curto e de uma linha só ficava com um espaço em branco por baixo antes do
+   resto da ficha começar. Como linha à parte, a altura é sempre a mesma,
+   venha o nome curto ou comprido.
    Antes vinha tudo no mesmo monte de crachás, cada um com a sua cor: sete
    cores ao lado umas das outras não são hierarquia nenhuma, e o olho não
    sabia onde pousar. Agora só o dourado (menção/nota) e o pip do local têm
@@ -810,17 +818,18 @@ function vinhoCardHTML(v){
       <div class="vc-main">
         <div class="vc-head">
           <div class="vc-nome">${esc(v.nome)}</div>
-          <div class="vc-anowrap">
-            <div class="vc-ano">${v.ano||'s/a'}</div>
-            ${v.classificacao?`<span class="bdg vc-cls">${esc(v.classificacao)}</span>`:''}
-          </div>
+          <div class="vc-ano">${v.ano||'s/a'}</div>
+        </div>
+        <div class="vc-anobadges">
+          ${v.classificacao?`<span class="bdg">${esc(v.classificacao)}</span>`:''}
+          ${v.vivino_nota?`<span class="bdg viv">★ ${Number(v.vivino_nota).toFixed(1)}</span>`:''}
         </div>
         <div class="vc-sub">${esc([v.produtor,[v.tipo,v.estilo].filter(Boolean).join(' '),v.regiao].filter(Boolean).join(' · '))}</div>
         <div class="vc-badges">
           ${castasTxt?`<span class="bdg cas">🍇 ${esc(castasTxt)}</span>`:''}
           ${cl?`<span class="bdg mono">${esc(cl)}</span>`:''}
           ${v.mencao?`<span class="bdg men">${esc(v.mencao)}</span>`:''}
-          ${v.vivino_nota?`<span class="bdg viv">★ ${Number(v.vivino_nota).toFixed(1)}</span>`:''}
+          ${v.preco_medio!=null?`<span class="bdg">${esc(eur0(v.preco_medio))}</span>`:''}
         </div>
         <div class="vc-foot">
           ${sitios.map(x=>`<span class="vc-l"><span class="vc-pip" style="background:${esc(x.cor)}"></span><b>${esc(x.txt)}</b></span>`).join('')}
