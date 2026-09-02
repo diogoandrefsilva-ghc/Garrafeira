@@ -405,7 +405,14 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .mini.o{background:var(--oup);color:var(--ou2);border-color:#eddfba}
 
 /* Cabeçalho do modal do vinho: a garrafa, o nome e a origem sobre o
-   bordô. É o que dá a "capa" à ficha — o resto do modal fica papel. */
+   bordô. É o que dá a "capa" à ficha — o resto do modal fica papel.
+
+   A imagem é a MESMA moldura da miniatura da lista, só maior: fundo de
+   papel, cantos redondos, `overflow:hidden` e `object-fit:cover`. Antes
+   não tinha altura definida nem overflow e usava `contain`: a foto ficava
+   um quadrado branco no meio do bordô, com a garrafa desenhada a espreitar
+   por cima e por baixo. Se lhe mexeres, mexe também na `.vc-thumb` — são a
+   mesma ideia em dois tamanhos. */
 .mhero{position:relative;margin:-20px -20px 4px;padding:18px 18px 16px;border-radius:var(--r2) var(--r2) 0 0;
   background:linear-gradient(155deg,#3d0e20,var(--vhd) 55%,#8d2748);color:#fff;overflow:hidden}
 .mhero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;
@@ -413,9 +420,13 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .mhero .mx{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.14);color:#fff}
 .mhero .mx:hover{background:rgba(255,255,255,.3)}
 .mhero-in{display:flex;gap:14px;align-items:center;padding-right:34px}
-.mhero-g{width:56px;flex-shrink:0;display:flex;align-items:center;justify-content:center;position:relative}
-.mhero-g svg{width:100%;height:auto;max-height:92px;filter:drop-shadow(0 6px 12px rgba(0,0,0,.45))}
-.mhero-g img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;border-radius:6px}
+.mhero-g{width:64px;height:104px;flex-shrink:0;position:relative;display:flex;align-items:center;
+  justify-content:center;overflow:hidden;border-radius:11px;padding:0;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  background:linear-gradient(160deg,#fff,var(--bg2));border:1px solid rgba(255,255,255,.5);
+  box-shadow:0 8px 20px -8px rgba(0,0,0,.6)}
+.mhero-g svg{width:100%;height:auto;max-height:94px;padding:5px 3px;filter:drop-shadow(0 2px 4px rgba(43,10,22,.22))}
+.mhero-g img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .mhero-tx{min-width:0;flex:1}
 .mhero-k{font-size:10px;font-weight:600;letter-spacing:1.1px;text-transform:uppercase;color:rgba(255,255,255,.7)}
 .mhero h3{font-family:var(--fd);font-weight:600;font-size:21px;line-height:1.2;margin-top:4px}
@@ -426,10 +437,9 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 /* A imagem em grande (toca-se na capa do modal do vinho). O palco tem
    altura fixa e a imagem entra em `contain`: umas fotos são da garrafa
    inteira, outras só do rótulo — cortar era deformar. */
-.mhero-g{border:none;background:none;padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.mhero-lupa{position:absolute;right:-4px;bottom:-2px;width:20px;height:20px;border-radius:50%;
-  background:rgba(255,255,255,.9);color:var(--vhd);font-size:10px;display:flex;align-items:center;
-  justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.mhero-lupa{position:absolute;right:4px;top:4px;width:19px;height:19px;border-radius:7px;
+  background:rgba(28,10,16,.6);color:#fff;font-size:9.5px;display:flex;align-items:center;
+  justify-content:center;backdrop-filter:blur(2px);pointer-events:none}
 /* A garrafa desenhada fica SEMPRE por baixo e a fotografia por cima. Assim
    não há palco vazio enquanto a imagem carrega (nem se o link estiver
    morto — aí o `onerror` tira-a e fica a garrafa). É o mesmo que o cartão

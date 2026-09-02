@@ -1382,7 +1382,8 @@ function abrirConsumir(vinhoId,garrafaId){
     <div class="mhero">
       <button class="mx" onclick="fecharModal('modal-consumir')">✕</button>
       <div class="mhero-in">
-        <div class="mhero-g">${garrafaSVG(v)}</div>
+        <div class="mhero-g">${garrafaSVG(v)}${imagemDe(v)
+          ?`<img src="${esc(imagemDe(v))}" alt="" onerror="this.remove()">`:''}</div>
         <div class="mhero-tx">
           <div class="mhero-k">Dar saída</div>
           <h3>${esc(v.nome)}</h3>
