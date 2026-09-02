@@ -7,8 +7,7 @@
      Navegação · Estatísticas · Filtros · Lista · Mapa dos locais ·
      Consumidos · Modal do vinho · Modal editar/novo · Consumir garrafa ·
      Modal da garrafa · IA (procurar informação) · Auth (Supabase) ·
-     Utilizadores (admin) · Locais (config) · Migração dos dados antigos ·
-     Exportar · Diagnóstico · Init
+     Utilizadores (admin) · Locais (config) · Exportar · Diagnóstico · Init
 */
 
 /* ── SESSÃO SUPABASE ───────────────────────────────────────────────────
@@ -27,6 +26,15 @@ const SESSION_KEY='garrafeira_sb_session';
 // Barrona sem tocar em código. A UI usa-o para saber que botões mostrar; a
 // decisão a sério é sempre da RLS (garrafeira.is_admin()).
 let ADMIN_EMAIL='diogo.andre.f.silva@gmail.com';
+// O DONO da conta Supabase — este, sim, é fixo e não muda quando a app
+// passa para outro admin (`admin_email` na BD). A password temporária e o
+// diagnóstico mexem na CONTA Supabase (que continua a ser minha), não na
+// garrafeira, por isso ficam presos a este email e não ao admin de cada vez.
+const SUPABASE_DONO_EMAIL='diogo.andre.f.silva@gmail.com';
+function souDono(){
+  return !!(_sbSession&&_sbSession.user&&
+    String(_sbSession.user.email||'').toLowerCase()===SUPABASE_DONO_EMAIL.toLowerCase());
+}
 let _sbSession=null;
 
 function sbHeaders(extra={}){
@@ -82,8 +90,8 @@ async function sbFetch(url,opt){
   return r;
 }
 // O PostgREST recusa objetos com colunas diferentes na mesma inserção em
-// lote. A migração dos dados antigos manda dezenas de linhas de uma vez e
-// nem todas têm os mesmos campos preenchidos — sem isto rebentava lá.
+// lote — um POST de várias garrafas de uma vez, por exemplo, rebentava se
+// nem todas tivessem os mesmos campos preenchidos.
 function sbRowsUniformes(rows){
   const plain=o=>o&&typeof o==='object'&&!Array.isArray(o);
   if(!Array.isArray(rows)||rows.length<2||!rows.every(plain))return rows;
@@ -124,6 +132,7 @@ function aplicarPermissoes(){
   isReadOnly=!podeEditar();
   document.body.classList.toggle('readonly',isReadOnly);
   document.body.classList.toggle('naoadmin',!isAdmin());
+  document.body.classList.toggle('naodono',!souDono());
 }
 // Guarda de UI. Devolve true quando a ação deve parar aqui.
 function roGuard(){
@@ -395,12 +404,6 @@ function restaurarTab(){
   const i=ORDEM_TABS.indexOf(t);
   if(i>0&&bts[i])tab(t,bts[i]);
 }
-function abrirProcura(){
-  const bts=document.querySelectorAll('.itabs .it');
-  if(tabAtiva!=='garrafeira')tab('garrafeira',bts[0]);
-  const c=document.getElementById('f-texto');
-  c.focus();c.select();
-}
 
 /* ── RESUMO (ecrã inicial) ─────────────────────────────────────────
    Só quatro números, de propósito — nada de painel cheio ao estilo do
@@ -459,7 +462,7 @@ function scCard(cor,label,valor,sub,id){
    `filtroFn` decide quem entra na lista e `listaBase` é de onde se filtra:
    os monocasta para o card do meio, todos os com stock para os outros. */
 const RESUMO_NOME={mono:'Monocasta',regiao:'Regiões',casta:'Castas',valor:'Valor',falta:'A completar'};
-function resumoPainel(id,titulo,rows,filtroFn,listaBase){
+function resumoPainel(id,titulo,rows,filtroFn,listaBase,notaTop){
   const fechar=`<button class="rdet-x" onclick="resumoFechar()" title="Fechar">✕</button>`;
   if(RESUMO_DRILL){
     const vs=listaBase.filter(filtroFn).slice().sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
@@ -474,6 +477,7 @@ function resumoPainel(id,titulo,rows,filtroFn,listaBase){
   }
   return `<div class="sc-det">
     <div class="rdet-bar"><div class="rdet-cab">${esc(titulo)}</div>${fechar}</div>
+    ${notaTop?`<div class="rdet-nota">${notaTop}</div>`:''}
     <div class="rdet-rows">${rows.length
       ?rows.map(r=>`<div class="rdet-row" onclick="resumoDrill('${id}','${escJs(r.nome)}')">
         <span>${esc(r.nome)}</span><span class="rdet-n">${esc(r.txt!=null?r.txt:String(r.n))}</span></div>`).join('')
@@ -491,6 +495,20 @@ function valorGarrafa(g){
 }
 function valorVinho(v){
   return garrafasDe(v.id,true).reduce((s,g)=>{const x=valorGarrafa(g);return x==null?s:s+x;},0);
+}
+
+// O painel do valor organiza-se por INTERVALO DE PREÇO, não por local — é a
+// pergunta que se faz a seguir a "quanto vale isto": "está sobretudo em
+// garrafas baratas ou caras?". `faixaIndice` decide sempre a MESMA faixa
+// para o mesmo valor, tanto a somar como a filtrar o drill-down.
+const FAIXAS_PRECO=[
+  {nome:'Até 15€',max:15},
+  {nome:'Entre 15€ e 30€',max:30},
+  {nome:'Entre 30€ e 50€',max:50},
+  {nome:'Acima de 50€',max:Infinity}
+];
+function faixaIndice(valor){
+  return FAIXAS_PRECO.findIndex(f=>valor<=f.max);
 }
 
 /* O que falta preencher num vinho. É a lista do que a app mostra e a
@@ -525,19 +543,16 @@ function renderResumo(){
   // Os quatro cards ficam sempre juntos na grelha 2×2 e o painel abre a
   // seguir, a toda a largura (`grid-column:1/-1`). Pô-lo logo a seguir ao
   // card aberto partia a grelha ao meio e deixava buracos.
-  // VALOR: por local, que é a pergunta que se faz a seguir ("quanto é que
-  // está guardado ali?"). As garrafas sem preço nenhum ficam de fora e
-  // dizem-se no subtítulo, para o número não parecer mais certo do que é.
+  // VALOR: por intervalo de preço — "está sobretudo em garrafas baratas ou
+  // caras?". As garrafas sem preço nenhum ficam de fora e dizem-se no
+  // subtítulo, para o número não parecer mais certo do que é.
   const ativas=db.garrafas.filter(naGarrafeira);
   const comPreco=ativas.filter(g=>valorGarrafa(g)!=null);
   const valorTotal=comPreco.reduce((s,g)=>s+valorGarrafa(g),0);
-  const porLocal=new Map();
-  comPreco.forEach(g=>{
-    const k=nomeLocal(g.local_id);
-    porLocal.set(k,(porLocal.get(k)||0)+valorGarrafa(g));
-  });
-  const valRows=[...porLocal.entries()].map(([nome,v])=>({nome,n:v,txt:eur0(v)}))
-    .sort((a,b)=>b.n-a.n);
+  const valorMedio=comPreco.length?valorTotal/comPreco.length:0;
+  const porFaixa=FAIXAS_PRECO.map(f=>({nome:f.nome,soma:0}));
+  comPreco.forEach(g=>{porFaixa[faixaIndice(valorGarrafa(g))].soma+=valorGarrafa(g);});
+  const valRows=porFaixa.filter(r=>r.soma>0).map(r=>({nome:r.nome,n:r.soma,txt:eur0(r.soma)}));
 
   // A COMPLETAR: os vinhos a quem falta alguma coisa que a app usa.
   const faltosos=comStock.filter(v=>faltasDe(v).length);
@@ -562,8 +577,10 @@ function renderResumo(){
   if(RESUMO_ABERTO==='casta')
     html+=resumoPainel('casta','Vinhos por casta',casRows,v=>(v.castas||[]).includes(RESUMO_DRILL),comStock);
   if(RESUMO_ABERTO==='valor')
-    html+=resumoPainel('valor','Valor estimado, por local',valRows,
-      v=>garrafasDe(v.id,true).some(g=>nomeLocal(g.local_id)===RESUMO_DRILL&&valorGarrafa(g)!=null),comStock);
+    html+=resumoPainel('valor','Valor estimado, por intervalo de preço',valRows,
+      v=>garrafasDe(v.id,true).some(g=>{const x=valorGarrafa(g);return x!=null&&FAIXAS_PRECO[faixaIndice(x)].nome===RESUMO_DRILL;}),
+      comStock,
+      comPreco.length?`Valor médio: <b>${esc(eur0(valorMedio))}</b> por garrafa, sobre ${comPreco.length} garrafa${comPreco.length===1?'':'s'} com preço conhecido.`:'');
   if(RESUMO_ABERTO==='falta')
     html+=resumoPainel('falta','O que falta preencher',falRows,
       v=>faltasDe(v).includes(RESUMO_DRILL),comStock);
@@ -711,25 +728,45 @@ function vinhosFiltrados(){
     return passaTexto(v,termos);
   });
 }
-// Agrupa a lista já filtrada para o separador Detalhe. Por região: grupos
-// alfabéticos, e dentro de cada um o mais novo primeiro (é o que se quer ao
-// abrir uma região — ver o que há de recente). Por ano: grupos do mais
-// recente para o mais velho, cada um por nome (não faz sentido ordenar por
-// ano dentro de um grupo que já É um ano só).
+// Dentro de cada grupo (região, ano ou casta), do melhor Vivino para o
+// pior — é a pergunta natural depois de já se ter escolhido o grupo: "qual
+// destes bebo primeiro?". Sem nota fica no fim, por nome.
+function ordenarPorVivino(lista){
+  return lista.slice().sort((a,b)=>
+    (b.vivino_nota??-1)-(a.vivino_nota??-1)||a.nome.localeCompare(b.nome,'pt'));
+}
+// Agrupa a lista já filtrada para o separador Detalhe. Por região e por
+// casta: grupos alfabéticos; por ano: do mais recente para o mais velho.
 function agruparVinhos(lista,modo){
   if(modo==='ano'){
     const porAno={};
     lista.forEach(v=>{const k=v.ano||'__semano';(porAno[k]=porAno[k]||[]).push(v);});
     const anos=Object.keys(porAno).filter(k=>k!=='__semano').map(Number).sort((a,b)=>b-a);
-    const grupos=anos.map(a=>({titulo:String(a),vinhos:porAno[a].slice().sort((x,y)=>x.nome.localeCompare(y.nome,'pt'))}));
-    if(porAno['__semano'])grupos.push({titulo:'Sem ano',vinhos:porAno['__semano'].slice().sort((x,y)=>x.nome.localeCompare(y.nome,'pt'))});
+    const grupos=anos.map(a=>({titulo:String(a),vinhos:ordenarPorVivino(porAno[a])}));
+    if(porAno['__semano'])grupos.push({titulo:'Sem ano',vinhos:ordenarPorVivino(porAno['__semano'])});
+    return grupos;
+  }
+  if(modo==='casta'){
+    // Monocasta primeiro, casta a casta ("100% Syrah"), e só depois
+    // "Várias Castas" — é a pergunta "o que é isto, puro?" antes da mistura.
+    const mono={},varias=[],semCasta=[];
+    lista.forEach(v=>{
+      const n=(v.castas||[]).length;
+      if(n===1)(mono[v.castas[0]]=mono[v.castas[0]]||[]).push(v);
+      else if(n>1)varias.push(v);
+      else semCasta.push(v);
+    });
+    const nomes=Object.keys(mono).sort((a,b)=>a.localeCompare(b,'pt'));
+    const grupos=nomes.map(n=>({titulo:`100% ${n}`,vinhos:ordenarPorVivino(mono[n])}));
+    if(varias.length)grupos.push({titulo:'Várias Castas',vinhos:ordenarPorVivino(varias)});
+    if(semCasta.length)grupos.push({titulo:'Sem castas registadas',vinhos:ordenarPorVivino(semCasta)});
     return grupos;
   }
   const porReg={};
   lista.forEach(v=>{const k=v.regiao||'__semregiao';(porReg[k]=porReg[k]||[]).push(v);});
   const regs=Object.keys(porReg).filter(k=>k!=='__semregiao').sort((a,b)=>a.localeCompare(b,'pt'));
-  const grupos=regs.map(r=>({titulo:r,vinhos:porReg[r].slice().sort((x,y)=>(y.ano||0)-(x.ano||0)||x.nome.localeCompare(y.nome,'pt'))}));
-  if(porReg['__semregiao'])grupos.push({titulo:'Sem região',vinhos:porReg['__semregiao'].slice().sort((x,y)=>x.nome.localeCompare(y.nome,'pt'))});
+  const grupos=regs.map(r=>({titulo:r,vinhos:ordenarPorVivino(porReg[r])}));
+  if(porReg['__semregiao'])grupos.push({titulo:'Sem região',vinhos:ordenarPorVivino(porReg['__semregiao'])});
   return grupos;
 }
 let DET_AGRUPAR='regiao';
@@ -737,6 +774,7 @@ function detAgrupar(modo){
   DET_AGRUPAR=modo;
   document.getElementById('seg-regiao').classList.toggle('on',modo==='regiao');
   document.getElementById('seg-ano').classList.toggle('on',modo==='ano');
+  document.getElementById('seg-casta').classList.toggle('on',modo==='casta');
   renderDetalhe();
 }
 
@@ -772,7 +810,10 @@ function vinhoCardHTML(v){
       <div class="vc-main">
         <div class="vc-head">
           <div class="vc-nome">${esc(v.nome)}</div>
-          <div class="vc-ano">${v.ano||'s/a'}</div>
+          <div class="vc-anowrap">
+            <div class="vc-ano">${v.ano||'s/a'}</div>
+            ${v.classificacao?`<span class="bdg vc-cls">${esc(v.classificacao)}</span>`:''}
+          </div>
         </div>
         <div class="vc-sub">${esc([v.produtor,[v.tipo,v.estilo].filter(Boolean).join(' '),v.regiao].filter(Boolean).join(' · '))}</div>
         <div class="vc-badges">
@@ -799,7 +840,7 @@ function renderDetalhe(){
   document.getElementById('det-count').textContent=
     `${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'}`;
   if(!res.length){
-    box.innerHTML='<div class="vazio"><b>Ainda sem vinhos</b>Toca no + para pôr o primeiro — ou, se ainda não migraste o que já tinhas, vai a Definições › Dados.</div>';
+    box.innerHTML='<div class="vazio"><b>Ainda sem vinhos</b>Toca no + para pôr o primeiro.</div>';
     return;
   }
   const grupos=agruparVinhos(res,DET_AGRUPAR);
@@ -2183,7 +2224,7 @@ function renderCfg(){
   const sobre=document.getElementById('sobre-box');
   if(sobre)sobre.innerHTML=`${db.vinhos.length} vinhos · ${db.garrafas.length} garrafas (${db.garrafas.filter(naGarrafeira).length} na garrafeira) · ${db.castas.length} castas · ${db.locais.length} locais.<br>
     Dados e login no Supabase, schema <code>garrafeira</code>. Admin atual: <b>${esc(ADMIN_EMAIL)}</b>.`;
-  renderCfgLocais();renderMigracao();
+  renderCfgLocais();
   if(isAdmin()){admRenderPedidos();admRenderUtilizadores();}
 }
 
@@ -2356,92 +2397,6 @@ async function admPassarAdmin(){
   }catch(e){st.style.color='var(--dg)';st.textContent=e.message;}
 }
 
-/* ── MIGRAÇÃO DOS DADOS ANTIGOS ────────────────────────────────────
-   Lê o `dados-iniciais.js` (o Excel da sala + o bloco de notas dos níveis,
-   já lidos e limpos) e mostra o que vai entrar ANTES de entrar. Só corre
-   quando alguém carrega, e recusa-se a correr uma segunda vez se já lá
-   estiver alguma coisa — a proteção contra a migração feita duas vezes é
-   pensada, não é um acaso: garrafas a dobrar num mapa de garrafeira são
-   piores do que garrafas nenhumas. */
-function renderMigracao(){
-  const box=document.getElementById('mig-box');
-  if(!box)return;
-  if(typeof DADOS_INICIAIS==='undefined'){box.innerHTML='';return;}
-  const nV=DADOS_INICIAIS.vinhos.length;
-  const nG=DADOS_INICIAIS.vinhos.reduce((s,v)=>s+v.garrafas.length,0);
-  const jaTem=db.vinhos.length>0;
-  box.innerHTML=`<h4>Migrar o que já existia</h4>
-    <div class="note">O Excel da garrafeira da sala e o bloco de notas dos níveis, já lidos e limpos:
-      <b>${nV} vinhos</b> em <b>${nG} garrafas</b>, por ${DADOS_INICIAIS.locais.length} locais.
-      ${jaTem?'<br><br><b>A garrafeira já tem vinhos lá dentro</b> — a migração está travada para não duplicar tudo. Se quiseres mesmo correr, apaga primeiro o que lá está.'
-             :'<br>Nada é gravado sem carregares no botão.'}</div>
-    <button class="btn ${jaTem?'ghost':'prim'}" id="mig-btn" ${jaTem?'disabled':''} onclick="migrarDados()">
-      ${jaTem?'Migração travada (já há vinhos)':'⬆️ Migrar '+nV+' vinhos'}</button>
-    <div id="mig-log" class="note" style="margin-top:8px"></div>`;
-}
-async function migrarDados(){
-  if(roGuard())return;
-  if(db.vinhos.length){toast('Já há vinhos na garrafeira — migração travada',1);return;}
-  if(!confirm(`Vai criar ${DADOS_INICIAIS.vinhos.length} vinhos e as respetivas garrafas. Continuar?`))return;
-  const btn=document.getElementById('mig-btn'),log=document.getElementById('mig-log');
-  btn.disabled=true;btn.textContent='A migrar…';
-  const diz=t=>{log.innerHTML=esc(t);};
-  try{
-    // 1) locais (os que já existirem pelo nome são reaproveitados)
-    diz('A criar locais…');
-    const porNome={};db.locais.forEach(l=>porNome[l.nome]=l);
-    const faltam=DADOS_INICIAIS.locais.filter(l=>!porNome[l.nome]);
-    if(faltam.length){
-      const r=await sbReq('POST','locais',faltam,{'Prefer':'return=representation'});
-      (r||[]).forEach(l=>{db.locais.push(l);porNome[l.nome]=l;});
-    }
-
-    // 2) vinhos, num POST só — 85 linhas de uma vez em vez de 85 pedidos.
-    diz('A criar vinhos…');
-    const linhas=DADOS_INICIAIS.vinhos.map(v=>({
-      nome:v.nome,ano:v.ano,regiao:v.regiao||'',tipo:v.tipo||'Tinto',
-      mencao:v.mencao||'',estagio_meses:v.estagioMeses
-    }));
-    const criados=await sbReq('POST','vinhos',linhas,{'Prefer':'return=representation'});
-    if(!criados||criados.length!==DADOS_INICIAIS.vinhos.length)
-      throw new Error('a base de dados devolveu '+((criados||[]).length)+' vinhos em vez de '+DADOS_INICIAIS.vinhos.length);
-
-    // Os ids saem por NOME+ANO, não pela posição na resposta. O PostgREST
-    // devolve-os pela ordem de inserção hoje, mas isso não é contrato
-    // nenhum — e se um dia mudar, o que acontece é as castas e as garrafas
-    // irem parar aos vinhos errados, calado, sem erro nenhum.
-    const idPor={};criados.forEach(v=>{idPor[chave(v.nome)+'|'+(v.ano||'')]=v.id;});
-    const idDe=v=>idPor[chave(v.nome)+'|'+(v.ano||'')];
-    if(DADOS_INICIAIS.vinhos.some(v=>!idDe(v)))
-      throw new Error('não consegui emparelhar todos os vinhos gravados com os do ficheiro');
-
-    // 3) castas — só os vinhos que as trazem (o bloco de notas não tinha)
-    const comCastas=DADOS_INICIAIS.vinhos.map(v=>[idDe(v),v.castas]).filter(([,c])=>c&&c.length);
-    for(let i=0;i<comCastas.length;i++){
-      diz(`A gravar castas… ${i+1}/${comCastas.length}`);
-      await sbRpc('definir_castas',{p_vinho_id:comCastas[i][0],p_nomes:comCastas[i][1]});
-    }
-
-    // 4) garrafas
-    diz('A arrumar as garrafas…');
-    const gl=[];
-    DADOS_INICIAIS.vinhos.forEach(v=>v.garrafas.forEach(g=>gl.push({
-      vinho_id:idDe(v),
-      local_id:(porNome[g.local]||{}).id||null,
-      prateleira:g.prateleira||'',lugar:g.lugar||''
-    })));
-    await sbReq('POST','garrafas',gl,{'Prefer':'return=minimal'});
-
-    diz('A reler tudo…');
-    await carregar();renderLista();renderCfg();
-    toast(`Migrado: ${criados.length} vinhos, ${gl.length} garrafas ✓`);
-  }catch(e){
-    log.innerHTML=`<span style="color:var(--dg)">Falhou: ${esc(e.message)}</span><br>
-      Nada foi desfeito automaticamente — vê o que ficou na garrafeira antes de tentar outra vez.`;
-    btn.disabled=false;btn.textContent='⬆️ Tentar outra vez';
-  }
-}
-
 /* ── EXPORTAR ──────────────────────────────────────────────────────── */
 /* ── EXPORTAR A LISTA PARA PDF ─────────────────────────────────────
    Sem biblioteca nenhuma: monta-se uma tabela num `#print-area` que só
@@ -2495,7 +2450,7 @@ function exportarPDF(){
     <div class="pcab">
       <div><h1>Garrafeira</h1>
         <div class="psub">${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'} ·
-          por ${DET_AGRUPAR==='ano'?'ano':'região'}</div></div>
+          por ${DET_AGRUPAR==='ano'?'ano':DET_AGRUPAR==='casta'?'casta':'região'}</div></div>
       <div class="pdata">${dataPT(hoje())}</div>
     </div>
     <table>
@@ -2592,6 +2547,6 @@ if('serviceWorker' in navigator){
 // Começa fechado e só abre quando `carregar()` souber quem é quem. Ao
 // contrário, havia um instante — entre o HTML aparecer e as permissões
 // chegarem — em que quem só pode VER tinha o botão de apagar à frente.
-document.body.classList.add('readonly','naoadmin');
+document.body.classList.add('readonly','naoadmin','naodono');
 ajustarSticky();
 sbInit();
