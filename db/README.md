@@ -45,7 +45,7 @@ A app não depende de a coluna existir para funcionar: deteta-o sozinha
 o manda nas gravações — em vez da foto mostra a garrafa desenhada, que é o
 que aparece na mesma para todos os vinhos sem link.
 
-### `vinhos.links` (por aplicar)
+### `vinhos.links` (já aplicada)
 
 Coluna nova: `jsonb NOT NULL DEFAULT '[]'`, uma lista de `{titulo,url}`
 escolhida à mão por quem usa a app (Ver no Vivino errado, a loja onde
@@ -53,16 +53,9 @@ comprou, um artigo sobre o produtor…). Não tem nada a ver com `ai_fontes` —
 essa é o rasto da última procura da IA e é substituída por inteiro a cada
 procura; `links` é só do utilizador e a IA nunca lhe mexe.
 
-Falta correr no SQL Editor:
-
-```sql
-alter table garrafeira.vinhos
-  add column if not exists links jsonb not null default '[]'::jsonb;
-```
-
-A app deteta sozinha se a coluna existe (mesmo padrão do `imagem_url`,
-`TEM_LINKS` em `app.js`) e esconde a secção enquanto não correr — sem isso um
-PATCH rebentava as gravações com 400.
+Aplicada como a migração `garrafeira_05_links_utilizador`. A app deteta-a
+sozinha (mesmo padrão do `imagem_url`, `TEM_LINKS` em `app.js`) e esconde a
+secção se um dia faltar — sem isso um PATCH rebentava as gravações com 400.
 
 ### `vinhos.imagem_path` + bucket `garrafeira-rotulos` (já aplicados)
 
