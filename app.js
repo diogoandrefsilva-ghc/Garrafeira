@@ -2303,30 +2303,51 @@ function renderCfgLocais(){
     </div>`;
   }).join('');
 }
-async function novoLocal(){
+function novoLocal(){
   if(roGuard())return;
-  const nome=prompt('Nome do local (ex.: "Frigorífico da cozinha")');
-  if(!nome||!nome.trim())return;
-  try{
-    const r=await sbReq('POST','locais',[{nome:nome.trim(),ordem:db.locais.length+1}],{'Prefer':'return=representation'});
-    db.locais.push(r[0]);reindexar();renderCfgLocais();renderLista();
-    toast('Local criado ✓');
-  }catch(e){toast(/duplicate|unique/i.test(e.message)?'Já existe um local com esse nome':'Não foi possível: '+e.message,1);}
+  abrirLocalModal(null);
 }
-async function editarLocal(id){
+function editarLocal(id){
   if(roGuard())return;
   const l=IDXL[id];if(!l)return;
-  const nome=prompt('Nome do local',l.nome);
-  if(nome===null)return;
-  const desc=prompt('Descrição (opcional)',l.descricao||'');
-  if(desc===null)return;
-  const dados={nome:nome.trim()||l.nome,descricao:desc.trim()};
+  abrirLocalModal(l);
+}
+function abrirLocalModal(l){
+  document.getElementById('modal-local-in').innerHTML=`
+    <div class="mtop"><h3>${l?'Editar local':'Novo local'}</h3>
+      <button class="mx" onclick="fecharModal('modal-local')">✕</button></div>
+    <label>Nome</label>
+    <input type="text" id="loc-nome" value="${esc(l?l.nome:'')}" placeholder="Frigorífico da cozinha">
+    <label>Descrição (opcional)</label>
+    <input type="text" id="loc-desc" value="${esc(l?l.descricao:'')}" placeholder="Níveis 1 a 14">
+    <div class="macoes">
+      <button class="btn prim" id="loc-btn" onclick="guardarLocalModal(${l?l.id:0})">Guardar</button>
+      <button class="btn ghost" onclick="fecharModal('modal-local')">Cancelar</button>
+    </div>`;
+  abrirModal('modal-local');
+}
+async function guardarLocalModal(id){
+  const nome=document.getElementById('loc-nome').value.trim();
+  if(!nome){toast('O nome é obrigatório',1);return;}
+  const dados={nome,descricao:document.getElementById('loc-desc').value.trim()};
+  const btn=document.getElementById('loc-btn');
+  btn.disabled=true;btn.textContent='A guardar…';
   try{
-    await sbReq('PATCH',`locais?id=eq.${id}`,dados);
-    Object.assign(l,dados);renderCfgLocais();renderLista();
+    if(id){
+      await sbReq('PATCH',`locais?id=eq.${id}`,dados);
+      Object.assign(IDXL[id],dados);
+    }else{
+      const r=await sbReq('POST','locais',[Object.assign({ordem:db.locais.length+1},dados)],{'Prefer':'return=representation'});
+      db.locais.push(r[0]);reindexar();
+    }
+    fecharModal('modal-local');
+    renderCfgLocais();renderLista();
     if(tabAtiva==='locais')renderMapa();
-    toast('Guardado ✓');
-  }catch(e){toast('Não foi possível: '+e.message,1);}
+    toast(id?'Guardado ✓':'Local criado ✓');
+  }catch(e){
+    toast(/duplicate|unique/i.test(e.message)?'Já existe um local com esse nome':'Não foi possível: '+e.message,1);
+    btn.disabled=false;btn.textContent='Guardar';
+  }
 }
 async function apagarLocal(id){
   if(roGuard())return;
