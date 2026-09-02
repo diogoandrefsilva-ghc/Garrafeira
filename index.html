@@ -98,10 +98,6 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       <div class="escudo"><img src="icone.svg" alt=""></div>
       <h1>Garrafeira</h1>
     </div>
-    <nav class="hnav">
-      <button class="hn" onclick="abrirProcura()" title="Procurar">🔍</button>
-      <button class="hn" onclick="sbLogout()" title="Terminar sessão">Sair</button>
-    </nav>
   </div>
 </header>
 
@@ -146,8 +142,8 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
         <div class="segbtns">
           <button class="segbtn on" id="seg-regiao" onclick="detAgrupar('regiao')">Região</button>
           <button class="segbtn" id="seg-ano" onclick="detAgrupar('ano')">Ano</button>
+          <button class="segbtn" id="seg-casta" onclick="detAgrupar('casta')">Casta</button>
         </div>
-        <button class="mini" onclick="exportarPDF()" title="Exportar a lista para PDF">⬇︎ PDF</button>
       </div>
     </div>
 
@@ -202,14 +198,16 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
         <button class="btn prim" onclick="admAdicionarUtilizador()">Dar acesso</button>
       </div>
 
-      <h4 style="margin-top:18px">Password temporária</h4>
-      <div class="note">Este projeto Supabase não tem email próprio configurado. Em vez de depender do "esqueci-me da password", gera aqui uma password, dita-a à pessoa, e ela troca-a em Definições › Conta.</div>
-      <div class="linha-add">
-        <select id="adm-pt-email"></select>
-        <input type="text" id="adm-pt-pass" placeholder="mínimo 8 caracteres">
-        <button class="btn ghost" onclick="admGerarPassTemp()">Gerar</button>
+      <div class="dono-hide">
+        <h4 style="margin-top:18px">Password temporária</h4>
+        <div class="note">Este projeto Supabase não tem email próprio configurado. Em vez de depender do "esqueci-me da password", gera aqui uma password, dita-a à pessoa, e ela troca-a em Definições › Conta.</div>
+        <div class="linha-add">
+          <select id="adm-pt-email"></select>
+          <input type="text" id="adm-pt-pass" placeholder="mínimo 8 caracteres">
+          <button class="btn ghost" onclick="admGerarPassTemp()">Gerar</button>
+        </div>
+        <div class="note" id="adm-pt-status"></div>
       </div>
-      <div class="note" id="adm-pt-status"></div>
 
       <h4 style="margin-top:18px">Passar a app a outra pessoa</h4>
       <div class="note">O admin é quem manda em quem tem acesso. Passar a app a alguém tira-te esse poder — quem escolheres tem de já estar na lista acima.</div>
@@ -222,12 +220,12 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 
     <div class="fcard ro-hide" id="fcard-dados">
       <h3>Dados</h3>
-      <div class="note">Cópia de segurança do que está na app, em JSON. Só download — a app lê sempre do Supabase.</div>
+      <div class="note">Cópia de segurança do que está na app, em JSON, e a lista em PDF. Só download — a app lê sempre do Supabase.</div>
       <button class="btn ghost" onclick="exportarJSON()">⬇️ Exportar JSON</button>
-      <div id="mig-box" style="margin-top:16px"></div>
+      <button class="btn ghost" onclick="exportarPDF()">⬇️ Exportar PDF</button>
     </div>
 
-    <div class="fcard admin-hide" id="fcard-diag">
+    <div class="fcard admin-hide dono-hide" id="fcard-diag">
       <h3>Diagnóstico</h3>
       <div class="note">Últimas procuras à IA (browser → Edge Function → Gemini). Do lado do browser vê-se sempre "502"; a causa está aqui.</div>
       <button class="btn ghost" onclick="renderDiag()">🔄 Ver últimas</button>
@@ -253,7 +251,6 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 
 <div class="toast" id="toast"></div>
 
-<script src="dados-iniciais.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

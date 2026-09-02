@@ -18,7 +18,7 @@ parte e isolado: `garrafeira`.
   organizada) · Mapa dos locais · Consumidos · **Modal do vinho** ·
   Modal editar/novo · Consumir garrafa · Modal da garrafa · **IA** ·
   Auth (Supabase) · Definições · Locais · **Utilizadores (admin)** ·
-  **Migração dos dados antigos** · Exportar · Diagnóstico · Init.
+  Exportar · Diagnóstico · Init.
 
 ## Os cinco separadores (o ecrã inicial não é a lista)
 `Garrafeira` (resumo) · `Detalhe` · `Locais` · `Consumidos` · `Definições`.
@@ -36,15 +36,20 @@ vinhos, monocasta, regiões, castas, **valor estimado** e **a completar**.
 O **valor** é uma estimativa e diz-se isso no subtítulo: vale o que se pagou
 (`preco_compra`) quando se sabe, e o `preco_medio` do vinho quando não se
 sabe; garrafas sem nenhum dos dois não entram na conta (inventar um preço
-era pôr no cartão um número que ninguém podia conferir). Abre por local.
+era pôr no cartão um número que ninguém podia conferir). Abre por
+**intervalo de preço** (`FAIXAS_PRECO`/`faixaIndice`: até 15€, 15€–30€,
+30€–50€, acima de 50€) — é a pergunta que se faz a seguir a "quanto vale
+isto": está sobretudo em garrafas baratas ou caras? O painel também mostra
+o **valor médio por garrafa** (só ali, não no card fechado — o card fechado
+já tem o total).
 
 **A completar** são os vinhos a quem falta alguma coisa que a app usa —
 imagem, castas, preço médio ou classificação (`FALTAS`/`faltasDe`).
 
 Cinco dos seis abrem ao tocar (`renderResumo`, `scCard`, `resumoPainel`,
-`contarPor`): uma contagem casta a casta, região a região, local a local ou
-falta a falta; tocar numa linha dessa contagem mostra os vinhos
-(`resumoDrill`). O painel (`.sc-det`) abre **por baixo da grelha
+`contarPor`): uma contagem casta a casta, região a região, faixa de preço a
+faixa de preço ou falta a falta; tocar numa linha dessa contagem mostra os
+vinhos (`resumoDrill`). O painel (`.sc-det`) abre **por baixo da grelha
 toda**, com `grid-column:1/-1` — pô-lo logo a seguir ao card aberto partia a
 grelha ao meio e deixava buracos.
 
@@ -67,15 +72,24 @@ célula com a garrafinha desenhada, o nome (até duas linhas) e o lugar em
 destaque.
 
 `Detalhe` (`renderDetalhe`) é a **lista completa sem filtro nenhum**, só
-organizada por região ou por ano (`agruparVinhos`, `detAgrupar`). Não lhe
-metas procura nem filtros: isso é a Garrafeira, e ter os dois sítios a
-filtrar era ter duas verdades sobre o que está a ser mostrado.
+organizada por região, por ano ou por casta (`agruparVinhos`, `detAgrupar`).
+Não lhe metas procura nem filtros: isso é a Garrafeira, e ter os dois sítios
+a filtrar era ter duas verdades sobre o que está a ser mostrado.
 
-O **Detalhe** exporta a lista para PDF (`exportarPDF`): monta uma tabela num
-`#print-area` que só existe na impressão e chama `window.print()` — quem
-imprime escolhe "Guardar como PDF". Sem biblioteca nenhuma, que aqui não há
-build; a folha vai na horizontal porque são doze colunas, e os grupos são os
-mesmos que estão no ecrã.
+Por **casta** vêm primeiro os monocasta, um grupo por casta ("100% Syrah",
+"100% Touriga Nacional", por ordem alfabética), e só no fim "Várias Castas"
+— é a pergunta "o que é isto, puro?" antes da mistura. Dentro de QUALQUER
+organização (região, ano ou casta), os vinhos vêm ordenados pela nota do
+Vivino, do melhor para o pior (`ordenarPorVivino`) — sem nota fica no fim,
+por nome.
+
+O **Detalhe** exporta a lista para PDF (`exportarPDF`), e também está em
+Definições › Dados ao lado do JSON: monta uma tabela num `#print-area` que
+só existe na impressão e chama `window.print()` — quem imprime escolhe
+"Guardar como PDF". Sem biblioteca nenhuma, que aqui não há build; a folha
+vai na horizontal porque são doze colunas, e os grupos são os mesmos que
+estão no ecrã (a organização escolhida em Detalhe, mesmo exportando a
+partir de Definições).
 
 `renderLista()` ficou como o despachante chamado depois de QUALQUER
 mutação (guardar, apagar, consumir, mover): atualiza resumo + pesquisa +
@@ -94,7 +108,8 @@ famílias de cor lado a lado no mesmo cartão e nenhuma queria dizer nada.
 
 **O cartão do vinho tem três zonas e é a POSIÇÃO que diz o que a coisa é:**
 1. a **garrafa** (a imagem, com a quantidade ao canto);
-2. a **identidade** — nome, ano, produtor/tipo/região, castas, menção, nota;
+2. a **identidade** — nome, ano (com a classificação por baixo, em
+   `.vc-anowrap`), produtor/tipo/região, castas, menção, nota;
 3. depois de um filete, o **rodapé do que é físico** — onde está a garrafa e
    se está no ponto de beber.
 Um crachá novo entra numa destas zonas; não há uma quarta.
@@ -163,8 +178,6 @@ fazem, e o ecrã inicial não precisa de dois sítios para a mesma coisa.
 - `sw.js` — service worker (cache PWA).
 - `vinho-info.ts` — a Edge Function que procura a ficha do vinho na net
   (deploy à parte: `supabase functions deploy vinho-info`).
-- `dados-iniciais.js` — o Excel e o bloco de notas de onde isto partiu, já
-  lidos e limpos. Só a migração lhe toca.
 - `db/` — `schema.sql` → `functions.sql` → `policies.sql` → `seed.sql`
   (+ `README.md` com os passos manuais no painel do Supabase). Fonte de
   verdade do schema.
@@ -238,6 +251,14 @@ Utilizadores › Passar a app** (`definir_admin()`), não um deploy.
 `allowed_users` — era ficar sem admin nenhum e sem forma de voltar atrás
 pela interface.
 
+**Admin da app ≠ dono da conta Supabase.** `SUPABASE_DONO_EMAIL` (app.js) é
+fixo e não muda com `definir_admin()` — ao contrário de `ADMIN_EMAIL`, que
+passa para quem herdar a app. A password temporária (`admin_pass_temp`) e o
+Diagnóstico mexem na CONTA Supabase, que é minha mesmo depois de passar a
+app a outra pessoa; por isso ficam atrás de `.dono-hide`
+(`body.naodono`/`souDono()`), não só de `.admin-hide` — o próximo admin vê
+"Utilizadores" mas não estas duas.
+
 ## A procura da IA (`vinho-info`)
 Botão em cada vinho e no formulário de vinho novo. Quem procura é a Edge
 Function `vinho-info.ts` — irmã da `calendario-sporting` do Goals: mesma
@@ -270,21 +291,14 @@ descoberta de modelo, mesma escada de variantes, mesmos fallbacks.
   modelo e o erro exato do Gemini. Do lado do browser vê-se sempre "502"; a
   causa está lá. Definições › Diagnóstico.
 
-## A migração dos dados antigos
-`dados-iniciais.js` (gerado a partir do Excel da sala e do bloco de notas
-dos níveis) + o botão em Definições › Dados. **Trava-se sozinha se já houver
-vinhos** — garrafas a dobrar num mapa de garrafeira são piores do que
-garrafas nenhumas. O cabeçalho do `dados-iniciais.js` diz o que foi limpo ao
-ler as fontes e porquê.
-
 ## Regras técnicas (não partir a app)
 - `app.js` carrega como `<script src>` **normal, NÃO module** — há
   `onclick="…"` no HTML e no HTML gerado, as funções têm de ser **globais**.
-- **PWA/cache:** se mexeres em `app.js`, `style.css`, `index.html` ou
-  `dados-iniciais.js`, **sobe o `CACHE_NAME` no `sw.js`**. Os quatro são
-  network-first de propósito: com o JS em cache-first, um deploy dava ao
-  browser o `index.html` novo com o `app.js` velho — botões novos a chamar
-  funções que ainda não existiam, sem erro visível. Aconteceu no Goals.
+- **PWA/cache:** se mexeres em `app.js`, `style.css` ou `index.html`,
+  **sobe o `CACHE_NAME` no `sw.js`**. Os três são network-first de
+  propósito: com o JS em cache-first, um deploy dava ao browser o
+  `index.html` novo com o `app.js` velho — botões novos a chamar funções que
+  ainda não existiam, sem erro visível. Aconteceu no Goals.
 - **Supabase:** schema `garrafeira`, `Accept-Profile`/`Content-Profile` em
   **todos** os pedidos REST (`sbHeaders`) — é isso que aponta para o schema,
   nunca vai no URL. A chave no topo do `app.js` é a **`anon`** (pública, por
