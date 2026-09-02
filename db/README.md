@@ -57,34 +57,21 @@ Aplicada como a migração `garrafeira_05_links_utilizador`. A app deteta-a
 sozinha (mesmo padrão do `imagem_url`, `TEM_LINKS` em `app.js`) e esconde a
 secção se um dia faltar — sem isso um PATCH rebentava as gravações com 400.
 
-### `vinhos.atualizado_em` (por aplicar)
+### `vinhos.atualizado_em` (já aplicada)
 
 Coluna nova: `timestamptz NOT NULL DEFAULT now()`, carimbada pela app
 (`guardarVinho()` em `app.js`) sempre que o vinho é criado ou editado à mão
 no formulário. É o que separa "última pesquisa com IA" (`ai_atualizado_em`,
 só quando o `ai_modelo` é mesmo `gemini…`) de "última atualização manual" no
-novo separador "Atualizações" da página do vinho — a app deteta a coluna
-sozinha (`TEM_ATUALIZADO`, mesmo padrão do `imagem_url`/`links`) e usa
-`criado_em` como recurso enquanto a migração não corre.
+separador "Atualizações" da página do vinho — a app deteta a coluna sozinha
+(`TEM_ATUALIZADO`, mesmo padrão do `imagem_url`/`links`) e usa `criado_em`
+como recurso se um dia faltar.
 
-Falta correr no SQL Editor do Supabase (schema `garrafeira`, projeto
-`gjweqwfbnkgnibhajldc`):
-
-```sql
-ALTER TABLE garrafeira.vinhos
-  ADD COLUMN IF NOT EXISTS atualizado_em timestamptz NOT NULL DEFAULT now();
-
--- Para os 85 vinhos já existentes: conta o carregamento inicial e a
--- pesquisa feita à mão (ChatGPT/Claude/confirmação no rótulo) como
--- "atualização manual" — só NÃO conta se a última coisa que mexeu na ficha
--- foi mesmo uma pesquisa Gemini feita pela app.
-UPDATE garrafeira.vinhos
-SET atualizado_em = CASE
-  WHEN ai_atualizado_em IS NOT NULL AND ai_modelo !~* '^gemini'
-    THEN GREATEST(criado_em, ai_atualizado_em)
-  ELSE criado_em
-END;
-```
+Aplicada como a migração `garrafeira_06_atualizado_manual`, com o
+carregamento inicial e a pesquisa feita à mão (ChatGPT/Claude/confirmação
+no rótulo) dos 85 vinhos já existentes contados como "atualização manual" —
+só NÃO contou se a última coisa que mexeu na ficha foi mesmo uma pesquisa
+Gemini feita pela app.
 
 ### `vinhos.imagem_path` + bucket `garrafeira-rotulos` (já aplicados)
 
