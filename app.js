@@ -3155,7 +3155,14 @@ const PDF_CSS=`
   .psub{font-size:11px;color:#7a6d68;margin-top:3px}
   .pdata{font-size:11px;color:#7a6d68;white-space:nowrap}
   .pwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  table{width:100%;border-collapse:collapse;min-width:900px}
+  /* border-collapse:SEPARATE (com spacing:0), não collapse — de propósito.
+     Com collapse, o WebKit/Chromium ignora o break-inside:avoid de baixo
+     numa <tr>: um vinho cuja linha caísse mesmo no fim da página saía
+     cortado ao meio, a continuar na página seguinte. É um bug antigo dos
+     dois motores, não desta app. Visualmente não muda nada — só há
+     border-bottom (nunca laterais nem topo), por isso não há bordos a
+     duplicar-se nos cantos que o collapse evitava. */
+  table{width:100%;border-collapse:separate;border-spacing:0;min-width:900px}
   thead{display:table-header-group}   /* o cabeçalho repete-se em cada página */
   tr{page-break-inside:avoid;break-inside:avoid}
   th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.4px;
@@ -3171,6 +3178,11 @@ const PDF_CSS=`
   td{padding:4px 5px;border-bottom:1px solid #ccc;vertical-align:top}
   .pnome{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:600;font-size:12px}
   .pc{text-align:center;white-space:nowrap}
+  /* Um cabeçalho de grupo sozinho no fim de uma página, sem nenhum vinho
+     por baixo, lê-se como um erro — break-after:avoid empurra-o para a
+     página seguinte JUNTO com o que vem a seguir, em vez de o deixar
+     órfão. */
+  tr.pgrupo{page-break-after:avoid;break-after:avoid}
   .pgrupo td{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:600;font-size:12.5px;
     color:#7b1f3d;background:#f6f1ea;padding-top:8px;border-bottom:1px solid #7b1f3d}
   /* No iOS a "Orientação" do ecrã de impressão é do próprio sistema e o

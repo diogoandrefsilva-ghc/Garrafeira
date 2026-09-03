@@ -172,6 +172,20 @@ baixo do trabalho de impressão, e o `print()` sai de um clique a sério.
 Se houver uma segunda folha um dia, passa pelo `pdfPreAbrir`/`pdfDocumento` —
 não voltes a montar um documento à mão nem a imprimir a página da app.
 
+**A tabela usa `border-collapse:separate` (com `border-spacing:0`), nunca
+`collapse`.** É outro bug antigo do WebKit/Chromium: com `collapse`, o
+`break-inside:avoid` de uma `<tr>` é ignorado, e um vinho cuja linha caísse
+mesmo no fim da página saía cortado ao meio, a continuar na seguinte. Com
+`separate` o navegador respeita o `avoid` a sério. Visualmente não muda
+nada — a tabela só tem `border-bottom` (nunca laterais nem topo), por isso
+não há bordos a duplicar-se nos cantos que o `collapse` evitava. Se um dia
+precisares de bordos verticais, tem isto em mente antes de os acrescentar.
+
+**O cabeçalho de cada grupo (`tr.pgrupo`) leva `break-after:avoid`** — sem
+isso podia ficar sozinho na última linha de uma página, com os vinhos do
+grupo todos a começar na seguinte. O `avoid` empurra o cabeçalho para a
+página de baixo JUNTO com o que vem a seguir, em vez de o deixar órfão.
+
 `renderLista()` ficou como o despachante chamado depois de QUALQUER
 mutação (guardar, apagar, consumir, mover): chama `renderResumo()` e
 `renderFiltrados()` (que por sua vez refaz Detalhe e Locais), sem tentar
