@@ -3144,6 +3144,34 @@ function exportarPDF(){
    vez de encolher a letra até os nomes se partirem, a tabela tem largura
    mínima e desliza na horizontal dentro da `.pwrap`; a imprimir, a caixa
    deixa de a apertar e a folha fica exatamente como foi desenhada. */
+/* As regras que só valem NO PAPEL — tamanhos menores, largura cheia (a
+   pré-visualização usa tamanhos maiores e desliza na horizontal, ver
+   PDF_CSS). Vivem numa string à parte porque servem DUAS vezes: dentro de
+   `@media print` (a impressão a sério) e, prefixadas por classe, dentro de
+   `calcularQuebras()` (medir a folha como vai sair impressa, SEM chegar a
+   imprimir — ver PDF_SCRIPT). As duas cópias vêm da MESMA string via
+   `cssComPrefixo`; não as separes, ou um dia deixam de bater certo e as
+   quebras calculam-se com tamanhos que não são os do papel. */
+const PDF_CSS_IMPRESSAO=`
+    body{padding:0;font-size:7.6pt}
+    .pwrap{overflow:visible}
+    table{min-width:0}
+    h1{font-size:17pt}
+    .psub,.pdata{font-size:8pt}
+    th{font-size:6.6pt;padding:3pt 4pt}
+    td{padding:3pt 4pt;border-bottom:.6pt solid #ccc}
+    .pgrupo td{border-bottom:.6pt solid #7b1f3d}
+    .pnome{font-size:8.2pt}
+    .pgrupo td{font-size:8.6pt;padding-top:6pt}
+`;
+// ".a{x} .b,.c{y}" -> "PREFIXO .a{x} PREFIXO .b,PREFIXO .c{y}" — usado
+// para ativar as regras de PDF_CSS_IMPRESSAO por CLASSE em vez de por
+// @media, só para as medir (nunca para as imprimir a sério).
+function cssComPrefixo(css,prefixo){
+  return css.replace(/([^{}]+)\{([^{}]*)\}/g,(m,sel,decl)=>
+    sel.split(',').map(s=>prefixo+' '+s.trim()).join(',')+'{'+decl+'}');
+}
+
 const PDF_CSS=`
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:#241d1c;background:#fff;
@@ -3156,15 +3184,16 @@ const PDF_CSS=`
   .pdata{font-size:11px;color:#7a6d68;white-space:nowrap}
   .pwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
   /* border-collapse:SEPARATE (com spacing:0), não collapse — de propósito.
-     Com collapse, o WebKit/Chromium ignora o break-inside:avoid de baixo
-     numa <tr>: um vinho cuja linha caísse mesmo no fim da página saía
-     cortado ao meio, a continuar na página seguinte. É um bug antigo dos
-     dois motores, não desta app. Visualmente não muda nada — só há
-     border-bottom (nunca laterais nem topo), por isso não há bordos a
-     duplicar-se nos cantos que o collapse evitava. */
+     Com collapse, o break-inside:avoid de uma <tr> é ignorado nalguns
+     motores. Visualmente não muda nada — só há border-bottom (nunca
+     laterais nem topo), por isso não há bordos a duplicar-se nos cantos
+     que o collapse evitava. Fica como rede de segurança: quem realmente
+     decide onde a folha quebra é o calcularQuebras() ali em baixo, não
+     este avoid — ver a explicação grande a seguir ao PDF_SCRIPT. */
   table{width:100%;border-collapse:separate;border-spacing:0;min-width:900px}
   thead{display:table-header-group}   /* o cabeçalho repete-se em cada página */
   tr{page-break-inside:avoid;break-inside:avoid}
+  tr.quebra-pagina{page-break-before:always;break-before:page}
   th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.4px;
     color:#7b1f3d;border-bottom:1px solid #7b1f3d;padding:4px 5px;white-space:nowrap}
   /* O filete entre vinhos é CINZENTO (#ccc) e não um tom da paleta da app.
@@ -3178,11 +3207,6 @@ const PDF_CSS=`
   td{padding:4px 5px;border-bottom:1px solid #ccc;vertical-align:top}
   .pnome{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:600;font-size:12px}
   .pc{text-align:center;white-space:nowrap}
-  /* Um cabeçalho de grupo sozinho no fim de uma página, sem nenhum vinho
-     por baixo, lê-se como um erro — break-after:avoid empurra-o para a
-     página seguinte JUNTO com o que vem a seguir, em vez de o deixar
-     órfão. */
-  tr.pgrupo{page-break-after:avoid;break-after:avoid}
   .pgrupo td{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:600;font-size:12.5px;
     color:#7b1f3d;background:#f6f1ea;padding-top:8px;border-bottom:1px solid #7b1f3d}
   /* No iOS a "Orientação" do ecrã de impressão é do próprio sistema e o
@@ -3190,27 +3214,146 @@ const PDF_CSS=`
      padrão (que o desktop respeita); quem imprimir no iOS toca no ícone
      horizontal no ecrã de Opções. */
   @page{size:A4 landscape;margin:9mm}
-  @media print{
-    body{padding:0;font-size:7.6pt}
-    .pwrap{overflow:visible}
-    table{min-width:0}
-    h1{font-size:17pt}
-    .psub,.pdata{font-size:8pt}
-    th{font-size:6.6pt;padding:3pt 4pt}
-    td{padding:3pt 4pt;border-bottom:.6pt solid #ccc}
-    .pgrupo td{border-bottom:.6pt solid #7b1f3d}
-    .pnome{font-size:8.2pt}
-    .pgrupo td{font-size:8.6pt;padding-top:6pt}
-  }`;
+  @media print{${PDF_CSS_IMPRESSAO}}
+  /* A MESMA folha de estilos de cima, mas ativada por CLASSE em vez de
+     por @media — só serve para o calcularQuebras() MEDIR a folha como
+     ela vai sair impressa, sem chegar a imprimir a sério (ver
+     PDF_SCRIPT). Gerada da mesma string por cssComPrefixo: nunca
+     escrevas isto uma segunda vez à mão, os dois ficavam a poder
+     discordar. Sem @media, isto não muda nada no ecrã em uso normal —
+     break-before só significa alguma coisa quando se está mesmo a
+     imprimir, e a classe só fica ligada durante uma medição instantânea. */
+  ${cssComPrefixo(PDF_CSS_IMPRESSAO,'html.medir-impressao')}
+`;
 
 // O documento é servido por `srcdoc`, logo é da MESMA origem — é isso que
 // deixa chamar-lhe o `print()` a partir daqui. As fontes vêm do mesmo sítio
 // de onde a app as traz, para o papel ter a letra da app; sem rede, as
 // alternativas (Georgia/system-ui) já estão na cascata e nada fica à espera.
+/* ── AS QUEBRAS DE PÁGINA CALCULAM-SE EM JS, NÃO SE DEIXAM AO MOTOR ──
+   Havia aqui só CSS (`break-inside:avoid` na <tr>, `break-after:avoid` no
+   cabeçalho do grupo) — e um vinho com garrafas em dois locais diferentes
+   (linha alta, várias sub-linhas) continuava a sair CORTADO A MEIO entre
+   duas páginas num iPhone a sério (AirPrint/WebKit), com `border-collapse:
+   separate` e tudo. O `avoid` é um PEDIDO ao motor de impressão — "se
+   puderes, não partas isto" — e este motor, quando a linha não cabe no
+   que sobra da página, ignora o pedido e parte-a na mesma. Não há CSS que
+   force isso a sério; a spec chama a este mecanismo "fragmentação
+   forçada" a `break-before:always/page`, que TODOS os motores respeitam
+   (é uma ordem, não um pedido) — e é aí que este código se agarra.
+
+   O truque: em vez de pedir "não partas esta linha", calcula-se ANTES de
+   imprimir exatamente que linhas cabem em cada página (medindo a altura
+   REAL de cada `<tr>` sob o CSS de impressão — `.medir-impressao` liga
+   por classe as mesmas regras do `@media print`, sem chegar a imprimir) e
+   marca-se com `quebra-pagina` (`break-before:page`) só a linha que NÃO
+   cabia. Como cada página passa a começar exatamente onde nós dissemos,
+   o motor nunca chega a ter de decidir "isto não cabe, corto ou empurro?"
+   — a pergunta que ele responde mal deixa de se pôr.
+
+   O cabeçalho de um grupo (região/ano/casta) é medido JUNTO com o vinho
+   a seguir: se os dois não cabem, quebra-se ANTES do cabeçalho, nunca
+   entre ele e o primeiro vinho — o mesmo raciocínio que o `break-after:
+   avoid` tentava (e que se tirou daqui: com as quebras já calculadas ao
+   pormenor, um `avoid` a mais só arriscava discordar do que este código
+   decidiu). */
+const PDF_SCRIPT=`
+(function(){
+  function calcularQuebras(){
+    var raiz=document.documentElement;
+    var tabela=document.querySelector('table');
+    if(!tabela)return;
+    var corpo=tabela.tBodies[0];
+    if(!corpo)return;
+    var linhas=Array.prototype.slice.call(corpo.rows);
+    // reabrir a pré-visualização ou recalcular (beforeprint) não pode
+    // empilhar quebras em cima de quebras de uma vez anterior.
+    linhas.forEach(function(l){l.classList.remove('quebra-pagina');});
+    if(!linhas.length)return;
+
+    raiz.classList.add('medir-impressao');
+    // 1mm = 96/25.4px (a definição CSS de px, igual em ecrã e em papel).
+    // @page é A4 horizontal com 9mm de margem — os mesmos números do
+    // PDF_CSS ali em cima; muda um, muda o outro.
+    var mmPx=96/25.4;
+    var alturaUtil=(210-9-9)*mmPx;
+    var larguraUtil=(297-9-9)*mmPx;
+    // A LARGURA da medição tem de ser a do PAPEL, não a do ecrã onde a
+    // pré-visualização está a abrir. Sem isto, um telemóvel estreito
+    // (390px) media a tabela toda enrolada — mais palavras a quebrar
+    // linha em cada célula, linhas mais altas, quebras a mais e no sítio
+    // errado — enquanto um ecrã largo dava outro número qualquer para o
+    // MESMO documento. .pwrap é o único elemento com largura própria (a
+    // tabela em si já vai a min-width:0 sob medir-impressao); impor-lhe
+    // a largura do papel torna a medição igual em qualquer ecrã,
+    // exatamente como vai sair impressa.
+    var wrap=document.querySelector('.pwrap');
+    var larguraAntiga=wrap?wrap.style.width:null;
+    if(wrap)wrap.style.width=larguraUtil+'px';
+
+    var cabecalho=document.querySelector('.pcab');
+    var alturaCabecalho=cabecalho?cabecalho.getBoundingClientRect().height:0;
+    var alturaThead=tabela.tHead?tabela.tHead.getBoundingClientRect().height:0;
+
+    var restante=alturaUtil-alturaCabecalho-alturaThead;
+    for(var i=0;i<linhas.length;i++){
+      var l=linhas[i];
+      var altura=l.getBoundingClientRect().height;
+      var alturaComOSeguinte=altura;
+      if(l.classList.contains('pgrupo')&&linhas[i+1]){
+        alturaComOSeguinte+=linhas[i+1].getBoundingClientRect().height;
+      }
+      if(i>0&&alturaComOSeguinte>restante+0.5){
+        l.classList.add('quebra-pagina');
+        restante=alturaUtil-alturaThead;
+      }
+      restante-=altura;
+    }
+    if(wrap)wrap.style.width=larguraAntiga||'';
+    raiz.classList.remove('medir-impressao');
+  }
+  function preparar(){
+    // as Google Fonts chegam depois do <link> — sem esperar por elas, a
+    // altura de cada linha media-se com a alternativa (Georgia/system-ui)
+    // e as quebras calculavam-se erradas assim que a fonte a sério
+    // chegasse. Mas document.fonts.ready NÃO TEM PRAZO: sem rede (ou com
+    // uma ligação parva a meio caminho), pode nunca resolver — e o botão
+    // de imprimir ficava preso em "A preparar…" para sempre, pior do que
+    // o problema que isto veio corrigir. 3s chega de sobra para uma
+    // fonte que carrega a sério; passado isso, mede-se com o que houver
+    // (Georgia/system-ui, já na cascata) em vez de continuar à espera.
+    const semPrazo=p=>Promise.race([p,new Promise(r=>setTimeout(r,3000))]);
+    window.pdfQuebrasProntas=semPrazo(document.fonts&&document.fonts.ready||Promise.resolve()).then(calcularQuebras);
+    // rede de segurança: se a impressão for pedida por outro caminho que
+    // não o botão da barra (não devia haver nenhum, mas nunca se sabe),
+    // recalcula-se na mesma mesmo em cima da hora.
+    window.addEventListener('beforeprint',calcularQuebras);
+  }
+  // este <script> vem ANTES da tabela no documento (ver pdfDocumento) —
+  // de propósito, para não ficar preso atrás do <link rel=stylesheet> das
+  // Google Fonts (um script clássico espera por uma folha de estilos
+  // pendente antes de correr, mesmo sem precisar dela). Por isso a
+  // tabela ainda não existe quando este código corre; DOMContentLoaded
+  // não depende de CSS nenhum e dispara assim que o HTML estiver todo
+  // interpretado — ao contrário de 'load', que esperaria pelas fontes.
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',preparar);
+  else preparar();
+})();
+`;
+
 function pdfDocumento(corpo,titulo){
+  // O <script> vem ANTES de qualquer <link rel=stylesheet>, não no fim do
+  // body — um script clássico colocado DEPOIS de uma folha de estilos
+  // pendente espera por ela antes de correr (é a regra do próprio
+  // browser: pode vir a precisar do CSSOM). Com a rede da Google Fonts
+  // lenta ou em baixo, isso atrasava o calcularQuebras() sem necessidade
+  // nenhuma — ele nem olha para a folha de estilos, só para a tabela. O
+  // PDF_SCRIPT já sabe esperar pelo DOMContentLoaded por dentro (que não
+  // depende de CSS nenhum), por isso pode vir logo ao início do <head>.
   return `<!DOCTYPE html><html lang="pt"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(titulo)}</title>
+<script>${PDF_SCRIPT}<\/script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -3225,13 +3368,36 @@ function pdfPreAbrir(corpo,titulo){
     <div class="pdfp-bar">
       <span class="pdfp-t">${esc(titulo)}</span>
       <div class="pdfp-acc">
-        <button class="pdfp-btn prim" onclick="pdfPreImprimir()">🖨 Imprimir / Guardar PDF</button>
+        <button class="pdfp-btn prim" id="pdf-pre-imprimir" onclick="pdfPreImprimir()" disabled>A preparar…</button>
         <button class="pdfp-btn" onclick="pdfPreFechar()" aria-label="Fechar">✕</button>
       </div>
     </div>
     <iframe id="pdf-pre-frame" title="${esc(titulo)}"></iframe>`;
   document.body.appendChild(ov);
-  document.getElementById('pdf-pre-frame').srcdoc=pdfDocumento(corpo,titulo);
+  const frame=document.getElementById('pdf-pre-frame');
+  const botao=document.getElementById('pdf-pre-imprimir');
+  const ligar=()=>{botao.disabled=false;botao.textContent='🖨 Imprimir / Guardar PDF';};
+  // O botão nasce DESLIGADO — só liga quando o calcularQuebras() lá
+  // dentro (PDF_SCRIPT) já correu. É o que impede o pdfPreImprimir() de
+  // ter de ESPERAR por uma promessa antes do w.print(): um await ali
+  // tirava a chamada de dentro do gesto síncrono do clique, e é
+  // exatamente isso que o Safari trava como "impressão automática" — a
+  // mesma lição do afterprint/rAF que já se pagou uma vez nesta folha.
+  //
+  // Espera-se por `pdfQuebrasProntas` A ESPREITAR (não pelo 'load' do
+  // iframe): 'load' só dispara depois de TODOS os recursos — incluindo a
+  // folha de estilos das Google Fonts — terminarem, e é exatamente essa
+  // rede que pode estar lenta ou em baixo. O PDF_SCRIPT corre cedo (vem
+  // antes de qualquer <link rel=stylesheet>, ver pdfDocumento) e não
+  // depende de CSS nenhum, por isso a promessa costuma existir em
+  // milissegundos — só se espreita, nunca se fica preso a render alheio.
+  (function esperar(tentativas){
+    const w=frame.contentWindow;
+    if(w&&w.pdfQuebrasProntas){w.pdfQuebrasProntas.then(ligar);return;}
+    if(tentativas<=0){ligar();return;}   // nunca chegou a aparecer — liga-se à mesma
+    setTimeout(()=>esperar(tentativas-1),40);
+  })(250);   // 250×40ms = 10s de tentativas, sobra para qualquer telemóvel lento
+  frame.srcdoc=pdfDocumento(corpo,titulo);
 }
 
 function pdfPreFechar(){
@@ -3239,15 +3405,17 @@ function pdfPreFechar(){
   if(ov)ov.remove();
 }
 
-// O print() do documento de dentro, e não o da app — a app nem entra na
-// folha. Sai de um clique a sério (o botão), que é o que o Safari exige
-// para não o travar como impressão automática.
 function pdfPreImprimir(){
   const f=document.getElementById('pdf-pre-frame');
   const w=f&&f.contentWindow;
   if(!w){toast('A folha ainda está a abrir — tenta outra vez',1);return;}
   try{w.focus();w.print();}
   catch(e){toast('O browser não deixou imprimir daqui. Usa o menu do browser › Imprimir.',1);}
+  // devolve o foco à app: o w.focus() de cima manda-o para dentro do
+  // iframe, e sem o repor aqui o Escape deixava de fechar a
+  // pré-visualização (o teclado ficava a apontar para dentro dela, e o
+  // 'keydown' da app não recebe eventos de outro documento).
+  window.focus();
 }
 
 function exportarJSON(){

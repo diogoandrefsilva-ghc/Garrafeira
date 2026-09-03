@@ -173,18 +173,82 @@ Se houver uma segunda folha um dia, passa pelo `pdfPreAbrir`/`pdfDocumento` —
 não voltes a montar um documento à mão nem a imprimir a página da app.
 
 **A tabela usa `border-collapse:separate` (com `border-spacing:0`), nunca
-`collapse`.** É outro bug antigo do WebKit/Chromium: com `collapse`, o
-`break-inside:avoid` de uma `<tr>` é ignorado, e um vinho cuja linha caísse
-mesmo no fim da página saía cortado ao meio, a continuar na seguinte. Com
-`separate` o navegador respeita o `avoid` a sério. Visualmente não muda
-nada — a tabela só tem `border-bottom` (nunca laterais nem topo), por isso
-não há bordos a duplicar-se nos cantos que o `collapse` evitava. Se um dia
-precisares de bordos verticais, tem isto em mente antes de os acrescentar.
+`collapse`.** É um bug antigo do WebKit/Chromium: com `collapse`, o
+`break-inside:avoid` de uma `<tr>` costuma ser ignorado. Fica como rede de
+segurança de baixo custo — mas não é ele que garante nada a sério, ver
+abaixo. Visualmente não muda nada — a tabela só tem `border-bottom` (nunca
+laterais nem topo), por isso não há bordos a duplicar-se nos cantos que o
+`collapse` evitava. Se um dia precisares de bordos verticais, tem isto em
+mente antes de os acrescentar.
 
-**O cabeçalho de cada grupo (`tr.pgrupo`) leva `break-after:avoid`** — sem
-isso podia ficar sozinho na última linha de uma página, com os vinhos do
-grupo todos a começar na seguinte. O `avoid` empurra o cabeçalho para a
-página de baixo JUNTO com o que vem a seguir, em vez de o deixar órfão.
+**AS QUEBRAS DE PÁGINA CALCULAM-SE EM JS (`calcularQuebras`, dentro do
+`PDF_SCRIPT`), não se deixam ao motor de impressão.** Havia só CSS
+(`break-inside:avoid` na `<tr>`, `break-after:avoid` no cabeçalho do
+grupo) — e um vinho com garrafas em locais diferentes (linha alta, várias
+sub-linhas) continuou a sair **cortado a meio entre duas páginas num
+iPhone a sério** (AirPrint/WebKit), mesmo com `border-collapse:separate`.
+Confirmado com o PDF real de um utilizador: a linha de um "Carmim" com
+garrafas em dois locais tinha o produtor, as castas e o "onde está" a
+começar numa página e a acabar na seguinte. `avoid` é um PEDIDO ("se
+puderes, não partas isto") e este motor, quando a linha não cabe no que
+sobra da página, ignora o pedido e parte-a na mesma — não há CSS que force
+isso a sério. A spec tem outro mecanismo, **fragmentação forçada**
+(`break-before:always/page`), que É uma ordem e todos os motores
+respeitam — e é aí que a correção se agarra:
+- Antes de imprimir, mede-se a altura REAL de cada `<tr>` **sob o CSS de
+  impressão** — a classe `.medir-impressao` ativa por CLASSE (não por
+  `@media`) as mesmas regras do `@media print` (`PDF_CSS_IMPRESSAO`,
+  gerada uma vez só e reaproveitada nos dois sítios por `cssComPrefixo` —
+  nunca escrevas essas regras a dobrar, ou um dia deixam de bater certo);
+- **a LARGURA da medição é a do PAPEL, imposta em `.pwrap` durante a
+  medição** (`larguraUtil`, os mesmos 297mm do `@page` menos as margens),
+  nunca a do ecrã onde a pré-visualização está aberta. Sem isto, um
+  telemóvel estreito (390px) media a tabela toda enrolada — mais palavras
+  a quebrar linha, linhas mais altas, quebras a mais e no sítio errado —
+  e dava um número DIFERENTE do de um ecrã largo para o MESMO documento
+  (foi assim que se apanhou o bug: desktop e telemóvel discordavam);
+- a linha que não cabe no que resta da página leva a classe
+  `quebra-pagina` (`break-before:page`), e só essa. Como cada página passa
+  a começar exatamente onde este código disse, o motor nunca chega a ter
+  de decidir "isto não cabe, corto ou empurro?" — a pergunta que ele
+  responde mal deixa de se pôr;
+- o cabeçalho de um grupo é medido **junto com o vinho a seguir**: se os
+  dois não cabem, a quebra fica ANTES do cabeçalho, nunca entre ele e o
+  primeiro vinho — por isso não há `break-after:avoid` na `.pgrupo` no
+  CSS: com as quebras já calculadas ao pormenor, um `avoid` a mais só
+  arriscava discordar do que este código decidiu.
+
+**O `<script>` do `PDF_SCRIPT` vem ANTES de qualquer `<link
+rel=stylesheet>` no `<head>`, nunca depois.** Um script clássico colocado
+DEPOIS de uma folha de estilos pendente espera por ela antes de correr —
+é regra do próprio browser, para o caso de precisar do CSSOM — mesmo este
+código nunca olhando para CSS nenhum. Com a rede das Google Fonts lenta
+ou em baixo, isso atrasava (ou travava) o `calcularQuebras()` sem
+necessidade nenhuma. Por vir tão cedo, a tabela ainda não existe quando
+este script corre; por isso espera pelo `DOMContentLoaded` (que não
+depende de CSS nenhum, ao contrário de `load`) antes de tocar no DOM.
+
+**`document.fonts.ready` NÃO TEM PRAZO** — sem rede (ou com uma ligação
+parva a meio caminho) pode nunca resolver, e o botão "Imprimir" ficava
+preso em "A preparar…" para sempre, pior do que o problema que isto veio
+corrigir. Por isso tem um limite de 3s (`semPrazo`): passado isso,
+mede-se com o que houver (Georgia/system-ui, já na cascata) em vez de
+continuar à espera. E o código exterior (`pdfPreAbrir`) que espera pela
+promessa **espreita-a repetidamente em vez de esperar pelo `load` do
+iframe** — `load` só dispara depois de TODOS os recursos, incluindo essa
+mesma folha de estilos lenta, o que dava o mesmo problema visto de fora.
+
+**O botão "Imprimir" nasce DESLIGADO e só liga quando `calcularQuebras()`
+já correu.** É o que evita o `pdfPreImprimir()` ter de dar `await` numa
+promessa antes do `w.print()` — um `await` ali tirava a chamada de dentro
+do gesto síncrono do clique, e é exatamente isso que o Safari trava como
+"impressão automática" (a mesma lição do `afterprint`/`rAF` lá em cima).
+
+**`w.focus()` (antes do `w.print()`) desloca o foco do teclado para
+dentro do iframe — e sem o repor, o Escape deixava de fechar a
+pré-visualização** (o `keydown` da app não recebe eventos de outro
+documento). `pdfPreImprimir()` chama `window.focus()` depois de imprimir,
+de propósito.
 
 `renderLista()` ficou como o despachante chamado depois de QUALQUER
 mutação (guardar, apagar, consumir, mover): chama `renderResumo()` e
