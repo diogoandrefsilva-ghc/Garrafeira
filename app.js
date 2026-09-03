@@ -605,7 +605,7 @@ function resumoPainel(id,titulo,rows,filtroFn,listaBase,notaTop){
         <div class="rdet-cab">${esc(RESUMO_DRILL)} <i>· ${vs.length} vinho${vs.length===1?'':'s'}</i></div>
         ${fechar}
       </div>
-      <div class="rdet-lista">${vs.map(vinhoCardHTML).join('')||'<div class="note">Sem vinhos.</div>'}</div>
+      <div class="rdet-lista">${vs.map(v=>vinhoCardHTML(v)).join('')||'<div class="note">Sem vinhos.</div>'}</div>
     </div>`;
   }
   return `<div class="sc-det">
@@ -892,8 +892,116 @@ function passaTexto(v,termos){
     v.ano,(v.castas||[]).join(' '),v.notas,v.notas_prova,v.harmonizacao].join(' '));
   return termos.every(t=>alvo.includes(t));
 }
+
+// Os termos da caixa de procura, tal como `vinhosFiltrados` os usa — o
+// cartão precisa dos MESMOS para dizer onde encontrou a palavra.
+function termosProcura(){
+  const c=document.getElementById('f-texto');
+  return c?chave(c.value).split(/\s+/).filter(Boolean):[];
+}
+
+/* ── ONDE É QUE A PALAVRA ESTAVA ────────────────────────────────────
+   A procura livre lê muito mais do que o cartão mostra: sub-região, notas
+   de prova, harmonização, as minhas notas. Procurar "caça" devolvia vinhos
+   sem uma única letra da palavra à vista — a lista respondia certo e
+   parecia enganada.
+   Por isso, e SÓ enquanto se procura por texto, o cartão ganha uma última
+   faixa com o campo onde a palavra apareceu e o pedaço à volta dela, com a
+   palavra sombreada. Não é uma quarta zona da identidade do vinho (essas
+   continuam três, ver `vinhoCardHTML`): é a procura a mostrar o seu
+   trabalho, e desaparece com ela.
+   Só entra o que NÃO se vê no cartão: um termo que já está no nome, no
+   produtor, na região, no ano ou nas castas visíveis não precisa de ser
+   repetido por baixo — quem procurou "esporão" está a ver "Esporão" em
+   serifa a três centímetros dali. Termo a termo: "esporao caça" mostra onde
+   está a "caça" e cala-se sobre o nome.
+   Aparecem TODOS os campos onde a palavra está, pela ordem da ficha do
+   vinho: um vinho com "caça" nas notas de prova e na harmonização dá as
+   duas linhas, e são duas respostas diferentes ("sabe a" e "come-se com").
+   O tecto de MAX_MATCH linhas é só para o cartão não crescer sem fim num
+   vinho com a palavra em todo o lado. */
+const MAX_MATCH=3;
+const CAMPOS_MATCH=[
+  ['Sub-região',    v=>v.sub_regiao],
+  // As duas primeiras castas já estão no cartão; as que o "+2" esconde é
+  // que precisam de ser ditas, e só as que deram match.
+  ['Casta',         (v,t)=>(v.castas||[]).slice(2).filter(c=>t.some(x=>chave(c).includes(x))).join(' · ')],
+  ['Notas de prova',v=>v.notas_prova],
+  ['Harmoniza com', v=>v.harmonizacao],
+  ['As minhas notas',v=>v.notas]
+];
+function trechosMatch(v,termos){
+  if(!termos||!termos.length)return '';
+  const visivel=chave([v.nome,v.produtor,v.tipo,v.estilo,v.regiao,v.mencao,v.ano,
+    (v.castas||[]).slice(0,2).join(' ')].join(' '));
+  const porMostrar=termos.filter(t=>!visivel.includes(t));
+  if(!porMostrar.length)return '';
+  const linhas=[];
+  for(const [rot,ler] of CAMPOS_MATCH){
+    if(linhas.length===MAX_MATCH)break;
+    const txt=String(ler(v,porMostrar)||'').trim();
+    if(!txt)continue;
+    const alvo=chave(txt);
+    const presentes=porMostrar.filter(t=>alvo.includes(t));
+    if(!presentes.length)continue;
+    linhas.push(`<div class="vcm-l"><span class="vcm-k">${esc(rot)}</span>`+
+      `<span class="vcm-t">${trechoRealcado(txt,presentes)}</span></div>`);
+  }
+  return linhas.length?`<div class="vc-match">${linhas.join('')}</div>`:'';
+}
+// Normaliza SEM mexer nas posições: `chave()` caracter a caracter, e quem
+// não devolver exatamente um caracter fica como estava. É preciso porque o
+// `chave()` normal (NFD + tirar acentos) encurta a string — os índices do
+// match deixavam de servir para cortar o texto ORIGINAL, que é o que se
+// mostra (com acentos e maiúsculas).
+function normPos(s){
+  let out='';
+  for(const c of s){const n=chave(c);out+=(n.length===1?n:c);}
+  return out;
+}
+// O pedaço de texto à volta do primeiro match, com TODOS os termos
+// sombreados lá dentro. Uma nota de prova inteira não cabe no cartão nem
+// interessa aqui: o que se quer ver é a palavra que se procurou e o que ela
+// tem à volta. Corta a espaços para não partir palavras a meio.
+// A janela NÃO é centrada no match: leva só uma migalha de contexto à
+// frente (`ANTES`) e o resto atrás. Centrada — ou sem janela nenhuma num
+// texto curto — a palavra caía na terceira linha do trecho, e o trecho
+// corta às duas (`.vcm-t`): a faixa existia para mostrar a palavra e era
+// exatamente a palavra que ficava de fora. Por isso a janela também abre
+// quando o texto até cabe em `max` mas o match está lá para o fim: o que
+// manda é a palavra apanhar a PRIMEIRA linha, não o tamanho do texto.
+// (E por isso a janela nunca recua para trás de `a-ANTES` para se encher
+// no fim de um texto: encher a janela era outra vez empurrar a palavra
+// para baixo.)
+const ANTES=26;
+function trechoRealcado(txt,termos,max=72){
+  const n=normPos(txt);
+  const hits=[];
+  termos.forEach(t=>{for(let i=n.indexOf(t);i>=0;i=n.indexOf(t,i+1))hits.push([i,i+t.length]);});
+  hits.sort((a,b)=>a[0]-b[0]);
+  const juntos=[];
+  hits.forEach(h=>{const u=juntos[juntos.length-1];
+    if(u&&h[0]<=u[1])u[1]=Math.max(u[1],h[1]);else juntos.push(h.slice());});
+  let ini=0,fim=txt.length;
+  if(juntos.length&&(txt.length>max||juntos[0][0]>ANTES)){
+    const [a,b]=juntos[0];
+    ini=Math.max(0,a-ANTES);
+    fim=Math.min(txt.length,Math.max(b,ini+max));
+    if(ini>0){const e=txt.indexOf(' ',ini);if(e>=0&&e<a)ini=e+1;}
+    if(fim<txt.length){const e=txt.lastIndexOf(' ',fim);if(e>b)fim=e;}
+  }
+  let out='',pos=ini;
+  juntos.forEach(([a,b])=>{
+    if(b<=ini||a>=fim)return;
+    a=Math.max(a,ini);b=Math.min(b,fim);
+    out+=esc(txt.slice(pos,a))+'<mark class="hl">'+esc(txt.slice(a,b))+'</mark>';
+    pos=b;
+  });
+  out+=esc(txt.slice(pos,fim));
+  return (ini>0?'… ':'')+out+(fim<txt.length?' …':'');
+}
 function vinhosFiltrados(){
-  const termos=chave(document.getElementById('f-texto').value).split(/\s+/).filter(Boolean);
+  const termos=termosProcura();
   return db.vinhos.filter(v=>{
     const gs=garrafasDe(v.id,true);
     if(!gs.length)return false;                                  // só o que está lá
@@ -994,8 +1102,12 @@ function detAgrupar(modo){
    Antes vinha tudo no mesmo monte de crachás, cada um com a sua cor: sete
    cores ao lado umas das outras não são hierarquia nenhuma, e o olho não
    sabia onde pousar. Agora só o dourado (menção/nota) e o pip do local têm
-   cor própria. */
-function vinhoCardHTML(v){
+   cor própria.
+   A faixa da procura (`trechosMatch`) não é uma quarta zona: só existe
+   enquanto se procura por texto, e o que diz é da PROCURA — onde é que a
+   palavra estava — não do vinho. Sem procura, o cartão é exatamente o
+   mesmo de sempre. */
+function vinhoCardHTML(v,termos){
   const gs=garrafasDe(v.id,true);
   const cl=castaLabel(v);
   const jan=janelaBeber(v);
@@ -1032,6 +1144,7 @@ function vinhoCardHTML(v){
         </div>
       </div>
     </div>
+    ${trechosMatch(v,termos)}
   </article>`;
 }
 // A lista completa, organizada por região, ano ou casta — e, quando a
@@ -1042,6 +1155,7 @@ function renderDetalhe(){
   if(!box)return;
   const filtrando=haFiltros();
   const res=filtrando?vinhosFiltrados():db.vinhos.filter(v=>stockDe(v.id)>0);
+  const termos=termosProcura();
   const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
   document.getElementById('det-count').textContent=
     `${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'}`;
@@ -1054,7 +1168,7 @@ function renderDetalhe(){
   const grupos=agruparVinhos(res,DET_AGRUPAR);
   box.innerHTML=grupos.map(g=>`<div class="dgrupo">
       <div class="dgrupo-tit">${esc(g.titulo)} <span class="dgrupo-n">${g.vinhos.length}</span></div>
-      ${g.vinhos.map(vinhoCardHTML).join('')}
+      ${g.vinhos.map(v=>vinhoCardHTML(v,termos)).join('')}
     </div>`).join('');
 }
 
