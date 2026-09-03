@@ -214,6 +214,26 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
 .vc-l b{font-weight:500;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vc-pip{width:7px;height:7px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 2px #fff,0 0 0 3px rgba(0,0,0,.06)}
 
+/* Onde é que a palavra estava (só enquanto se procura por texto).
+   Faixa colada ao fundo do cartão, a sangrar até às bordas (as margens
+   negativas são o padding do .vcard ao contrário) e em tom de papel um
+   pouco mais escuro: lê-se como um rodapé da PROCURA, não como mais uma
+   linha da ficha do vinho — daí ficar fora do .vc-top, a toda a largura,
+   e não alinhada com a coluna do nome.
+   A palavra encontrada leva bordô e não dourado: o dourado é a distinção
+   (menção, nota do Vivino) e uma palavra sombreada não distingue vinho
+   nenhum — é a app a apontar para o que lhe perguntaram. */
+.vc-match{margin:11px -14px -12px;padding:8px 14px 9px;border-top:1px solid var(--bo);
+  background:var(--bg);border-radius:0 0 13px 13px}
+.vcm-l{display:flex;gap:9px;align-items:baseline;font-size:11px;line-height:1.5;color:var(--mu)}
+.vcm-l+.vcm-l{margin-top:5px}
+.vcm-k{flex:0 0 auto;font-size:9px;letter-spacing:.5px;text-transform:uppercase;font-weight:700;
+  color:var(--vh);opacity:.8}
+/* Duas linhas chegam: o que se quer ver é a palavra e o que ela tem à
+   volta — a nota de prova inteira lê-se na ficha do vinho. */
+.vcm-t{min-width:0;flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-radius:3px;padding:0 2px}
+
 /* Crachás: um só desenho. A cor é excepção, não regra —
    dourado = distinção (menção/nota), o resto vive em tons de papel. */
 .bdg{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;padding:3px 9px;border-radius:99px;

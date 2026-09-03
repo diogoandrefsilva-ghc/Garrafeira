@@ -131,6 +131,11 @@ célula com a garrafinha desenhada, o nome (até duas linhas) e o lugar em
 destaque. Com a procura ligada, só aparecem os locais e lugares com garrafas
 que passam nela — é a resposta a "onde estão as minhas garrafas de Syrah".
 
+Quando a procura tem **texto**, cada cartão que passou por causa de um campo
+que o cartão não mostra ganha a **faixa do match** por baixo — ver "A
+linguagem visual". `renderDetalhe` passa os termos (`termosProcura()`) ao
+`vinhoCardHTML(v,termos)`; sem termos, o cartão é exatamente o de sempre.
+
 `Detalhe` (`renderDetalhe`) é a lista organizada por região, por ano ou por
 casta (`agruparVinhos`, `detAgrupar`) — **sem filtro nenhum** por defeito
 (a lista toda), e com a mesma organização mas só os vinhos que passam na
@@ -261,6 +266,33 @@ famílias de cor lado a lado no mesmo cartão e nenhuma queria dizer nada.
 3. depois de um filete, o **rodapé do que é físico** — onde está a garrafa e
    se está no ponto de beber.
 Um crachá novo entra numa destas zonas; não há uma quarta.
+
+**A faixa da procura é a exceção que confirma isto** (`trechosMatch`,
+`.vc-match`): enquanto há texto na caixa de procura, o cartão ganha em
+baixo — a toda a largura, fora do `.vc-top` — o **campo onde a palavra foi
+encontrada** e o pedaço de texto à volta dela, com a palavra sombreada. Não
+é uma quarta zona da identidade do vinho: o que diz é da PROCURA, não do
+vinho, e desaparece com ela. Existe porque a procura livre lê muito mais do
+que o cartão mostra (sub-região, notas de prova, harmonização, as minhas
+notas) — procurar "caça" devolvia vinhos sem uma letra da palavra à vista,
+e a lista respondia certo a parecer enganada.
+
+Só entra o que **não se vê no cartão**, termo a termo: quem procura
+"esporão" está a ver "Esporão" em serifa dois centímetros acima, e repeti-lo
+por baixo era ruído; "esporão caça" mostra a harmonização e cala-se sobre o
+nome. As castas contam como visíveis só as duas que o cartão mostra — a que
+está escondida no "+2" aparece. Aparecem **todos** os campos onde a palavra
+está (pela ordem da ficha do vinho, até `MAX_MATCH`): "sabe a caça" e
+"come-se com caça" são respostas diferentes. De cada campo mostra-se uma
+janela de ~120 caracteres à volta do primeiro match, cortada a espaços e
+com reticências — a nota de prova inteira lê-se na ficha do vinho.
+
+O sombreado é **bordô**, não dourado: o dourado é a distinção (menção, nota
+do Vivino) e uma palavra encontrada não distingue vinho nenhum — é a app a
+apontar para o que lhe perguntaram. `normPos()` é o que permite sombrear no
+texto ORIGINAL (com acentos e maiúsculas) a partir de um match feito sem
+eles: normaliza caracter a caracter, mantendo as posições, porque o
+`chave()` normal encurta a string e os índices deixavam de servir.
 
 **O crachá da maturação enche-se** (`janelaBadge`, `.bdg.jan.cheio`). Dizer
 "No ponto" deixou de separar alguma coisa — está em quase todos os vinhos —
