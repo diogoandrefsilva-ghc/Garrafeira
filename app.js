@@ -652,7 +652,9 @@ const FALTAS=[
   {k:'Sem castas',          tem:v=>(v.castas||[]).length>0},
   {k:'Sem preço médio',     tem:v=>v.preco_medio!=null},
   {k:'Sem classificação',   tem:v=>!!v.classificacao},
-  {k:'Sem nota Vivino',     tem:v=>v.vivino_nota!=null}
+  {k:'Sem nota Vivino',     tem:v=>v.vivino_nota!=null},
+  {k:'Sem informação de harmonização',       tem:v=>!!v.harmonizacao},
+  {k:'Sem informação de intervalo de consumo',tem:v=>v.beber_de!=null||v.beber_ate!=null}
 ];
 function faltasDe(v){return FALTAS.filter(f=>!f.tem(v)).map(f=>f.k);}
 
