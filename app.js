@@ -1278,8 +1278,8 @@ function linha(rot,val){
    resto — ficha, onde está, o que se bebeu — fica em papel por baixo,
    com as secções separadas por filete.
    Esta capa é também a BARRA da página: fica colada ao topo e encolhe ao
-   rolar (ver "PÁGINA DO VINHO"), por isso tem dois botões — ‹ à esquerda
-   e ✕ à direita, o mesmo par do painel do resumo. */
+   rolar (ver "PÁGINA DO VINHO"). Só tem o ✕ — um ‹ à esquerda recuava a
+   coluna do nome 40px para repetir o que o ✕ e o arrastar já fazem. */
 function vinhoDetalheHTML(v){
   const ativas=garrafasDe(v.id,true), bebidas=garrafasDe(v.id,false).filter(g=>g.estado==='consumida');
   const cl=castaLabel(v), jan=janelaBeber(v);
@@ -1299,7 +1299,6 @@ function vinhoDetalheHTML(v){
   });
 
   return `<div class="mhero">
-      <button class="mx mvolta" onclick="fecharModal('modal-vinho')" title="Voltar">‹</button>
       <button class="mx" onclick="fecharModal('modal-vinho')">✕</button>
       <div class="mhero-in">
         <button class="mhero-g" onclick="abrirFoto(${v.id})" title="Ver a imagem em grande">

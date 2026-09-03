@@ -584,10 +584,13 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
   display:flex;flex-direction:column;justify-content:center;
   padding:calc(18px - 10px*var(--pg)) 18px calc(16px - 8px*var(--pg));
   box-shadow:0 8px 22px -14px rgba(30,8,16,calc(.75*var(--pg)))}
-/* O `gap` é FIXO de propósito (e a garrafa mantém a largura, ver abaixo):
+/* Recuo só à DIREITA, para o ✕. À esquerda não há botão nenhum: um ‹
+   custava outros 40px a toda a coluna do nome para repetir o que o ✕, o
+   Escape, o voltar do telemóvel e o arrastar já fazem.
+   O `gap` é FIXO de propósito (e a garrafa mantém a largura, ver abaixo):
    tudo o que muda a largura da coluna do nome obriga o browser a remontar
    o texto a cada passo do scroll. Só a ALTURA da garrafa é que encolhe. */
-.modal.pagina .mhero-in{padding:0 40px;gap:14px}
+.modal.pagina .mhero-in{padding:0 40px 0 0;gap:14px}
 /* `font-size:0` no bloco de texto e não nos filhos: os espaços em branco
    ENTRE as pastilhas contam como texto e, com elas encolhidas a zero,
    deixavam na barra uma linha fantasma de 21px (a altura da letra
@@ -654,12 +657,9 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
   opacity:clamp(0,calc(2*var(--pg) - 1),1);font-size:12px;font-weight:600;color:rgba(255,255,255,.9)}
 .mhero-ab{display:none}
 .modal.pagina .mhero-ab{display:block}
-/* ‹ à esquerda e ✕ à direita — o mesmo par do painel do resumo
-   (`.rdet-bar`). O ‹ só existe em página; num modal não havia "atrás".
-   Os 12→20px são o que os deixa centrados na barra já encolhida. */
-.mvolta{display:none}
+/* O ✕ desce com o cabeçalho: os 12→20px são o que o deixa centrado na
+   barra já encolhida. */
 .modal.pagina .mhero .mx{top:calc(12px + 8px*var(--pg))}
-.modal.pagina .mhero .mvolta{display:flex;left:12px;right:auto;font-size:21px;padding-bottom:3px}
 
 /* Arrastar de lado para sair: a folha segue o dedo (sem transição, senão
    ia sempre atrás dele) e, se não chegar ao ponto de sair, volta ao

@@ -208,10 +208,11 @@ continuam a funcionar sem saber de nada disto. Uma `.sec` a sério — com o
 `posicionarFiltros` e em todos os pontos de saída, para o mesmo resultado.
 Se um dia isso for preciso, é aqui que se paga.
 
-Sai-se por **cinco** caminhos, e todos passam por `fecharModal` para
+Sai-se por **quatro** caminhos, e todos passam por `fecharModal` para
 gastarem o mesmo passo de história:
-- **‹** à esquerda do cabeçalho e **✕** à direita — o mesmo par do painel
-  do resumo (`.rdet-bar`);
+- o **✕** à direita do cabeçalho. Não há ‹ à esquerda: chegou a haver, e
+  custava 40px de recuo a toda a coluna do nome para repetir o que os
+  outros três já faziam;
 - **Escape**;
 - o **voltar do telemóvel/browser**: abrir a página faz `history.pushState`
   e o `popstate` fecha-a (e o que estiver aberto por cima — é tudo o mesmo
