@@ -160,28 +160,44 @@ telemóvel; e no encolhido é a **origem** que desaparece, não o ano
 
 **O encolher não tem dois estados, tem um cursor** (`pgCabecalho`): `--pg`
 vai de 0 a 1 ao longo do scroll e o `style.css` desenha cada medida com
-`calc()` a partir dele — letra, garrafa, espaçamentos, a sombra que
+`calc()` a partir dele — garrafa, espaçamentos, recortes, a sombra que
 aparece por baixo da barra. Uma classe ligada num limiar (era o que estava)
-faz a mesma coisa num salto só, e sente-se. O que desaparece pelo caminho
-encolhe a letra até 0 em vez de `display:none`, senão a caixa ia-se de uma
-vez. Três coisas que isto obriga e que não são opcionais:
-- **a altura é imposta** (`PG_H0`→`PG_H1`, ambos medidos, não adivinhados),
-  senão a curva não é linear: o nome a mudar de três linhas para duas, ou
-  as pastilhas a caberem finalmente na mesma linha, tiravam 30px de uma vez
-  a meio do caminho. Com a altura imposta, o que reflui lá dentro fica
-  escondido pelo `overflow:hidden` e centrado pelo `justify-content`;
-- **o percurso é o próprio encolher** (`PG_H0-PG_H1`): o scroll que se
-  gasta é o que o cabeçalho liberta, por isso a ficha por baixo fica quieta
-  enquanto ele fecha, em vez de subir ao dobro da velocidade do dedo;
-- **`overflow-anchor:none` na `.mbox`**: o cabeçalho a encolher tira altura
-  ao topo do conteúdo e o browser corrigia o scroll na mesma medida — ele
-  reabria sozinho e ficava aos saltos entre aberto e fechado.
+faz a mesma coisa num salto só, e sente-se.
 
-O nome perde LINHAS pelo caminho, inteiras e com reticências
-(`-webkit-line-clamp`), e são as que cabem na moldura de agora — daí a
-tabelinha `PG_TAB` (quanto mede o cabeçalho com 1, 2, 3 linhas, aberto e
-fechado), medida uma vez por vinho aberto. Com um `max-height` contínuo
-via-se o "Reserva" cortado a meio da altura das letras.
+Isto é desenho **e** orçamento: acontece a cada passo do scroll, e cada
+passo tem 16ms para tudo. Foi preciso duas voltas para lá chegar (a
+primeira ficou a andar aos bocados — "à Robocop"), e o que se aprendeu:
+- **o cabeçalho é `fixed`, não `sticky`.** Preso ao fluxo, cada pixel que
+  ele encolhia obrigava a recalcular a folha toda por baixo: 2,4ms de
+  layout por passo. Fora do fluxo (e com `contain`), 0,6ms. Em troca, a
+  `.mbox` leva um `padding-top` do tamanho do cabeçalho aberto;
+- **nada muda de `font-size`, nem o nome.** Mudar o tamanho da letra
+  obriga o browser a remontar o texto letra a letra: eram 3ms por passo só
+  nos três pedaços pequenos, mais do que tudo o resto junto. O que
+  desaparece fecha-se por **recorte** (`max-height`) e opacidade; o nome
+  fica sempre a 21px e perde LINHAS inteiras, com reticências
+  (`-webkit-line-clamp`), as que cabem na moldura de agora — daí a
+  tabelinha `PG_TAB` (quanto mede o cabeçalho com 1, 2, 3 linhas, aberto e
+  fechado), medida uma vez por vinho aberto. Com um `max-height` contínuo
+  no nome via-se o "Reserva" cortado a meio da altura das letras, e a
+  encolher-lhe a letra as palavras saltavam de linha a meio do caminho;
+- **nada muda de largura à esquerda do nome** (o `gap` é fixo, a garrafa
+  só encolhe de ALTURA e o desenho lá dentro é escalado): mexer na largura
+  da coluna do texto é outra forma de o mandar remontar;
+- **a altura é imposta** (`PG_H0`→`PG_H1`, ambos medidos, não adivinhados),
+  senão a curva não é linear: o nome a perder uma linha, ou as pastilhas a
+  caberem finalmente na mesma, tiravam 30px de uma vez a meio do caminho.
+  Com a altura imposta, o que reflui lá dentro fica escondido pelo
+  `overflow:hidden` e centrado pelo `justify-content`;
+- **o percurso é o próprio encolher** (`PG_H0-PG_H1`): o scroll que se
+  gasta é o que o cabeçalho liberta, e como a ficha começa logo por baixo
+  dele, o primeiro pixel dela anda colado ao seu rebordo de baixo enquanto
+  ele fecha — nada é engolido pelo caminho.
+
+O ano aparece **duas vezes** no HTML de propósito (`.mhero-ab`): a linha da
+origem inteira não cabe numa barra e cortá-la levava a região atrás, por
+isso fecha-se toda e a barra tem a sua própria cópia do ano, que abre no
+fim. Sem a garrafa à vista, o ano é o que falta saber.
 
 Por baixo continua a ser o **mesmo `#modal-vinho`**, só com outra pele
 (`.pagina`). É de propósito e é o que mantém isto pequeno: os

@@ -1133,17 +1133,18 @@ function pgVinho(){return document.getElementById('modal-vinho');}
    dependem do nome do vinho (uma linha ou três). Servem para duas coisas.
 
    Primeira: o scroll que se gasta a encolher é exatamente o que o
-   cabeçalho liberta (`PG_H0-PG_H1`), por isso a ficha por baixo fica
-   QUIETA enquanto ele fecha, em vez de subir ao dobro da velocidade do
-   dedo.
+   cabeçalho liberta (`PG_H0-PG_H1`). Como a ficha começa por baixo dele
+   (o `padding-top` da `.mbox`, que não muda), as duas contas dão a mesma
+   e o primeiro pixel da ficha anda COLADO ao rebordo de baixo do
+   cabeçalho enquanto ele fecha — nada é engolido pelo caminho.
 
    Segunda: a altura é IMPOSTA a cada passo, em vez de sair do que estiver
-   lá dentro. Sem isso a curva não era linear — o nome a passar de três
-   linhas para duas, ou as duas pastilhas a caberem finalmente na mesma
-   linha, tiravam 30px de uma vez a meio do caminho, e sentia-se. Com a
-   altura imposta, o que reflui lá dentro fica escondido pelo
-   `overflow:hidden` e centrado pelo `justify-content` — a moldura desce
-   sempre ao mesmo ritmo. Custa dois `offsetHeight` por vinho aberto. */
+   lá dentro. Sem isso a curva não era linear — o nome a perder uma linha,
+   ou as duas pastilhas a caberem finalmente na mesma, tiravam 30px de uma
+   vez a meio do caminho, e sentia-se. Com a altura imposta, o que reflui
+   lá dentro fica escondido pelo `overflow:hidden` e centrado pelo
+   `justify-content` — a moldura desce sempre ao mesmo ritmo. Custa meia
+   dúzia de `offsetHeight` por vinho aberto. */
 let PG_H0=200,PG_H1=70,PG_LINHAS=1,PG_TAB=[];
 function pgMedirEncolhe(){
   const h=pgVinho().querySelector('.mhero');
@@ -1156,6 +1157,12 @@ function pgMedirEncolhe(){
   };
   h.style.height='';
   PG_TAB=[];
+  // Quanto ocupa a linha da origem (uma linha ou duas): é o que a faz
+  // fechar-se a direito em vez de ficar parada e só depois cair.
+  h.style.setProperty('--pg-hs','999');
+  h.style.setProperty('--pg','0');
+  const sub=h.querySelector('.mhero-s');
+  h.style.setProperty('--pg-hs',String(sub?sub.offsetHeight:0));
   // Quantas linhas ocupa este nome por inteiro, e quanto mede o cabeçalho
   // com cada número de linhas, aberto e fechado. São meia dúzia de
   // medições por vinho aberto e poupam a `pgCabecalho()` de adivinhar.
@@ -1165,6 +1172,10 @@ function pgMedirEncolhe(){
   for(let n=1;n<=PG_LINHAS;n++)PG_TAB[n]=[alturaCom(n,'0'),alturaCom(n,'1')];
   PG_H0=PG_TAB[PG_LINHAS][0];   // por inteiro: todas as linhas do nome
   PG_H1=PG_TAB[1][1];           // barra: uma linha só
+  // O cabeçalho está fora do fluxo (ver style.css): é este espaço que
+  // faz a ficha começar por baixo dele em vez de lhe ficar atrás.
+  const cx=document.getElementById('modal-vinho-in');
+  if(cx)cx.style.paddingTop=PG_H0+'px';
   pgCabecalho();
 }
 function pgCabecalho(){
@@ -1299,6 +1310,7 @@ function vinhoDetalheHTML(v){
           <div class="mhero-k">${esc([v.tipo,v.estilo,v.classificacao].filter(Boolean).join(' · '))||'&nbsp;'}</div>
           <h3>${esc(v.nome)}</h3>
           <div class="mhero-s"><span class="mhero-o">${origem}${origem&&v.ano?' · ':''}</span>${v.ano?`<b>${v.ano}</b>`:''}</div>
+          ${v.ano?`<div class="mhero-ab">${v.ano}</div>`:''}
           ${v.vivino_nota?`<span class="mhero-n">★ ${Number(v.vivino_nota).toFixed(2)} Vivino${v.vivino_avaliacoes?` · ${v.vivino_avaliacoes}`:''}</span>`:''}
           ${jan?`<span class="mhero-n">${JANELA_TXT[jan]}</span>`:''}
         </div>
