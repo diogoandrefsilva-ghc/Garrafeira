@@ -114,6 +114,15 @@ feito à mão em JS era mais código e pior no iOS. O que está ligado aparece
 em pastilhas com ✕ próprio (`.factivos`), escondidas quando o painel está
 aberto para não dizer a mesma coisa duas vezes.
 
+A **maturação** não filtra por "No ponto" — filtra pelo **terço da janela**:
+*No ponto · a abrir*, *· a meio*, *· a fechar*, mais *Ainda cedo* e *Já
+passou* (`listasFiltro`, valores `ponto:abrir`/`ponto:meio`/`ponto:fechar`).
+"No ponto" sozinho está em quase todos os vinhos e devolvia a lista quase
+inteira; a pergunta que sobra é em que parte da janela se está, e *a fechar*
+é a lista do que se deve beber primeiro. As palavras são as mesmas que a
+ficha do vinho escreve (`FASES`) — quem filtra por uma tem de a reconhecer
+quando abre o vinho.
+
 `Locais` (`renderMapa`) é cada local como uma estante: cabeçalho com a cor
 do sítio e **duas contagens em serifa, com a palavra à frente** — "9 vinhos"
 e "12 garrafas". São mesmo coisas diferentes (12 garrafas podem ser 9
@@ -252,6 +261,19 @@ famílias de cor lado a lado no mesmo cartão e nenhuma queria dizer nada.
 3. depois de um filete, o **rodapé do que é físico** — onde está a garrafa e
    se está no ponto de beber.
 Um crachá novo entra numa destas zonas; não há uma quarta.
+
+**O crachá da maturação enche-se** (`janelaBadge`, `.bdg.jan.cheio`). Dizer
+"No ponto" deixou de separar alguma coisa — está em quase todos os vinhos —
+por isso o crachá passou a mostrar **onde** dentro da janela: enche-se até
+ao ano em que estamos (`janelaPos`, 0 no primeiro ano da janela, 1 no
+último) e o rebordo do enchimento é o marcador. Não é um crachá novo nem
+uma linha nova: a informação entra dentro do que já lá estava, e o rodapé
+não alarga um pixel. Só o estado `ponto` se enche — em `cedo`/`passou` a
+posição era sempre o princípio ou o fim, e um risco encostado à borda
+lia-se como defeito; sem as duas pontas (ou com uma janela de um ano) não
+há posição e o crachá fica como sempre foi. A **palavra** da fase só
+aparece onde há espaço: na ficha do vinho (*Beber entre* → "2021 – 2030
+🍷 No ponto · a meio") e na pesquisa, nunca no cartão.
 
 `.vc-anofloat` é um **float** (`float:right`), não uma coluna flex ao lado
 do nome: com flex, a altura da linha do nome ficava presa à do lado do
