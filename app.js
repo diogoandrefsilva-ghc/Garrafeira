@@ -290,6 +290,34 @@ function imagemDe(v){
 }
 function imagemPropria(v){return !!String((v||{}).imagem_path||'').trim();}
 
+/* Um `imagem_url` preenchido não é o mesmo que uma imagem que abre — a IA
+   às vezes traz um link de uma loja que entretanto mudou a foto ou tirou o
+   produto do ar. `IMG_QUEBRADA` guarda, por vinho, QUAL foi o URL testado
+   e falhou; comparar o URL (não só um booleano) é o que faz um link novo
+   (ex.: repetir a procura da IA) voltar a ser testado em vez de ficar
+   marcado como partido para sempre. `verificarImagens()` testa em segundo
+   plano com um `Image()` fora do DOM — o mesmo teste que o `onerror` do
+   `<img>` já faz ao mostrar a garrafa, só que aqui o resultado alimenta o
+   "A completar" em vez de só esconder o quadrado vazio. */
+let IMG_QUEBRADA={};        // vinho_id -> URL testado que não carregou
+function imagemFuncional(v){
+  const img=imagemDe(v);
+  return !!img&&IMG_QUEBRADA[v.id]!==img;
+}
+function verificarImagens(){
+  db.vinhos.forEach(v=>{
+    const url=imagemDe(v);
+    if(!url||IMG_QUEBRADA[v.id]===url)return;
+    const img=new Image();
+    img.onerror=()=>{
+      if(IMG_QUEBRADA[v.id]===url)return;
+      IMG_QUEBRADA[v.id]=url;
+      renderResumo();
+    };
+    img.src=url;
+  });
+}
+
 /* O bucket é PRIVADO, por isso um <img src> não lhe chega com o JWT — o
    browser não manda cabeçalhos numa imagem. A saída são links assinados:
    pedem-se TODOS de uma vez ao carregar (um pedido, não um por vinho) e
@@ -582,7 +610,7 @@ function faixaIndice(valor){
    procura usa — sem casta não há filtro por casta, sem preço não há valor,
    sem imagem o cartão fica com a garrafa desenhada em vez do rótulo. */
 const FALTAS=[
-  {k:'Sem imagem do rótulo',tem:v=>!!String(v.imagem_url||'').trim()},
+  {k:'Sem imagem do rótulo',tem:imagemFuncional},
   {k:'Sem castas',          tem:v=>(v.castas||[]).length>0},
   {k:'Sem preço médio',     tem:v=>v.preco_medio!=null},
   {k:'Sem classificação',   tem:v=>!!v.classificacao},
@@ -985,6 +1013,7 @@ function renderDetalhe(){
 function renderLista(){
   renderResumo();
   renderFiltrados();
+  verificarImagens();
 }
 
 /* ── MAPA DOS LOCAIS ───────────────────────────────────────────────
