@@ -384,6 +384,44 @@ function janelaBeber(v){
 }
 const JANELA_TXT={ponto:'🍷 No ponto',cedo:'⏳ Ainda cedo',passou:'⚠️ Já passou'};
 
+/* ONDE dentro da janela: 0 no primeiro ano, 1 no último. Só há posição
+   com as DUAS pontas e com intervalo a sério — com uma ponta só não há
+   intervalo nenhum para posicionar, e uma janela de um ano era uma
+   divisão por zero. Fora da janela vem encostada (0 ou 1), mas quem usa
+   isto só pergunta pela posição de quem está no ponto. */
+function janelaPos(v){
+  if(!v.beber_de||!v.beber_ate||v.beber_ate<=v.beber_de)return null;
+  const y=new Date().getFullYear();
+  return Math.max(0,Math.min(1,(y-v.beber_de)/(v.beber_ate-v.beber_de)));
+}
+/* Os terços da janela em palavras — [limite, chave, rótulo]. É o mesmo
+   vocabulário na pesquisa e na ficha do vinho, de propósito: quem filtra
+   por "a fechar" tem de reconhecer a palavra quando abre o vinho.
+   Sem posição não há fase, e é a mesma regra do crachá, que nesses casos
+   também não se enche — assim a lista e o filtro nunca discordam. */
+const FASES=[[.34,'abrir','a abrir'],[.67,'meio','a meio'],[2,'fechar','a fechar']];
+function janelaFase(v){
+  const p=janelaPos(v);
+  return p==null?null:FASES.find(f=>p<f[0]);
+}
+/* O crachá da maturação. "No ponto" está em quase todos os vinhos e por
+   isso deixou de separar alguma coisa: o crachá passa a ENCHER-SE até ao
+   ano em que estamos, e o rebordo do enchimento é o marcador. Não é um
+   crachá novo nem uma linha nova no cartão — é o mesmo, com a posição lá
+   dentro (o desenho está no `.bdg.jan.cheio`, no style.css).
+   Só 'ponto' se enche: em 'cedo' e 'passou' a posição era sempre o
+   princípio ou o fim, e um risco encostado à borda lê-se como defeito.
+   `comFase` escreve a palavra ao lado — vai a ficha do vinho, onde há
+   espaço; no cartão fica só o enchimento, que não alarga o rodapé. */
+function janelaBadge(v,jan,comFase){
+  if(!jan)return '';
+  const fase=jan==='ponto'?janelaFase(v):null;
+  const p=fase?janelaPos(v):null;
+  return `<span class="bdg jan ${jan}${p==null?'':' cheio'}"`
+    +`${p==null?'':` style="--p:${p.toFixed(3)}"`}>`
+    +`${JANELA_TXT[jan]}${comFase&&fase?' · '+fase[2]:''}</span>`;
+}
+
 /* ── UTILITÁRIOS ───────────────────────────────────────────────────── */
 function esc(s){
   return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -794,7 +832,13 @@ function limparTexto(){
 function listasFiltro(){
   const o=opcoesFiltro();
   o.castaN=[['1','Monocasta'],['2','Várias castas'],['0','Sem castas registadas']];
-  o.janela=[['ponto','No ponto'],['cedo','Ainda cedo'],['passou','Já passou']];
+  // "No ponto" sozinho não era um filtro — está em quase todos os vinhos e
+  // devolvia a lista quase inteira. O que se pergunta a seguir é em que
+  // parte da janela: por isso o ponto abre nos três terços (as mesmas
+  // palavras que a ficha do vinho escreve), e o valor leva a fase atrás
+  // ('ponto:fechar'). "A fechar" é a lista do que se deve beber primeiro.
+  o.janela=[...FASES.map(f=>['ponto:'+f[1],'No ponto · '+f[2]]),
+    ['cedo','Ainda cedo'],['passou','Já passou']];
   o.vivino=FAIXAS_VIVINO.map((f,i)=>[String(i),f.nome]);
   o.preco=FAIXAS_PRECO.map((f,i)=>[String(i),f.nome]);
   o.teor=FAIXAS_TEOR.map((f,i)=>[String(i),f.nome]);
@@ -858,7 +902,13 @@ function vinhosFiltrados(){
     if(F.produtor&&v.produtor!==F.produtor)return false;
     if(F.ano&&String(v.ano)!==F.ano)return false;
     if(F.mencao&&v.mencao!==F.mencao)return false;
-    if(F.janela&&janelaBeber(v)!==F.janela)return false;
+    if(F.janela){
+      // 'ponto:meio' → estado 'ponto' E fase 'meio'; 'cedo'/'passou' não
+      // têm fase nenhuma atrás.
+      const [est,fase]=F.janela.split(':');
+      if(janelaBeber(v)!==est)return false;
+      if(fase&&(janelaFase(v)||[])[1]!==fase)return false;
+    }
     if(F.vivino&&(v.vivino_nota==null||String(faixaVivinoIndice(v.vivino_nota))!==F.vivino))return false;
     if(F.preco&&(v.preco_medio==null||String(faixaIndice(v.preco_medio))!==F.preco))return false;
     if(F.teor&&(v.teor==null||String(faixaTeorIndice(v.teor))!==F.teor))return false;
@@ -976,7 +1026,7 @@ function vinhoCardHTML(v){
         </div>
         <div class="vc-foot">
           ${sitios.map(x=>`<span class="vc-l"><span class="vc-pip" style="background:${esc(x.cor)}"></span><b>${esc(x.txt)}</b></span>`).join('')}
-          ${jan?`<span class="bdg jan ${jan}">${JANELA_TXT[jan]}</span>`:''}
+          ${janelaBadge(v,jan)}
         </div>
       </div>
     </div>
@@ -1314,7 +1364,7 @@ function vinhoDetalheHTML(v){
   const cl=castaLabel(v), jan=janelaBeber(v);
   const estagio=v.estagio_texto||(v.estagio_meses?`${v.estagio_meses} meses`:'');
   const idadeInfo=v.beber_de||v.beber_ate
-    ? `${v.beber_de||'?'} – ${v.beber_ate||'?'}${jan?`  <span class="bdg jan ${jan}">${JANELA_TXT[jan]}</span>`:''}` : '';
+    ? `${v.beber_de||'?'} – ${v.beber_ate||'?'}  ${janelaBadge(v,jan,true)}` : '';
   const img=imagemDe(v);
   const origem=[v.produtor,v.regiao,v.sub_regiao].filter(Boolean).map(esc).join(' · ');
 

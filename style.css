@@ -230,6 +230,24 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
 .bdg.jan.ponto{background:var(--vdp);color:var(--vd);border-color:#cfe3d8}
 .bdg.jan.cedo{background:var(--bg2);color:var(--mu)}
 .bdg.jan.passou{background:var(--dgp);color:var(--dg);border-color:#f2cdcb}
+/* "No ponto" está em quase todos os vinhos e por isso já não separava
+   nada. O crachá passa a ENCHER-SE até ao ano em que estamos dentro da
+   janela (`--p`: 0 no primeiro ano, 1 no último) e o rebordo do
+   enchimento — os últimos 2px, mais escuros — é o marcador. A informação
+   entra DENTRO do que já lá estava: o cartão não ganha linha nem crachá
+   novo, e o rodapé não alarga um pixel.
+   O verde é o `--vd` em rgba e não passa de .14 por cima do texto: mais
+   do que isso e o próprio texto do crachá deixava de se ler. Vai em
+   ::before com `z-index:-1` para ficar POR BAIXO do texto, e o
+   `isolation:isolate` prende esse z-index negativo ao crachá — sem ele o
+   preenchimento descia para trás do cartão e desaparecia.
+   Em `--p:0` não se pinta nada, e é o que se quer dizer: a janela abriu
+   este ano, ainda não se gastou nada dela. */
+.bdg.jan.cheio{position:relative;overflow:hidden;isolation:isolate}
+.bdg.jan.cheio::before{content:'';position:absolute;left:0;top:0;bottom:0;z-index:-1;
+  width:calc(var(--p) * 100%);
+  background:linear-gradient(90deg,rgba(61,107,82,.07),rgba(61,107,82,.14) calc(100% - 2px),
+    rgba(61,107,82,.45) calc(100% - 2px))}
 .vazio{text-align:center;padding:38px 18px;color:var(--mu);font-size:13px;line-height:1.7;
   background:var(--card);border:1px dashed var(--bo2);border-radius:var(--r)}
 .vazio b{font-family:var(--fd);font-weight:600;display:block;font-size:16px;color:var(--vh);margin-bottom:6px}
