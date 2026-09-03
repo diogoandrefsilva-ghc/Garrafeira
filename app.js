@@ -3160,11 +3160,19 @@ const PDF_CSS=`
   tr{page-break-inside:avoid;break-inside:avoid}
   th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.4px;
     color:#7b1f3d;border-bottom:1px solid #7b1f3d;padding:4px 5px;white-space:nowrap}
-  td{padding:4px 5px;border-bottom:.6px solid #e8dfd4;vertical-align:top}
+  /* O filete entre vinhos é CINZENTO (#ccc) e não um tom da paleta da app.
+     Chegou a ser o bege dos rebordos (#e8dfd4) e a folha ficou a parecer
+     sem divisórias: o bege foi escolhido para o fundo de papel da app,
+     e sobre papel branco a sério não se lê. A espessura é 1px (.6pt no
+     papel) — .6px pintava, mas um bordo de sub-pixel é frágil de motor
+     para motor e aqui não se ganha nada com ele.
+     CUIDADO: isto está DENTRO de um template literal do app.js — nada
+     de plicas inclinadas aqui, que fecham a string e partem o ficheiro. */
+  td{padding:4px 5px;border-bottom:1px solid #ccc;vertical-align:top}
   .pnome{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:600;font-size:12px}
   .pc{text-align:center;white-space:nowrap}
   .pgrupo td{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:600;font-size:12.5px;
-    color:#7b1f3d;background:#f6f1ea;padding-top:8px;border-bottom:.6px solid #7b1f3d}
+    color:#7b1f3d;background:#f6f1ea;padding-top:8px;border-bottom:1px solid #7b1f3d}
   /* No iOS a "Orientação" do ecrã de impressão é do próprio sistema e o
      toggle Vertical/Horizontal não obedece a nenhum @page. Fica o pedido
      padrão (que o desktop respeita); quem imprimir no iOS toca no ícone
@@ -3177,7 +3185,8 @@ const PDF_CSS=`
     h1{font-size:17pt}
     .psub,.pdata{font-size:8pt}
     th{font-size:6.6pt;padding:3pt 4pt}
-    td{padding:3pt 4pt}
+    td{padding:3pt 4pt;border-bottom:.6pt solid #ccc}
+    .pgrupo td{border-bottom:.6pt solid #7b1f3d}
     .pnome{font-size:8.2pt}
     .pgrupo td{font-size:8.6pt;padding-top:6pt}
   }`;
