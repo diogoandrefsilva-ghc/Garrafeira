@@ -3052,15 +3052,35 @@ async function admPassarAdmin(){
 
 /* ── EXPORTAR ──────────────────────────────────────────────────────── */
 /* ── EXPORTAR A LISTA PARA PDF ─────────────────────────────────────
-   Sem biblioteca nenhuma: monta-se uma tabela num `#print-area` que só
-   existe para a impressão e chama-se `window.print()` — quem imprime
-   escolhe "Guardar como PDF" (no iOS é o próprio menu de partilha). Uma
-   biblioteca de PDF eram centenas de KB num sítio onde não há build, e o
-   resultado seria pior do que o que o browser já sabe fazer.
+   Sem biblioteca nenhuma, que aqui não há build: monta-se um DOCUMENTO
+   COMPLETO — o seu próprio `<html>`, com o seu próprio CSS — mostra-se numa
+   pré-visualização, e quem imprime escolhe "Guardar como PDF" (no iOS é o
+   próprio menu de partilha). Uma biblioteca de PDF eram centenas de KB para
+   um resultado pior do que o que o browser já sabe fazer.
 
-   A folha vai na HORIZONTAL (`@page landscape`) porque são doze colunas —
-   em retrato os nomes dos vinhos partiam-se todos. Os grupos são os mesmos
-   que estão no ecrã (região ou ano), para o papel bater certo com a app. */
+   O documento vive num `<iframe srcdoc>` e NÃO num `#print-area` dentro da
+   app. Essa diferença é o que faz a folha deixar de sair em branco — eram
+   três causas, e o iframe mata as três de uma vez:
+
+   - **a folha era montada na página viva** e a app inteira era escondida por
+     `body>*{display:none!important}`. A folha ficava refém do style.css da
+     app: bastava uma regra a ganhar (um modal `fixed` por cima, o `@page` a
+     discordar do que o iOS quer fazer com a orientação) para ir uma folha
+     vazia para o papel;
+   - **o `afterprint` limpava o `#print-area`** — e no WebKit o `afterprint`
+     dispara antes de o PDF estar mesmo gerado: o `print()` volta e o ecrã de
+     partilha do iOS ainda está a rasterizar. O conteúdo desaparecia debaixo
+     do trabalho de impressão. É uma corrida, e é por isso que era "muitas
+     vezes", não sempre;
+   - **o `print()` saía de dois `requestAnimationFrame`**, ou seja, fora do
+     gesto do utilizador: o Safari trava isso ("impedido de imprimir
+     automaticamente"), e num telemóvel que troca de ecrã a meio os rAF nem
+     chegam a correr — não saía nada.
+
+   Agora o `print()` é um clique numa barra que está à frente de quem está a
+   imprimir, sobre um documento isolado que ele ACABOU de ver. Uma folha em
+   branco deixa de poder passar despercebida — e deixa de acontecer, porque o
+   documento não depende de uma única regra da app. */
 function exportarPDF(){
   const res=db.vinhos.filter(v=>stockDe(v.id)>0);
   if(!res.length){toast('Não há vinhos para exportar',1);return;}
@@ -3097,32 +3117,117 @@ function exportarPDF(){
       <td class="pc">${stockDe(v.id)}</td>
     </tr>`).join('')}`).join('');
 
-  let box=document.getElementById('print-area');
-  if(!box){box=document.createElement('div');box.id='print-area';document.body.appendChild(box);}
-  box.innerHTML=`
+  const sub=`${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'} · `+
+            `por ${DET_AGRUPAR==='ano'?'ano':DET_AGRUPAR==='casta'?'casta':'região'}`;
+
+  pdfPreAbrir(`
     <div class="pcab">
-      <div><h1>Garrafeira</h1>
-        <div class="psub">${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'} ·
-          por ${DET_AGRUPAR==='ano'?'ano':DET_AGRUPAR==='casta'?'casta':'região'}</div></div>
-      <div class="pdata">${dataPT(hoje())}</div>
+      <div><h1>Garrafeira</h1><div class="psub">${esc(sub)}</div></div>
+      <div class="pdata">${esc(dataPT(hoje()))}</div>
     </div>
-    <table>
-      <thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>
-      <tbody>${linhas}</tbody>
-    </table>`;
-  // Chamar print() logo a seguir ao innerHTML apanha o Safari a meio do
-  // layout da tabela nova: a pré-visualização aparece e fecha-se sozinha,
-  // e a tentativa seguinte vem bloqueada ("impedido de imprimir
-  // automaticamente"). Dois requestAnimationFrame dão tempo à página para
-  // desenhar a tabela antes do print(), sem sair do gesto do utilizador.
-  requestAnimationFrame(()=>requestAnimationFrame(()=>window.print()));
+    <div class="pwrap">
+      <table>
+        <thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>`,'Garrafeira');
 }
-// A tabela só serve a impressão — depois de imprimir não vale a pena
-// continuar a segurar umas centenas de linhas no DOM.
-window.addEventListener('afterprint',()=>{
-  const box=document.getElementById('print-area');
-  if(box)box.innerHTML='';
-});
+
+/* ── A FOLHA E A SUA PRÉ-VISUALIZAÇÃO ──────────────────────────────
+   O CSS da folha vive AQUI, não no style.css: é o documento que o iframe
+   recebe, e é isso que o põe fora do alcance de qualquer regra da app.
+   Se um dia houver uma segunda folha (os consumidos, um local), passa por
+   estas duas funções — não voltes a montar um documento à mão.
+
+   A folha é desenhada para o PAPEL (A4 horizontal, doze colunas), mas
+   também tem de se ler na pré-visualização de um telemóvel com 390px. Em
+   vez de encolher a letra até os nomes se partirem, a tabela tem largura
+   mínima e desliza na horizontal dentro da `.pwrap`; a imprimir, a caixa
+   deixa de a apertar e a folha fica exatamente como foi desenhada. */
+const PDF_CSS=`
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:#241d1c;background:#fff;
+    font-size:11px;line-height:1.45;padding:18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .pcab{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;
+    border-bottom:2px solid #7b1f3d;padding-bottom:7px;margin-bottom:10px}
+  h1{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:600;font-size:23px;
+    color:#7b1f3d;line-height:1}
+  .psub{font-size:11px;color:#7a6d68;margin-top:3px}
+  .pdata{font-size:11px;color:#7a6d68;white-space:nowrap}
+  .pwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{width:100%;border-collapse:collapse;min-width:900px}
+  thead{display:table-header-group}   /* o cabeçalho repete-se em cada página */
+  tr{page-break-inside:avoid;break-inside:avoid}
+  th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.4px;
+    color:#7b1f3d;border-bottom:1px solid #7b1f3d;padding:4px 5px;white-space:nowrap}
+  td{padding:4px 5px;border-bottom:.6px solid #e8dfd4;vertical-align:top}
+  .pnome{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:600;font-size:12px}
+  .pc{text-align:center;white-space:nowrap}
+  .pgrupo td{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:600;font-size:12.5px;
+    color:#7b1f3d;background:#f6f1ea;padding-top:8px;border-bottom:.6px solid #7b1f3d}
+  /* No iOS a "Orientação" do ecrã de impressão é do próprio sistema e o
+     toggle Vertical/Horizontal não obedece a nenhum @page. Fica o pedido
+     padrão (que o desktop respeita); quem imprimir no iOS toca no ícone
+     horizontal no ecrã de Opções. */
+  @page{size:A4 landscape;margin:9mm}
+  @media print{
+    body{padding:0;font-size:7.6pt}
+    .pwrap{overflow:visible}
+    table{min-width:0}
+    h1{font-size:17pt}
+    .psub,.pdata{font-size:8pt}
+    th{font-size:6.6pt;padding:3pt 4pt}
+    td{padding:3pt 4pt}
+    .pnome{font-size:8.2pt}
+    .pgrupo td{font-size:8.6pt;padding-top:6pt}
+  }`;
+
+// O documento é servido por `srcdoc`, logo é da MESMA origem — é isso que
+// deixa chamar-lhe o `print()` a partir daqui. As fontes vêm do mesmo sítio
+// de onde a app as traz, para o papel ter a letra da app; sem rede, as
+// alternativas (Georgia/system-ui) já estão na cascata e nada fica à espera.
+function pdfDocumento(corpo,titulo){
+  return `<!DOCTYPE html><html lang="pt"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(titulo)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>${PDF_CSS}</style></head><body>${corpo}</body></html>`;
+}
+
+function pdfPreAbrir(corpo,titulo){
+  pdfPreFechar();
+  const ov=document.createElement('div');
+  ov.id='pdf-pre';
+  ov.innerHTML=`
+    <div class="pdfp-bar">
+      <span class="pdfp-t">${esc(titulo)}</span>
+      <div class="pdfp-acc">
+        <button class="pdfp-btn prim" onclick="pdfPreImprimir()">🖨 Imprimir / Guardar PDF</button>
+        <button class="pdfp-btn" onclick="pdfPreFechar()" aria-label="Fechar">✕</button>
+      </div>
+    </div>
+    <iframe id="pdf-pre-frame" title="${esc(titulo)}"></iframe>`;
+  document.body.appendChild(ov);
+  document.getElementById('pdf-pre-frame').srcdoc=pdfDocumento(corpo,titulo);
+}
+
+function pdfPreFechar(){
+  const ov=document.getElementById('pdf-pre');
+  if(ov)ov.remove();
+}
+
+// O print() do documento de dentro, e não o da app — a app nem entra na
+// folha. Sai de um clique a sério (o botão), que é o que o Safari exige
+// para não o travar como impressão automática.
+function pdfPreImprimir(){
+  const f=document.getElementById('pdf-pre-frame');
+  const w=f&&f.contentWindow;
+  if(!w){toast('A folha ainda está a abrir — tenta outra vez',1);return;}
+  try{w.focus();w.print();}
+  catch(e){toast('O browser não deixou imprimir daqui. Usa o menu do browser › Imprimir.',1);}
+}
 
 function exportarJSON(){
   const dados={
@@ -3201,6 +3306,9 @@ window.addEventListener('resize',()=>{
 // submeter coisa nenhuma, que era o que o browser tentava fazer).
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target.id==='f-texto'){e.preventDefault();e.target.blur();}
+  // A pré-visualização da folha está por cima de tudo — sai primeiro, e
+  // sozinha: fechá-la não é sair também do vinho que está por baixo.
+  if(e.key==='Escape'&&document.getElementById('pdf-pre')){pdfPreFechar();return;}
   if(e.key==='Escape')document.querySelectorAll('.modal.on').forEach(m=>fecharModal(m.id));
 });
 

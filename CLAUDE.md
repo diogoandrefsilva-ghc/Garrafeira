@@ -148,13 +148,29 @@ organização (região, ano ou casta), os vinhos vêm ordenados pela nota do
 Vivino, do melhor para o pior (`ordenarPorVivino`) — sem nota fica no fim,
 por nome.
 
-O **Detalhe** exporta a lista para PDF (`exportarPDF`), e também está em
-Definições › Dados ao lado do JSON: monta uma tabela num `#print-area` que
-só existe na impressão e chama `window.print()` — quem imprime escolhe
-"Guardar como PDF". Sem biblioteca nenhuma, que aqui não há build; a folha
-vai na horizontal porque são doze colunas, e os grupos são os mesmos que
-estão no ecrã (a organização escolhida em Detalhe, mesmo exportando a
-partir de Definições).
+A lista exporta-se para PDF em Definições › Dados, ao lado do JSON
+(`exportarPDF`). Sem biblioteca nenhuma, que aqui não há build: monta-se um
+**documento completo** — o seu próprio `<html>`, com o seu próprio CSS
+(`PDF_CSS`) — abre-se numa **pré-visualização** (`pdfPreAbrir`) e é o botão
+dessa barra que chama o `print()` do documento (`pdfPreImprimir`); quem
+imprime escolhe "Guardar como PDF". A folha vai na horizontal porque são
+doze colunas, e os grupos são os mesmos que estão no ecrã (a organização
+escolhida em Detalhe, mesmo exportando a partir de Definições).
+
+**O documento vive num `<iframe srcdoc>` e nunca na página da app** — e não é
+detalhe de arrumação, é a correção do bug de a folha sair em branco. Antes a
+tabela era montada num `#print-area` dentro da app, com um `@media print` a
+esconder tudo o resto (`body>*{display:none!important}`) e o `window.print()`
+a sair de dois `requestAnimationFrame`. Três maneiras de sair papel vazio:
+a folha ficava refém da cascata do `style.css` (um modal `fixed`, o `@page` a
+discordar do iOS); o `afterprint` limpava o `#print-area` **antes** de o
+WebKit ter acabado de rasterizar o trabalho — daí ser "muitas vezes" e não
+sempre; e o `print()` fora do gesto do utilizador é travado pelo Safari
+("impedido de imprimir automaticamente") e nem chega a correr num telemóvel
+que troca de ecrã. Isolado no iframe, nada da app lhe toca, nada é apagado por
+baixo do trabalho de impressão, e o `print()` sai de um clique a sério.
+Se houver uma segunda folha um dia, passa pelo `pdfPreAbrir`/`pdfDocumento` —
+não voltes a montar um documento à mão nem a imprimir a página da app.
 
 `renderLista()` ficou como o despachante chamado depois de QUALQUER
 mutação (guardar, apagar, consumir, mover): chama `renderResumo()` e
