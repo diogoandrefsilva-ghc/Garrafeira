@@ -72,13 +72,16 @@ $$;
 -- DEFINER, avaliar a policy de uma tabela obrigava a avaliar a policy da
 -- outra e o Postgres devolve recursão (42P17) — ou, pior, um `false` calado.
 --
--- Repara no que NÃO está aqui: `is_admin()`. O admin da app manda em quem
--- ENTRA (allowed_users) e em quem pode ter garrafeira — não nas garrafas dos
--- outros. Pôr um `OR garrafeira.is_admin()` nestas três funções abria a
--- garrafeira de toda a gente a uma pessoa só e o isolamento passava a ser
--- uma sugestão. Quem precisar de mexer numa garrafeira alheia (recuperar a
--- conta de alguém, por exemplo) faz uma linha de SQL no painel do Supabase,
--- de propósito: é uma coisa que se deve ter de escrever à mão.
+-- O admin da app entra aqui, mas SÓ A CONVITE. `is_admin()` sozinho nunca
+-- abre nada: o que abre é o `admin_acesso` que o DONO escolheu para a sua
+-- garrafeira ('nenhuma' por defeito, 'leitura', ou 'edicao'). Um
+-- `OR garrafeira.is_admin()` seco nestas funções abria a garrafeira de toda
+-- a gente a uma pessoa só, e o isolamento passava a ser uma sugestão; assim
+-- o admin pode ajudar quem lho pedir, e mais ninguém.
+--
+-- A permissão é do PAPEL e não da pessoa (é o que a coluna consegue
+-- guardar), e por isso `definir_admin()` repõe-nas todas a 'nenhuma' ao
+-- passar a app — ver lá em baixo.
 
 CREATE OR REPLACE FUNCTION garrafeira.e_dono(p_gid bigint)
   RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
@@ -104,21 +107,42 @@ AS $$
   );
 $$;
 
--- Ver = ser dono ou ter recebido. Escrever = ser dono E ser editor (o
--- `pode_editar` de `allowed_users` continua a decidir quem escreve seja
--- onde for; isto só acrescenta "e tem de ser em casa própria").
+-- O que o dono desta garrafeira deu ao admin da app: 'nenhuma'|'leitura'|
+-- 'edicao'. Numa garrafeira que seja do PRÓPRIO admin devolve 'nenhuma' —
+-- ele já lá entra por ser dono, e deixar o valor contar duas vezes só dava
+-- caminhos a mais para a mesma resposta.
+CREATE OR REPLACE FUNCTION garrafeira.admin_acesso(p_gid bigint)
+  RETURNS text LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path TO 'garrafeira', 'public'
+AS $$
+  SELECT CASE WHEN garrafeira.is_admin() AND NOT garrafeira.e_dono(p_gid)
+              THEN (SELECT admin_acesso FROM garrafeira.garrafeiras WHERE id = p_gid)
+              ELSE 'nenhuma' END;
+$$;
+
+-- Ver = ser dono, ter recebido, ou ser o admin a quem o dono abriu a porta.
+-- Escrever = ser dono E ser editor (o `pode_editar` de `allowed_users`
+-- continua a decidir quem escreve seja onde for; isto só acrescenta "e tem
+-- de ser em casa própria"), ou ser o admin com 'edicao'.
+--
+-- Repara que o ramo do admin NÃO passa por `is_editor()`: quem é admin é
+-- editor de qualquer maneira (ver `is_editor`), e fazer a pergunta outra
+-- vez só escondia a regra que interessa — quem manda aqui é o dono.
 CREATE OR REPLACE FUNCTION garrafeira.pode_ver(p_gid bigint)
   RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
   SET search_path TO 'garrafeira', 'public'
 AS $$
-  SELECT garrafeira.e_dono(p_gid) OR garrafeira.tem_partilha(p_gid);
+  SELECT garrafeira.e_dono(p_gid)
+      OR garrafeira.tem_partilha(p_gid)
+      OR garrafeira.admin_acesso(p_gid) IN ('leitura','edicao');
 $$;
 
 CREATE OR REPLACE FUNCTION garrafeira.pode_mexer(p_gid bigint)
   RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
   SET search_path TO 'garrafeira', 'public'
 AS $$
-  SELECT garrafeira.is_editor() AND garrafeira.e_dono(p_gid);
+  SELECT (garrafeira.is_editor() AND garrafeira.e_dono(p_gid))
+      OR garrafeira.admin_acesso(p_gid) = 'edicao';
 $$;
 
 -- A garrafeira de um vinho, para as policies de `vinho_castas` e de
@@ -348,6 +372,15 @@ BEGIN
   -- O novo dono fica também com `pode_editar`: se um dia deixar de ser
   -- admin, continua a poder mexer nas garrafas em vez de ficar de fora.
   UPDATE garrafeira.allowed_users SET pode_editar = true WHERE lower(email) = v_novo;
+
+  -- E as permissões que as pessoas deram AO ADMIN caem todas. `admin_acesso`
+  -- é uma permissão dada ao papel (é o que a coluna consegue guardar), mas
+  -- quem a deu estava a pensar numa PESSOA — deixá-la de pé era o admin
+  -- novo acordar com a chave da garrafeira de toda a gente sem ninguém lha
+  -- ter dado. Quem quiser voltar a abri-la abre-a num clique; quem não der
+  -- por isso fica protegido, que é o lado certo para onde errar.
+  UPDATE garrafeira.garrafeiras SET admin_acesso = 'nenhuma'
+   WHERE admin_acesso <> 'nenhuma';
 
   RETURN v_novo;
 END;

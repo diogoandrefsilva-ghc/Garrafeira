@@ -136,6 +136,16 @@ function souDonoDaGarrafeira(g){
 }
 function minhasGarrafeiras(){return GA_LISTA.filter(g=>souDonoDaGarrafeira(g));}
 function nomeGarrafeira(){const g=garrafeiraAtiva();return g?g.nome:'';}
+/* O que o DONO desta garrafeira deu ao admin da app. Numa que seja do
+   próprio admin não quer dizer nada (ele já lá entra por ser dono) — a
+   função SQL com o mesmo nome faz exatamente a mesma ressalva. */
+function acessoAdmin(g){
+  g=g||garrafeiraAtiva();
+  if(!g||!isAdmin()||souDonoDaGarrafeira(g))return 'nenhuma';
+  return String(g.admin_acesso||'nenhuma');
+}
+// Estou aqui a mando do dono, e não por ser meu?
+function souAdminConvidado(g){return acessoAdmin(g)!=='nenhuma';}
 // De quem é a que está aberta, para as frases da UI. É o EMAIL e não um
 // nome bonito de propósito: `allowed_users.nome` só o admin o consegue ler
 // (a policy `au_sel` deixa ver a própria linha), por isso um nome aqui
@@ -163,14 +173,21 @@ function isAdmin(){
 // "Posso editar em geral" (o `pode_editar` de allowed_users) — é diferente
 // de poder editar o que está AGORA no ecrã, que é o `podeEditar()`.
 function souEditor(){return isAdmin()||!!EU.pode_editar;}
-function podeEditar(){return souEditor()&&souDonoDaGarrafeira();}
+// Duas portas, e só duas: a minha garrafeira, ou uma em que o dono deu
+// 'edicao' ao admin. Uma partilha nunca abre esta — é sempre só de ver.
+function podeEditar(){
+  if(souDonoDaGarrafeira())return souEditor();
+  return acessoAdmin()==='edicao';
+}
 function aplicarPermissoes(){
   isReadOnly=!podeEditar();
   document.body.classList.toggle('readonly',isReadOnly);
   document.body.classList.toggle('naoadmin',!isAdmin());
   document.body.classList.toggle('naodono',!souDono());
-  // Uma garrafeira emprestada esconde mais do que o modo de leitura normal:
-  // partilhar, mudar o nome e passar a garrafeira são coisas do dono dela.
+  // `naominha` é "não sou o DONO", e não "não posso editar": o admin com
+  // 'edicao' mexe nas garrafas mas continua sem poder partilhar, renomear
+  // ou passar a garrafeira de outra pessoa — mexe no que lhe abriram, não
+  // na fechadura.
   document.body.classList.toggle('naominha',!souDonoDaGarrafeira());
   aplicarCabecalho();
 }
@@ -187,7 +204,8 @@ function aplicarCabecalho(){
   if(!el)return;
   const g=garrafeiraAtiva();
   const mostrar=!!g&&(GA_LISTA.length>1||!souDonoDaGarrafeira(g));
-  el.textContent=mostrar?(souDonoDaGarrafeira(g)?g.nome:`${g.nome} · de ${g.dono}`):'';
+  el.textContent=mostrar?(souDonoDaGarrafeira(g)?g.nome:`${g.nome} · de ${g.dono}`
+    +(acessoAdmin(g)==='edicao'?' · podes editar':'')):'';
   el.style.display=mostrar?'':'none';
   ajustarSticky();
 }
@@ -200,6 +218,7 @@ function roGuard(){
   if(!garrafeiraAtiva())toast('Ainda não tens garrafeira — vê em Definições › Garrafeiras',1);
   else if(!souDonoDaGarrafeira())toast(`👀 ${nomeGarrafeira()} é de ${donoGarrafeira()} — aqui só podes ver`,1);
   else toast('🔒 Não tens permissão para editar a garrafeira',1);
+  // (o admin com 'edicao' nunca chega aqui — `podeEditar()` já disse que sim)
   return true;
 }
 
@@ -3120,31 +3139,99 @@ function renderCfgGarrafeira(){
         </div>
         <div class="note" id="ga-nome-status"></div>
 
-        <h4 style="margin-top:18px">Quem mais a pode ver</h4>
+        ${isAdmin()?'':`
+        <h4 style="margin-top:18px">Permissões ao admin</h4>
+        <div class="note">O admin da app trata de quem entra — nas tuas garrafas só entra se tu
+          deixares. Por defeito não vê nada. Isto vale para <b>quem for admin de cada vez</b>: se a
+          app passar a outra pessoa, volta sozinho a "Nenhuma" e tens de decidir outra vez.</div>
+        <select id="ga-admin" onchange="guardarAcessoAdmin(this.value)">
+          <option value="nenhuma"${g.admin_acesso==='nenhuma'?' selected':''}>Nenhuma — nem vê a garrafeira</option>
+          <option value="leitura"${g.admin_acesso==='leitura'?' selected':''}>Só leitura — vê, não mexe</option>
+          <option value="edicao"${g.admin_acesso==='edicao'?' selected':''}>Leitura e edição — vê e mexe</option>
+        </select>
+        <div class="note" id="ga-admin-status"></div>`}
+
+        <h4 style="margin-top:18px">Permissões de leitura a outros</h4>
         <div class="note">Quem puseres aqui vê as tuas garrafas mas <b>não lhes mexe</b> — nem
           acrescenta, nem consome, nem apaga. Tem de já ter acesso à app (é o admin que aprova isso).</div>
         <div id="cfg-partilhas"></div>
         <div class="linha-add">
           <input type="email" id="ga-partilhar" placeholder="email@exemplo.com">
-          <button class="btn prim" onclick="partilharGarrafeira()">Partilhar</button>
+          <button class="btn prim" onclick="partilharGarrafeira()">Dar acesso</button>
         </div>
         <div class="note" id="ga-partilhar-status"></div>
 
         <h4 style="margin-top:18px">Passar a garrafeira</h4>
         <div class="note">Passa estas garrafas para a conta de outra pessoa — as garrafas, os locais
-          e o histórico vão todos com ela. Deixas de as ver (a não ser que ela te partilhe de volta).
+          e o histórico vão todos com ela. Deixas de as ver (a não ser que ela te dê acesso de volta).
           É diferente de "passar a app": isso é quem manda em quem entra, isto é de quem são as garrafas.</div>
         <div class="linha-add">
           <input type="email" id="ga-passar" placeholder="email@exemplo.com">
           <button class="btn danger" onclick="passarGarrafeira()">Passar</button>
         </div>
         <div class="note" id="ga-passar-status"></div>
+
+        <h4 style="margin-top:18px">Outra garrafeira</h4>
+        <div class="note">Uma segunda garrafeira tua — a da casa de férias, ou a que estás a guardar
+          para alguém. Trocas entre elas aqui em cima.</div>
+        <div class="linha-add">
+          <input type="text" id="ga-nova" placeholder="Garrafeira da praia">
+          <button class="btn ghost" onclick="criarGarrafeira()">+ Criar</button>
+        </div>
+        <div class="note" id="ga-nova-status"></div>
       </div>`
-    :`<div class="aviso" style="margin-top:10px">👀 Estás a ver a garrafeira de <b>${esc(g.dono)}</b>.
-        Aqui só podes ver e procurar — as garrafas são dele.</div>
-      <button class="btn ghost" onclick="devolverGarrafeira()">Deixar de ver esta garrafeira</button>`}`;
+    :`<div class="aviso" style="margin-top:10px">${souAdminConvidado(g)
+        ? (acessoAdmin(g)==='edicao'
+          ? `🔧 <b>${esc(g.dono)}</b> deu-te acesso de <b>leitura e edição</b> a esta garrafeira. O que mexeres aqui mexe nas garrafas dele.`
+          : `👀 <b>${esc(g.dono)}</b> deu-te acesso de <b>leitura</b> a esta garrafeira. Vês e procuras, não mexes.`)
+        : `👀 Estás a ver a garrafeira de <b>${esc(g.dono)}</b>.
+           Aqui só podes ver e procurar — as garrafas são dele.`}</div>
+      ${souAdminConvidado(g)
+        ? `<div class="note">Foi ele que to deu nas Definições dele, e é lá que to tira.</div>`
+        : `<button class="btn ghost" onclick="devolverGarrafeira()">Deixar de ver esta garrafeira</button>`}`}`;
 
   if(minha)renderPartilhas();
+}
+
+/* O dono escolhe o que o admin da app pode fazer aqui dentro. É um UPDATE à
+   linha da garrafeira e não uma partilha: as partilhas são só de leitura, e
+   esta é a única porta por onde alguém que não é dono pode vir a escrever. */
+async function guardarAcessoAdmin(valor){
+  const st=document.getElementById('ga-admin-status');
+  const g=garrafeiraAtiva();
+  if(!g)return;
+  const antes=g.admin_acesso;
+  st.style.color='var(--mu)';st.textContent='A guardar…';
+  try{
+    await sbReq('PATCH',`garrafeiras?id=eq.${g.id}`,{admin_acesso:valor});
+    g.admin_acesso=valor;
+    st.style.color='var(--vd)';
+    st.textContent=valor==='nenhuma'?'✓ O admin deixou de ver esta garrafeira.'
+      :valor==='leitura'?'✓ O admin passa a ver, sem mexer.'
+      :'✓ O admin passa a ver e a mexer.';
+  }catch(e){
+    g.admin_acesso=antes;
+    const sel=document.getElementById('ga-admin');if(sel)sel.value=antes;
+    st.style.color='var(--dg)';st.textContent=e.message;
+  }
+}
+
+/* Uma segunda garrafeira. A primeira nasce sozinha (`garantir_garrafeira`),
+   esta é escolha explícita — por isso é um POST normal e não a RPC, que
+   devolveria a que já existe em vez de criar outra. */
+async function criarGarrafeira(){
+  const inp=document.getElementById('ga-nova');
+  const st=document.getElementById('ga-nova-status');
+  const nome=inp.value.trim();
+  if(!nome){st.style.color='var(--dg)';st.textContent='Dá-lhe um nome.';return;}
+  st.style.color='var(--mu)';st.textContent='A criar…';
+  try{
+    const r=await sbReq('POST','garrafeiras',[{nome,dono:EU.email}],{'Prefer':'return=representation'});
+    GA_LISTA.push(r[0]);
+    GA_LISTA.sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt'));
+    inp.value='';
+    await trocarGarrafeira(r[0].id);
+  }catch(e){st.style.color='var(--dg)';st.textContent=e.message;}
 }
 
 /* Trocar de garrafeira é recarregar SÓ o conteúdo (`carregarGarrafeira`) —
@@ -3211,13 +3298,18 @@ async function tirarPartilha(email){
 async function devolverGarrafeira(){
   const g=garrafeiraAtiva();
   if(!g||souDonoDaGarrafeira(g))return;
-  if(!confirm(`Deixar de ver "${g.nome}"?\n\nSó ${g.dono} ta pode voltar a partilhar.`))return;
+  if(!confirm(`Deixar de ver "${g.nome}"?\n\nSó ${g.dono} te pode voltar a dar acesso.`))return;
   try{
     await sbReq('DELETE',`partilhas?garrafeira_id=eq.${g.id}&email=eq.${encodeURIComponent(EU.email)}`);
     localStorage.removeItem(GA_KEY);
     await carregar();
     renderLista();renderCfg();
-    toast('Já não vês essa garrafeira');
+    // Se a garrafeira continua à vista, o acesso não vinha de uma partilha
+    // — vinha do `admin_acesso` que o dono deu ao admin, e esse só ele o
+    // tira. Dizê-lo é melhor do que um "✓ feito" com a lista igual.
+    toast(GA_LISTA.some(x=>x.id===g.id)
+      ?`Continuas a ver "${g.nome}": o acesso vem das permissões que ${g.dono} deu ao admin.`
+      :'Já não vês essa garrafeira');
   }catch(e){toast('Não foi possível: '+e.message,1);}
 }
 

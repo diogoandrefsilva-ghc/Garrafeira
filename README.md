@@ -7,8 +7,9 @@ que já se bebeu.
 - **Dados e login no Supabase** (schema `garrafeira`, isolado das outras
   apps do mesmo projeto).
 - **Uma garrafeira por pessoa.** Mesma app, mesmas tabelas — mas cada um só
-  vê as suas garrafas. Podes **emprestar** a tua a um amigo: ele vê e
-  procura, nunca mexe.
+  vê as suas garrafas. Podes **dar acesso de leitura** a quem quiseres: eles
+  veem e procuram, nunca mexem. E és tu que decides o que o admin da app
+  pode fazer na tua — nada (o defeito), ver, ou ver e editar.
 - **Instalável** no telemóvel (PWA).
 - Cada vinho tem a sua **garrafa desenhada** (SVG, cor pelo tipo, ano no
   rótulo), a foto que a procura encontrou, ou **uma fotografia tua** — toca

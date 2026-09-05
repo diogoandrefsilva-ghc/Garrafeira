@@ -488,15 +488,29 @@ mesmas garrafas é um estado partilhado que ninguém pediu, e a coluna
 acrescenta-se um dia mais facilmente do que se desfaz a confusão. Na app
 isso é o `isReadOnly` de sempre (`body.readonly`), que passou a ter **duas**
 causas: ou não sou editor, ou o que está aberto é de outra pessoa
-(`podeEditar() = souEditor() && souDonoDaGarrafeira()`). Quem recusa a
-sério é a RLS — `pode_mexer()` exige ser dono.
+(`podeEditar()`: na minha garrafeira basta `souEditor()`; na de outra pessoa
+só o admin com `'edicao'`). Quem recusa a sério é a RLS — uma partilha nunca
+faz `pode_mexer()` dar verdadeiro.
 
-**O admin da app não vê as garrafeiras dos outros**, e isso é a sério: não
-há `OR is_admin()` em `e_dono`/`pode_ver`/`pode_mexer`. O admin manda em
-quem ENTRA (`allowed_users`) e em quem pode ter garrafeira; as garrafas dos
-outros não são dele. Um dia que seja preciso mexer numa garrafeira alheia
-(recuperar a conta de alguém), escreve-se SQL no painel — de propósito, é
-uma coisa que se deve ter de escrever à mão.
+**O admin da app não vê as garrafeiras dos outros — a não ser que o dono o
+convide.** É a coluna `garrafeiras.admin_acesso`: `'nenhuma'` (o defeito, nem
+a vê), `'leitura'`, `'edicao'`. `is_admin()` sozinho não abre nada — nem em
+`e_dono`, nem em `pode_ver`, nem em `pode_mexer`; o que abre é o que o dono
+escolheu em Definições › Garrafeiras › **Permissões ao admin**. Assim o
+admin pode ajudar quem lho pedir, e mais ninguém.
+
+Mesmo com `'edicao'`, o admin mexe nas GARRAFAS e não na fechadura: renomear,
+partilhar, passar e mudar o próprio `admin_acesso` continuam a ser só do
+dono (as policies de `garrafeiras`/`partilhas` comparam o `dono` à mão, não
+passam por `pode_mexer`). Sem isso ele subia-se de `'leitura'` a `'edicao'`
+sozinho e a permissão deixava de ser de quem a dá.
+
+A permissão é do **papel** e não da pessoa — é o que a coluna consegue
+guardar. Por isso `definir_admin()` repõe todas a `'nenhuma'` ao passar a
+app: quem a deu estava a pensar numa pessoa, e o admin seguinte não pode
+acordar com a chave da garrafeira de toda a gente. Quem quiser voltar a
+abri-la abre-a num clique; quem não der por isso fica protegido, que é o
+lado certo para onde errar.
 
 Três coisas a ter na cabeça ao mexer nisto:
 - **um vinho novo leva `garrafeira_id:GA_ID` no POST**, e um local também.
@@ -579,8 +593,8 @@ propõe uma coisa que a app nunca mostra.
 is_allowed()   →  entra na app
 is_editor()    →  escreve (admin + quem tiver allowed_users.pode_editar)
 is_admin()     →  manda em quem tem acesso e em quem é editor
-pode_ver(g)    →  vê a garrafeira g       (é dono dela, ou foi-lhe emprestada)
-pode_mexer(g)  →  escreve na garrafeira g (is_editor() E é dono dela)
+pode_ver(g)    →  vê a garrafeira g       (dono · foi-lhe emprestada · admin convidado)
+pode_mexer(g)  →  escreve na garrafeira g (is_editor() E dono · admin com 'edicao')
 ```
 O Goals só tem dois ("admin" e "leitura"); aqui há o meio-termo porque numa
 garrafeira de casa faz sentido haver quem dê saída a uma garrafa sem por
@@ -597,7 +611,9 @@ Na UI: `body.readonly` esconde `.ro-hide` (não pode editar),
 que `.ro-hide` e é por isso que existe: o cartão das Garrafeiras TEM de
 continuar visível numa garrafeira emprestada — é lá que está o caminho de
 volta à própria — e só o que lá dentro é do dono (partilhar, renomear,
-passar) é que desaparece. **Isto é só a UI** — quem manda é a RLS; esconder
+passar, as permissões ao admin) é que desaparece. `naominha` é "não sou o
+DONO" e não "não posso editar": o admin com `'edicao'` mexe nas garrafas e
+continua a ver este cartão fechado. **Isto é só a UI** — quem manda é a RLS; esconder
 um botão nunca foi proteção nenhuma.
 
 ## O admin está na BASE DE DADOS, não em código

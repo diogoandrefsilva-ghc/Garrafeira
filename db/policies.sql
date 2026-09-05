@@ -20,13 +20,14 @@
 -- agora por `pode_ver`/`pode_mexer`, e é isso que faz com que o João nunca
 -- veja uma linha da garrafeira do Barrona enquanto ele não lha emprestar.
 --
--- Emprestada é SÓ PARA VER: não há `pode_mexer` que dê verdadeiro numa
--- garrafeira de outra pessoa, e por isso não há caminho nenhum — nem por
--- engano nem à força — para escrever nela. A app esconde os botões
--- (`body.readonly`), mas quem recusa é isto.
+-- Emprestada por `partilhas` é SÓ PARA VER: `pode_mexer` nunca dá verdadeiro
+-- por causa de uma partilha, e por isso não há caminho nenhum — nem por
+-- engano nem à força — para escrever numa garrafeira que te emprestaram. A
+-- app esconde os botões (`body.readonly`), mas quem recusa é isto.
 --
--- O `is_admin()` NÃO abre garrafeiras. Ele manda em quem entra na app; as
--- garrafas dos outros não são dele. Ver a nota em functions.sql.
+-- A ÚNICA exceção é o admin da app, e só quando o dono lha deu: a coluna
+-- `garrafeiras.admin_acesso` ('nenhuma' por defeito, 'leitura', 'edicao').
+-- `is_admin()` sozinho não abre nada. Ver a nota em functions.sql.
 --
 -- Nada aqui é legível pelo role `anon`: todas as policies são
 -- `TO authenticated`. Não há modo convidado nesta app — uma garrafeira de
@@ -42,10 +43,15 @@
 -- policy da tabela X que chama uma função que lê a tabela X é o caminho
 -- curto para a recursão. Nas outras tabelas já não há esse problema — elas
 -- leem `garrafeiras` de fora.
+-- A condição do admin lê a coluna DIRETAMENTE em vez de chamar
+-- `garrafeira.admin_acesso(id)`: essa função passa pelo `e_dono()`, que lê
+-- outra vez esta mesma tabela. Aqui, na policy dela, escreve-se à mão.
 DROP POLICY IF EXISTS g_sel ON garrafeira.garrafeiras;
 CREATE POLICY g_sel ON garrafeira.garrafeiras
   FOR SELECT TO authenticated
-  USING (lower(dono) = lower(auth.email()) OR garrafeira.tem_partilha(id));
+  USING (lower(dono) = lower(auth.email())
+      OR garrafeira.tem_partilha(id)
+      OR (garrafeira.is_admin() AND admin_acesso <> 'nenhuma'));
 
 -- Criar a sua: a app não faz isto por POST (usa `garantir_garrafeira()`,
 -- que garante que não há duas), mas quem quiser uma segunda garrafeira
@@ -55,10 +61,15 @@ CREATE POLICY g_ins ON garrafeira.garrafeiras
   FOR INSERT TO authenticated
   WITH CHECK (garrafeira.is_editor() AND lower(dono) = lower(auth.email()));
 
--- Mudar o nome, sim. Mudar o DONO, não: o `WITH CHECK` obriga a linha a
--- continuar minha depois do UPDATE, e por isso passar a garrafeira a outra
--- pessoa só se faz por `transferir_garrafeira()` — que verifica que ela já
--- pode editar na app antes de lha entregar.
+-- Mudar o nome e o `admin_acesso`, sim. Mudar o DONO, não: o `WITH CHECK`
+-- obriga a linha a continuar minha depois do UPDATE, e por isso passar a
+-- garrafeira a outra pessoa só se faz por `transferir_garrafeira()` — que
+-- verifica que ela já pode editar na app antes de lha entregar.
+--
+-- Só o DONO, note-se — nem o admin com 'edicao'. Ele mexe nas GARRAFAS que
+-- lhe abriram, não na fechadura: dar-lhe este UPDATE era deixá-lo subir-se
+-- de 'leitura' a 'edicao' sozinho, e a permissão deixava de ser de quem a
+-- dá.
 DROP POLICY IF EXISTS g_upd ON garrafeira.garrafeiras;
 CREATE POLICY g_upd ON garrafeira.garrafeiras
   FOR UPDATE TO authenticated

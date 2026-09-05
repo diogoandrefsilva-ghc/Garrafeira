@@ -31,9 +31,11 @@ Depois da migração 07 a coluna "vê vinhos/garrafas" passa a querer dizer
 | quem | vê a garrafeira do Barrona | escreve nela |
 |---|---|---|
 | o dono dela | sim | sim |
-| a quem ele a emprestou | sim | **não** |
+| a quem ele deu acesso de leitura | sim | **não** |
 | outro editor da app | **não** | não |
-| o admin da app | **não** | não |
+| o admin da app, `admin_acesso='nenhuma'` (defeito) | **não** | não |
+| o admin da app, `admin_acesso='leitura'` | sim | **não** |
+| o admin da app, `admin_acesso='edicao'` | sim | sim |
 
 E as funções: `definir_castas` junta as grafias repetidas e apaga as castas
 que saíram da lista; `consumir_garrafa` recusa consumir a mesma garrafa duas
@@ -73,11 +75,16 @@ O que ela faz:
   encontrava o seu próprio vazio — uma app que se esvazia sozinha parece
   avariada. Passam a ver, deixam de mexer;
 - `locais.nome` deixa de ser único no mundo e passa a ser único **dentro de
-  cada garrafeira**: duas pessoas têm as duas uma "Garrafeira Principal".
+  cada garrafeira**: duas pessoas têm as duas uma "Garrafeira Principal";
+- `admin_acesso` nasce a `nenhuma` em todas — o admin não fica a ver as
+  garrafeiras de ninguém, é cada dono que decide.
 
-Testada num Postgres 16 local com o schema antigo e dados dentro: as 2+3+2
-linhas sobreviveram com o histórico de consumo intacto, correr a migração
-duas vezes não duplica nada, e depois dela um estranho não vê uma linha.
+Testada num Postgres 16 local com o schema antigo e dados dentro: as linhas
+sobreviveram com o histórico de consumo intacto, correr a migração duas
+vezes não duplica nada, e depois dela um recém-chegado não vê uma linha
+(nem uma foto de rótulo). Os três valores do `admin_acesso` foram testados
+um a um, mais as tentativas do admin de se subir a `edicao`, de renomear e
+de passar a si próprio uma garrafeira alheia — todas recusadas.
 
 ### `vinhos.imagem_url` (já aplicada)
 
@@ -189,7 +196,7 @@ Estes não se fazem por SQL:
 
 | Tabela | O que guarda |
 |---|---|
-| `garrafeiras` | **de quem é cada garrafeira** (`dono` = email). É isto que isola uma pessoa da outra |
+| `garrafeiras` | **de quem é cada garrafeira** (`dono` = email) e o que o dono deixa o admin da app lá fazer (`admin_acesso`). É isto que isola uma pessoa da outra |
 | `partilhas` | a quem mais foi emprestada uma garrafeira — sempre **só para ver** |
 | `allowed_users` | quem entra. `pode_editar` marca quem tem garrafeira própria e lhe mexe |
 | `access_requests` | pedidos à espera de aprovação do admin |
@@ -224,12 +231,25 @@ caminho nenhum — nem por engano, nem à força — para escrever na garrafeira
 de outra pessoa: `pode_mexer()` exige ser dono, e é ela que está em todas as
 policies de escrita.
 
-**O `is_admin()` não abre garrafeiras.** O admin manda em quem ENTRA na app;
-as garrafas dos outros não são dele. Um `OR is_admin()` nas funções de
-visibilidade abria a garrafeira de toda a gente a uma pessoa só, e o
-isolamento passava a ser uma sugestão. Quem precisar de mexer numa
-garrafeira alheia (recuperar a conta de alguém) escreve SQL no painel — de
-propósito: é uma coisa que se deve ter de escrever à mão.
+**O `is_admin()` sozinho não abre garrafeiras.** O que abre é o convite do
+dono: `garrafeiras.admin_acesso`, com três valores —
+
+| valor | o admin da app… |
+|---|---|
+| `nenhuma` (defeito) | nem sabe que a garrafeira existe |
+| `leitura` | vê e procura, não mexe |
+| `edicao` | vê e mexe nas garrafas |
+
+Escolhe-se em Definições › Garrafeiras › *Permissões ao admin*, e só o dono
+lá chega. Mesmo com `edicao`, o admin mexe nas GARRAFAS e não na fechadura:
+renomear, dar acesso a outros, passar a garrafeira e mudar o próprio
+`admin_acesso` são só do dono — as policies de `garrafeiras` e `partilhas`
+comparam o `dono` à mão e não passam por `pode_mexer()`. Sem isso o admin
+subia-se de `leitura` a `edicao` sozinho.
+
+É uma permissão dada ao **papel**, não à pessoa. Por isso `definir_admin()`
+repõe todas a `nenhuma` ao passar a app — o admin seguinte não herda calado
+a chave da garrafeira de toda a gente.
 
 Nada é legível pelo role `anon`: todas as policies são `TO authenticated`.
 Não há modo convidado — ao contrário do calendário de jogos do Goals, isto
