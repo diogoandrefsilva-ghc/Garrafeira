@@ -34,8 +34,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
 - `db/` — `schema.sql` → `functions.sql` → `policies.sql` → `seed.sql`
   (+ `README.md` com os passos manuais no painel do Supabase). Fonte de
   verdade do schema. `migracao-garrafeiras.sql` é a migração 07 (uma
-  garrafeira por pessoa) para a base que já existe — a única deste repo
-  ainda **por aplicar** no Supabase.
+  garrafeira por pessoa); `migracao-ia-planos.sql` é a 08 (planos de IA por
+  utilizador) e, numa base existente, é seguida por `functions.sql`.
 - Não mexer à mão: `apple-touch-icon.png` (é gerado — ver "Ícones").
 
 ## Os cinco separadores (o ecrã inicial não é a lista)
@@ -650,6 +650,15 @@ app a outra pessoa; por isso ficam atrás de `.dono-hide`
 Botão em cada vinho e no formulário de vinho novo. Quem procura é a Edge
 Function `vinho-info.ts` — irmã da `calendario-sporting` do Goals: mesma
 descoberta de modelo, mesma escada de variantes, mesmos fallbacks.
+- **Três planos por utilizador:** `sem_ia`, `gratis`, `premium`, guardados em
+  `allowed_users.ia_plano`. Só o admin os altera em Definições › Utilizadores;
+  o admin é sempre premium. A Edge Function pergunta `garrafeira.plano_ia()`
+  com o JWT de quem chamou — nunca aceita um plano vindo do browser. `gratis`
+  usa exclusivamente `GEMINI_FREE_API_KEY` e os modelos fixos 2.5 Flash /
+  Flash-Lite, portanto não pode cair na chave premium. Tem cinco tentativas
+  por dia por utilizador, configuráveis pelo secret `GEMINI_FREE_DAILY_LIMIT`.
+  As análises registam o plano em `analises.plano_ia`; o trigger volta a
+  carimbá-lo pela função SQL, mesmo se alguém falar com o PostgREST à mão.
 - **Grounding com pesquisa Google** (`tools:[{google_search:{}}]`). Sem isso
   o modelo inventa notas do Vivino e preços de memória, que é exatamente o
   que não se quer numa base de dados. Por causa do tool, a API **recusa**
@@ -687,6 +696,25 @@ descoberta de modelo, mesma escada de variantes, mesmos fallbacks.
   (`iaMostrarResultado`), com o que está agora ao lado do que a IA propõe.
   Vêm marcados **só os campos vazios**: substituir o que alguém escreveu à
   mão por uma leitura automática tem de ser um clique consciente.
+
+## Importar por imagens (`importar-vinhos`)
+
+O botão **Definições → Dados → Importar por imagens** aceita uma a três fotos
+de rótulos, listas ou prateleiras. `encolherImagem()` reduz cada uma no
+browser; a função recebe os base64 apenas em memória, envia-os ao Gemini e
+descarta-os no fim. Não há upload para Storage nem imagens dentro da tabela
+`garrafeira.importacoes`: essa tabela guarda somente os metadados do pedido e
+o resultado pendente, associado ao email do JWT e à garrafeira que o editor
+pode alterar.
+
+`importar-vinhos.ts` usa só `GEMINI_FREE_API_KEY` e `gemini-2.5-flash` com
+Flash-Lite como recurso. Não usa pesquisa web nem a chave premium. O plano
+grátis tem o limite por utilizador `GEMINI_IMPORT_FREE_DAILY_LIMIT` (3 por
+defeito); premium não tem esse limite. A função corre a leitura em segundo
+plano com `EdgeRuntime.waitUntil`, e a app consulta `importacoes` até ficar
+concluída ou com erro. O resultado é sempre uma proposta: a UI deixa escolher
+cada vinho e editar nome, produtor, ano e quantidade; só `importarGuardar()`
+cria o vinho, as castas e as garrafas.
 - Quem pode chamar é qualquer **editor** — e a pergunta é feita à BD
   (RPC `is_editor()`) com o JWT de quem chamou, não comparando emails dentro
   da função. Assim a regra vive num sítio só e mudar de admin não obriga a

@@ -86,6 +86,42 @@ vezes não duplica nada, e depois dela um recém-chegado não vê uma linha
 um a um, mais as tentativas do admin de se subir a `edicao`, de renomear e
 de passar a si próprio uma garrafeira alheia — todas recusadas.
 
+### Migração 08 — planos de IA por utilizador (**por aplicar**)
+
+`db/migracao-ia-planos.sql`. Acrescenta `allowed_users.ia_plano` e
+`analises.plano_ia`. Os três valores são `sem_ia`, `gratis` e `premium`;
+todas as contas existentes começam em `sem_ia`, exceto o admin, que a função
+`garrafeira.plano_ia()` trata sempre como premium.
+
+Correr no SQL Editor, por esta ordem:
+
+1. `db/migracao-ia-planos.sql`
+2. `db/functions.sql`
+
+Depois publicar a nova `vinho-info` e definir o secret `GEMINI_FREE_API_KEY`.
+O limite diário do plano grátis é cinco pesquisas por utilizador, mas pode ser
+alterado pelo secret opcional `GEMINI_FREE_DAILY_LIMIT` (1–50).
+
+### Migração 09 — importação a partir de imagens (**por aplicar**)
+
+`db/migracao-importacao-imagens.sql`. Cria `garrafeira.importacoes`, a fila
+privada onde fica apenas o resultado temporário da leitura; **nunca** os bytes
+das fotografias. Cada pedido está associado ao utilizador e à garrafeira que
+ele pode editar, e só a Edge Function (service role) o pode fechar.
+
+Correr no SQL Editor, por esta ordem:
+
+1. `db/migracao-importacao-imagens.sql`
+2. `db/functions.sql`
+3. `db/policies.sql`
+
+Depois publicar `importar-vinhos`. A função usa exclusivamente
+`GEMINI_FREE_API_KEY`, mesmo para o plano premium: não pesquisa na internet e
+não usa a chave paga. Aceita até três imagens por pedido; por defeito, uma
+conta no plano grátis pode fazer três pedidos/dia. Altera-se pelo secret
+opcional `GEMINI_IMPORT_FREE_DAILY_LIMIT` (1–20). A app mostra sempre as
+propostas antes de criar vinhos ou garrafas.
+
 ### `vinhos.imagem_url` (já aplicada)
 
 Link para uma foto do rótulo/garrafa — a `vinho-info` (Edge Function) tenta
@@ -187,8 +223,9 @@ Estes não se fazem por SQL:
    recuperação de password.
 3. **Secrets da Edge Function.** Já existem no projeto e são partilhados por
    todas as functions (são por PROJETO, não por function):
-   `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. Não é
-   preciso criar nada de novo.
+   `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. Para os
+   planos de IA, acrescentar `GEMINI_FREE_API_KEY`; `GEMINI_FREE_DAILY_LIMIT`
+   é opcional e vale 5 por defeito.
 4. **Deploy da função:** `supabase functions deploy vinho-info` (o ficheiro
    está na raiz do repo, `vinho-info.ts`).
 

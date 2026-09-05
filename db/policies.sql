@@ -252,6 +252,26 @@ CREATE POLICY analises_del ON garrafeira.analises
   USING (garrafeira.is_admin() OR lower(quem) = lower(auth.email()));
 
 -- ---------------------------------------------------------------------
+-- importacoes — tal como as análises, só quem a pediu (ou o admin) vê o
+-- resultado. A inserção confirma que pode mexer na garrafeira escolhida;
+-- o fecho corre na Edge Function com a service role.
+-- ---------------------------------------------------------------------
+DROP POLICY IF EXISTS importacoes_sel ON garrafeira.importacoes;
+CREATE POLICY importacoes_sel ON garrafeira.importacoes
+  FOR SELECT TO authenticated
+  USING (garrafeira.is_admin() OR lower(quem) = lower(auth.email()));
+
+DROP POLICY IF EXISTS importacoes_ins ON garrafeira.importacoes;
+CREATE POLICY importacoes_ins ON garrafeira.importacoes
+  FOR INSERT TO authenticated
+  WITH CHECK (garrafeira.is_editor() AND garrafeira.pode_mexer(garrafeira_id));
+
+DROP POLICY IF EXISTS importacoes_del ON garrafeira.importacoes;
+CREATE POLICY importacoes_del ON garrafeira.importacoes
+  FOR DELETE TO authenticated
+  USING (garrafeira.is_admin() OR lower(quem) = lower(auth.email()));
+
+-- ---------------------------------------------------------------------
 -- sync_log — a app escreve o "pedido" antes de chamar (é assim que se
 -- apanha o caso em que nem saiu do browser); a Edge Function escreve o
 -- resto com a service role. Ler é só do admin: é diagnóstico, não é

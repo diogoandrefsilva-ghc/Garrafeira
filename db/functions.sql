@@ -63,6 +63,23 @@ AS $$
   );
 $$;
 
+-- O plano de IA é uma decisão do admin, guardada na mesma lista que autoriza
+-- a entrada. É uma função (e não uma leitura que a Edge Function confia do
+-- cliente) para que ninguém consiga transformar um pedido grátis em pago.
+-- O admin conta sempre como premium, mesmo que a sua linha ainda não exista.
+CREATE OR REPLACE FUNCTION garrafeira.plano_ia()
+  RETURNS text LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path TO 'garrafeira', 'public'
+AS $$
+  SELECT CASE
+    WHEN garrafeira.is_admin() THEN 'premium'
+    ELSE COALESCE((
+      SELECT ia_plano FROM garrafeira.allowed_users
+       WHERE lower(email) = lower(COALESCE(auth.email(), ''))
+    ), 'sem_ia')
+  END;
+$$;
+
 -- ---------------------------------------------------------------------
 -- DE QUEM É ESTA GARRAFEIRA (o isolamento, em três funções)
 -- ---------------------------------------------------------------------
@@ -584,6 +601,9 @@ AS $$
 BEGIN
   NEW.quem      := lower(COALESCE(auth.email(), ''));
   NEW.criado_em := now();
+  -- Não se aceita o plano que veio do browser: o registo tem de espelhar o
+  -- que a função `plano_ia()` decidiu para o JWT que fez o pedido.
+  NEW.plano_ia  := garrafeira.plano_ia();
   NEW.estado    := 'pendente';   -- nasce sempre pendente; quem a fecha é a função
   NEW.resultado := NULL;
   NEW.erro      := NULL;
@@ -595,6 +615,29 @@ DROP TRIGGER IF EXISTS analises_guard_ins ON garrafeira.analises;
 CREATE TRIGGER analises_guard_ins
   BEFORE INSERT ON garrafeira.analises
   FOR EACH ROW EXECUTE FUNCTION garrafeira.analises_guard_ins();
+
+-- Igual à análise: quem, plano e estado nunca vêm do browser. A importação
+-- precisa ainda de estar presa à garrafeira que a pessoa pode editar; a
+-- policy confirma essa parte antes de este trigger ser chamado.
+CREATE OR REPLACE FUNCTION garrafeira.importacoes_guard_ins()
+  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+  SET search_path TO 'garrafeira', 'public'
+AS $$
+BEGIN
+  NEW.quem      := lower(COALESCE(auth.email(), ''));
+  NEW.criado_em := now();
+  NEW.plano_ia  := garrafeira.plano_ia();
+  NEW.estado    := 'pendente';
+  NEW.resultado := NULL;
+  NEW.erro      := NULL;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS importacoes_guard_ins ON garrafeira.importacoes;
+CREATE TRIGGER importacoes_guard_ins
+  BEFORE INSERT ON garrafeira.importacoes
+  FOR EACH ROW EXECUTE FUNCTION garrafeira.importacoes_guard_ins();
 
 -- Carimba quem criou o vinho, sem confiar no cliente.
 CREATE OR REPLACE FUNCTION garrafeira.vinhos_guard_ins()

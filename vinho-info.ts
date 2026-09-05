@@ -21,16 +21,20 @@
 // nosso. Sem `assincrono` mantém-se a resposta completa de uma vez.
 //
 // Secrets do projeto (partilhados por todas as functions):
-//   GEMINI_API_KEY · SUPABASE_URL · SUPABASE_SERVICE_ROLE_KEY
+//   GEMINI_API_KEY (premium) · GEMINI_FREE_API_KEY (plano grátis)
+//   SUPABASE_URL · SUPABASE_SERVICE_ROLE_KEY
 // Deploy: supabase functions deploy vinho-info
 // =====================================================================
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY")!;
+const GEMINI_FREE_KEY = Deno.env.get("GEMINI_FREE_API_KEY") ?? "";
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_SRV = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GAPI = "https://generativelanguage.googleapis.com/v1beta";
+const FREE_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+const FREE_DAILY_LIMIT = Math.max(1, Math.min(50, Number(Deno.env.get("GEMINI_FREE_DAILY_LIMIT") ?? 5) || 5));
 
 const TIMEOUT_MS = 55_000;        // modo síncrono, preso ao browser
 const PROC_TIMEOUT_MS = 110_000;  // segundo plano — já não depende do browser
@@ -100,7 +104,10 @@ async function descobrirFlash(signal: AbortSignal): Promise<string[]> {
   return _models ?? [];
 }
 const ESTAVEIS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"];
-async function candidatosModelo(signal: AbortSignal): Promise<string[]> {
+async function candidatosModelo(signal: AbortSignal, plano: "gratis" | "premium"): Promise<string[]> {
+  // No plano grátis os modelos são fixos: nunca se descobre nem se tenta um
+  // modelo pago por engano. A chave grátis é a última fronteira de custo.
+  if (plano === "gratis") return FREE_MODELS;
   const pinned = Deno.env.get("GEMINI_MODEL");
   const vistos = new Set<string>();
   const lista = [...(pinned ? [pinned] : []), ...ESTAVEIS, ...(await descobrirFlash(signal))]
@@ -352,7 +359,8 @@ async function registar(estado: string, detalhe: Record<string, unknown>, quem: 
    corre normalmente e não é preciso confiar em nada que o cliente mande.
    Devolve null se a tabela ainda não existir; nesse caso cai-se no modo
    síncrono em vez de rebentar. */
-async function criarAnalise(auth: string, pedido: unknown, vinhoId: number | null, quem: string, signal: AbortSignal) {
+async function criarAnalise(auth: string, pedido: unknown, vinhoId: number | null, quem: string,
+                            plano: "gratis" | "premium", signal: AbortSignal) {
   try {
     const r = await fetch(`${SB_URL}/rest/v1/analises`, {
       method: "POST",
@@ -361,7 +369,7 @@ async function criarAnalise(auth: string, pedido: unknown, vinhoId: number | nul
         "Content-Profile": "garrafeira", Prefer: "return=representation",
       },
       signal,
-      body: JSON.stringify({ quem, pedido, vinho_id: vinhoId }),
+      body: JSON.stringify({ quem, pedido, vinho_id: vinhoId, plano_ia: plano }),
     });
     if (!r.ok) { console.log("VINHO criar analise:", r.status, (await r.text().catch(() => "")).slice(0, 300)); return null; }
     const id = (await r.json())?.[0]?.id;
@@ -390,12 +398,12 @@ async function fecharAnalise(id: number, quem: string, patch: Record<string, unk
    (RPC `garrafeira.is_editor()`) COM O JWT DE QUEM CHAMOU, e não comparando
    emails aqui — assim a regra vive num sítio só (db/functions.sql) e mudar
    de admin não obriga a redeploy da função. */
-async function ehEditor(auth: string, signal: AbortSignal): Promise<{ ok: boolean; email: string | null }> {
-  if (!auth) return { ok: false, email: null };
+async function ehEditor(auth: string, signal: AbortSignal): Promise<{ ok: boolean; email: string | null; plano: string }> {
+  if (!auth) return { ok: false, email: null, plano: "sem_ia" };
   const u = await fetch(`${SB_URL}/auth/v1/user`, { headers: { apikey: SB_SRV, Authorization: auth }, signal });
-  if (!u.ok) { console.log("VINHO /user erro:", u.status); return { ok: false, email: null }; }
+  if (!u.ok) { console.log("VINHO /user erro:", u.status); return { ok: false, email: null, plano: "sem_ia" }; }
   const email = String((await u.json()).email ?? "").toLowerCase();
-  if (!email) return { ok: false, email: null };
+  if (!email) return { ok: false, email: null, plano: "sem_ia" };
   try {
     const r = await fetch(`${SB_URL}/rest/v1/rpc/is_editor`, {
       method: "POST",
@@ -405,9 +413,33 @@ async function ehEditor(auth: string, signal: AbortSignal): Promise<{ ok: boolea
       },
       signal, body: "{}",
     });
-    if (!r.ok) { console.log("VINHO is_editor:", r.status, (await r.text().catch(() => "")).slice(0, 200)); return { ok: false, email }; }
-    return { ok: (await r.json()) === true, email };
-  } catch (e) { console.log("VINHO is_editor excecao:", String((e as Error).message).slice(0, 200)); return { ok: false, email }; }
+    if (!r.ok) { console.log("VINHO is_editor:", r.status, (await r.text().catch(() => "")).slice(0, 200)); return { ok: false, email, plano: "sem_ia" }; }
+    const editor = (await r.json()) === true;
+    if (!editor) return { ok: false, email, plano: "sem_ia" };
+    const p = await fetch(`${SB_URL}/rest/v1/rpc/plano_ia`, {
+      method: "POST",
+      headers: { apikey: SB_SRV, Authorization: auth, "Content-Type": "application/json", "Content-Profile": "garrafeira" },
+      signal, body: "{}",
+    });
+    if (!p.ok) { console.log("VINHO plano_ia:", p.status, (await p.text().catch(() => "")).slice(0, 200)); return { ok: false, email, plano: "sem_ia" }; }
+    const plano = String(await p.json());
+    return { ok: true, email, plano };
+  } catch (e) { console.log("VINHO is_editor excecao:", String((e as Error).message).slice(0, 200)); return { ok: false, email, plano: "sem_ia" }; }
+}
+
+// A quota é verificada no servidor, com o JWT do próprio utilizador. Conta
+// tentativas (inclusive erros): sem isso, uma falha repetida esgotava a quota
+// global e deixava o resto sem pesquisa. O limite vem de secret para poder
+// ser afinado sem redeploy.
+async function temQuotaGratis(auth: string, quem: string, signal: AbortSignal): Promise<boolean> {
+  const hoje = new Date().toISOString().slice(0, 10) + "T00:00:00.000Z";
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/analises?select=id&quem=eq.${encodeURIComponent(quem)}&plano_ia=eq.gratis&criado_em=gte.${encodeURIComponent(hoje)}&limit=${FREE_DAILY_LIMIT}`, {
+      headers: { apikey: SB_SRV, Authorization: auth, "Content-Profile": "garrafeira" }, signal,
+    });
+    if (!r.ok) { console.log("VINHO quota grátis:", r.status); return false; }
+    return (await r.json()).length < FREE_DAILY_LIMIT;
+  } catch (e) { console.log("VINHO quota grátis excecao:", String((e as Error).message).slice(0, 200)); return false; }
 }
 
 /* ── O TRABALHO A SÉRIO ──
@@ -419,8 +451,10 @@ type Res = { ok: true; corpo: Record<string, unknown> } | { ok: false; status: n
 async function produzirFicha(
   nome: string, ano: number | null, produtor: string, regiao: string,
   quem: string | null, signal: AbortSignal, budgetMs: number,
-  campos: string[] | null = null,
+  campos: string[] | null = null, plano: "gratis" | "premium" = "premium",
 ): Promise<Res> {
+  const geminiKey = plano === "gratis" ? GEMINI_FREE_KEY : GEMINI_KEY;
+  if (!geminiKey) return { ok: false, status: 503, erro: "a pesquisa grátis ainda não está configurada" };
   const inicio = Date.now();
   const restante = () => budgetMs - (Date.now() - inicio) - 2_000;
   const searchMs = Math.max(15_000, budgetMs - 14_000);
@@ -451,7 +485,7 @@ async function produzirFicha(
       contents: [{ role: "user", parts: [{ text: texto0 }] }], generationConfig,
     };
     if (v.search) corpo.tools = [{ google_search: {} }];
-    return fetch(`${GAPI}/models/${model}:generateContent?key=${GEMINI_KEY}`, {
+    return fetch(`${GAPI}/models/${model}:generateContent?key=${geminiKey}`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       signal: sinal, body: JSON.stringify(corpo),
     });
@@ -475,9 +509,9 @@ async function produzirFicha(
   const transitorio = (s: number) => s === 429 || s === 500 || s === 503;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  const candidatos = await candidatosModelo(signal);
+  const candidatos = await candidatosModelo(signal, plano);
   if (signal.aborted) throw new DOMException("timeout", "AbortError");
-  let model = candidatos[0] ?? "gemini-flash-latest";
+  let model = candidatos[0] ?? (plano === "gratis" ? FREE_MODELS[0] : "gemini-flash-latest");
   let comPesquisa = true;
   let g: Response | null = null;
 
@@ -544,13 +578,13 @@ async function produzirFicha(
     }
   });
   await registar("ok", {
-    nome, ano, modelo: model, pesquisa: comPesquisa,
+    nome, ano, modelo: model, plano, pesquisa: comPesquisa,
     campos: Object.keys(ficha).length, fontes: fontes.map((f) => f.url).slice(0, 8),
   }, quem);
 
   return {
     ok: true,
-    corpo: { ...ficha, fontes: fontes.slice(0, 8), pesquisa: comPesquisa, modelo: model, geradoEm: new Date().toISOString() },
+    corpo: { ...ficha, fontes: fontes.slice(0, 8), pesquisa: comPesquisa, plano, modelo: model, geradoEm: new Date().toISOString() },
   };
 }
 
@@ -573,6 +607,15 @@ Deno.serve(async (req) => {
     if (!auth.ok) {
       await registar("erro", { passo: "autorizacao" }, quem);
       return json({ error: "não autorizado — só quem pode editar a garrafeira é que procura" }, 403);
+    }
+    if (auth.plano !== "gratis" && auth.plano !== "premium") {
+      await registar("erro", { passo: "plano", plano: auth.plano }, quem);
+      return json({ error: "não tens acesso à pesquisa por IA — pede ao admin para te atribuir o plano grátis ou premium" }, 403);
+    }
+    const plano = auth.plano as "gratis" | "premium";
+    if (plano === "gratis" && !(await temQuotaGratis(authHeader, quem!, ctrl.signal))) {
+      await registar("erro", { passo: "quota-gratis", limite_dia: FREE_DAILY_LIMIT }, quem);
+      return json({ error: `atingiste o limite diário de ${FREE_DAILY_LIMIT} pesquisas grátis — tenta amanhã ou pede acesso premium` }, 429);
     }
 
     const body = await req.json().catch(() => ({}));
@@ -600,7 +643,7 @@ Deno.serve(async (req) => {
        existir, `criarAnalise` devolve null e cai-se no modo síncrono em vez
        de rebentar. */
     if (body?.assincrono === true) {
-      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, campos: camposPedidos }, vinhoId, quem!, ctrl.signal);
+      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, campos: camposPedidos }, vinhoId, quem!, plano, ctrl.signal);
       if (analiseId != null) {
         const dono = quem!;
         // NÃO faz await: o trabalho pesado sobrevive ao pedido original.
@@ -608,7 +651,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-            const res = await produzirFicha(nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos);
+            const res = await produzirFicha(nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, plano);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -626,7 +669,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = await produzirFicha(nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos);
+    const res = await produzirFicha(nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, plano);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";

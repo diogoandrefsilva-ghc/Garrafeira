@@ -165,7 +165,7 @@ function donoGarrafeira(){
    `isReadOnly` é "não posso editar isto que está aberto" — e passou a ter
    duas causas: ou não sou editor, ou a garrafeira aberta é de outra pessoa.
    Numa garrafeira emprestada não há meio-termo nenhum: vê-se, não se mexe. */
-let isReadOnly=true, EU={email:'',pode_editar:false};
+let isReadOnly=true, EU={email:'',pode_editar:false,ia_plano:'sem_ia'};
 function isAdmin(){
   return !!(_sbSession&&_sbSession.user&&
     String(_sbSession.user.email||'').toLowerCase()===String(ADMIN_EMAIL||'').toLowerCase());
@@ -173,6 +173,11 @@ function isAdmin(){
 // "Posso editar em geral" (o `pode_editar` de allowed_users) — é diferente
 // de poder editar o que está AGORA no ecrã, que é o `podeEditar()`.
 function souEditor(){return isAdmin()||!!EU.pode_editar;}
+// A UI só explica o plano; a Edge Function volta a confirmá-lo através da
+// base de dados antes de tocar em qualquer chave Gemini.
+function planoIA(){return isAdmin()?'premium':String(EU.ia_plano||'sem_ia');}
+function podeUsarIA(){return planoIA()==='gratis'||planoIA()==='premium';}
+function rotuloPlanoIA(){return planoIA()==='premium'?'pesquisa premium':'pesquisa grátis';}
 // Duas portas, e só duas: a minha garrafeira, ou uma em que o dono deu
 // 'edicao' ao admin. Uma partilha nunca abre esta — é sempre só de ver.
 function podeEditar(){
@@ -242,7 +247,7 @@ async function carregar(){
   const [castas,cfg,eu,gars]=await Promise.all([
     sbReq('GET','castas?select=*&order=nome.asc'),
     sbReq('GET','config?select=*'),
-    sbReq('GET',`allowed_users?select=email,nome,pode_editar&email=eq.${encodeURIComponent(_sbSession.user.email)}`),
+    sbReq('GET',`allowed_users?select=email,nome,pode_editar,ia_plano&email=eq.${encodeURIComponent(_sbSession.user.email)}`),
     sbReq('GET','garrafeiras?select=*&order=nome.asc')
   ]);
   db.castas=castas||[];
@@ -253,7 +258,7 @@ async function carregar(){
   // à mesma) — nesse caso não vem linha nenhuma e ele fica editor por ser
   // admin, que é o que a BD também decide.
   const minha=(eu||[])[0]||null;
-  EU={email:_sbSession.user.email,pode_editar:minha?!!minha.pode_editar:false,nome:minha?minha.nome:''};
+  EU={email:_sbSession.user.email,pode_editar:minha?!!minha.pode_editar:false,nome:minha?minha.nome:'',ia_plano:minha?minha.ia_plano||'sem_ia':'sem_ia'};
 
   GA_LISTA=gars||[];
   // Quem pode editar e ainda não tem garrafeira nenhuma ganha a dele aqui —
@@ -1673,7 +1678,9 @@ function vinhoDetalheHTML(v){
     </div>
 
     <div class="macoes ro-hide">
-      <button class="btn prim" onclick="iaEscolher(${v.id})">🔎 Procurar informação</button>
+      ${podeUsarIA()
+        ? `<button class="btn prim" onclick="iaEscolher(${v.id})">🔎 Procurar informação</button>`
+        : '<span class="note">A pesquisa por IA não está incluída no teu acesso.</span>'}
       <button class="btn ghost" onclick="abrirEditarVinho(${v.id})">✏️ Editar</button>
     </div>
 
@@ -1948,9 +1955,9 @@ function abrirEditarVinho(id){
       <div><label>Produtor</label><input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado"></div>
     </div>
 
-    ${id?'':`<div class="aviso">Escreve o nome (e o ano, se souberes) e carrega em <b>Procurar informação</b>: a pesquisa preenche o resto — castas, região, tipo, nota do Vivino, preço médio e quando beber. Confirmas antes de gravar.</div>
+    ${id?'':podeUsarIA()?`<div class="aviso">Escreve o nome (e o ano, se souberes) e carrega em <b>Procurar informação</b>: a ${esc(rotuloPlanoIA())} preenche o resto — castas, região, tipo, nota do Vivino, preço médio e quando beber. Confirmas antes de gravar.</div>
       <button class="btn prim full" id="e-btn-ia" onclick="iaProcurarNovo()">🔎 Procurar informação</button>
-      <div id="e-ia-estado"></div>`}
+      <div id="e-ia-estado"></div>`:'<div class="note">A pesquisa por IA não está incluída no teu acesso. Pede ao admin para te atribuir o plano grátis ou premium.</div>'}
 
     <div class="mrow">
       <div><label>Tipo</label><select id="e-tipo">${opts(TIPOS,o('tipo','Tinto'))}</select></div>
@@ -2338,7 +2345,7 @@ async function iaLog(estado,detalhe){
 /* Chama a função e espera pelo resultado. Devolve o objeto da IA, ou
    levanta um erro com uma mensagem que se possa mostrar a alguém. */
 async function iaPedir(pedido,vinhoId){
-  await iaLog('pedido',{pedido,vinho_id:vinhoId||null});
+  await iaLog('pedido',{pedido,vinho_id:vinhoId||null,plano:planoIA()});
   let r;
   try{
     r=await sbFetch(`${SB_URL}/functions/v1/vinho-info`,{
@@ -2391,6 +2398,7 @@ function iaValorAtual(v,k){
 }
 function iaEscolher(vinhoId){
   if(roGuard())return;
+  if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
   const v=IDXV[vinhoId];if(!v)return;
   const linhas=IA_CAMPOS.map(c=>{
     const tem=!!iaValorAtual(v,c.k);
@@ -2404,7 +2412,7 @@ function iaEscolher(vinhoId){
       <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
       <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
 
-    <div class="aviso">Escolhe o que queres procurar. <b>Quanto menos pedires, melhor a procura</b> —
+    <div class="aviso"><b>${esc(rotuloPlanoIA())}</b>. Escolhe o que queres procurar. <b>Quanto menos pedires, melhor a procura</b> —
       o modelo concentra-se nisso em vez de andar atrás de tudo. Já vêm marcados os campos vazios.</div>
 
     <div class="ia-escbar">
@@ -2532,13 +2540,14 @@ async function iaArrancar(vinhoId){
 }
 // Do formulário de "novo vinho": preenche os campos em vez de gravar.
 async function iaProcurarNovo(){
+  if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
   const nome=document.getElementById('e-nome').value.trim();
   if(!nome){toast('Escreve primeiro o nome do vinho',1);document.getElementById('e-nome').focus();return;}
   const ano=inteiro(document.getElementById('e-ano').value);
   const btn=document.getElementById('e-btn-ia');
   const est=document.getElementById('e-ia-estado');
   btn.disabled=true;btn.textContent='🔎 A procurar…';
-  est.innerHTML='<div class="note" style="margin-top:8px">A pesquisar na net. Pode levar até dois minutos — podes ir fazendo o resto.</div>';
+  est.innerHTML=`<div class="note" style="margin-top:8px">A ${esc(rotuloPlanoIA())} está a procurar na net. Pode levar até dois minutos — podes ir fazendo o resto.</div>`;
   try{
     const res=await iaPedir({nome,ano,produtor:document.getElementById('e-produtor').value.trim()},null);
     iaPreencherForm(res);
@@ -3398,19 +3407,27 @@ async function admRecusar(email){
   }catch(e){toast('Não foi possível: '+e.message,1);}
 }
 let _admUsers=[];
+const IA_PLANOS=[
+  {v:'sem_ia',r:'sem IA'},
+  {v:'gratis',r:'IA grátis'},
+  {v:'premium',r:'IA premium'}
+];
 async function admRenderUtilizadores(){
   const box=document.getElementById('adm-users-list');
   if(!box)return;
   try{
-    _admUsers=await sbReq('GET','allowed_users?select=email,nome,pode_editar&order=email.asc')||[];
+    _admUsers=await sbReq('GET','allowed_users?select=email,nome,pode_editar,ia_plano&order=email.asc')||[];
   }catch(e){box.innerHTML=`<div class="note">${esc(e.message)}</div>`;return;}
   box.innerHTML=_admUsers.map(u=>{
     const eAdmin=u.email.toLowerCase()===String(ADMIN_EMAIL).toLowerCase();
     return `<div class="ua-row">
       <span class="em">${esc(u.email)}${u.nome?' ('+esc(u.nome)+')':''}</span>
-      ${eAdmin?'<span class="tagme">admin</span>'
+      ${eAdmin?'<span class="tagme">admin · IA premium</span>'
         :`<label class="chk" title="Tem garrafeira própria e pode mexer-lhe"><input type="checkbox"${u.pode_editar?' checked':''}
             onchange="admToggleEditor('${escJs(u.email)}',this.checked)"> editor</label>
+          <select class="mini" title="Plano de pesquisa por IA" onchange="admDefinirPlano('${escJs(u.email)}',this.value)">
+            ${IA_PLANOS.map(p=>`<option value="${p.v}"${(u.ia_plano||'sem_ia')===p.v?' selected':''}>${p.r}</option>`).join('')}
+          </select>
           <button class="jdel" title="Tirar acesso" onclick="admTirarAcesso('${escJs(u.email)}')">✕</button>`}
     </div>`;
   }).join('')||'<div class="note" style="padding:6px 0">Ninguém na lista.</div>';
@@ -3428,6 +3445,13 @@ async function admToggleEditor(email,val){
   try{
     await sbReq('PATCH',`allowed_users?email=eq.${encodeURIComponent(email)}`,{pode_editar:val});
     toast(val?email+' passa a ter garrafeira própria':email+' fica só a ver');
+  }catch(e){toast('Não foi possível: '+e.message,1);admRenderUtilizadores();}
+}
+async function admDefinirPlano(email,plano){
+  if(!IA_PLANOS.some(p=>p.v===plano)){admRenderUtilizadores();return;}
+  try{
+    await sbReq('PATCH',`allowed_users?email=eq.${encodeURIComponent(email)}`,{ia_plano:plano});
+    toast(email+' fica com '+(IA_PLANOS.find(p=>p.v===plano)||{}).r);
   }catch(e){toast('Não foi possível: '+e.message,1);admRenderUtilizadores();}
 }
 async function admTirarAcesso(email){
@@ -3845,6 +3869,128 @@ function pdfPreImprimir(){
   // pré-visualização (o teclado ficava a apontar para dentro dela, e o
   // 'keydown' da app não recebe eventos de outro documento).
   window.focus();
+}
+
+// ── IMPORTAR VINHOS POR IMAGENS ─────────────────────────────────────
+let IMPORT_RESULTADO=[];
+
+function importarAbrir(){
+  if(roGuard())return;
+  if(!podeUsarIA()){toast('A importação por IA não está incluída no teu acesso',1);return;}
+  document.getElementById('modal-ia-in').innerHTML=
+    "<div class='mtop'><div><h3>📷 Importar vinhos por imagens</h3><div class='note' style='margin-top:3px'>Até 3 fotos de rótulos, uma lista ou uma prateleira.</div></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
+    "<div class='aviso'>As imagens são encolhidas no teu telemóvel, lidas pela IA e descartadas no fim. <b>Nada entra na garrafeira sem revisão tua.</b> A leitura não pesquisa na internet.</div>"+
+    "<label>Imagens (máximo 3)</label><input id='imp-ficheiros' type='file' accept='image/jpeg,image/png,image/webp' multiple onchange='importarEscolha(this)'>"+
+    "<div class='note' id='imp-estado' style='margin-top:8px'>Escolhe fotografias nítidas; podes juntar frente e verso do mesmo rótulo.</div>"+
+    "<div class='macoes'><button class='btn prim' id='imp-btn' onclick='importarEnviar()'>Ler imagens</button><button class='btn ghost' onclick=\"fecharModal('modal-ia')\">Cancelar</button></div>";
+  abrirModal('modal-ia');
+}
+function importarEscolha(input){
+  const estado=document.getElementById('imp-estado'),n=(input.files||[]).length;
+  if(n>3){estado.textContent='Escolheste '+n+' imagens; usa no máximo 3.';estado.style.color='var(--dg)';return;}
+  estado.style.color='';estado.textContent=n?n+' imagem(ns) escolhida(s). Serão encolhidas antes de enviar.':'Escolhe fotografias nítidas; podes juntar frente e verso do mesmo rótulo.';
+}
+async function importarBase64(file){
+  const blob=await encolherImagem(file,1400,0.82);
+  const data=await new Promise((resolve,reject)=>{
+    const r=new FileReader();r.onerror=()=>reject(new Error('não consegui ler essa imagem'));
+    r.onload=()=>resolve(String(r.result||'').split(',')[1]||'');r.readAsDataURL(blob);
+  });
+  if(!data)throw new Error('não consegui preparar essa imagem');
+  return {mime:'image/jpeg',data};
+}
+async function importarEnviar(){
+  const input=document.getElementById('imp-ficheiros'),files=Array.from(input.files||[]);
+  if(!files.length||files.length>3){toast('Escolhe entre 1 e 3 imagens',1);return;}
+  const btn=document.getElementById('imp-btn'),estado=document.getElementById('imp-estado');
+  btn.disabled=true;btn.textContent='A preparar…';estado.style.color='';
+  try{
+    const imagens=[];
+    for(let i=0;i<files.length;i++){
+      estado.textContent='A preparar imagem '+(i+1)+' de '+files.length+'…';
+      imagens.push(await importarBase64(files[i]));
+    }
+    estado.textContent='A enviar para leitura…';btn.textContent='A ler…';
+    const r=await sbFetch(SB_URL+'/functions/v1/importar-vinhos',{
+      method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY},
+      body:JSON.stringify({garrafeiraId:GA_ID,imagens})
+    });
+    let d={};try{d=await r.json();}catch(_){}
+    if(!r.ok){
+      if(r.status===404)throw new Error('A função importar-vinhos ainda não está publicada no Supabase. Ver o README.');
+      throw new Error(d.error||('O servidor respondeu HTTP '+r.status));
+    }
+    if(!d.id)throw new Error('A importação não devolveu identificador');
+    importarEspera(d.id);
+  }catch(e){
+    estado.style.color='var(--dg)';estado.textContent='Não deu: '+e.message;
+    btn.disabled=false;btn.textContent='Tentar outra vez';
+  }
+}
+async function importarEspera(id){
+  const estado=document.getElementById('imp-estado'),btn=document.getElementById('imp-btn'),fim=Date.now()+150000;
+  btn.disabled=true;btn.textContent='A ler…';estado.textContent='A IA está a ler as imagens. Pode levar até dois minutos; mantém esta janela aberta para rever o resultado.';
+  while(Date.now()<fim){
+    await new Promise(resolve=>setTimeout(resolve,2500));
+    try{
+      const rows=await sbReq('GET','importacoes?id=eq.'+id+'&select=estado,resultado,erro');
+      const job=(rows||[])[0];if(!job)continue;
+      if(job.estado==='concluido'){importarMostrarResultado(job.resultado||{});return;}
+      if(job.estado==='erro')throw new Error(job.erro||'a leitura falhou');
+    }catch(e){
+      estado.style.color='var(--dg)';estado.textContent='Não deu: '+e.message;
+      btn.disabled=false;btn.textContent='Tentar outra vez';return;
+    }
+  }
+  estado.textContent='Ainda está a processar. Podes fechar e tentar novamente daqui a pouco; não foi criado nenhum vinho.';
+  btn.disabled=false;btn.textContent='Nova leitura';
+}
+function importarMostrarResultado(resultado){
+  IMPORT_RESULTADO=Array.isArray(resultado.vinhos)?resultado.vinhos:[];
+  const aviso=resultado.aviso?'<div class="aviso">'+esc(resultado.aviso)+'</div>':'';
+  const linhas=IMPORT_RESULTADO.map((v,i)=>{
+    const detalhes=[v.tipo,v.regiao,v.mencao,v.teor?v.teor+'%':'',(v.castas||[]).join(', ')].filter(Boolean).join(' · ');
+    return "<div class='ia-linha' style='display:block;margin-top:10px'>"+
+      "<label style='display:flex;gap:8px;align-items:center'><input type='checkbox' class='imp-sel' data-i='"+i+"' checked><b>"+esc(v.nome||'Sem nome')+"</b></label>"+
+      "<div class='formgrid' style='margin-top:8px'><div><label>Nome</label><input class='imp-nome' data-i='"+i+"' value='"+esc(v.nome||"")+"'></div><div><label>Produtor</label><input class='imp-produtor' data-i='"+i+"' value='"+esc(v.produtor||"")+"'></div><div><label>Ano</label><input class='imp-ano' data-i='"+i+"' inputmode='numeric' value='"+esc(v.ano||"")+"'></div><div><label>Garrafas</label><input class='imp-qtd' data-i='"+i+"' type='number' min='1' max='60' value='"+esc(v.quantidade||1)+"'></div></div>"+
+      (detalhes?"<div class='note' style='margin-top:6px'>"+esc(detalhes)+"</div>":"")+
+      (v.aviso?"<div class='note' style='margin-top:4px'>⚠️ "+esc(v.aviso)+"</div>":"")+"</div>";
+  }).join('');
+  document.getElementById('modal-ia-in').innerHTML=
+    "<div class='mtop'><div><h3>Rever antes de importar</h3><div class='note' style='margin-top:3px'>"+IMPORT_RESULTADO.length+" vinho(s) proposto(s). Edita nome, produtor, ano ou quantidade antes de adicionar.</div></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
+    aviso+(linhas||"<div class='note' style='margin-top:14px'>Não foi possível identificar nenhum vinho com segurança. Tenta fotos mais nítidas ou uma imagem de cada vez.</div>")+
+    "<div class='macoes'><button class='btn prim' id='imp-guardar' "+(linhas?"onclick='importarGuardar()'":"disabled")+">Adicionar selecionados</button><button class='btn ghost' onclick=\"fecharModal('modal-ia')\">Cancelar</button></div>";
+}
+function importarValor(classe,i){
+  const e=document.querySelector('.'+classe+'[data-i=\"'+i+'\"]');
+  return e?e.value.trim():'';
+}
+async function importarGuardar(){
+  const selecionados=Array.from(document.querySelectorAll('.imp-sel:checked')).map(e=>parseInt(e.dataset.i,10)).filter(Number.isInteger);
+  if(!selecionados.length){toast('Seleciona pelo menos um vinho',1);return;}
+  const btn=document.getElementById('imp-guardar');btn.disabled=true;btn.textContent='A adicionar…';
+  let feitos=0;
+  try{
+    for(const i of selecionados){
+      const origem=IMPORT_RESULTADO[i]||{},nome=importarValor('imp-nome',i);
+      if(!nome)continue;
+      const anoLido=inteiro(importarValor('imp-ano',i));
+      const vinho=Object.assign({},origem,{nome,produtor:importarValor('imp-produtor',i),ano:(anoLido&&anoLido>=1900&&anoLido<=2100)?anoLido:null,garrafeira_id:GA_ID});
+      const castas=Array.isArray(vinho.castas)?vinho.castas:[];delete vinho.castas;delete vinho.quantidade;delete vinho.aviso;
+      if(TEM_ATUALIZADO)vinho.atualizado_em=new Date().toISOString();
+      const criados=await sbReq('POST','vinhos',[vinho],{'Prefer':'return=representation'});
+      const vinhoId=criados&&criados[0]&&criados[0].id;if(!vinhoId)throw new Error('não foi possível criar '+nome);
+      if(castas.length)await sbRpc('definir_castas',{p_vinho_id:vinhoId,p_nomes:castas});
+      const qtd=Math.max(1,Math.min(60,inteiro(importarValor('imp-qtd',i))||1));
+      await sbReq('POST','garrafas',Array.from({length:qtd},()=>({vinho_id:vinhoId})),{'Prefer':'return=minimal'});
+      feitos++;
+    }
+    await carregarGarrafeira();await recarregarCastas();renderLista();fecharModal('modal-ia');
+    toast(feitos+' vinho(s) e respetivas garrafas adicionados ✓');
+  }catch(e){
+    toast('A importação parou: '+e.message+'. O que já entrou ficou guardado.',1);
+    btn.disabled=false;btn.textContent='Tentar guardar restantes';
+  }
 }
 
 function exportarJSON(){
