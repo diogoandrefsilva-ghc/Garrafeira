@@ -1991,6 +1991,9 @@ function abrirEditarVinho(id){
     <input type="url" id="e-imagem" value="${esc(o('imagem_url'))}" placeholder="https://…/rotulo.jpg">
     <div class="note">O link da fotografia, não o da página da loja — e sem nenhum, a app desenha a garrafa com a cor do tipo e o ano no rótulo.</div>`:''}
 
+    <label>Harmoniza com</label>
+    <textarea id="e-harmonizacao" placeholder="Queijos curados, carnes grelhadas…">${esc(o('harmonizacao'))}</textarea>
+
     <label>As minhas notas</label>
     <textarea id="e-notas" placeholder="Onde comprei, para que ocasião guardei, o que achei…">${esc(o('notas'))}</textarea>
 
@@ -2037,6 +2040,7 @@ function lerFormVinho(){
     preco_medio:num(g('e-preco')),
     vivino_nota:num(g('e-vivino')),
     vivino_url:g('e-vivino-url'),
+    harmonizacao:g('e-harmonizacao'),
     notas:g('e-notas'),
     _castas:g('e-castas').split(',').map(s=>s.trim()).filter(Boolean)
   };
@@ -2703,11 +2707,11 @@ function iaPreencherForm(res){
   por('e-teor',res.teor);
   por('e-beber-de',res.beber_de);por('e-beber-ate',res.beber_ate);
   por('e-preco',res.preco_medio);por('e-vivino',res.vivino_nota);
-  por('e-imagem',res.imagem_url);
+  por('e-imagem',res.imagem_url);por('e-harmonizacao',res.harmonizacao);
   // O resumo e as notas de prova só entram quando o vinho for gravado (o
   // formulário não tem campos para eles) — ficam aqui à espera disso.
   _iaExtraNovo={
-    notas_prova:res.notas_prova||'',harmonizacao:res.harmonizacao||'',
+    notas_prova:res.notas_prova||'',
     ai_resumo:res.ai_resumo||'',vivino_url:res.vivino_url||'',
     vivino_avaliacoes:res.vivino_avaliacoes||null,
     ai_fontes:res.fontes||null,ai_modelo:res.modelo||'',
