@@ -20,6 +20,12 @@
 // "demorou demasiado", por mais tempo que se lhe desse: o tecto não era
 // nosso. Sem `assincrono` mantém-se a resposta completa de uma vez.
 //
+// O MOTOR vem no corpo do pedido e por omissão é o GRÁTIS, mesmo para quem é
+// premium: a chave cara só sai quando o browser pede `plano:"premium"` e a BD
+// confirma que essa pessoa o é. É o que deixa a app pôr as duas leituras lado
+// a lado sem gastar sempre a cara — e o cliente só consegue pedir MENOS do
+// que tem, nunca mais.
+//
 // Secrets do projeto (partilhados por todas as functions):
 //   GEMINI_API_KEY (premium) · GEMINI_FREE_API_KEY (plano grátis)
 //   SUPABASE_URL · SUPABASE_SERVICE_ROLE_KEY
@@ -360,7 +366,7 @@ async function registar(estado: string, detalhe: Record<string, unknown>, quem: 
    Devolve null se a tabela ainda não existir; nesse caso cai-se no modo
    síncrono em vez de rebentar. */
 async function criarAnalise(auth: string, pedido: unknown, vinhoId: number | null, quem: string,
-                            plano: "gratis" | "premium", signal: AbortSignal) {
+                            signal: AbortSignal) {
   try {
     const r = await fetch(`${SB_URL}/rest/v1/analises`, {
       method: "POST",
@@ -369,7 +375,10 @@ async function criarAnalise(auth: string, pedido: unknown, vinhoId: number | nul
         "Content-Profile": "garrafeira", Prefer: "return=representation",
       },
       signal,
-      body: JSON.stringify({ quem, pedido, vinho_id: vinhoId, plano_ia: plano }),
+      // `plano_ia` não vai daqui de propósito: o trigger `analises_guard_ins`
+      // carimba-o com o DIREITO de quem chamou (é isso que a quota conta), e
+      // o motor que acabou por correr fica no `resultado`.
+      body: JSON.stringify({ quem, pedido, vinho_id: vinhoId }),
     });
     if (!r.ok) { console.log("VINHO criar analise:", r.status, (await r.text().catch(() => "")).slice(0, 300)); return null; }
     const id = (await r.json())?.[0]?.id;
@@ -451,10 +460,12 @@ type Res = { ok: true; corpo: Record<string, unknown> } | { ok: false; status: n
 async function produzirFicha(
   nome: string, ano: number | null, produtor: string, regiao: string,
   quem: string | null, signal: AbortSignal, budgetMs: number,
-  campos: string[] | null = null, plano: "gratis" | "premium" = "premium",
+  // A omissão é o GRÁTIS: se um dia alguém chamar isto sem dizer o motor, o
+  // engano sai barato. Ao contrário, saía a chave paga sem ninguém a pedir.
+  campos: string[] | null = null, plano: "gratis" | "premium" = "gratis",
 ): Promise<Res> {
   const geminiKey = plano === "gratis" ? GEMINI_FREE_KEY : GEMINI_KEY;
-  if (!geminiKey) return { ok: false, status: 503, erro: "a pesquisa grátis ainda não está configurada" };
+  if (!geminiKey) return { ok: false, status: 503, erro: `a pesquisa ${plano === "gratis" ? "grátis" : "premium"} ainda não está configurada (falta o secret da chave)` };
   const inicio = Date.now();
   const restante = () => budgetMs - (Date.now() - inicio) - 2_000;
   const searchMs = Math.max(15_000, budgetMs - 14_000);
@@ -541,7 +552,7 @@ async function produzirFicha(
   if (!g.ok) {
     const status = g.status, detail = await g.text();
     let msg = ""; try { msg = JSON.parse(detail)?.error?.message ?? ""; } catch (_) { /**/ }
-    await registar("erro", { passo: "gemini", status, modelo: model, pesquisa: comPesquisa, erro: (msg || detail).slice(0, 800) }, quem);
+    await registar("erro", { passo: "gemini", status, modelo: model, plano, pesquisa: comPesquisa, erro: (msg || detail).slice(0, 800) }, quem);
     if (transitorio(status)) return { ok: false, status: 503, erro: "o serviço está com muita procura agora — espera um minuto e tenta outra vez" };
     return { ok: false, status: 502, erro: `gemini ${status} (${model})${msg ? ": " + msg.slice(0, 200) : ""}` };
   }
@@ -551,12 +562,12 @@ async function produzirFicha(
   const bruto = (cand?.content?.parts ?? []).map((p: any) => p?.text ?? "").join("").trim();
   const parsed = extrairJson(bruto);
   if (!parsed) {
-    await registar("erro", { passo: "json", modelo: model, pesquisa: comPesquisa, amostra: bruto.slice(0, 800) }, quem);
+    await registar("erro", { passo: "json", modelo: model, plano, pesquisa: comPesquisa, amostra: bruto.slice(0, 800) }, quem);
     return { ok: false, status: 502, erro: "resposta ilegível do modelo" };
   }
   const ficha = normalizar(parsed, ano, campos);
   if (!ficha) {
-    await registar("erro", { passo: "vazio", modelo: model, pesquisa: comPesquisa, nome, amostra: bruto.slice(0, 500) }, quem);
+    await registar("erro", { passo: "vazio", modelo: model, plano, pesquisa: comPesquisa, nome, amostra: bruto.slice(0, 500) }, quem);
     // Sem pesquisa o modelo só conhece o que aprendeu no treino, e um vinho
     // de uma quinta pequena é exatamente o que ele não sabe — devolve vazio
     // em vez de inventar, que é o que se lhe pede. Não é "este vinho não
@@ -612,13 +623,25 @@ Deno.serve(async (req) => {
       await registar("erro", { passo: "plano", plano: auth.plano }, quem);
       return json({ error: "não tens acesso à pesquisa por IA — pede ao admin para te atribuir o plano grátis ou premium" }, 403);
     }
-    const plano = auth.plano as "gratis" | "premium";
-    if (plano === "gratis" && !(await temQuotaGratis(authHeader, quem!, ctrl.signal))) {
+    const direito = auth.plano as "gratis" | "premium";
+
+    const body = await req.json().catch(() => ({}));
+    /* O MOTOR desta procura, que NÃO é o mesmo que o direito de quem a pede.
+       Por omissão é o grátis, mesmo para quem é premium: a chave cara só sai
+       quando o browser a pede à letra E a BD confirma que essa pessoa o é.
+       Ou seja, o cliente consegue pedir MENOS do que tem, nunca mais — a
+       regra que interessa (ninguém se promove sozinho) fica de pé, e a chave
+       paga deixa de sair por omissão, o que é mais apertado do que antes. */
+    const plano: "gratis" | "premium" =
+      body?.plano === "premium" && direito === "premium" ? "premium" : "gratis";
+    /* A quota é do DIREITO e não do motor: quem só tem grátis continua com as
+       cinco por dia, e um premium a fazer a primeira volta no grátis não
+       gasta a quota de ninguém — a linha de `analises` é carimbada pelo
+       trigger com o direito, não com o motor que acabou por correr. */
+    if (direito === "gratis" && !(await temQuotaGratis(authHeader, quem!, ctrl.signal))) {
       await registar("erro", { passo: "quota-gratis", limite_dia: FREE_DAILY_LIMIT }, quem);
       return json({ error: `atingiste o limite diário de ${FREE_DAILY_LIMIT} pesquisas grátis — tenta amanhã ou pede acesso premium` }, 429);
     }
-
-    const body = await req.json().catch(() => ({}));
     const nome = String(body?.nome ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
     if (nome.length < 3) {
       await registar("erro", { passo: "nome", recebido: String(body?.nome ?? "").slice(0, 60) }, quem);
@@ -643,7 +666,7 @@ Deno.serve(async (req) => {
        existir, `criarAnalise` devolve null e cai-se no modo síncrono em vez
        de rebentar. */
     if (body?.assincrono === true) {
-      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, campos: camposPedidos }, vinhoId, quem!, plano, ctrl.signal);
+      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, campos: camposPedidos }, vinhoId, quem!, ctrl.signal);
       if (analiseId != null) {
         const dono = quem!;
         // NÃO faz await: o trabalho pesado sobrevive ao pedido original.

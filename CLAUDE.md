@@ -662,12 +662,38 @@ descoberta de modelo, mesma escada de variantes, mesmos fallbacks.
 - **Três planos por utilizador:** `sem_ia`, `gratis`, `premium`, guardados em
   `allowed_users.ia_plano`. Só o admin os altera em Definições › Utilizadores;
   o admin é sempre premium. A Edge Function pergunta `garrafeira.plano_ia()`
-  com o JWT de quem chamou — nunca aceita um plano vindo do browser. `gratis`
+  com o JWT de quem chamou — nunca aceita do browser um plano MAIOR do que
+  esse (ver o ponto seguinte). `gratis`
   usa exclusivamente `GEMINI_FREE_API_KEY` e os modelos fixos 2.5 Flash /
   Flash-Lite, portanto não pode cair na chave premium. Tem cinco tentativas
   por dia por utilizador, configuráveis pelo secret `GEMINI_FREE_DAILY_LIMIT`.
   As análises registam o plano em `analises.plano_ia`; o trigger volta a
   carimbá-lo pela função SQL, mesmo se alguém falar com o PostgREST à mão.
+- **Procura-se sempre primeiro no grátis, mesmo sendo premium** — o premium é
+  um segundo clique. `iaPedir(pedido,vinhoId,motor)` manda o MOTOR no corpo do
+  pedido e a função atende `premium` só a quem a BD disser que o é: o browser
+  pede menos do que tem, nunca mais. A regra que interessa (ninguém se promove
+  sozinho) fica de pé, e a chave cara deixa de sair por omissão — o que é mais
+  apertado do que era, não menos. O DIREITO continua a ser `plano_ia()`: é ele
+  que a quota conta e é ele que o trigger carimba em `analises.plano_ia`; o
+  motor que produziu cada leitura vem no `resultado`. Existe porque a pergunta
+  "vale a pena o premium?" não se responde de cabeça — responde-se pondo as
+  duas leituras lado a lado.
+- **Com as duas leituras, a confirmação passa a ser uma ESCOLHA** (`IA_RES` é
+  a grátis, `IA_RES_P` a premium). Com uma leitura só, cada campo é uma caixa
+  como sempre foi; com duas, os campos em que elas DISCORDAM viram botões de
+  rádio — manter / grátis / premium — porque com duas propostas em cima da
+  mesa "marcado" já não dizia qual delas entrava. Onde as duas concordam fica
+  a caixa e diz-se isso: pedir uma escolha onde não há escolha nenhuma era
+  encher o ecrã de decisões falsas. O "manter" está sempre lá, mesmo num campo
+  vazio — sem ele, duas propostas obrigavam a aceitar uma, que é o contrário
+  de confirmar. Premium é dourado (a cor da distinção nesta app), e
+  `iaTudoDe()` põe a ficha inteira num motor de uma vez, que é o que torna a
+  comparação legível. No formulário de vinho novo não há este ecrã: lá a
+  segunda volta reescreve o que a primeira encheu (`_iaAuto`) e mais nada.
+  **A importação por imagens ficou de fora** — as duas leituras devolvem
+  conjuntos de vinhos diferentes e compará-las campo a campo obrigava a
+  emparelhá-los por semelhança de nome, que erra.
 - **Grounding com pesquisa Google** (`tools:[{google_search:{}}]`). Sem isso
   o modelo inventa notas do Vivino e preços de memória, que é exatamente o
   que não se quer numa base de dados. Por causa do tool, a API **recusa**

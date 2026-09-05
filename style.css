@@ -567,6 +567,24 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .ia-campo{flex:1;min-width:0;font-size:13px;line-height:1.55}
 .ia-campo b{display:block;font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--mu)}
 .ia-antes{color:var(--mu);text-decoration:line-through;font-size:12px}
+/* A comparação entre motores. O premium é DOURADO porque nesta app o dourado
+   é a cor da distinção (menção, nota do Vivino) — e o que se distingue aqui é
+   a leitura que custou dinheiro. A grátis fica em papel, como o resto. */
+.ia-cmp{padding:10px 0;border-bottom:1px solid var(--bo)}
+.ia-cmp:last-child{border-bottom:none}
+.ia-cmp-t{display:block;font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--mu);margin-bottom:6px}
+.ia-op{display:flex;gap:9px;align-items:flex-start;margin-top:5px;padding:6px 9px;border:1px solid var(--bo);border-radius:9px;background:var(--card);font-size:13px;line-height:1.5;cursor:pointer}
+.ia-op input{width:auto;margin-top:3px;flex-shrink:0}
+.ia-op span{flex:1;min-width:0;word-break:break-word}
+.ia-op i{display:block;font-style:normal;font-size:10px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--mu)}
+.ia-op.at{background:transparent;color:var(--mu)}
+.ia-op.pr{border-color:#eddfba;background:var(--oup)}
+.ia-op.pr i{color:var(--ou2)}
+.ia-op:has(input:checked){border-color:var(--vh);box-shadow:0 0 0 1px var(--vh)}
+.ia-op.pr:has(input:checked){border-color:var(--ou);box-shadow:0 0 0 1px var(--ou)}
+.ia-igual{font-style:normal;color:var(--vd)}
+.ia-prbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px;padding:9px 11px;border:1px solid #f0e4c8;border-radius:11px;background:var(--oup);font-size:12.5px;color:var(--ou2)}
+.ia-prbar span{flex:1;min-width:130px}
 .ia-fontes{font-size:11px;color:var(--mu);margin-top:12px;line-height:1.75;word-break:break-word}
 .ia-fontes a{color:var(--in)}
 .aviso{background:var(--oup);border:1px solid #eddfba;border-radius:11px;padding:11px 13px;font-size:12px;color:#6f5205;line-height:1.6;margin-top:12px}
