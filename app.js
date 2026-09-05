@@ -3423,23 +3423,23 @@ async function admRenderUtilizadores(){
     return `<div class="ua-row">
       <span class="em">${esc(u.email)}${u.nome?' ('+esc(u.nome)+')':''}</span>
       ${eAdmin?'<span class="tagme">admin · IA premium</span>'
-        :`<label class="chk" title="Tem garrafeira própria e pode mexer-lhe"><input type="checkbox"${u.pode_editar?' checked':''}
-            onchange="admToggleEditor('${escJs(u.email)}',this.checked)"> editor</label>
-          <select class="mini" title="Plano de pesquisa por IA" onchange="admDefinirPlano('${escJs(u.email)}',this.value)">
-            ${IA_PLANOS.map(p=>`<option value="${p.v}"${(u.ia_plano||'sem_ia')===p.v?' selected':''}>${p.r}</option>`).join('')}
-          </select>
-          <button class="jdel" title="Tirar acesso" onclick="admTirarAcesso('${escJs(u.email)}')">✕</button>`}
+        :`<div class="ua-ctrls">
+            <label class="chk" title="Tem garrafeira própria e pode mexer-lhe"><input type="checkbox"${u.pode_editar?' checked':''}
+              onchange="admToggleEditor('${escJs(u.email)}',this.checked)"> Editor</label>
+            <select class="mini" title="Plano de pesquisa por IA" onchange="admDefinirPlano('${escJs(u.email)}',this.value)">
+              ${IA_PLANOS.map(p=>`<option value="${p.v}"${(u.ia_plano||'sem_ia')===p.v?' selected':''}>${p.r}</option>`).join('')}
+            </select>
+            <button class="jdel" title="Tirar acesso" onclick="admTirarAcesso('${escJs(u.email)}')">✕</button>
+          </div>`}
     </div>`;
   }).join('')||'<div class="note" style="padding:6px 0">Ninguém na lista.</div>';
 
-  // Os dois selects (password temporária e passar a app) saem da MESMA
-  // lista — nunca podem oferecer alguém que não tenha acesso.
+  // O select da password temporária sai da MESMA lista — nunca pode
+  // oferecer alguém que não tenha acesso.
   const outros=_admUsers.filter(u=>u.email.toLowerCase()!==String(ADMIN_EMAIL).toLowerCase());
   const op=l=>l.map(u=>`<option value="${esc(u.email)}">${esc(u.email)}</option>`).join('');
   const s1=document.getElementById('adm-pt-email');
-  const s2=document.getElementById('adm-dono-email');
   if(s1)s1.innerHTML=outros.length?op(outros):'<option value="">(mais ninguém tem acesso)</option>';
-  if(s2)s2.innerHTML=outros.length?op(outros):'<option value="">(mais ninguém tem acesso)</option>';
 }
 async function admToggleEditor(email,val){
   try{
@@ -3490,19 +3490,6 @@ async function admGerarPassTemp(){
       :e.message;
   }
 }
-async function admPassarAdmin(){
-  const st=document.getElementById('adm-dono-status');
-  const email=document.getElementById('adm-dono-email').value;
-  if(!email){st.style.color='var(--dg)';st.textContent='Escolhe a pessoa.';return;}
-  if(!confirm(`Passar a app a ${email}?\n\nA partir daí é ELE que manda em quem tem acesso — tu ficas como editor. Só ele te pode devolver o lugar.`))return;
-  st.style.color='var(--mu)';st.textContent='A passar…';
-  try{
-    await sbRpc('definir_admin',{p_email:email});
-    st.style.color='var(--vd)';st.textContent='✓ Feito. A recarregar…';
-    setTimeout(()=>window.location.reload(),1200);
-  }catch(e){st.style.color='var(--dg)';st.textContent=e.message;}
-}
-
 /* ── EXPORTAR ──────────────────────────────────────────────────────── */
 /* ── EXPORTAR A LISTA PARA PDF ─────────────────────────────────────
    Sem biblioteca nenhuma, que aqui não há build: monta-se um DOCUMENTO

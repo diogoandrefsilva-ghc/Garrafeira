@@ -548,9 +548,13 @@ as garrafas dele ainda na conta de quem montou a app, e a dele própria
 criada sem nada lá dentro.
 
 **Passar a APP ≠ passar uma GARRAFEIRA.** `definir_admin()` passa quem manda
-em quem entra; `transferir_garrafeira()` passa as garrafas. A entrega ao
-Barrona precisa dos dois cliques, em Definições. Transferir só o dono o pode
-fazer (nem o admin), e só para quem já tenha `pode_editar`.
+em quem entra; `transferir_garrafeira()` passa as garrafas — e são coisas
+diferentes que já não se fazem no mesmo sítio. Transferir a garrafeira
+continua na UI, em Definições › Garrafeiras, e só o dono a pode fazer (nem
+o admin), e só para quem já tenha `pode_editar`. Passar a app deixou de ter
+botão (ver "O admin está na BASE DE DADOS" mais abaixo) — quem precisar
+disso corre `select garrafeira.definir_admin('email@...')` no SQL Editor do
+Supabase.
 
 ## Vinho ≠ garrafa (é a decisão que segura o resto)
 Um **vinho** é a referência: nome, ano, produtor, castas, e tudo o que a IA
@@ -627,16 +631,21 @@ um botão nunca foi proteção nenhuma.
 `garrafeira.config.admin_email`, lido por `garrafeira.admin_email()`. A app
 começa com um valor de arranque em `ADMIN_EMAIL` (app.js) e substitui-o pelo
 da config no `carregar()`. Isto existe porque a app nasce para testes com um
-dono e passa depois para outro (o Barrona): a passagem é **Definições ›
-Utilizadores › Passar a app** (`definir_admin()`), não um deploy.
+dono e podia um dia passar para outro: a passagem é a função SQL
+`definir_admin()`, corrida à mão no SQL Editor do Supabase — não um deploy,
+mas também já não um botão em Definições. Era um botão (Definições ›
+Utilizadores › Passar a app) e deixou de fazer sentido tê-lo à vista: é uma
+operação rara e definitiva (quem a faz fica de fora de mandar em quem entra
+até alguém lho devolver do outro lado), e um botão permanente na UI é um
+convite a um toque a mais. Continua a existir para quem precisar mesmo
+dela — só muda o sítio de onde se chama.
 
 `definir_admin()` recusa passar a app a quem não esteja já em
-`allowed_users` — era ficar sem admin nenhum e sem forma de voltar atrás
-pela interface.
+`allowed_users` — era ficar sem admin nenhum e sem forma de voltar atrás.
 
 Isto passa a APP, não as GARRAFAS: os vinhos do Barrona são de quem for o
 `dono` da garrafeira dele, e mudam de mãos por `transferir_garrafeira()`
-(Definições › Garrafeiras). A entrega ao Barrona é dois cliques, não um.
+(Definições › Garrafeiras) — essa continua na UI, é a operação do dia a dia.
 
 **Admin da app ≠ dono da conta Supabase.** `SUPABASE_DONO_EMAIL` (app.js) é
 fixo e não muda com `definir_admin()` — ao contrário de `ADMIN_EMAIL`, que
