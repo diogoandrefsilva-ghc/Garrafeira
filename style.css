@@ -394,9 +394,14 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .linha-add{display:flex;gap:7px;flex-wrap:wrap;align-items:flex-end;margin-top:10px}
 .linha-add input,.linha-add select{flex:1;min-width:130px;padding:10px 12px;border:1px solid var(--bo);border-radius:9px;font-size:13.5px;font-family:inherit;background:var(--bg)}
 .linha-add .btn{margin-top:0}
-.ua-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--bo);font-size:13px}
+.ua-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;padding:9px 0;border-bottom:1px solid var(--bo);font-size:13px}
 .ua-row:last-child{border-bottom:none}
-.ua-row span.em{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* `flex-basis:100%` força o email a ocupar sempre a linha toda: com o
+   plano de IA a somar-se ao checkbox de editor e ao ✕, os controlos já não
+   cabiam ao lado do email num telemóvel — e um span `flex:1` (basis 0%)
+   nunca força quebra de linha sozinho (o texto com ellipsis tem min-content
+   ~0), por isso encolhia até desaparecer em vez de quebrar. */
+.ua-row span.em{flex:1 1 100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ua-row .tagme{font-family:var(--fd);font-size:12px;background:var(--vhp);color:var(--vh);padding:1px 9px;border-radius:99px;white-space:nowrap}
 .jdel{background:none;border:none;font-size:15px;cursor:pointer;color:var(--dg);padding:3px 6px;line-height:1}
 .chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;white-space:nowrap}
