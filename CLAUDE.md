@@ -34,8 +34,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
 - `db/` — `schema.sql` → `functions.sql` → `policies.sql` → `seed.sql`
   (+ `README.md` com os passos manuais no painel do Supabase). Fonte de
   verdade do schema. `migracao-garrafeiras.sql` é a migração 07 (uma
-  garrafeira por pessoa) para a base que já existe — a única deste repo
-  ainda **por aplicar** no Supabase.
+  garrafeira por pessoa); `migracao-ia-planos.sql` é a 08 (planos de IA por
+  utilizador) e, numa base existente, é seguida por `functions.sql`.
 - Não mexer à mão: `apple-touch-icon.png` (é gerado — ver "Ícones").
 
 ## Os cinco separadores (o ecrã inicial não é a lista)
@@ -650,6 +650,15 @@ app a outra pessoa; por isso ficam atrás de `.dono-hide`
 Botão em cada vinho e no formulário de vinho novo. Quem procura é a Edge
 Function `vinho-info.ts` — irmã da `calendario-sporting` do Goals: mesma
 descoberta de modelo, mesma escada de variantes, mesmos fallbacks.
+- **Três planos por utilizador:** `sem_ia`, `gratis`, `premium`, guardados em
+  `allowed_users.ia_plano`. Só o admin os altera em Definições › Utilizadores;
+  o admin é sempre premium. A Edge Function pergunta `garrafeira.plano_ia()`
+  com o JWT de quem chamou — nunca aceita um plano vindo do browser. `gratis`
+  usa exclusivamente `GEMINI_FREE_API_KEY` e os modelos fixos 2.5 Flash /
+  Flash-Lite, portanto não pode cair na chave premium. Tem cinco tentativas
+  por dia por utilizador, configuráveis pelo secret `GEMINI_FREE_DAILY_LIMIT`.
+  As análises registam o plano em `analises.plano_ia`; o trigger volta a
+  carimbá-lo pela função SQL, mesmo se alguém falar com o PostgREST à mão.
 - **Grounding com pesquisa Google** (`tools:[{google_search:{}}]`). Sem isso
   o modelo inventa notas do Vivino e preços de memória, que é exatamente o
   que não se quer numa base de dados. Por causa do tool, a API **recusa**

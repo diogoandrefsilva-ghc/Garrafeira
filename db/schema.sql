@@ -55,8 +55,12 @@ CREATE TABLE IF NOT EXISTS garrafeira.allowed_users (
   email       text NOT NULL,
   nome        text NOT NULL DEFAULT '',
   pode_editar boolean NOT NULL DEFAULT false,
+  -- Plano de pesquisa de vinhos. A Edge Function le-o no servidor: a app
+  -- mostra-o por conveniência, mas nunca é ela que escolhe a chave/modelo.
+  ia_plano    text NOT NULL DEFAULT 'sem_ia',
   created_at  timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT allowed_users_pkey PRIMARY KEY (email)
+  CONSTRAINT allowed_users_pkey PRIMARY KEY (email),
+  CONSTRAINT allowed_users_ia_plano_chk CHECK (ia_plano IN ('sem_ia','gratis','premium'))
 );
 
 CREATE TABLE IF NOT EXISTS garrafeira.access_requests (
@@ -360,13 +364,17 @@ CREATE TABLE IF NOT EXISTS garrafeira.analises (
   quem      text NOT NULL DEFAULT '',           -- email de quem carregou
   vinho_id  bigint REFERENCES garrafeira.vinhos (id) ON DELETE SET NULL,
   pedido    jsonb,                              -- {nome, ano, produtor, regiao}
+  plano_ia  text NOT NULL DEFAULT 'sem_ia',     -- 'gratis' | 'premium'
   estado    text NOT NULL DEFAULT 'pendente',   -- 'pendente'|'concluido'|'erro'
   resultado jsonb,
   erro      text,
   CONSTRAINT analises_pkey PRIMARY KEY (id),
-  CONSTRAINT analises_estado_chk CHECK (estado IN ('pendente','concluido','erro'))
+  CONSTRAINT analises_estado_chk CHECK (estado IN ('pendente','concluido','erro')),
+  CONSTRAINT analises_plano_ia_chk CHECK (plano_ia IN ('sem_ia','gratis','premium'))
 );
 CREATE INDEX IF NOT EXISTS analises_criado_idx ON garrafeira.analises (criado_em DESC);
+CREATE INDEX IF NOT EXISTS analises_gratis_quota_idx ON garrafeira.analises (quem, criado_em DESC)
+  WHERE plano_ia = 'gratis';
 
 -- Rasto de cada tentativa (browser -> Edge Function -> Gemini). Do lado do
 -- browser vê-se sempre "HTTP 502"; a causa real está aqui.

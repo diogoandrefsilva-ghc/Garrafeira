@@ -165,7 +165,7 @@ function donoGarrafeira(){
    `isReadOnly` é "não posso editar isto que está aberto" — e passou a ter
    duas causas: ou não sou editor, ou a garrafeira aberta é de outra pessoa.
    Numa garrafeira emprestada não há meio-termo nenhum: vê-se, não se mexe. */
-let isReadOnly=true, EU={email:'',pode_editar:false};
+let isReadOnly=true, EU={email:'',pode_editar:false,ia_plano:'sem_ia'};
 function isAdmin(){
   return !!(_sbSession&&_sbSession.user&&
     String(_sbSession.user.email||'').toLowerCase()===String(ADMIN_EMAIL||'').toLowerCase());
@@ -173,6 +173,11 @@ function isAdmin(){
 // "Posso editar em geral" (o `pode_editar` de allowed_users) — é diferente
 // de poder editar o que está AGORA no ecrã, que é o `podeEditar()`.
 function souEditor(){return isAdmin()||!!EU.pode_editar;}
+// A UI só explica o plano; a Edge Function volta a confirmá-lo através da
+// base de dados antes de tocar em qualquer chave Gemini.
+function planoIA(){return isAdmin()?'premium':String(EU.ia_plano||'sem_ia');}
+function podeUsarIA(){return planoIA()==='gratis'||planoIA()==='premium';}
+function rotuloPlanoIA(){return planoIA()==='premium'?'pesquisa premium':'pesquisa grátis';}
 // Duas portas, e só duas: a minha garrafeira, ou uma em que o dono deu
 // 'edicao' ao admin. Uma partilha nunca abre esta — é sempre só de ver.
 function podeEditar(){
@@ -242,7 +247,7 @@ async function carregar(){
   const [castas,cfg,eu,gars]=await Promise.all([
     sbReq('GET','castas?select=*&order=nome.asc'),
     sbReq('GET','config?select=*'),
-    sbReq('GET',`allowed_users?select=email,nome,pode_editar&email=eq.${encodeURIComponent(_sbSession.user.email)}`),
+    sbReq('GET',`allowed_users?select=email,nome,pode_editar,ia_plano&email=eq.${encodeURIComponent(_sbSession.user.email)}`),
     sbReq('GET','garrafeiras?select=*&order=nome.asc')
   ]);
   db.castas=castas||[];
@@ -253,7 +258,7 @@ async function carregar(){
   // à mesma) — nesse caso não vem linha nenhuma e ele fica editor por ser
   // admin, que é o que a BD também decide.
   const minha=(eu||[])[0]||null;
-  EU={email:_sbSession.user.email,pode_editar:minha?!!minha.pode_editar:false,nome:minha?minha.nome:''};
+  EU={email:_sbSession.user.email,pode_editar:minha?!!minha.pode_editar:false,nome:minha?minha.nome:'',ia_plano:minha?minha.ia_plano||'sem_ia':'sem_ia'};
 
   GA_LISTA=gars||[];
   // Quem pode editar e ainda não tem garrafeira nenhuma ganha a dele aqui —
@@ -1673,7 +1678,9 @@ function vinhoDetalheHTML(v){
     </div>
 
     <div class="macoes ro-hide">
-      <button class="btn prim" onclick="iaEscolher(${v.id})">🔎 Procurar informação</button>
+      ${podeUsarIA()
+        ? `<button class="btn prim" onclick="iaEscolher(${v.id})">🔎 Procurar informação</button>`
+        : '<span class="note">A pesquisa por IA não está incluída no teu acesso.</span>'}
       <button class="btn ghost" onclick="abrirEditarVinho(${v.id})">✏️ Editar</button>
     </div>
 
@@ -1948,9 +1955,9 @@ function abrirEditarVinho(id){
       <div><label>Produtor</label><input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado"></div>
     </div>
 
-    ${id?'':`<div class="aviso">Escreve o nome (e o ano, se souberes) e carrega em <b>Procurar informação</b>: a pesquisa preenche o resto — castas, região, tipo, nota do Vivino, preço médio e quando beber. Confirmas antes de gravar.</div>
+    ${id?'':podeUsarIA()?`<div class="aviso">Escreve o nome (e o ano, se souberes) e carrega em <b>Procurar informação</b>: a ${esc(rotuloPlanoIA())} preenche o resto — castas, região, tipo, nota do Vivino, preço médio e quando beber. Confirmas antes de gravar.</div>
       <button class="btn prim full" id="e-btn-ia" onclick="iaProcurarNovo()">🔎 Procurar informação</button>
-      <div id="e-ia-estado"></div>`}
+      <div id="e-ia-estado"></div>`:'<div class="note">A pesquisa por IA não está incluída no teu acesso. Pede ao admin para te atribuir o plano grátis ou premium.</div>'}
 
     <div class="mrow">
       <div><label>Tipo</label><select id="e-tipo">${opts(TIPOS,o('tipo','Tinto'))}</select></div>
@@ -2334,7 +2341,7 @@ async function iaLog(estado,detalhe){
 /* Chama a função e espera pelo resultado. Devolve o objeto da IA, ou
    levanta um erro com uma mensagem que se possa mostrar a alguém. */
 async function iaPedir(pedido,vinhoId){
-  await iaLog('pedido',{pedido,vinho_id:vinhoId||null});
+  await iaLog('pedido',{pedido,vinho_id:vinhoId||null,plano:planoIA()});
   let r;
   try{
     r=await sbFetch(`${SB_URL}/functions/v1/vinho-info`,{
@@ -2387,6 +2394,7 @@ function iaValorAtual(v,k){
 }
 function iaEscolher(vinhoId){
   if(roGuard())return;
+  if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
   const v=IDXV[vinhoId];if(!v)return;
   const linhas=IA_CAMPOS.map(c=>{
     const tem=!!iaValorAtual(v,c.k);
@@ -2400,7 +2408,7 @@ function iaEscolher(vinhoId){
       <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
       <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
 
-    <div class="aviso">Escolhe o que queres procurar. <b>Quanto menos pedires, melhor a procura</b> —
+    <div class="aviso"><b>${esc(rotuloPlanoIA())}</b>. Escolhe o que queres procurar. <b>Quanto menos pedires, melhor a procura</b> —
       o modelo concentra-se nisso em vez de andar atrás de tudo. Já vêm marcados os campos vazios.</div>
 
     <div class="ia-escbar">
@@ -2528,13 +2536,14 @@ async function iaArrancar(vinhoId){
 }
 // Do formulário de "novo vinho": preenche os campos em vez de gravar.
 async function iaProcurarNovo(){
+  if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
   const nome=document.getElementById('e-nome').value.trim();
   if(!nome){toast('Escreve primeiro o nome do vinho',1);document.getElementById('e-nome').focus();return;}
   const ano=inteiro(document.getElementById('e-ano').value);
   const btn=document.getElementById('e-btn-ia');
   const est=document.getElementById('e-ia-estado');
   btn.disabled=true;btn.textContent='🔎 A procurar…';
-  est.innerHTML='<div class="note" style="margin-top:8px">A pesquisar na net. Pode levar até dois minutos — podes ir fazendo o resto.</div>';
+  est.innerHTML=`<div class="note" style="margin-top:8px">A ${esc(rotuloPlanoIA())} está a procurar na net. Pode levar até dois minutos — podes ir fazendo o resto.</div>`;
   try{
     const res=await iaPedir({nome,ano,produtor:document.getElementById('e-produtor').value.trim()},null);
     iaPreencherForm(res);
@@ -3394,19 +3403,27 @@ async function admRecusar(email){
   }catch(e){toast('Não foi possível: '+e.message,1);}
 }
 let _admUsers=[];
+const IA_PLANOS=[
+  {v:'sem_ia',r:'sem IA'},
+  {v:'gratis',r:'IA grátis'},
+  {v:'premium',r:'IA premium'}
+];
 async function admRenderUtilizadores(){
   const box=document.getElementById('adm-users-list');
   if(!box)return;
   try{
-    _admUsers=await sbReq('GET','allowed_users?select=email,nome,pode_editar&order=email.asc')||[];
+    _admUsers=await sbReq('GET','allowed_users?select=email,nome,pode_editar,ia_plano&order=email.asc')||[];
   }catch(e){box.innerHTML=`<div class="note">${esc(e.message)}</div>`;return;}
   box.innerHTML=_admUsers.map(u=>{
     const eAdmin=u.email.toLowerCase()===String(ADMIN_EMAIL).toLowerCase();
     return `<div class="ua-row">
       <span class="em">${esc(u.email)}${u.nome?' ('+esc(u.nome)+')':''}</span>
-      ${eAdmin?'<span class="tagme">admin</span>'
+      ${eAdmin?'<span class="tagme">admin · IA premium</span>'
         :`<label class="chk" title="Tem garrafeira própria e pode mexer-lhe"><input type="checkbox"${u.pode_editar?' checked':''}
             onchange="admToggleEditor('${escJs(u.email)}',this.checked)"> editor</label>
+          <select class="mini" title="Plano de pesquisa por IA" onchange="admDefinirPlano('${escJs(u.email)}',this.value)">
+            ${IA_PLANOS.map(p=>`<option value="${p.v}"${(u.ia_plano||'sem_ia')===p.v?' selected':''}>${p.r}</option>`).join('')}
+          </select>
           <button class="jdel" title="Tirar acesso" onclick="admTirarAcesso('${escJs(u.email)}')">✕</button>`}
     </div>`;
   }).join('')||'<div class="note" style="padding:6px 0">Ninguém na lista.</div>';
@@ -3424,6 +3441,13 @@ async function admToggleEditor(email,val){
   try{
     await sbReq('PATCH',`allowed_users?email=eq.${encodeURIComponent(email)}`,{pode_editar:val});
     toast(val?email+' passa a ter garrafeira própria':email+' fica só a ver');
+  }catch(e){toast('Não foi possível: '+e.message,1);admRenderUtilizadores();}
+}
+async function admDefinirPlano(email,plano){
+  if(!IA_PLANOS.some(p=>p.v===plano)){admRenderUtilizadores();return;}
+  try{
+    await sbReq('PATCH',`allowed_users?email=eq.${encodeURIComponent(email)}`,{ia_plano:plano});
+    toast(email+' fica com '+(IA_PLANOS.find(p=>p.v===plano)||{}).r);
   }catch(e){toast('Não foi possível: '+e.message,1);admRenderUtilizadores();}
 }
 async function admTirarAcesso(email){

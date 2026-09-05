@@ -63,6 +63,23 @@ AS $$
   );
 $$;
 
+-- O plano de IA é uma decisão do admin, guardada na mesma lista que autoriza
+-- a entrada. É uma função (e não uma leitura que a Edge Function confia do
+-- cliente) para que ninguém consiga transformar um pedido grátis em pago.
+-- O admin conta sempre como premium, mesmo que a sua linha ainda não exista.
+CREATE OR REPLACE FUNCTION garrafeira.plano_ia()
+  RETURNS text LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path TO 'garrafeira', 'public'
+AS $$
+  SELECT CASE
+    WHEN garrafeira.is_admin() THEN 'premium'
+    ELSE COALESCE((
+      SELECT ia_plano FROM garrafeira.allowed_users
+       WHERE lower(email) = lower(COALESCE(auth.email(), ''))
+    ), 'sem_ia')
+  END;
+$$;
+
 -- ---------------------------------------------------------------------
 -- DE QUEM É ESTA GARRAFEIRA (o isolamento, em três funções)
 -- ---------------------------------------------------------------------
@@ -584,6 +601,9 @@ AS $$
 BEGIN
   NEW.quem      := lower(COALESCE(auth.email(), ''));
   NEW.criado_em := now();
+  -- Não se aceita o plano que veio do browser: o registo tem de espelhar o
+  -- que a função `plano_ia()` decidiu para o JWT que fez o pedido.
+  NEW.plano_ia  := garrafeira.plano_ia();
   NEW.estado    := 'pendente';   -- nasce sempre pendente; quem a fecha é a função
   NEW.resultado := NULL;
   NEW.erro      := NULL;
