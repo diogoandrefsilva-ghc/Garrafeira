@@ -713,18 +713,26 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .toast.err{background:var(--dg)}
 
 /* ── PERMISSÕES ─────────────────────────────────────────────────────
-   Três classes, três fronteiras diferentes:
+   Quatro classes, quatro fronteiras diferentes:
      .ro-hide    esconde-se de quem NÃO pode editar (body.readonly)
      .admin-hide esconde-se de quem NÃO é admin     (body.naoadmin)
      .dono-hide  esconde-se de quem NÃO é o dono da conta Supabase
                  (body.naodono) — password temporária e diagnóstico mexem
                  na CONTA, não na garrafeira, e continuam a ser meus mesmo
                  depois de passar a app a outro admin.
-   Isto é só a UI. Quem manda é a RLS (is_editor()/is_admin() em
+     .minha-only mostra-se SÓ ao dono da garrafeira aberta (body.naominha
+                 esconde-a) — partilhar, mudar o nome e passar a garrafeira
+                 são coisas de quem é dono dela.
+   `.minha-only` não é o mesmo que `.ro-hide`, e é por isso que existe: o
+   cartão das Garrafeiras TEM de continuar visível numa garrafeira
+   emprestada (é lá que está o caminho de volta à própria), e só o que lá
+   dentro é do dono é que desaparece.
+   Isto é só a UI. Quem manda é a RLS (pode_ver()/pode_mexer() em
    db/policies.sql) — esconder um botão nunca foi proteção nenhuma. */
 body.readonly .ro-hide{display:none!important}
 body.naoadmin .admin-hide{display:none!important}
 body.naodono .dono-hide{display:none!important}
+body.naominha .minha-only{display:none!important}
 
 /* ── PRÉ-VISUALIZAÇÃO DA FOLHA (PDF) ────────────────────────────────
    Aqui só vive a MOLDURA — a barra e o iframe. O CSS da própria folha vive

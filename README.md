@@ -6,6 +6,9 @@ que já se bebeu.
 - **Sem build.** HTML + CSS + um `app.js`. Publica-se em GitHub Pages.
 - **Dados e login no Supabase** (schema `garrafeira`, isolado das outras
   apps do mesmo projeto).
+- **Uma garrafeira por pessoa.** Mesma app, mesmas tabelas — mas cada um só
+  vê as suas garrafas. Podes **emprestar** a tua a um amigo: ele vê e
+  procura, nunca mexe.
 - **Instalável** no telemóvel (PWA).
 - Cada vinho tem a sua **garrafa desenhada** (SVG, cor pelo tipo, ano no
   rótulo), a foto que a procura encontrou, ou **uma fotografia tua** — toca
@@ -19,7 +22,7 @@ que já se bebeu.
 | **Detalhe** | a lista toda, organizada por região ou por ano |
 | **Locais** | o mapa: cada local → cada prateleira → cada lugar |
 | **Consumidos** | o histórico — quando, onde e o que se achou de cada garrafa bebida |
-| **Definições** | conta, locais, utilizadores (admin), migração dos dados antigos, exportação e diagnóstico |
+| **Definições** | conta, **garrafeiras** (trocar de garrafeira, partilhar, passar a outra pessoa), locais, utilizadores (admin), migração dos dados antigos, exportação e diagnóstico |
 
 Em cada vinho há um botão **Procurar informação**: uma Edge Function
 pergunta a um modelo *com pesquisa Google ligada* e traz castas, região,
@@ -32,6 +35,9 @@ automáticas entram como proposta, não como facto.
 
 1. **Base de dados:** correr no SQL Editor do Supabase, por esta ordem —
    `db/schema.sql` → `db/functions.sql` → `db/policies.sql` → `db/seed.sql`.
+   Numa base que já esteja a andar, correr antes
+   `db/migracao-garrafeiras.sql` → `db/functions.sql` → `db/policies.sql`
+   (é a migração que dá uma garrafeira a cada pessoa — ver `db/README.md`).
 2. **Expor o schema:** Settings › API › *Exposed schemas* → juntar
    `garrafeira`. Sem isto todos os pedidos dão 404.
 3. **Redirect URLs:** Authentication › URL Configuration → juntar o endereço

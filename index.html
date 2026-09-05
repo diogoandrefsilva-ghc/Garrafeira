@@ -96,7 +96,14 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
   <div class="hdr">
     <div class="brand">
       <div class="escudo"><img src="icone.svg" alt=""></div>
-      <h1>Garrafeira</h1>
+      <div style="min-width:0">
+        <h1>Garrafeira</h1>
+        <!-- De quem é a garrafeira que está aberta. Escrito por
+             `aplicarCabecalho()` e escondido quando só há uma que é minha —
+             repetir "Garrafeira do Barrona" por baixo de "Garrafeira" não
+             dizia nada a quem só tem a sua. -->
+        <p id="hdr-garrafeira" style="display:none"></p>
+      </div>
     </div>
   </div>
 </header>
@@ -180,6 +187,14 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       <button class="btn ghost" onclick="sbLogout()" style="margin-top:10px">Terminar sessão</button>
     </div>
 
+    <!-- SEM `ro-hide`: numa garrafeira emprestada o modo de leitura liga-se,
+         e é justamente aqui que está o caminho de volta à própria. -->
+    <div class="fcard" id="fcard-garrafeiras">
+      <h3>Garrafeiras</h3>
+      <div class="note">A tua garrafeira é só tua. Quem quiseres pode vê-la — mas só ver.</div>
+      <div id="cfg-garrafeira"></div>
+    </div>
+
     <div class="fcard ro-hide" id="fcard-locais">
       <h3>Locais da garrafeira</h3>
       <div class="note">Onde as garrafas moram. As prateleiras escrevem-se em cada garrafa — aqui só ficam os sítios.</div>
@@ -191,7 +206,8 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       <h3>Utilizadores</h3>
       <div class="note">Pedidos de acesso à espera:</div>
       <div id="adm-pedidos-list"></div>
-      <div class="note" style="margin-top:14px">Com acesso — marca <b>Editor</b> a quem também pode mexer nas garrafas:</div>
+      <div class="note" style="margin-top:14px">Com acesso — <b>Editor</b> é quem tem garrafeira própria e lhe pode mexer.
+        Sem a marca, a pessoa entra na app mas só vê o que lhe emprestarem. Ninguém mexe na garrafeira de outro:</div>
       <div id="adm-users-list"></div>
       <div class="linha-add">
         <input type="email" id="adm-user-novo" placeholder="email@exemplo.com">

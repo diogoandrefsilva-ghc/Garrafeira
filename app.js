@@ -114,30 +114,92 @@ async function sbRpc(nome,args){
   return sbReq('POST',`rpc/${nome}`,args||{});
 }
 
+/* ── A GARRAFEIRA ABERTA ───────────────────────────────────────────────
+   A app é a mesma para toda a gente, as tabelas são as mesmas — o que muda
+   é a GARRAFEIRA que está aberta. Cada pessoa tem a sua (`garrafeiras.dono`)
+   e só vê as garrafas dela; emprestar a um amigo é uma linha em `partilhas`,
+   e uma garrafeira emprestada é SEMPRE só de leitura.
+
+   `GA_ID` é a que está aberta neste momento. Fica no localStorage para
+   voltar à mesma no arranque seguinte — mas nunca é a última palavra: no
+   `carregar()` só vale se ainda constar da lista que a BD devolveu. Se
+   deixaram de me emprestar aquela garrafeira, o id guardado aqui não pode
+   ser o que decide o que se pede ao servidor. */
+const GA_KEY='garrafeira_ativa';
+let GA_LISTA=[], GA_ID=null;
+
+function emailSessao(){return String((_sbSession&&_sbSession.user&&_sbSession.user.email)||'').toLowerCase();}
+function garrafeiraAtiva(){return GA_LISTA.find(g=>g.id===GA_ID)||null;}
+function souDonoDaGarrafeira(g){
+  g=g||garrafeiraAtiva();
+  return !!(g&&String(g.dono||'').toLowerCase()===emailSessao());
+}
+function minhasGarrafeiras(){return GA_LISTA.filter(g=>souDonoDaGarrafeira(g));}
+function nomeGarrafeira(){const g=garrafeiraAtiva();return g?g.nome:'';}
+// De quem é a que está aberta, para as frases da UI. É o EMAIL e não um
+// nome bonito de propósito: `allowed_users.nome` só o admin o consegue ler
+// (a policy `au_sel` deixa ver a própria linha), por isso um nome aqui
+// aparecia a uns e não a outros — e um email é o que identifica a pessoa
+// sem ambiguidade nenhuma quando se está prestes a partilhar com ela.
+function donoGarrafeira(){
+  const g=garrafeiraAtiva();
+  return g?String(g.dono||''):'';
+}
+
 /* ── PERMISSÕES ────────────────────────────────────────────────────────
-   Três níveis, iguais aos de db/policies.sql:
-     · quem tem acesso  vê tudo
+   Três níveis, iguais aos de db/policies.sql, MAIS a garrafeira aberta:
+     · quem tem acesso  entra na app
      · editor           mexe em vinhos/garrafas/locais
      · admin            manda em quem tem acesso e em quem é editor
-   `isReadOnly` é "não posso editar" (não "não sou admin"): numa garrafeira
-   de casa faz sentido haver quem dê saída a uma garrafa sem por isso mandar
-   na lista de utilizadores. */
+     · e o dono         é o único que escreve NA SUA garrafeira
+   `isReadOnly` é "não posso editar isto que está aberto" — e passou a ter
+   duas causas: ou não sou editor, ou a garrafeira aberta é de outra pessoa.
+   Numa garrafeira emprestada não há meio-termo nenhum: vê-se, não se mexe. */
 let isReadOnly=true, EU={email:'',pode_editar:false};
 function isAdmin(){
   return !!(_sbSession&&_sbSession.user&&
     String(_sbSession.user.email||'').toLowerCase()===String(ADMIN_EMAIL||'').toLowerCase());
 }
-function podeEditar(){return isAdmin()||!!EU.pode_editar;}
+// "Posso editar em geral" (o `pode_editar` de allowed_users) — é diferente
+// de poder editar o que está AGORA no ecrã, que é o `podeEditar()`.
+function souEditor(){return isAdmin()||!!EU.pode_editar;}
+function podeEditar(){return souEditor()&&souDonoDaGarrafeira();}
 function aplicarPermissoes(){
   isReadOnly=!podeEditar();
   document.body.classList.toggle('readonly',isReadOnly);
   document.body.classList.toggle('naoadmin',!isAdmin());
   document.body.classList.toggle('naodono',!souDono());
+  // Uma garrafeira emprestada esconde mais do que o modo de leitura normal:
+  // partilhar, mudar o nome e passar a garrafeira são coisas do dono dela.
+  document.body.classList.toggle('naominha',!souDonoDaGarrafeira());
+  aplicarCabecalho();
 }
-// Guarda de UI. Devolve true quando a ação deve parar aqui.
+
+/* O nome da garrafeira aberta, por baixo do título. É a única coisa no ecrã
+   que diz DE QUEM é o que se está a ver — sem isto, uma garrafeira
+   emprestada só se distinguia da própria por os botões terem desaparecido,
+   que é uma app avariada e não uma app clara. Só aparece quando não é a
+   única: com uma garrafeira só, repetir "Garrafeira do Barrona" por baixo
+   de "Garrafeira" não acrescenta nada.
+   A altura do cabeçalho muda com ele, por isso remede-se o sticky. */
+function aplicarCabecalho(){
+  const el=document.getElementById('hdr-garrafeira');
+  if(!el)return;
+  const g=garrafeiraAtiva();
+  const mostrar=!!g&&(GA_LISTA.length>1||!souDonoDaGarrafeira(g));
+  el.textContent=mostrar?(souDonoDaGarrafeira(g)?g.nome:`${g.nome} · de ${g.dono}`):'';
+  el.style.display=mostrar?'':'none';
+  ajustarSticky();
+}
+// Guarda de UI. Devolve true quando a ação deve parar aqui. As duas razões
+// para dizer que não são diferentes e merecem frases diferentes — "não
+// tens permissão" numa garrafeira que é de outra pessoa manda procurar um
+// botão que não existe.
 function roGuard(){
   if(!isReadOnly)return false;
-  toast('🔒 Não tens permissão para editar a garrafeira',1);
+  if(!garrafeiraAtiva())toast('Ainda não tens garrafeira — vê em Definições › Garrafeiras',1);
+  else if(!souDonoDaGarrafeira())toast(`👀 ${nomeGarrafeira()} é de ${donoGarrafeira()} — aqui só podes ver`,1);
+  else toast('🔒 Não tens permissão para editar a garrafeira',1);
   return true;
 }
 
@@ -150,17 +212,21 @@ function roGuard(){
    nunca Date.now(). */
 let db={locais:[],vinhos:[],garrafas:[],castas:[],config:{}};
 
+/* Duas voltas ao servidor, e não uma: primeiro quem sou eu e que
+   garrafeiras posso ver, só depois o que está DENTRO da que ficou aberta.
+   Não dá para pedir tudo de uma vez porque o pedido dos vinhos leva o
+   `garrafeira_id` no filtro — e esse só se sabe depois de a lista chegar.
+   (A RLS filtrava na mesma sem o filtro; mas então quem tem duas
+   garrafeiras, ou uma emprestada, recebia as duas misturadas no mesmo
+   ecrã.) */
 async function carregar(){
-  const [locais,vinhos,garrafas,castas,vc,cfg,eu]=await Promise.all([
-    sbReq('GET','locais?select=*&order=ordem.asc,nome.asc'),
-    sbReq('GET','vinhos?select=*&order=nome.asc'),
-    sbReq('GET','garrafas?select=*&order=id.asc'),
+  const [castas,cfg,eu,gars]=await Promise.all([
     sbReq('GET','castas?select=*&order=nome.asc'),
-    sbReq('GET','vinho_castas?select=*'),
     sbReq('GET','config?select=*'),
-    sbReq('GET',`allowed_users?select=email,nome,pode_editar&email=eq.${encodeURIComponent(_sbSession.user.email)}`)
+    sbReq('GET',`allowed_users?select=email,nome,pode_editar&email=eq.${encodeURIComponent(_sbSession.user.email)}`),
+    sbReq('GET','garrafeiras?select=*&order=nome.asc')
   ]);
-  db.locais=locais||[];db.vinhos=vinhos||[];db.garrafas=garrafas||[];db.castas=castas||[];
+  db.castas=castas||[];
   db.config={};(cfg||[]).forEach(c=>db.config[c.chave]=c.valor);
   if(db.config.admin_email)ADMIN_EMAIL=db.config.admin_email;
 
@@ -169,6 +235,56 @@ async function carregar(){
   // admin, que é o que a BD também decide.
   const minha=(eu||[])[0]||null;
   EU={email:_sbSession.user.email,pode_editar:minha?!!minha.pode_editar:false,nome:minha?minha.nome:''};
+
+  GA_LISTA=gars||[];
+  // Quem pode editar e ainda não tem garrafeira nenhuma ganha a dele aqui —
+  // a app não tem (nem quer ter) um ecrã de "cria primeiro a tua
+  // garrafeira": entra-se e ela está lá, vazia. A função é idempotente e
+  // resolve dois separadores abertos ao mesmo tempo.
+  if(souEditor()&&!minhasGarrafeiras().length){
+    try{
+      await sbRpc('garantir_garrafeira',{p_nome:EU.nome?`Garrafeira de ${EU.nome}`:null});
+      GA_LISTA=await sbReq('GET','garrafeiras?select=*&order=nome.asc')||[];
+    }catch(e){/* sem garrafeira própria vê-se o que estiver partilhado */}
+  }
+  GA_ID=escolherGarrafeira();
+  if(GA_ID)localStorage.setItem(GA_KEY,String(GA_ID));
+  await carregarGarrafeira();
+}
+
+/* Qual fica aberta. Por ordem: a que estava da última vez (se ainda cá
+   estiver — pode ter deixado de ser partilhada), depois a MINHA, e só no
+   fim a primeira da lista. A minha à frente de uma emprestada de
+   propósito: entrar na app e cair na garrafeira de outra pessoa, em modo
+   de leitura, é uma app que parece avariada. */
+function escolherGarrafeira(){
+  if(!GA_LISTA.length)return null;
+  const guardada=parseInt(localStorage.getItem(GA_KEY)||'',10);
+  if(guardada&&GA_LISTA.some(g=>g.id===guardada))return guardada;
+  const minhas=minhasGarrafeiras();
+  return (minhas[0]||GA_LISTA[0]).id;
+}
+
+/* O conteúdo da garrafeira aberta. Sai daqui separado do `carregar()`
+   porque é exatamente isto — e só isto — que se refaz ao trocar de
+   garrafeira: a lista de garrafeiras, quem sou eu e as castas não mudaram. */
+async function carregarGarrafeira(){
+  if(!GA_ID){
+    db.locais=[];db.vinhos=[];db.garrafas=[];
+    IMG_ASSINADA={};reindexar();aplicarPermissoes();return;
+  }
+  const f=`garrafeira_id=eq.${GA_ID}`;
+  const [locais,vinhos,garrafas,vc]=await Promise.all([
+    sbReq('GET',`locais?${f}&select=*&order=ordem.asc,nome.asc`),
+    sbReq('GET',`vinhos?${f}&select=*&order=nome.asc`),
+    sbReq('GET',`garrafas?${f}&select=*&order=id.asc`),
+    // `vinho_castas` não tem `garrafeira_id` (a garrafeira dela é a do
+    // vinho): a RLS já não deixa sair as linhas dos vinhos que não posso
+    // ver, e as que sobram de outra garrafeira minha só ficam sem par no
+    // `porVinho` — ninguém as procura.
+    sbReq('GET','vinho_castas?select=*')
+  ]);
+  db.locais=locais||[];db.vinhos=vinhos||[];db.garrafas=garrafas||[];
 
   // castas por vinho: junta-se aqui, no cliente, em vez de pedir ao
   // PostgREST um select com relação embebida. O dataset é pequeno e assim
@@ -873,9 +989,17 @@ function renderFiltros(){
       <button onclick="setFiltro('${k}','')" title="Tirar este filtro">✕</button></span>`).join('');
 }
 function setFiltro(k,v){F[k]=v;renderFiltrados();}
-function limparFiltros(){
+// Só o ESTADO, sem desenhar. Quem troca de garrafeira precisa de esquecer
+// os filtros ANTES de os dados novos chegarem, e um `renderFiltrados()` aqui
+// desenhava a garrafeira anterior mais uma vez, já sem filtros — um piscar
+// de olhos com a lista de outra pessoa.
+function esquecerFiltros(){
   Object.keys(F).forEach(k=>F[k]='');
-  document.getElementById('f-texto').value='';
+  const t=document.getElementById('f-texto');
+  if(t)t.value='';
+}
+function limparFiltros(){
+  esquecerFiltros();
   renderFiltrados();
 }
 function haFiltros(){
@@ -1894,6 +2018,7 @@ async function guardarVinho(id){
   if(roGuard())return;
   const f=lerFormVinho();
   if(!f.nome){toast('Falta o nome do vinho',1);return;}
+  if(!id&&!GA_ID){toast('Não há nenhuma garrafeira aberta',1);return;}
   if(f.ano!=null&&(f.ano<1900||f.ano>2100)){toast('Ano fora do razoável',1);return;}
   const castas=f._castas;delete f._castas;
   // O formulário não tem campos para o resumo/notas de prova/link do Vivino:
@@ -1913,7 +2038,9 @@ async function guardarVinho(id){
       await sbReq('PATCH',`vinhos?id=eq.${id}`,f);
       Object.assign(IDXV[id],f);
     }else{
-      const r=await sbReq('POST','vinhos',[f],{'Prefer':'return=representation'});
+      // O vinho nasce na garrafeira que está aberta. A policy confirma que
+      // ela é minha; o trigger só serve de rede se isto faltar.
+      const r=await sbReq('POST','vinhos',[Object.assign({garrafeira_id:GA_ID},f)],{'Prefer':'return=representation'});
       const novo=r[0];novo.castas=[];
       db.vinhos.push(novo);vinhoId=novo.id;reindexar();
     }
@@ -2665,7 +2792,14 @@ async function sbAposLogin(){
   try{
     await carregar();
   }catch(e){
-    toast('Erro a carregar: '+e.message,1);
+    // A migração das garrafeiras (db/migracao-garrafeiras.sql) é a única
+    // que a app não consegue contornar sozinha — sem ela não sabe de quem
+    // são as garrafas, e adivinhar era mostrar as de toda a gente a toda a
+    // gente. Vale a pena dizer isto por palavras em vez de deixar um
+    // "erro a carregar: relation does not exist".
+    toast(/garrafeiras|does not exist|relation/i.test(e.message)
+      ?'Falta correr a migração db/migracao-garrafeiras.sql no Supabase.'
+      :'Erro a carregar: '+e.message,1);
     if(window.glEsconderSplash)window.glEsconderSplash();
     return;
   }
@@ -2850,12 +2984,16 @@ function renderCfg(){
   const el=document.getElementById('conta-email');
   if(el)el.textContent=_sbSession?`Sessão iniciada como ${_sbSession.user.email}`:'';
   const papel=document.getElementById('conta-papel');
-  if(papel)papel.textContent=isAdmin()
-    ?'És o admin desta garrafeira — mandas em quem tem acesso e em quem pode editar.'
-    :(podeEditar()?'Podes acrescentar, mover e dar saída a garrafas.':'Podes ver e procurar, mas não editar.');
+  if(papel)papel.textContent=(isAdmin()
+    ?'És o admin da app — mandas em quem tem acesso e em quem pode ter garrafeira. '
+    :(souEditor()?'Podes acrescentar, mover e dar saída a garrafas na tua garrafeira. '
+                 :'Podes ver e procurar, mas não editar. '))
+    +(garrafeiraAtiva()&&!souDonoDaGarrafeira()
+      ?`Neste momento estás a ver a garrafeira de ${donoGarrafeira()} — aí só podes ver.`:'');
   const sobre=document.getElementById('sobre-box');
-  if(sobre)sobre.innerHTML=`${db.vinhos.length} vinhos · ${db.garrafas.length} garrafas (${db.garrafas.filter(naGarrafeira).length} na garrafeira) · ${db.castas.length} castas · ${db.locais.length} locais.<br>
+  if(sobre)sobre.innerHTML=`${nomeGarrafeira()?'<b>'+esc(nomeGarrafeira())+'</b>: ':''}${db.vinhos.length} vinhos · ${db.garrafas.length} garrafas (${db.garrafas.filter(naGarrafeira).length} na garrafeira) · ${db.locais.length} locais. ${db.castas.length} castas (a lista das castas é comum a toda a gente).<br>
     Dados e login no Supabase, schema <code>garrafeira</code>. Admin atual: <b>${esc(ADMIN_EMAIL)}</b>.`;
+  renderCfgGarrafeira();
   renderCfgLocais();
   if(isAdmin()){admRenderPedidos();admRenderUtilizadores();}
 }
@@ -2910,7 +3048,9 @@ async function guardarLocalModal(id){
       await sbReq('PATCH',`locais?id=eq.${id}`,dados);
       Object.assign(IDXL[id],dados);
     }else{
-      const r=await sbReq('POST','locais',[Object.assign({ordem:db.locais.length+1},dados)],{'Prefer':'return=representation'});
+      // `garrafeira_id` explícito: um local não tem por onde o adivinhar
+      // (ao contrário da garrafa, que o herda do vinho por trigger).
+      const r=await sbReq('POST','locais',[Object.assign({garrafeira_id:GA_ID,ordem:db.locais.length+1},dados)],{'Prefer':'return=representation'});
       db.locais.push(r[0]);reindexar();
     }
     fecharModal('modal-local');
@@ -2939,6 +3079,183 @@ async function apagarLocal(id){
   }catch(e){toast('Não foi possível: '+e.message,1);}
 }
 
+/* ── GARRAFEIRAS (a minha, e as que me emprestaram) ────────────────
+   O sítio onde se troca de garrafeira e onde o dono decide quem mais a vê.
+   Vive em Definições e NÃO leva `.ro-hide`: numa garrafeira emprestada o
+   modo de leitura liga-se, e se este cartão desaparecesse com ele não
+   havia caminho de volta à própria — ficava-se preso na do outro. */
+function renderCfgGarrafeira(){
+  const box=document.getElementById('cfg-garrafeira');
+  if(!box)return;
+  const g=garrafeiraAtiva();
+
+  if(!g){
+    box.innerHTML=`<div class="note" style="padding:6px 0">${souEditor()
+      ? 'Ainda não tens garrafeira. Recarrega a página — ela é criada sozinha à entrada.'
+      : 'Ainda não tens garrafeira própria, e ninguém te emprestou a dele.<br>'+
+        'Pede ao admin para te marcar como <b>editor</b> (é isso que dá direito a garrafeira própria), '+
+        'ou pede a um amigo que te partilhe a dele.'}</div>`;
+    return;
+  }
+
+  const minha=souDonoDaGarrafeira(g);
+  // O seletor só aparece quando há mesmo escolha — com uma garrafeira só,
+  // um dropdown de um item é uma pergunta sem resposta possível.
+  const opcoes=GA_LISTA.map(x=>`<option value="${x.id}"${x.id===GA_ID?' selected':''}>${
+    esc(x.nome)}${souDonoDaGarrafeira(x)?'':' — de '+esc(x.dono)}</option>`).join('');
+
+  box.innerHTML=`
+    ${GA_LISTA.length>1?`
+      <label>A ver agora</label>
+      <select id="ga-sel" onchange="trocarGarrafeira(parseInt(this.value,10))">${opcoes}</select>`
+    :`<div class="ua-row"><span class="em"><b>${esc(g.nome)}</b></span>
+        <span class="tagme">${minha?'tua':'de '+esc(g.dono)}</span></div>`}
+
+    ${minha?`
+      <div class="minha-only">
+        <label>Nome da garrafeira</label>
+        <div class="linha-add">
+          <input type="text" id="ga-nome" value="${esc(g.nome)}" placeholder="Garrafeira do Barrona">
+          <button class="btn ghost" onclick="renomearGarrafeira()">Guardar</button>
+        </div>
+        <div class="note" id="ga-nome-status"></div>
+
+        <h4 style="margin-top:18px">Quem mais a pode ver</h4>
+        <div class="note">Quem puseres aqui vê as tuas garrafas mas <b>não lhes mexe</b> — nem
+          acrescenta, nem consome, nem apaga. Tem de já ter acesso à app (é o admin que aprova isso).</div>
+        <div id="cfg-partilhas"></div>
+        <div class="linha-add">
+          <input type="email" id="ga-partilhar" placeholder="email@exemplo.com">
+          <button class="btn prim" onclick="partilharGarrafeira()">Partilhar</button>
+        </div>
+        <div class="note" id="ga-partilhar-status"></div>
+
+        <h4 style="margin-top:18px">Passar a garrafeira</h4>
+        <div class="note">Passa estas garrafas para a conta de outra pessoa — as garrafas, os locais
+          e o histórico vão todos com ela. Deixas de as ver (a não ser que ela te partilhe de volta).
+          É diferente de "passar a app": isso é quem manda em quem entra, isto é de quem são as garrafas.</div>
+        <div class="linha-add">
+          <input type="email" id="ga-passar" placeholder="email@exemplo.com">
+          <button class="btn danger" onclick="passarGarrafeira()">Passar</button>
+        </div>
+        <div class="note" id="ga-passar-status"></div>
+      </div>`
+    :`<div class="aviso" style="margin-top:10px">👀 Estás a ver a garrafeira de <b>${esc(g.dono)}</b>.
+        Aqui só podes ver e procurar — as garrafas são dele.</div>
+      <button class="btn ghost" onclick="devolverGarrafeira()">Deixar de ver esta garrafeira</button>`}`;
+
+  if(minha)renderPartilhas();
+}
+
+/* Trocar de garrafeira é recarregar SÓ o conteúdo (`carregarGarrafeira`) —
+   quem eu sou e a lista de garrafeiras não mudaram. Os filtros e o painel
+   do resumo ficam para trás de propósito: apontavam para locais e castas
+   da garrafeira anterior, e um filtro por um local que já não existe é uma
+   lista vazia sem explicação. */
+async function trocarGarrafeira(id){
+  if(!id||id===GA_ID)return;
+  if(!GA_LISTA.some(g=>g.id===id))return;
+  const antes=GA_ID;
+  GA_ID=id;localStorage.setItem(GA_KEY,String(id));
+  fecharModal('modal-vinho');
+  esquecerFiltros();
+  RESUMO_ABERTO=null;RESUMO_DRILL=null;
+  try{
+    await carregarGarrafeira();
+  }catch(e){
+    GA_ID=antes;localStorage.setItem(GA_KEY,String(antes));
+    toast('Não foi possível abrir essa garrafeira: '+e.message,1);
+    return;
+  }
+  renderLista();renderCfg();
+  toast('A ver: '+nomeGarrafeira());
+}
+
+async function renderPartilhas(){
+  const box=document.getElementById('cfg-partilhas');
+  if(!box||!GA_ID)return;
+  try{
+    const l=await sbReq('GET',`partilhas?garrafeira_id=eq.${GA_ID}&select=email,criado_em&order=email.asc`);
+    box.innerHTML=(l||[]).map(x=>`<div class="ua-row">
+      <span class="em">${esc(x.email)}</span>
+      <span class="tagme">só vê</span>
+      <button class="jdel" title="Deixar de partilhar" onclick="tirarPartilha('${escJs(x.email)}')">✕</button>
+    </div>`).join('')||'<div class="note" style="padding:6px 0">Só tu vês esta garrafeira.</div>';
+  }catch(e){box.innerHTML=`<div class="note">${esc(e.message)}</div>`;}
+}
+
+async function partilharGarrafeira(){
+  const inp=document.getElementById('ga-partilhar');
+  const st=document.getElementById('ga-partilhar-status');
+  const email=inp.value.trim().toLowerCase();
+  if(!email||!email.includes('@')){st.style.color='var(--dg)';st.textContent='Email inválido.';return;}
+  st.style.color='var(--mu)';st.textContent='A partilhar…';
+  try{
+    await sbReq('POST','partilhas',[{garrafeira_id:GA_ID,email}],
+      {'Prefer':'return=minimal,resolution=ignore-duplicates'});
+    inp.value='';st.style.color='var(--vd)';st.textContent='✓ Partilhada.';
+    renderPartilhas();
+  }catch(e){st.style.color='var(--dg)';st.textContent=e.message;}
+}
+
+async function tirarPartilha(email){
+  if(!confirm(`${email} deixa de ver esta garrafeira?`))return;
+  try{
+    await sbReq('DELETE',`partilhas?garrafeira_id=eq.${GA_ID}&email=eq.${encodeURIComponent(email)}`);
+    renderPartilhas();toast('Partilha retirada');
+  }catch(e){toast('Não foi possível: '+e.message,1);}
+}
+
+// Quem recebeu uma garrafeira emprestada pode devolvê-la sem ter de pedir
+// ao dono (a policy `p_del` deixa apagar a própria linha).
+async function devolverGarrafeira(){
+  const g=garrafeiraAtiva();
+  if(!g||souDonoDaGarrafeira(g))return;
+  if(!confirm(`Deixar de ver "${g.nome}"?\n\nSó ${g.dono} ta pode voltar a partilhar.`))return;
+  try{
+    await sbReq('DELETE',`partilhas?garrafeira_id=eq.${g.id}&email=eq.${encodeURIComponent(EU.email)}`);
+    localStorage.removeItem(GA_KEY);
+    await carregar();
+    renderLista();renderCfg();
+    toast('Já não vês essa garrafeira');
+  }catch(e){toast('Não foi possível: '+e.message,1);}
+}
+
+async function renomearGarrafeira(){
+  const st=document.getElementById('ga-nome-status');
+  const nome=document.getElementById('ga-nome').value.trim();
+  if(!nome){st.style.color='var(--dg)';st.textContent='O nome não pode ficar vazio.';return;}
+  st.style.color='var(--mu)';st.textContent='A guardar…';
+  try{
+    await sbReq('PATCH',`garrafeiras?id=eq.${GA_ID}`,{nome});
+    const g=garrafeiraAtiva();if(g)g.nome=nome;
+    // O nome aparece em três sítios (cabeçalho, seletor, "Sobre"), por isso
+    // refaz-se o separador todo — e SÓ DEPOIS se escreve o "Guardado ✓",
+    // porque o `renderCfg()` deitou fora o `st` que estava aqui em cima.
+    aplicarCabecalho();renderCfg();
+    const st2=document.getElementById('ga-nome-status');
+    if(st2){st2.style.color='var(--vd)';st2.textContent='Guardado ✓';}
+  }catch(e){st.style.color='var(--dg)';st.textContent=e.message;}
+}
+
+async function passarGarrafeira(){
+  const st=document.getElementById('ga-passar-status');
+  const email=document.getElementById('ga-passar').value.trim().toLowerCase();
+  const g=garrafeiraAtiva();
+  if(!g)return;
+  if(!email||!email.includes('@')){st.style.color='var(--dg)';st.textContent='Email inválido.';return;}
+  if(!confirm(`Passar "${g.nome}" para ${email}?\n\nAs ${db.vinhos.length} fichas de vinho, `+
+    `as ${db.garrafas.length} garrafas e o histórico de consumos passam a ser dele. `+
+    `Deixas de os ver, a não ser que ele volte a partilhar contigo.`))return;
+  st.style.color='var(--mu)';st.textContent='A passar…';
+  try{
+    await sbRpc('transferir_garrafeira',{p_gid:g.id,p_email:email});
+    localStorage.removeItem(GA_KEY);
+    st.style.color='var(--vd)';st.textContent='✓ Feito. A recarregar…';
+    setTimeout(()=>window.location.reload(),1200);
+  }catch(e){st.style.color='var(--dg)';st.textContent=e.message;}
+}
+
 /* ── UTILIZADORES (admin) ──────────────────────────────────────────── */
 async function admRenderPedidos(){
   const box=document.getElementById('adm-pedidos-list');
@@ -2953,9 +3270,13 @@ async function admRenderPedidos(){
     </div>`).join('');
   }catch(e){box.innerHTML=`<div class="note">Não foi possível ler os pedidos: ${esc(e.message)}</div>`;}
 }
+// Aprovar passou a incluir `pode_editar`. Antes isso era dar-lhe acesso de
+// escrita À GARRAFEIRA DE CASA e por isso era um segundo passo pensado;
+// agora só lhe dá direito à garrafeira DELE, que é a coisa toda que ele vem
+// cá fazer. Quem quiser alguém a ver e mais nada tira a marca a seguir.
 async function admAprovar(email){
   try{
-    await sbReq('POST','allowed_users',[{email}],{'Prefer':'return=minimal,resolution=ignore-duplicates'});
+    await sbReq('POST','allowed_users',[{email,pode_editar:true}],{'Prefer':'return=minimal,resolution=ignore-duplicates'});
     await sbReq('DELETE',`access_requests?email=eq.${encodeURIComponent(email)}`);
     admRenderPedidos();admRenderUtilizadores();
     toast('Acesso dado a '+email);
@@ -2980,7 +3301,7 @@ async function admRenderUtilizadores(){
     return `<div class="ua-row">
       <span class="em">${esc(u.email)}${u.nome?' ('+esc(u.nome)+')':''}</span>
       ${eAdmin?'<span class="tagme">admin</span>'
-        :`<label class="chk"><input type="checkbox"${u.pode_editar?' checked':''}
+        :`<label class="chk" title="Tem garrafeira própria e pode mexer-lhe"><input type="checkbox"${u.pode_editar?' checked':''}
             onchange="admToggleEditor('${escJs(u.email)}',this.checked)"> editor</label>
           <button class="jdel" title="Tirar acesso" onclick="admTirarAcesso('${escJs(u.email)}')">✕</button>`}
     </div>`;
@@ -2998,7 +3319,7 @@ async function admRenderUtilizadores(){
 async function admToggleEditor(email,val){
   try{
     await sbReq('PATCH',`allowed_users?email=eq.${encodeURIComponent(email)}`,{pode_editar:val});
-    toast(val?email+' passa a poder editar':email+' fica só a ver');
+    toast(val?email+' passa a ter garrafeira própria':email+' fica só a ver');
   }catch(e){toast('Não foi possível: '+e.message,1);admRenderUtilizadores();}
 }
 async function admTirarAcesso(email){
@@ -3013,7 +3334,7 @@ async function admAdicionarUtilizador(){
   const email=inp.value.trim().toLowerCase();
   if(!email||!email.includes('@')){toast('Email inválido',1);return;}
   try{
-    await sbReq('POST','allowed_users',[{email}],{'Prefer':'return=minimal,resolution=ignore-duplicates'});
+    await sbReq('POST','allowed_users',[{email,pode_editar:true}],{'Prefer':'return=minimal,resolution=ignore-duplicates'});
     inp.value='';admRenderUtilizadores();
     toast('Acesso dado ✓ — ele já pode entrar com essa conta');
   }catch(e){toast('Não foi possível: '+e.message,1);}
@@ -3420,6 +3741,7 @@ function pdfPreImprimir(){
 
 function exportarJSON(){
   const dados={
+    garrafeira:nomeGarrafeira(),
     exportadoEm:new Date().toISOString(),
     locais:db.locais,
     vinhos:db.vinhos.map(v=>Object.assign({},v,{garrafas:garrafasDe(v.id,false)})),
@@ -3507,7 +3829,7 @@ if('serviceWorker' in navigator){
 // Começa fechado e só abre quando `carregar()` souber quem é quem. Ao
 // contrário, havia um instante — entre o HTML aparecer e as permissões
 // chegarem — em que quem só pode VER tinha o botão de apagar à frente.
-document.body.classList.add('readonly','naoadmin','naodono');
+document.body.classList.add('readonly','naoadmin','naodono','naominha');
 ajustarSticky();
 pgSwipe();
 sbInit();

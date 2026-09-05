@@ -6,19 +6,26 @@ estático (GitHub Pages), PWA. Dados e login em **Supabase** — o **mesmo
 projeto** do Goals/FestasBV/SplitBill (`gjweqwfbnkgnibhajldc`), num schema à
 parte e isolado: `garrafeira`.
 
+**Uma garrafeira por pessoa.** A app é a mesma, as tabelas são as mesmas —
+mas cada um só vê as suas garrafas. Ver "Cada um vê a sua garrafeira" mais
+abaixo antes de mexer em qualquer coisa que leia ou escreva dados: é a
+decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
+
 ## Estrutura
 - `index.html` — só markup: os três ecrãs de autenticação (`page-login`,
   `page-nova-pass`, `page-sem-acesso`), o splash, os 5 separadores e os 5
   modais (que são preenchidos por JS, vazios no HTML).
 - `app.js` — **toda a lógica** (~2000 linhas). Secções (`grep` pelo título,
   não leias o ficheiro todo):
-  Sessão Supabase (`sbHeaders`/`sbFetch`/`sbReq`/`sbRpc`) · Permissões ·
-  **DB** (`carregar`) · Índices e cálculos · Navegação · **Resumo** (ecrã
+  Sessão Supabase (`sbHeaders`/`sbFetch`/`sbReq`/`sbRpc`) ·
+  **A garrafeira aberta** (`GA_ID`) · Permissões ·
+  **DB** (`carregar` + `carregarGarrafeira`) · Índices e cálculos ·
+  Navegação · **Resumo** (ecrã
   inicial) · Pesquisa (Detalhe + Locais) · Filtros · **Detalhe** (lista
   organizada) · Mapa dos locais · Consumidos · **Página do vinho** ·
   Modal editar/novo · Consumir garrafa · Modal da garrafa · **IA** ·
-  Auth (Supabase) · Definições · Locais · **Utilizadores (admin)** ·
-  Exportar · Diagnóstico · Init.
+  Auth (Supabase) · Definições · Locais · **Garrafeiras** ·
+  **Utilizadores (admin)** · Exportar · Diagnóstico · Init.
 - `style.css` — todo o CSS. Ver **"A linguagem visual"** mais abaixo antes
   de lhe mexer: as cores e os tipos de letra são um sistema, não gosto.
 - `sw.js` — service worker (cache PWA).
@@ -26,7 +33,9 @@ parte e isolado: `garrafeira`.
   (deploy à parte: `supabase functions deploy vinho-info`).
 - `db/` — `schema.sql` → `functions.sql` → `policies.sql` → `seed.sql`
   (+ `README.md` com os passos manuais no painel do Supabase). Fonte de
-  verdade do schema.
+  verdade do schema. `migracao-garrafeiras.sql` é a migração 07 (uma
+  garrafeira por pessoa) para a base que já existe — a única deste repo
+  ainda **por aplicar** no Supabase.
 - Não mexer à mão: `apple-touch-icon.png` (é gerado — ver "Ícones").
 
 ## Os cinco separadores (o ecrã inicial não é a lista)
@@ -453,6 +462,75 @@ numa base nova antes do `db/schema.sql` correr, esconde o campo e não o
 manda nas gravações — sem isso um PATCH rebentava **todas** as gravações
 com 400.
 
+## Cada um vê a sua garrafeira (a outra decisão que segura o resto)
+Um **vinho**, uma **garrafa** e um **local** pertencem sempre a uma
+**garrafeira** (`garrafeiras`, com um `dono` que é um email), e ninguém vê
+uma linha de uma garrafeira que não seja sua. Mesma app, mesmas tabelas,
+mesma base de dados — o que muda é o `garrafeira_id`.
+
+`GA_ID` é a que está aberta no ecrã. Fica no `localStorage`, mas isso é só
+uma preferência: no `carregar()` só vale se ainda constar da lista que a BD
+devolveu (podem ter deixado de a partilhar comigo). Todos os pedidos de
+conteúdo levam `garrafeira_id=eq.GA_ID` — a RLS já filtrava sozinha, mas
+sem o filtro quem tem duas garrafeiras recebia-as misturadas no mesmo ecrã.
+
+`carregar()` são **duas voltas ao servidor** e não uma: primeiro quem sou eu
+e que garrafeiras posso ver, e só depois o que está dentro da que ficou
+aberta — o filtro dos vinhos precisa de um id que só a primeira volta
+conhece. `carregarGarrafeira()` é a segunda metade sozinha, e é só ela que
+corre ao trocar de garrafeira (as castas e a lista de garrafeiras não
+mudaram).
+
+**Emprestar é SÓ deixar ver.** Uma linha em `partilhas` e mais nada: quem a
+recebe vê e procura, nunca acrescenta, move, consome nem apaga. Não há
+`pode_editar` nas partilhas de propósito — duas pessoas a dar saída às
+mesmas garrafas é um estado partilhado que ninguém pediu, e a coluna
+acrescenta-se um dia mais facilmente do que se desfaz a confusão. Na app
+isso é o `isReadOnly` de sempre (`body.readonly`), que passou a ter **duas**
+causas: ou não sou editor, ou o que está aberto é de outra pessoa
+(`podeEditar() = souEditor() && souDonoDaGarrafeira()`). Quem recusa a
+sério é a RLS — `pode_mexer()` exige ser dono.
+
+**O admin da app não vê as garrafeiras dos outros**, e isso é a sério: não
+há `OR is_admin()` em `e_dono`/`pode_ver`/`pode_mexer`. O admin manda em
+quem ENTRA (`allowed_users`) e em quem pode ter garrafeira; as garrafas dos
+outros não são dele. Um dia que seja preciso mexer numa garrafeira alheia
+(recuperar a conta de alguém), escreve-se SQL no painel — de propósito, é
+uma coisa que se deve ter de escrever à mão.
+
+Três coisas a ter na cabeça ao mexer nisto:
+- **um vinho novo leva `garrafeira_id:GA_ID` no POST**, e um local também.
+  Uma **garrafa não**: o trigger `garrafas_guard` copia-lho do vinho e
+  ignora o que vier do cliente (senão dava para pendurar uma garrafa minha
+  no vinho de outra pessoa). O mesmo trigger recusa arrumar uma garrafa num
+  local que é de outra garrafeira — a FK não apanha isso, aponta ao
+  `locais.id` e não à garrafeira certa;
+- **as castas são a exceção e ficam globais.** "Touriga Nacional" é o mesmo
+  nome na garrafeira de toda a gente, e é a tabela única que faz a procura
+  por casta funcionar. O que é privado é a LIGAÇÃO (`vinho_castas`), e essa
+  anda pela garrafeira do vinho. Apagar uma casta passou a ser só do admin:
+  uma casta apagada levava atrás (CASCADE) as ligações dos vinhos de outra
+  pessoa, que via as castas desaparecerem sem ninguém lhes ter tocado;
+- **as fotos dos rótulos** vivem em `v<id-do-vinho>/…` no bucket privado, e
+  as policies do `storage.objects` chegam à garrafeira por aí
+  (`foto_visivel`/`foto_minha`). Se um dia mudares o formato do caminho em
+  `enviarFoto()`, muda `vinho_do_ficheiro()` no mesmo commit — senão as
+  fotos deixam de abrir para toda a gente, em silêncio.
+
+**Entrar não dá garrafeira; ser editor é que dá.** `pode_editar` mudou de
+significado: era "pode mexer nas garrafas de casa", passou a ser "tem
+garrafeira própria e mexe-lhe". Como já não é poder sobre os dados de
+ninguém, aprovar um pedido de acesso passa a marcá-lo logo
+(`admAprovar`) — era o segundo passo que toda a gente se esquecia de dar. A
+garrafeira em si é criada sozinha à primeira entrada
+(`garantir_garrafeira()`, idempotente), e não há ecrã nenhum de "cria
+primeiro a tua garrafeira".
+
+**Passar a APP ≠ passar uma GARRAFEIRA.** `definir_admin()` passa quem manda
+em quem entra; `transferir_garrafeira()` passa as garrafas. A entrega ao
+Barrona precisa dos dois cliques, em Definições. Transferir só o dono o pode
+fazer (nem o admin), e só para quem já tenha `pode_editar`.
+
 ## Vinho ≠ garrafa (é a decisão que segura o resto)
 Um **vinho** é a referência: nome, ano, produtor, castas, e tudo o que a IA
 descobriu. Uma **garrafa** é a coisa física: está num lugar, custou um
@@ -496,19 +574,31 @@ As listas estão em `app.js` (`TIPOS`/`ESTILOS`/`MENCOES`/`CLASSIF`) **e** em
 delas. Se acrescentares um valor, acrescenta nos dois sítios, senão a IA
 propõe uma coisa que a app nunca mostra.
 
-## Três níveis de permissão (não dois)
+## Três níveis de permissão, mais a garrafeira
 ```
-is_allowed()  →  vê tudo
-is_editor()   →  escreve (admin + quem tiver allowed_users.pode_editar)
-is_admin()    →  manda em quem tem acesso e em quem é editor
+is_allowed()   →  entra na app
+is_editor()    →  escreve (admin + quem tiver allowed_users.pode_editar)
+is_admin()     →  manda em quem tem acesso e em quem é editor
+pode_ver(g)    →  vê a garrafeira g       (é dono dela, ou foi-lhe emprestada)
+pode_mexer(g)  →  escreve na garrafeira g (is_editor() E é dono dela)
 ```
 O Goals só tem dois ("admin" e "leitura"); aqui há o meio-termo porque numa
 garrafeira de casa faz sentido haver quem dê saída a uma garrafa sem por
 isso mandar na lista de utilizadores.
 
-Na UI: `body.readonly` esconde `.ro-hide` (não pode editar) e
-`body.naoadmin` esconde `.admin-hide`. **Isto é só a UI** — quem manda é a
-RLS; esconder um botão nunca foi proteção nenhuma.
+`is_allowed()` já não chega para ver um vinho — diz que a pessoa entra na
+app, não de quem são as garrafas. Quem decide isso são as duas últimas, e
+são elas que estão nas policies de `locais`/`vinhos`/`garrafas`/
+`vinho_castas`.
+
+Na UI: `body.readonly` esconde `.ro-hide` (não pode editar),
+`body.naoadmin` esconde `.admin-hide` e `body.naominha` esconde
+`.minha-only` (só o dono da garrafeira aberta). `.minha-only` não é o mesmo
+que `.ro-hide` e é por isso que existe: o cartão das Garrafeiras TEM de
+continuar visível numa garrafeira emprestada — é lá que está o caminho de
+volta à própria — e só o que lá dentro é do dono (partilhar, renomear,
+passar) é que desaparece. **Isto é só a UI** — quem manda é a RLS; esconder
+um botão nunca foi proteção nenhuma.
 
 ## O admin está na BASE DE DADOS, não em código
 `garrafeira.config.admin_email`, lido por `garrafeira.admin_email()`. A app
@@ -520,6 +610,10 @@ Utilizadores › Passar a app** (`definir_admin()`), não um deploy.
 `definir_admin()` recusa passar a app a quem não esteja já em
 `allowed_users` — era ficar sem admin nenhum e sem forma de voltar atrás
 pela interface.
+
+Isto passa a APP, não as GARRAFAS: os vinhos do Barrona são de quem for o
+`dono` da garrafeira dele, e mudam de mãos por `transferir_garrafeira()`
+(Definições › Garrafeiras). A entrega ao Barrona é dois cliques, não um.
 
 **Admin da app ≠ dono da conta Supabase.** `SUPABASE_DONO_EMAIL` (app.js) é
 fixo e não muda com `definir_admin()` — ao contrário de `ADMIN_EMAIL`, que
@@ -595,6 +689,12 @@ descoberta de modelo, mesma escada de variantes, mesmos fallbacks.
 - **Não há `salvar()`.** Cada mutação é o `POST`/`PATCH`/`DELETE` da própria
   linha, atualiza o `db` local e re-renderiza. Padrão para um campo novo:
   optimista no `db`, `try/catch` à volta do `sbReq`, desfaz se a rede falhar.
+- **Uma tabela de conteúdo NOVA precisa de `garrafeira_id`** — coluna, FK,
+  índice, e as duas policies por `pode_ver()`/`pode_mexer()`. Uma tabela que
+  se esqueça disto é uma tabela que toda a gente lê: a RLS não adivinha de
+  quem é a linha. A única exceção é uma tabela pendurada num vinho (como
+  `vinho_castas`), que vai buscar a garrafeira ao vinho por
+  `garrafeira_do_vinho()` em vez de repetir a coluna.
 - **Os `id` são reais da BD** (`bigint GENERATED BY DEFAULT AS IDENTITY`,
   lidos de volta com `Prefer: return=representation`), nunca `Date.now()`.
 - **Alterar o schema:** edita primeiro `db/*.sql` (fonte de verdade) e só
