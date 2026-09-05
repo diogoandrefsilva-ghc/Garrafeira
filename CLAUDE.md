@@ -540,6 +540,13 @@ garrafeira em si é criada sozinha à primeira entrada
 (`garantir_garrafeira()`, idempotente), e não há ecrã nenhum de "cria
 primeiro a tua garrafeira".
 
+Uma garrafeira **acabada de nascer não fica aberta** se houver outra à vista
+(`escolherGarrafeira(acabadaDeNascer)`): está forçosamente vazia, e abrir a
+app num ecrã vazio quando há garrafas para mostrar lê-se como "perdi tudo".
+Era o que ia acontecer ao Barrona na primeira entrada depois da migração —
+as garrafas dele ainda na conta de quem montou a app, e a dele própria
+criada sem nada lá dentro.
+
 **Passar a APP ≠ passar uma GARRAFEIRA.** `definir_admin()` passa quem manda
 em quem entra; `transferir_garrafeira()` passa as garrafas. A entrega ao
 Barrona precisa dos dois cliques, em Definições. Transferir só o dono o pode

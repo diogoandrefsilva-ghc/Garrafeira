@@ -260,13 +260,15 @@ async function carregar(){
   // a app não tem (nem quer ter) um ecrã de "cria primeiro a tua
   // garrafeira": entra-se e ela está lá, vazia. A função é idempotente e
   // resolve dois separadores abertos ao mesmo tempo.
+  let acabadaDeNascer=false;
   if(souEditor()&&!minhasGarrafeiras().length){
     try{
       await sbRpc('garantir_garrafeira',{p_nome:EU.nome?`Garrafeira de ${EU.nome}`:null});
       GA_LISTA=await sbReq('GET','garrafeiras?select=*&order=nome.asc')||[];
+      acabadaDeNascer=minhasGarrafeiras().length>0;
     }catch(e){/* sem garrafeira própria vê-se o que estiver partilhado */}
   }
-  GA_ID=escolherGarrafeira();
+  GA_ID=escolherGarrafeira(acabadaDeNascer);
   if(GA_ID)localStorage.setItem(GA_KEY,String(GA_ID));
   await carregarGarrafeira();
 }
@@ -275,12 +277,22 @@ async function carregar(){
    estiver — pode ter deixado de ser partilhada), depois a MINHA, e só no
    fim a primeira da lista. A minha à frente de uma emprestada de
    propósito: entrar na app e cair na garrafeira de outra pessoa, em modo
-   de leitura, é uma app que parece avariada. */
-function escolherGarrafeira(){
+   de leitura, é uma app que parece avariada.
+
+   `acabadaDeNascer` é a exceção, e ganha à regra de cima: uma garrafeira
+   criada HÁ UM SEGUNDO está forçosamente vazia, e abrir a app num ecrã
+   vazio quando há garrafas para mostrar lê-se como "perdi tudo". Foi o que
+   ia acontecer ao Barrona na primeira entrada depois desta mudança — a
+   garrafeira dele ainda na conta de quem montou a app, e a dele própria
+   acabada de nascer sem nada lá dentro. Assim ele cai onde estão as
+   garrafas, e a vazia fica no seletor à espera. */
+function escolherGarrafeira(acabadaDeNascer){
   if(!GA_LISTA.length)return null;
   const guardada=parseInt(localStorage.getItem(GA_KEY)||'',10);
   if(guardada&&GA_LISTA.some(g=>g.id===guardada))return guardada;
   const minhas=minhasGarrafeiras();
+  if(acabadaDeNascer&&GA_LISTA.length>minhas.length)
+    return GA_LISTA.find(g=>!souDonoDaGarrafeira(g)).id;
   return (minhas[0]||GA_LISTA[0]).id;
 }
 
