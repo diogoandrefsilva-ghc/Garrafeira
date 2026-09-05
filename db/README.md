@@ -102,6 +102,26 @@ Depois publicar a nova `vinho-info` e definir o secret `GEMINI_FREE_API_KEY`.
 O limite diário do plano grátis é cinco pesquisas por utilizador, mas pode ser
 alterado pelo secret opcional `GEMINI_FREE_DAILY_LIMIT` (1–50).
 
+### Migração 09 — importação a partir de imagens (**por aplicar**)
+
+`db/migracao-importacao-imagens.sql`. Cria `garrafeira.importacoes`, a fila
+privada onde fica apenas o resultado temporário da leitura; **nunca** os bytes
+das fotografias. Cada pedido está associado ao utilizador e à garrafeira que
+ele pode editar, e só a Edge Function (service role) o pode fechar.
+
+Correr no SQL Editor, por esta ordem:
+
+1. `db/migracao-importacao-imagens.sql`
+2. `db/functions.sql`
+3. `db/policies.sql`
+
+Depois publicar `importar-vinhos`. A função usa exclusivamente
+`GEMINI_FREE_API_KEY`, mesmo para o plano premium: não pesquisa na internet e
+não usa a chave paga. Aceita até três imagens por pedido; por defeito, uma
+conta no plano grátis pode fazer três pedidos/dia. Altera-se pelo secret
+opcional `GEMINI_IMPORT_FREE_DAILY_LIMIT` (1–20). A app mostra sempre as
+propostas antes de criar vinhos ou garrafas.
+
 ### `vinhos.imagem_url` (já aplicada)
 
 Link para uma foto do rótulo/garrafa — a `vinho-info` (Edge Function) tenta

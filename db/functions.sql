@@ -616,6 +616,29 @@ CREATE TRIGGER analises_guard_ins
   BEFORE INSERT ON garrafeira.analises
   FOR EACH ROW EXECUTE FUNCTION garrafeira.analises_guard_ins();
 
+-- Igual à análise: quem, plano e estado nunca vêm do browser. A importação
+-- precisa ainda de estar presa à garrafeira que a pessoa pode editar; a
+-- policy confirma essa parte antes de este trigger ser chamado.
+CREATE OR REPLACE FUNCTION garrafeira.importacoes_guard_ins()
+  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+  SET search_path TO 'garrafeira', 'public'
+AS $$
+BEGIN
+  NEW.quem      := lower(COALESCE(auth.email(), ''));
+  NEW.criado_em := now();
+  NEW.plano_ia  := garrafeira.plano_ia();
+  NEW.estado    := 'pendente';
+  NEW.resultado := NULL;
+  NEW.erro      := NULL;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS importacoes_guard_ins ON garrafeira.importacoes;
+CREATE TRIGGER importacoes_guard_ins
+  BEFORE INSERT ON garrafeira.importacoes
+  FOR EACH ROW EXECUTE FUNCTION garrafeira.importacoes_guard_ins();
+
 -- Carimba quem criou o vinho, sem confiar no cliente.
 CREATE OR REPLACE FUNCTION garrafeira.vinhos_guard_ins()
   RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER

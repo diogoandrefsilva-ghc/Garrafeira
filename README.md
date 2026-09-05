@@ -37,6 +37,11 @@ ou **IA premium**. A decisão é confirmada pela Edge Function no servidor; a
 app nunca escolhe uma chave paga. O plano grátis usa uma chave Gemini separada
 e tem, por defeito, cinco pesquisas por utilizador/dia.
 
+Em **Definições → Dados**, quem pode editar pode também importar até três
+fotografias de rótulos, prateleiras ou listas. A IA propõe os vinhos e as
+quantidades, mas a pessoa revê, edita e escolhe o que criar antes de entrar
+qualquer registo. As fotografias não ficam guardadas.
+
 ## Pôr a andar
 
 1. **Base de dados:** correr no SQL Editor do Supabase, por esta ordem —
@@ -46,14 +51,20 @@ e tem, por defeito, cinco pesquisas por utilizador/dia.
    (é a migração que dá uma garrafeira a cada pessoa — ver `db/README.md`).
    Para ativar os planos de IA numa base já existente, correr também
    `db/migracao-ia-planos.sql` e depois `db/functions.sql`.
+   Para a importação por imagens, correr `db/migracao-importacao-imagens.sql`,
+   depois `db/functions.sql` e `db/policies.sql`.
 2. **Expor o schema:** Settings › API › *Exposed schemas* → juntar
    `garrafeira`. Sem isto todos os pedidos dão 404.
 3. **Redirect URLs:** Authentication › URL Configuration → juntar o endereço
    do GitHub Pages desta app.
-4. **Edge Function:** `supabase functions deploy vinho-info`
+4. **Edge Functions:** `supabase functions deploy vinho-info` e
+   `supabase functions deploy importar-vinhos`
    (os secrets `GEMINI_API_KEY`/`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`
    já existem no projeto; acrescentar `GEMINI_FREE_API_KEY` para a via
    gratuita. `GEMINI_FREE_DAILY_LIMIT` é opcional e vale 5 por defeito.)
+   A importação por imagens usa sempre essa chave gratuita; o limite opcional
+   `GEMINI_IMPORT_FREE_DAILY_LIMIT` vale 3 importações/dia para cada conta
+   com plano grátis.
 5. **GitHub Pages:** Settings › Pages → branch `main`.
 6. Entrar na app e, em **Definições › Dados**, carregar em *Migrar* para
    trazer os 85 vinhos que vieram do Excel e do bloco de notas.
