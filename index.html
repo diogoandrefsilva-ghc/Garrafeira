@@ -8,11 +8,13 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Garrafeira">
-<meta name="theme-color" content="#5c1630">
+<meta name="theme-color" content="#4e1228">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icone.svg" type="image/svg+xml">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -94,51 +96,63 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
   <div class="hdr">
     <div class="brand">
       <div class="escudo"><img src="icone.svg" alt=""></div>
-      <div>
+      <div style="min-width:0">
         <h1>Garrafeira</h1>
-        <p id="hdr-sub">&nbsp;</p>
+        <!-- De quem é a garrafeira que está aberta. Escrito por
+             `aplicarCabecalho()` e escondido quando só há uma que é minha —
+             repetir "Garrafeira do Barrona" por baixo de "Garrafeira" não
+             dizia nada a quem só tem a sua. -->
+        <p id="hdr-garrafeira" style="display:none"></p>
       </div>
     </div>
-    <nav class="hnav">
-      <button class="hn" onclick="abrirProcura()" title="Procurar">🔍</button>
-      <button class="hn" onclick="sbLogout()" title="Terminar sessão">Sair</button>
-    </nav>
   </div>
 </header>
 
 <div class="wrap">
   <div class="itabs">
-    <button class="it on" onclick="tab('garrafeira',this)">🍷 Garrafeira</button>
-    <button class="it" onclick="tab('detalhe',this)">📋 Detalhe</button>
-    <button class="it" onclick="tab('locais',this)">📍 Locais</button>
-    <button class="it" onclick="tab('consumidos',this)">📖 Consumidos</button>
-    <button class="it" onclick="tab('cfg',this)">⚙️ Definições</button>
+    <button class="it on" onclick="tab('garrafeira',this)"><span class="ic">🍷</span> Garrafeira</button>
+    <button class="it" onclick="tab('detalhe',this)"><span class="ic">📋</span> Detalhe</button>
+    <button class="it" onclick="tab('locais',this)"><span class="ic">📍</span> Locais</button>
+    <button class="it" onclick="tab('consumidos',this)"><span class="ic">📖</span> Consumidos</button>
+    <button class="it so-ic" onclick="tab('cfg',this)" title="Definições" aria-label="Definições">⚙️</button>
   </div>
 
-  <!-- ═══ GARRAFEIRA (ecrã inicial: resumo + procura com filtros) ═══ -->
+  <!-- ═══ GARRAFEIRA (ecrã inicial: só o resumo) ═══ -->
   <section class="sec on" id="s-garrafeira">
     <div class="g4" id="resumo-cards"></div>
-
-    <div class="filtros">
-      <input type="search" id="f-texto" placeholder="Procurar por nome, produtor, casta, região…" oninput="renderPesquisa()">
-      <div class="fchips" id="f-selects"></div>
-      <div class="fbar">
-        <span class="fcount" id="f-count"></span>
-        <button class="lnk" id="f-limpar" onclick="limparFiltros()" style="display:none">limpar filtros</button>
-      </div>
-    </div>
-
-    <div id="pesq-resultados"></div>
   </section>
 
-  <!-- ═══ DETALHE (lista completa, só organizada) ═══ -->
+  <!-- ═══ DETALHE (lista completa, organizada, com a procura) ═══ -->
   <section class="sec" id="s-detalhe">
     <div class="dbar">
       <span class="fcount" id="det-count"></span>
-      <div class="segbtns">
-        <button class="segbtn on" id="seg-regiao" onclick="detAgrupar('regiao')">Região</button>
-        <button class="segbtn" id="seg-ano" onclick="detAgrupar('ano')">Ano</button>
+      <div class="dbar-a">
+        <div class="segbtns">
+          <button class="segbtn on" id="seg-regiao" onclick="detAgrupar('regiao')">Região</button>
+          <button class="segbtn" id="seg-ano" onclick="detAgrupar('ano')">Ano</button>
+          <button class="segbtn" id="seg-casta" onclick="detAgrupar('casta')">Casta</button>
+        </div>
       </div>
+    </div>
+
+    <!-- A mesma procura vive aqui e em Locais (posicionarFiltros move este
+         nó de sítio ao trocar de separador). Colapsada é só uma linha: a
+         caixa de texto e, à direita, o botão que abre os outros filtros. -->
+    <div class="filtros" id="filtros">
+      <div class="fsearch">
+        <div class="fsearch-box">
+          <span class="fsearch-i">🔍</span>
+          <input type="search" id="f-texto" placeholder="Procurar vinho, produtor, casta, região…" oninput="renderFiltrados()">
+          <button class="fsearch-x" id="f-texto-x" onclick="limparTexto()" title="Limpar">✕</button>
+        </div>
+        <button class="ftoggle" onclick="toggleFiltros()">Filtros <span class="fn" id="f-n"></span> <span class="fchev">▾</span></button>
+      </div>
+      <div class="fbar" id="fbar-info" style="display:none">
+        <span class="fcount" id="f-count"></span>
+        <button class="lnk" id="f-limpar" onclick="limparFiltros()" style="display:none">limpar</button>
+      </div>
+      <div class="fchips" id="f-selects"></div>
+      <div class="factivos" id="f-activos"></div>
     </div>
 
     <div id="detalhe-grupos"></div>
@@ -146,7 +160,6 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 
   <!-- ═══ LOCAIS ═══ -->
   <section class="sec" id="s-locais">
-    <div class="note">O mapa da garrafeira: cada local, cada prateleira, cada lugar. Toca num lugar para abrir o vinho.</div>
     <div id="mapa"></div>
   </section>
 
@@ -174,6 +187,15 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       <button class="btn ghost" onclick="sbLogout()" style="margin-top:10px">Terminar sessão</button>
     </div>
 
+    <!-- SEM `ro-hide`: numa garrafeira emprestada o modo de leitura liga-se,
+         e é justamente aqui que está o caminho de volta à própria. -->
+    <div class="fcard" id="fcard-garrafeiras">
+      <h3>Garrafeiras</h3>
+      <div class="note">A tua garrafeira é só tua. Quem quiseres pode vê-la — mas só ver.
+        Só tu decides o que o admin da app lá pode fazer.</div>
+      <div id="cfg-garrafeira"></div>
+    </div>
+
     <div class="fcard ro-hide" id="fcard-locais">
       <h3>Locais da garrafeira</h3>
       <div class="note">Onde as garrafas moram. As prateleiras escrevem-se em cada garrafa — aqui só ficam os sítios.</div>
@@ -185,21 +207,24 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       <h3>Utilizadores</h3>
       <div class="note">Pedidos de acesso à espera:</div>
       <div id="adm-pedidos-list"></div>
-      <div class="note" style="margin-top:14px">Com acesso — marca <b>Editor</b> a quem também pode mexer nas garrafas:</div>
+      <div class="note" style="margin-top:14px">Com acesso — <b>Editor</b> é quem tem garrafeira própria e lhe pode mexer.
+        Sem a marca, a pessoa entra na app mas só vê o que lhe emprestarem. Ninguém mexe na garrafeira de outro:</div>
       <div id="adm-users-list"></div>
       <div class="linha-add">
         <input type="email" id="adm-user-novo" placeholder="email@exemplo.com">
         <button class="btn prim" onclick="admAdicionarUtilizador()">Dar acesso</button>
       </div>
 
-      <h4 style="margin-top:18px">Password temporária</h4>
-      <div class="note">Este projeto Supabase não tem email próprio configurado. Em vez de depender do "esqueci-me da password", gera aqui uma password, dita-a à pessoa, e ela troca-a em Definições › Conta.</div>
-      <div class="linha-add">
-        <select id="adm-pt-email"></select>
-        <input type="text" id="adm-pt-pass" placeholder="mínimo 8 caracteres">
-        <button class="btn ghost" onclick="admGerarPassTemp()">Gerar</button>
+      <div class="dono-hide">
+        <h4 style="margin-top:18px">Password temporária</h4>
+        <div class="note">Este projeto Supabase não tem email próprio configurado. Em vez de depender do "esqueci-me da password", gera aqui uma password, dita-a à pessoa, e ela troca-a em Definições › Conta.</div>
+        <div class="linha-add">
+          <select id="adm-pt-email"></select>
+          <input type="text" id="adm-pt-pass" placeholder="mínimo 8 caracteres">
+          <button class="btn ghost" onclick="admGerarPassTemp()">Gerar</button>
+        </div>
+        <div class="note" id="adm-pt-status"></div>
       </div>
-      <div class="note" id="adm-pt-status"></div>
 
       <h4 style="margin-top:18px">Passar a app a outra pessoa</h4>
       <div class="note">O admin é quem manda em quem tem acesso. Passar a app a alguém tira-te esse poder — quem escolheres tem de já estar na lista acima.</div>
@@ -212,12 +237,12 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 
     <div class="fcard ro-hide" id="fcard-dados">
       <h3>Dados</h3>
-      <div class="note">Cópia de segurança do que está na app, em JSON. Só download — a app lê sempre do Supabase.</div>
+      <div class="note">Cópia de segurança do que está na app, em JSON, e a lista em PDF. Só download — a app lê sempre do Supabase.</div>
       <button class="btn ghost" onclick="exportarJSON()">⬇️ Exportar JSON</button>
-      <div id="mig-box" style="margin-top:16px"></div>
+      <button class="btn ghost" onclick="exportarPDF()">⬇️ Exportar PDF</button>
     </div>
 
-    <div class="fcard admin-hide" id="fcard-diag">
+    <div class="fcard admin-hide dono-hide" id="fcard-diag">
       <h3>Diagnóstico</h3>
       <div class="note">Últimas procuras à IA (browser → Edge Function → Gemini). Do lado do browser vê-se sempre "502"; a causa está aqui.</div>
       <button class="btn ghost" onclick="renderDiag()">🔄 Ver últimas</button>
@@ -234,15 +259,20 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 <button class="fab ro-hide" onclick="abrirNovoVinho()" title="Adicionar vinho">+</button>
 
 <!-- ═══ MODAIS ═══ -->
-<div class="modal" id="modal-vinho"><div class="mbox" id="modal-vinho-in"></div></div>
+<!-- O detalhe do vinho é o mesmo `.modal` de sempre, mas com pele de
+     PÁGINA (`.pagina`): ecrã inteiro, cabeçalho do vinho fixo em cima e
+     saída por ‹ / ✕ / Escape / voltar do telemóvel / arrastar de lado.
+     Ver "PÁGINA DO VINHO" no style.css e no app.js. -->
+<div class="modal pagina" id="modal-vinho"><div class="mbox" id="modal-vinho-in"></div></div>
 <div class="modal" id="modal-edit"><div class="mbox" id="modal-edit-in"></div></div>
 <div class="modal" id="modal-consumir"><div class="mbox" id="modal-consumir-in"></div></div>
 <div class="modal" id="modal-garrafa"><div class="mbox" id="modal-garrafa-in"></div></div>
 <div class="modal" id="modal-ia"><div class="mbox" id="modal-ia-in"></div></div>
+<div class="modal" id="modal-foto"><div class="mbox" id="modal-foto-in"></div></div>
+<div class="modal" id="modal-local"><div class="mbox" id="modal-local-in"></div></div>
 
 <div class="toast" id="toast"></div>
 
-<script src="dados-iniciais.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
