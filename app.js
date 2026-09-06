@@ -178,9 +178,10 @@ function souEditor(){return isAdmin()||!!EU.pode_editar;}
 function planoIA(){return isAdmin()?'premium':String(EU.ia_plano||'sem_ia');}
 function podeUsarIA(){return planoIA()==='gratis'||planoIA()==='premium';}
 // `planoIA()` é o DIREITO da pessoa; o MOTOR de cada procura é outra coisa.
-// Procura-se sempre primeiro no grátis, mesmo sendo premium — a chave cara
-// só sai por clique (ver a secção da IA). Isto diz só quem TEM esse clique.
+// Cada um procura com o motor a que tem direito, e quem é premium pode pedir
+// uma segunda opinião ao outro para os comparar (ver a secção da IA).
 function temPremium(){return planoIA()==='premium';}
+function motorDoPlano(){return temPremium()?'premium':'gratis';}
 function rotuloMotor(m){return m==='premium'?'IA premium':'IA grátis';}
 // Duas portas, e só duas: a minha garrafeira, ou uma em que o dono deu
 // 'edicao' ao admin. Uma partilha nunca abre esta — é sempre só de ver.
@@ -1959,7 +1960,7 @@ function abrirEditarVinho(id){
       <div><label>Produtor</label><input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado"></div>
     </div>
 
-    ${id?'':podeUsarIA()?`<div class="aviso">Escreve o nome (e o ano, se souberes) e carrega em <b>Procurar informação</b>: a <b>IA grátis</b> preenche o resto — castas, região, tipo, nota do Vivino, preço médio e quando beber. Confirmas antes de gravar.</div>
+    ${id?'':podeUsarIA()?`<div class="aviso">Escreve o nome (e o ano, se souberes) e carrega em <b>Procurar informação</b>: a pesquisa preenche o resto — castas, região, tipo, nota do Vivino, preço médio e quando beber. Confirmas antes de gravar.</div>
       <button class="btn prim full" id="e-btn-ia" onclick="iaProcurarNovo()">🔎 Procurar informação</button>
       <div id="e-ia-estado"></div>`:'<div class="note">A pesquisa por IA não está incluída no teu acesso. Pede ao admin para te atribuir o plano grátis ou premium.</div>'}
 
@@ -2423,7 +2424,7 @@ function iaEscolher(vinhoId){
 
     <div class="aviso">Escolhe o que queres procurar. <b>Quanto menos pedires, melhor a procura</b> —
       o modelo concentra-se nisso em vez de andar atrás de tudo. Já vêm marcados os campos vazios.
-      ${temPremium()?'A primeira volta é sempre com a <b>IA grátis</b>; no fim podes repeti-la com a premium e comparar as duas.':''}</div>
+      ${temPremium()?'Procura-se com a <b>IA premium</b>; no fim podes repetir com a grátis e comparar as duas.':''}</div>
 
     <div class="ia-escbar">
       <button class="mini" onclick="iaEscTodos(true)">Marcar tudo</button>
@@ -2545,37 +2546,40 @@ async function iaArrancar(vinhoId){
   // O pedido fica guardado tal e qual: a segunda volta tem de ser a MESMA
   // pergunta, senão não se está a comparar motores, está-se a comparar duas
   // perguntas diferentes.
-  // O vinho fica marcado JÁ, e não só quando o resultado chega: se a volta
-  // grátis falhar, o botão de tentar com a premium precisa de saber de que
-  // vinho estamos a falar — sem isto ia buscar o do resultado anterior.
-  IA_PEDIDO=pedido;IA_VINHO=vinhoId;IA_RES=null;IA_RES_P=null;IA_ERRO_P='';
-  iaMostrarEspera(v.nome+(v.ano?' '+v.ano:''),'gratis');
+  // O vinho fica marcado JÁ, e não só quando o resultado chega: se a primeira
+  // volta falhar, o botão da segunda opinião precisa de saber de que vinho
+  // estamos a falar — sem isto ia buscar o do resultado anterior.
+  IA_PEDIDO=pedido;IA_VINHO=vinhoId;IA_RES=null;IA_RES2=null;IA_ERRO2='';
+  IA_MOTOR=motorDoPlano();IA_MOTOR2='';
+  iaMostrarEspera(v.nome+(v.ano?' '+v.ano:''),IA_MOTOR);
   try{
-    iaMostrarResultado(await iaPedir(pedido,vinhoId,'gratis'),vinhoId);
+    iaMostrarResultado(await iaPedir(pedido,vinhoId,IA_MOTOR),vinhoId);
   }catch(e){iaMostrarErro(e.message);}
 }
 
-/* A SEGUNDA VOLTA, com a chave paga. Só existe para quem é premium e só
-   depois de já haver uma leitura grátis ao lado — é esse o ponto: ver, campo
-   a campo, o que é que o dinheiro comprou. Se falhar, volta-se ao resultado
-   grátis com o erro por cima, em vez de se perder a leitura que já se tinha
-   (ela custou uma chamada na mesma). */
-async function iaPremium(){
+/* A SEGUNDA OPINIÃO: a mesma pergunta feita ao OUTRO motor, para se ver campo
+   a campo em que é que eles diferem. Só faz sentido a quem é premium — é o
+   único que tem os dois à mão. Se falhar, volta-se ao resultado que já se
+   tinha com o erro por cima, em vez de o deitar fora (ele custou uma chamada
+   na mesma). */
+function motorOposto(m){return m==='premium'?'gratis':'premium';}
+async function iaSegundaOpiniao(){
   if(!temPremium()||!IA_PEDIDO||!IA_VINHO)return;
   const v=IDXV[IA_VINHO]||{};
-  // A volta grátis pode ter falhado (chave mal configurada, o modelo em
-  // baixo): aí não há par nenhum para comparar e a premium passa a ser A
-  // leitura, com o ecrã de sempre.
-  const semGratis=!IA_RES;
-  iaMostrarEspera(v.nome+(v.ano?' '+v.ano:''),'premium');
+  const motor=motorOposto(IA_MOTOR);
+  // A primeira volta pode ter falhado (chave sem quota, o modelo em baixo):
+  // aí não há par nenhum para comparar e esta passa a ser A leitura, com o
+  // ecrã de sempre.
+  const semPrimeira=!IA_RES;
+  iaMostrarEspera(v.nome+(v.ano?' '+v.ano:''),motor);
   try{
-    const res=await iaPedir(IA_PEDIDO,IA_VINHO,'premium');
-    IA_ERRO_P='';
-    if(semGratis){iaMostrarResultado(res,IA_VINHO);return;}
-    IA_RES_P=res;
+    const res=await iaPedir(IA_PEDIDO,IA_VINHO,motor);
+    IA_ERRO2='';
+    if(semPrimeira){IA_MOTOR=motor;iaMostrarResultado(res,IA_VINHO);return;}
+    IA_RES2=res;IA_MOTOR2=motor;
   }catch(e){
-    IA_RES_P=null;IA_ERRO_P=e.message;
-    if(semGratis){iaMostrarErro(e.message);return;}
+    IA_RES2=null;IA_MOTOR2='';IA_ERRO2=e.message;
+    if(semPrimeira){iaMostrarErro(e.message);return;}
   }
   iaMostrarResultado(IA_RES,IA_VINHO);
 }
@@ -2587,23 +2591,25 @@ async function iaProcurarNovo(motor){
   const ano=inteiro(document.getElementById('e-ano').value);
   const btn=document.getElementById('e-btn-ia');
   const est=document.getElementById('e-ia-estado');
-  // Aqui não há ecrã de confirmação onde comparar as duas (o formulário é
-  // ele próprio a confirmação), por isso a segunda volta REESCREVE o que a
-  // primeira encheu — e só isso, ver `iaPreencherForm`.
-  const m=motor==='premium'&&temPremium()?'premium':'gratis';
-  if(m==='gratis')_iaAuto=[];
+  /* Aqui não há ecrã de confirmação onde comparar as duas (o formulário é ele
+     próprio a confirmação), por isso a segunda volta REESCREVE o que a
+     primeira encheu — e só isso, ver `iaPreencherForm`. Por omissão vale o
+     motor do PLANO; `motor` só vem preenchido pelo botão da segunda opinião. */
+  const m=motor&&temPremium()?motor:motorDoPlano();
+  const outro=motorOposto(m);
+  if(!motor)_iaAuto=[];
   btn.disabled=true;btn.textContent='🔎 A procurar…';
   est.innerHTML=`<div class="note" style="margin-top:8px">A ${esc(rotuloMotor(m))} está a procurar na net. Pode levar até dois minutos — podes ir fazendo o resto.</div>`;
+  const botaoOutro=!motor&&temPremium()
+    ? `<button class="mini${outro==='premium'?' o':''}" style="margin-top:8px" onclick="iaProcurarNovo('${outro}')">✨ Tentar com a ${esc(rotuloMotor(outro))}</button>`:'';
   try{
     const res=await iaPedir({nome,ano,produtor:document.getElementById('e-produtor').value.trim()},null,m);
-    iaPreencherForm(res,m==='premium');
-    est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">✓ Preenchido pela ${esc(rotuloMotor(m))}${res.fontes&&res.fontes.length?' ('+res.fontes.length+' fontes)':''}. Confere antes de gravar.</div>`
-      +(m==='gratis'&&temPremium()?`<button class="mini o" style="margin-top:8px" onclick="iaProcurarNovo('premium')">✨ Repetir com IA premium</button>`:'');
+    iaPreencherForm(res,!!motor);
+    est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">✓ Preenchido pela ${esc(rotuloMotor(m))}${res.fontes&&res.fontes.length?' ('+res.fontes.length+' fontes)':''}. Confere antes de gravar.</div>`+botaoOutro;
   }catch(e){
-    // Mesma ideia do `iaMostrarErro`: a grátis falhou, mas quem é premium
-    // tem para onde ir.
-    est.innerHTML=`<div class="erro">${esc(e.message)}</div>`
-      +(m==='gratis'&&temPremium()?`<button class="mini o" style="margin-top:8px" onclick="iaProcurarNovo('premium')">✨ Tentar com IA premium</button>`:'');
+    // Mesma ideia do `iaMostrarErro`: o motor do plano falhou, mas quem é
+    // premium tem o outro para onde ir.
+    est.innerHTML=`<div class="erro">${esc(e.message)}</div>`+botaoOutro;
   }
   btn.disabled=false;btn.textContent='🔎 Procurar informação';
 }
@@ -2647,29 +2653,31 @@ function iaMostrarEspera(titulo,motor){
   abrirModal('modal-ia');
 }
 function iaMostrarErro(msg){
-  /* A primeira volta é sempre a grátis. Se ela falhar, quem é premium não pode
-     ficar sem caminho nenhum — uma chave grátis avariada trancava a procura a
-     toda a gente, inclusive a quem paga. O botão desaparece depois de a
-     premium também ter falhado, para não convidar a insistir no mesmo. */
-  const tentarPremium=temPremium()&&IA_PEDIDO&&IA_VINHO&&!IA_RES_P&&!IA_ERRO_P;
+  /* Se o motor do plano falhar, quem é premium ainda tem o outro à mão — e
+     foi o que valeu quando a chave grátis ficou sem quota. O botão desaparece
+     depois de o segundo motor também ter falhado, para não convidar a
+     insistir no mesmo. */
+  const outro=temPremium()&&IA_PEDIDO&&IA_VINHO&&!IA_RES2&&!IA_ERRO2;
   document.getElementById('modal-ia-in').innerHTML=`
     <div class="mtop"><h3>Não deu</h3><button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
     <div class="erro">${esc(msg)}</div>
-    <div class="macoes">${tentarPremium?'<button class="btn prim" onclick="iaPremium()">✨ Tentar com IA premium</button>':''}
+    <div class="macoes">${outro?`<button class="btn prim" onclick="iaSegundaOpiniao()">✨ Tentar com a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))}</button>`:''}
       <button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button></div>`;
   abrirModal('modal-ia');
 }
 
-/* `IA_RES` é sempre a leitura GRÁTIS (a primeira, que toda a gente faz);
-   `IA_RES_P` só existe depois de alguém premium ter pedido a segunda.
+/* `IA_RES` é a primeira leitura e `IA_MOTOR` o motor que a produziu — o do
+   PLANO de quem procura (premium a quem o tem, grátis aos outros). `IA_RES2`
+   é a segunda opinião, o outro motor, e só existe se alguém premium a pedir.
 
    Com uma leitura só, cada campo é uma CAIXA, como sempre foi. Com duas, os
-   campos em que elas discordam viram botões de RÁDIO — manter / grátis /
-   premium — porque com duas propostas em cima da mesa "marcado" já não dizia
-   qual delas entrava. Os campos em que as duas concordam ficam caixa e
-   dizem-no: pedir uma escolha onde não há escolha nenhuma era encher o ecrã
-   de decisões falsas. */
-let IA_RES=null, IA_VINHO=null, IA_RES_P=null, IA_PEDIDO=null, IA_ERRO_P='';
+   campos em que elas discordam viram botões de RÁDIO — manter / uma / outra —
+   porque com duas propostas em cima da mesa "marcado" já não dizia qual delas
+   entrava. Os campos em que as duas concordam ficam caixa e dizem-no: pedir
+   uma escolha onde não há escolha nenhuma era encher o ecrã de decisões
+   falsas. */
+let IA_RES=null, IA_VINHO=null, IA_RES2=null, IA_PEDIDO=null, IA_ERRO2='';
+let IA_MOTOR='gratis', IA_MOTOR2='';
 
 function iaTxt(c,res){
   const v=res?res[c.k]:null;
@@ -2679,11 +2687,18 @@ function iaTxt(c,res){
 function iaMostrarResultado(res,vinhoId){
   IA_RES=res||{};IA_VINHO=vinhoId;
   const v=IDXV[vinhoId]||{};
-  const cmp=!!IA_RES_P;
+  const cmp=!!IA_RES2;
+  // Qual das duas é a premium muda com o plano de quem procura: é ela que
+  // leva o dourado, aqui como em todo o resto da app.
+  const rot1=rotuloMotor(IA_MOTOR), rot2=rotuloMotor(IA_MOTOR2);
+  // `.ia-op.pr` é a opção dourada na lista; `.mini.o` é o botão dourado da
+  // barra de atalhos. São dois sítios com a mesma ideia e classes diferentes.
+  const cls1=IA_MOTOR==='premium'?' pr':'', cls2=IA_MOTOR2==='premium'?' pr':'';
+  const mini1=IA_MOTOR==='premium'?' o':'', mini2=IA_MOTOR2==='premium'?' o':'';
   const atual=k=>k==='castas'?(v.castas||[]).join(', '):(v[k]==null?'':String(v[k]));
 
   const linhas=IA_CAMPOS.map(c=>{
-    const ant=atual(c.k), g=iaTxt(c,IA_RES), p=cmp?iaTxt(c,IA_RES_P):'';
+    const ant=atual(c.k), g=iaTxt(c,IA_RES), p=cmp?iaTxt(c,IA_RES2):'';
     const novoG=g&&chave(g)!==chave(ant), novoP=p&&chave(p)!==chave(ant);
     if(!novoG&&!novoP)return '';                              // já lá está igual
     // Marcado por omissão só o que está VAZIO. Substituir o que alguém
@@ -2703,37 +2718,43 @@ function iaMostrarResultado(res,vinhoId){
     // Discordam (ou uma delas não trouxe nada): escolhe-se qual entra. O
     // "manter" está sempre lá — sem ele, um campo vazio com duas propostas
     // obrigava a aceitar uma delas, que é o contrário de confirmar.
-    const def=!vazio?'atual':(p?'p':'g');
+    /* Num campo vazio ganha por omissão a leitura PREMIUM — é a cara, é a que
+       se pediu de propósito — e a outra só entra se a premium não trouxe nada.
+       Qual das duas é a premium depende do plano de quem procura, por isso não
+       se pode fixar aqui "a segunda". */
+    const rPrem=IA_MOTOR==='premium'?'r1':'r2', tPrem=IA_MOTOR==='premium'?g:p;
+    const rOutra=rPrem==='r1'?'r2':'r1',        tOutra=rPrem==='r1'?p:g;
+    const def=!vazio?'atual':(tPrem?rPrem:(tOutra?rOutra:'atual'));
     const op=(val,rot,txt,cls)=>`<label class="ia-op${cls||''}">
       <input type="radio" name="iap-${c.k}" value="${val}"${def===val?' checked':''}>
       <span><i>${esc(rot)}</i>${esc(txt)}</span></label>`;
     return `<div class="ia-cmp"><b class="ia-cmp-t">${esc(c.rot)}</b>
       ${op('atual','manter',ant||'(vazio)',' at')}
-      ${g?op('g','IA grátis',g):''}
-      ${p?op('p','IA premium',p,' pr'):''}</div>`;
+      ${g?op('r1',rot1,g,cls1):''}
+      ${p?op('r2',rot2,p,cls2):''}</div>`;
   }).filter(Boolean).join('');
 
   const fontesDe=(r,rot)=>r&&r.fontes&&r.fontes.length
     ? `<div class="ia-fontes">Fontes${cmp?' ('+rot+')':''}: ${r.fontes.map(f=>
         `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo||f.url)}</a>`).join(' · ')}</div>`:'';
-  const semNet=IA_RES.pesquisa===false||(IA_RES_P&&IA_RES_P.pesquisa===false);
+  const semNet=IA_RES.pesquisa===false||(IA_RES2&&IA_RES2.pesquisa===false);
 
   document.getElementById('modal-ia-in').innerHTML=`
-    <div class="mtop"><div><h3>${cmp?'Grátis vs premium':'O que se encontrou'}</h3>
+    <div class="mtop"><div><h3>${cmp?esc(rot1)+' vs '+esc(rot2):'O que se encontrou'}</h3>
       <div class="note" style="margin-top:3px">${esc(v.nome||'')} ${v.ano||''}</div></div>
       <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
 
-    ${IA_ERRO_P?`<div class="erro">A pesquisa premium não deu: ${esc(IA_ERRO_P)}. Fica o que a grátis trouxe.</div>`:''}
+    ${IA_ERRO2?`<div class="erro">A segunda opinião não deu: ${esc(IA_ERRO2)}. Fica o que a ${esc(rot1)} trouxe.</div>`:''}
     ${!cmp&&temPremium()&&linhas?`<div class="ia-prbar">
-      <span>Isto foi a <b>IA grátis</b>. Queres ver o que a premium diz ao lado?</span>
-      <button class="mini o" onclick="iaPremium()">✨ Repetir com premium</button></div>`:''}
+      <span>Isto foi a <b>${esc(rot1)}</b>. Queres ver o que a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))} diz ao lado?</span>
+      <button class="mini o" onclick="iaSegundaOpiniao()">✨ Comparar</button></div>`:''}
 
     ${linhas?`<div class="note" style="margin-top:10px">${cmp
         ? 'Cada campo mostra o que cada motor trouxe — escolhe o que fica. Os campos que já tinham valor vêm em <b>manter</b>.'
         : 'Só entra o que ficar marcado. Já vêm marcados os campos que estavam <b>vazios</b>; para trocar o que já lá estava, marca à mão.'}</div>
       ${cmp?`<div class="ia-escbar">
-        <button class="mini" onclick="iaTudoDe('g')">Tudo da grátis</button>
-        <button class="mini o" onclick="iaTudoDe('p')">Tudo da premium</button>
+        <button class="mini${mini1}" onclick="iaTudoDe('r1')">Tudo da ${esc(rot1)}</button>
+        <button class="mini${mini2}" onclick="iaTudoDe('r2')">Tudo da ${esc(rot2)}</button>
         <button class="mini" onclick="iaTudoDe('atual')">Manter tudo</button></div>`:''}
       <div style="margin-top:8px">${linhas}</div>
       <div class="macoes">
@@ -2742,10 +2763,10 @@ function iaMostrarResultado(res,vinhoId){
         <button class="btn ghost" onclick="fecharModal('modal-ia')">Cancelar</button>
       </div>`
     :`<div class="note" style="margin-top:14px">A procura não trouxe nada de novo — o que está na ficha já bate certo com o que se encontrou.</div>
-      <div class="macoes">${!cmp&&temPremium()?`<button class="btn ghost" onclick="iaPremium()">✨ Tentar com IA premium</button>`:''}
+      <div class="macoes">${!cmp&&temPremium()?`<button class="btn ghost" onclick="iaSegundaOpiniao()">✨ Tentar com a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))}</button>`:''}
         <button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button></div>`}
 
-    ${fontesDe(IA_RES,'grátis')}${cmp?fontesDe(IA_RES_P,'premium'):''}
+    ${fontesDe(IA_RES,rot1)}${cmp?fontesDe(IA_RES2,rot2):''}
     <div class="ia-fontes"><i>${semNet
       ? '⚠️ Isto saiu da memória do modelo, sem pesquisa na net — confere tudo antes de aceitar.'
       : 'Leitura automática de páginas da net. Vale como ponto de partida, não como certeza.'}</i></div>`;
@@ -2754,15 +2775,16 @@ function iaMostrarResultado(res,vinhoId){
 function iaTodos(marcar){
   IA_CAMPOS.forEach(c=>{const e=document.getElementById('ia-'+c.k);if(e)e.checked=marcar;});
 }
-/* Pôr a ficha inteira num motor de uma vez. É isto que torna a comparação
-   útil de verdade: vê-se a ficha toda de um lado, depois a do outro, em vez
-   de a montar campo a campo às cegas. As caixas são as linhas em que as duas
-   concordam — entram com qualquer motor e saem todas no "manter". */
-function iaTudoDe(motor){
+/* Pôr a ficha inteira numa das leituras de uma vez. É isto que torna a
+   comparação útil de verdade: vê-se a ficha toda de um lado, depois a do
+   outro, em vez de a montar campo a campo às cegas. As caixas são as linhas
+   em que as duas concordam — entram com qualquer uma e saem todas no
+   "manter". */
+function iaTudoDe(qual){
   IA_CAMPOS.forEach(c=>{
     const cx=document.getElementById('ia-'+c.k);
-    if(cx)cx.checked=motor!=='atual';
-    const r=document.querySelector(`input[name="iap-${c.k}"][value="${motor}"]`);
+    if(cx)cx.checked=qual!=='atual';
+    const r=document.querySelector(`input[name="iap-${c.k}"][value="${qual}"]`);
     if(r)r.checked=true;
   });
 }
@@ -2776,9 +2798,9 @@ async function iaAplicar(){
   IA_CAMPOS.forEach(c=>{
     let res;
     const r=document.querySelector(`input[name="iap-${c.k}"]:checked`);
-    if(r){                         // linha de escolha entre motores
+    if(r){                         // linha de escolha entre as duas leituras
       if(r.value==='atual')return;
-      res=r.value==='p'?IA_RES_P:IA_RES;
+      res=r.value==='r2'?IA_RES2:IA_RES;
     }else{                         // caixa: leitura única, ou as duas de acordo
       const e=document.getElementById('ia-'+c.k);
       if(!e||!e.checked)return;
@@ -2817,7 +2839,7 @@ async function iaAplicar(){
     toast('Ficha atualizada ✓');
   }catch(e){
     toast('Não foi possível guardar: '+e.message,1);
-    if(btn){btn.disabled=false;btn.textContent='Guardar o que '+(IA_RES_P?'escolhi':'está marcado');}
+    if(btn){btn.disabled=false;btn.textContent='Guardar o que '+(IA_RES2?'escolhi':'está marcado');}
   }
 }
 
