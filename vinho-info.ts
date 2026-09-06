@@ -125,8 +125,11 @@ async function candidatosModelo(signal: AbortSignal, plano: "gratis" | "premium"
        (a dizer "não respondeu a tempo", que nem era verdade). O que segura o
        custo é a CHAVE, não a lista — por isso descobrir aqui não abre porta
        nenhuma à chave paga: esta pergunta é feita com a grátis. */
+    // Seis chegam: vêm ordenados do melhor para o pior, e quando a chave está
+    // sem quota cada nome a mais são ~750ms de espera à toa antes de se
+    // chegar à última tentativa sem pesquisa.
     return [...FREE_MODELS, ...(await descobrirFlash(signal, "gratis"))]
-      .filter((m) => (vistos.has(m) ? false : vistos.add(m)));
+      .filter((m) => (vistos.has(m) ? false : vistos.add(m))).slice(0, 6);
   }
   const pinned = Deno.env.get("GEMINI_MODEL");
   const lista = [...(pinned ? [pinned] : []), ...ESTAVEIS, ...(await descobrirFlash(signal, "premium"))]
@@ -564,18 +567,40 @@ async function produzirFicha(
     if (g && !transitorio(g.status) && g.status !== 404) break;
   }
 
+  /* TUDO a 429 com o tool de pesquisa ligado — e o ciclo acima nunca chega a
+     tentar SEM ele: um 429 salta já para o modelo seguinte, e a variante
+     "sem-pesquisa" vive dentro do modelo que acabou de ser descartado. Só que
+     o grounding tem uma quota à PARTE, e muito mais curta, do que a geração
+     normal: é o primeiro a ser recusado e leva a procura toda atrás dele.
+     Daí esta última tentativa sem pesquisa antes de desistir — vale uma
+     leitura de memória, que a app marca como tal, contra não ter nada. */
+  if (!g && tentativas.some((t) => t.estado === 429) && restante() > 3_000) {
+    model = candidatos[0] ?? model;
+    comPesquisa = false;
+    g = await tentar(model, { search: false, semThinking: false, label: "sem-pesquisa (último recurso)" });
+    if (g && !g.ok && g.status === 404) g = null;
+  }
+
   if (!g) {
     await registar("erro", { passo: "sem-resposta", nome, plano, tentativas, orcamento_ms: budgetMs }, quem);
-    /* Tudo a 404 não é um timeout, é a chave a não conhecer nenhum destes
-       modelos — e dizer "não respondeu a tempo" mandava quem lê tentar outra
-       vez para sempre. O nome do secret vai na mensagem porque é isso que
-       resolve o problema. */
-    const so404 = tentativas.length > 0 && tentativas.every((t) => t.estado === 404);
-    if (so404) {
+    /* Tudo a 404, ou tudo a 429, não é um timeout — e dizer "não respondeu a
+       tempo" mandava quem lê tentar outra vez para sempre. O nome do secret
+       vai na mensagem porque é isso que resolve o problema. */
+    const chave = plano === "gratis" ? "grátis" : "premium";
+    const secret = plano === "gratis" ? "GEMINI_FREE_API_KEY" : "GEMINI_API_KEY";
+    /* A ordem é pela ACIONABILIDADE, não pela contagem: basta um 429 no meio
+       para o problema ser quota (o 404 nos outros modelos é só o catálogo
+       desse projeto a ser mais curto). Uma lista mista de 404 e 429 é
+       exatamente o que se viu na prática. */
+    if (tentativas.some((t) => t.estado === 429)) {
+      return { ok: false, status: 503, erro:
+        `a chave ${chave} está sem quota no Gemini (429): nenhum dos ${tentativas.length} modelos aceitou o pedido, ` +
+        `nem sequer sem pesquisa na net. É a quota do Google e não a da app — confirma o plano do projeto de onde saiu o ${secret}.` };
+    }
+    if (tentativas.length > 0 && tentativas.every((t) => t.estado === 404)) {
       return { ok: false, status: 502, erro:
-        `a chave ${plano === "gratis" ? "grátis" : "premium"} não tem acesso a nenhum destes modelos (404): ` +
-        `${[...new Set(tentativas.map((t) => t.modelo))].join(", ")}. ` +
-        `Confere o secret ${plano === "gratis" ? "GEMINI_FREE_API_KEY" : "GEMINI_API_KEY"} no Supabase.` };
+        `a chave ${chave} não tem acesso a nenhum destes modelos (404): ` +
+        `${[...new Set(tentativas.map((t) => t.modelo))].join(", ")}. Confere o secret ${secret} no Supabase.` };
     }
     return { ok: false, status: 504, erro: "o modelo não respondeu a tempo — tenta outra vez daqui a pouco" };
   }
@@ -583,6 +608,11 @@ async function produzirFicha(
     const status = g.status, detail = await g.text();
     let msg = ""; try { msg = JSON.parse(detail)?.error?.message ?? ""; } catch (_) { /**/ }
     await registar("erro", { passo: "gemini", status, modelo: model, plano, pesquisa: comPesquisa, erro: (msg || detail).slice(0, 800) }, quem);
+    // Um 429 que sobreviva até aqui é quota, não "muita procura": a diferença
+    // é entre esperar um minuto e ir tratar da conta no Google.
+    if (status === 429) return { ok: false, status: 503, erro:
+      `a chave ${plano === "gratis" ? "grátis" : "premium"} está sem quota no Gemini (429). É a quota do Google e não a da app — ` +
+      `confirma o plano do projeto de onde saiu o ${plano === "gratis" ? "GEMINI_FREE_API_KEY" : "GEMINI_API_KEY"}.` };
     if (transitorio(status)) return { ok: false, status: 503, erro: "o serviço está com muita procura agora — espera um minuto e tenta outra vez" };
     return { ok: false, status: 502, erro: `gemini ${status} (${model})${msg ? ": " + msg.slice(0, 200) : ""}` };
   }
