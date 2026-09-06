@@ -69,20 +69,25 @@ function comLimiteProprio(sinalPai: AbortSignal, ms: number) {
     limpar: () => { clearTimeout(t); sinalPai.removeEventListener("abort", propagar); },
   };
 }
-let _models: string[] | null = null;
-function rankFlash(names: string[]): string[] {
-  const ok = [...new Set(names.filter((n) =>
-    n.includes("flash") && !/(lite|8b|image|tts|live|audio|embed|exp|preview|thinking)/.test(n)
-  ))];
+// A descoberta é por CHAVE, não global: cada uma vê o seu próprio catálogo, e
+// misturá-los era oferecer ao plano grátis nomes que só a chave paga tem.
+const _models: Record<string, string[] | null> = { gratis: null, premium: null };
+function rankFlash(names: string[], comLite = false): string[] {
+  const base = names.filter((n) =>
+    n.includes("flash") && !/(8b|image|tts|live|audio|embed|exp|preview|thinking)/.test(n));
+  const ok = [...new Set(comLite ? base : base.filter((n) => !n.includes("lite")))];
   const score = (n: string): number => {
+    if (n.includes("lite")) return -1;             // só como último recurso
     if (n === "gemini-flash-latest") return 100;   // apontador sempre atualizado
     const m = n.match(/^gemini-(\d+(?:\.\d+)?)-flash$/);
     return m ? parseFloat(m[1]) : 0;
   };
   return ok.sort((a, b) => score(b) - score(a) || a.localeCompare(b));
 }
-async function descobrirFlash(signal: AbortSignal): Promise<string[]> {
-  if (_models) return _models;
+async function descobrirFlash(signal: AbortSignal, plano: "gratis" | "premium"): Promise<string[]> {
+  if (_models[plano]) return _models[plano]!;
+  const key = plano === "gratis" ? GEMINI_FREE_KEY : GEMINI_KEY;
+  if (!key) return [];
   try {
     const names: string[] = [];
     let page = "";
@@ -91,10 +96,10 @@ async function descobrirFlash(signal: AbortSignal): Promise<string[]> {
       // fallback, em vez de gastar aqui o orçamento todo.
       const { signal: sp, limpar } = comLimiteProprio(signal, 8_000);
       let r: Response;
-      try { r = await fetch(`${GAPI}/models?pageSize=200${page ? `&pageToken=${page}` : ""}&key=${GEMINI_KEY}`, { signal: sp }); }
+      try { r = await fetch(`${GAPI}/models?pageSize=200${page ? `&pageToken=${page}` : ""}&key=${key}`, { signal: sp }); }
       catch (_) { limpar(); break; }
       limpar();
-      if (!r.ok) break;
+      if (!r.ok) { console.log("VINHO ListModels", plano, "->", r.status); break; }
       const d = await r.json();
       (d.models ?? []).forEach((m: any) => {
         if ((m.supportedGenerationMethods ?? []).includes("generateContent")) {
@@ -104,19 +109,27 @@ async function descobrirFlash(signal: AbortSignal): Promise<string[]> {
       page = d.nextPageToken ?? "";
       if (!page) break;
     }
-    const ranked = rankFlash(names);
-    if (ranked.length) _models = ranked;
+    const ranked = rankFlash(names, plano === "gratis");
+    if (ranked.length) _models[plano] = ranked;
+    console.log("VINHO modelos", plano, ":", ranked.slice(0, 8).join(", ") || "(nenhum)");
   } catch (_) { /* fica o fallback */ }
-  return _models ?? [];
+  return _models[plano] ?? [];
 }
 const ESTAVEIS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"];
 async function candidatosModelo(signal: AbortSignal, plano: "gratis" | "premium"): Promise<string[]> {
-  // No plano grátis os modelos são fixos: nunca se descobre nem se tenta um
-  // modelo pago por engano. A chave grátis é a última fronteira de custo.
-  if (plano === "gratis") return FREE_MODELS;
-  const pinned = Deno.env.get("GEMINI_MODEL");
   const vistos = new Set<string>();
-  const lista = [...(pinned ? [pinned] : []), ...ESTAVEIS, ...(await descobrirFlash(signal))]
+  if (plano === "gratis") {
+    /* Os nomes fixos primeiro, e a seguir o que a CHAVE GRÁTIS diz mesmo ter.
+       Eram só os fixos, e isso partiu-se assim que a chave grátis não serviu
+       nenhum dos dois: o Gemini respondia 404 aos dois e a procura morria ali
+       (a dizer "não respondeu a tempo", que nem era verdade). O que segura o
+       custo é a CHAVE, não a lista — por isso descobrir aqui não abre porta
+       nenhuma à chave paga: esta pergunta é feita com a grátis. */
+    return [...FREE_MODELS, ...(await descobrirFlash(signal, "gratis"))]
+      .filter((m) => (vistos.has(m) ? false : vistos.add(m)));
+  }
+  const pinned = Deno.env.get("GEMINI_MODEL");
+  const lista = [...(pinned ? [pinned] : []), ...ESTAVEIS, ...(await descobrirFlash(signal, "premium"))]
     .filter((m) => (vistos.has(m) ? false : vistos.add(m)));
   return lista.length ? lista : ["gemini-flash-latest"];
 }
@@ -501,6 +514,10 @@ async function produzirFicha(
       signal: sinal, body: JSON.stringify(corpo),
     });
   };
+  /* O rasto de CADA tentativa. Sem isto, "não deu" chegava ao Diagnóstico sem
+     dizer porquê e a causa só se via nos logs da função — foi assim que se
+     perdeu tempo com uns 404 que pareciam um timeout. */
+  const tentativas: { modelo: string; estado: number | string }[] = [];
   const tentar = async (model: string, v: V): Promise<Response | null> => {
     const ms = Math.min(v.search ? searchMs : FALLBACK_TENTATIVA_TIMEOUT_MS, restante());
     if (ms < 2_000) return null;
@@ -509,11 +526,13 @@ async function produzirFicha(
       const r = await chamar(model, v, sinal);
       limpar();
       console.log("VINHO tentativa:", model, v.label, "->", r.status);
+      tentativas.push({ modelo: model, estado: r.status });
       return r;
     } catch (e) {
       limpar();
       if (signal.aborted) throw e;
       console.log("VINHO tentativa presa:", model, v.label);
+      tentativas.push({ modelo: model, estado: "presa" });
       return null;
     }
   };
@@ -537,7 +556,7 @@ async function produzirFicha(
       g = await tentar(model, v);
       if (!g) continue;
       if (g.status === 400) { console.log("VINHO 400:", (await g.clone().text()).slice(0, 300)); g = null; continue; }
-      if (g.status === 404) { _models = null; g = null; break; }          // saiu do catálogo
+      if (g.status === 404) { _models[plano] = null; g = null; break; }   // saiu do catálogo
       if (transitorio(g.status)) { await sleep(700); g = null; break; }   // cheio: outro modelo
       break;
     }
@@ -546,7 +565,18 @@ async function produzirFicha(
   }
 
   if (!g) {
-    await registar("erro", { passo: "sem-resposta", nome, modelos: candidatos.length, orcamento_ms: budgetMs }, quem);
+    await registar("erro", { passo: "sem-resposta", nome, plano, tentativas, orcamento_ms: budgetMs }, quem);
+    /* Tudo a 404 não é um timeout, é a chave a não conhecer nenhum destes
+       modelos — e dizer "não respondeu a tempo" mandava quem lê tentar outra
+       vez para sempre. O nome do secret vai na mensagem porque é isso que
+       resolve o problema. */
+    const so404 = tentativas.length > 0 && tentativas.every((t) => t.estado === 404);
+    if (so404) {
+      return { ok: false, status: 502, erro:
+        `a chave ${plano === "gratis" ? "grátis" : "premium"} não tem acesso a nenhum destes modelos (404): ` +
+        `${[...new Set(tentativas.map((t) => t.modelo))].join(", ")}. ` +
+        `Confere o secret ${plano === "gratis" ? "GEMINI_FREE_API_KEY" : "GEMINI_API_KEY"} no Supabase.` };
+    }
     return { ok: false, status: 504, erro: "o modelo não respondeu a tempo — tenta outra vez daqui a pouco" };
   }
   if (!g.ok) {

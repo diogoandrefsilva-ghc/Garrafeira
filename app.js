@@ -2545,7 +2545,10 @@ async function iaArrancar(vinhoId){
   // O pedido fica guardado tal e qual: a segunda volta tem de ser a MESMA
   // pergunta, senão não se está a comparar motores, está-se a comparar duas
   // perguntas diferentes.
-  IA_PEDIDO=pedido;IA_RES_P=null;IA_ERRO_P='';
+  // O vinho fica marcado JÁ, e não só quando o resultado chega: se a volta
+  // grátis falhar, o botão de tentar com a premium precisa de saber de que
+  // vinho estamos a falar — sem isto ia buscar o do resultado anterior.
+  IA_PEDIDO=pedido;IA_VINHO=vinhoId;IA_RES=null;IA_RES_P=null;IA_ERRO_P='';
   iaMostrarEspera(v.nome+(v.ano?' '+v.ano:''),'gratis');
   try{
     iaMostrarResultado(await iaPedir(pedido,vinhoId,'gratis'),vinhoId);
@@ -2560,9 +2563,20 @@ async function iaArrancar(vinhoId){
 async function iaPremium(){
   if(!temPremium()||!IA_PEDIDO||!IA_VINHO)return;
   const v=IDXV[IA_VINHO]||{};
+  // A volta grátis pode ter falhado (chave mal configurada, o modelo em
+  // baixo): aí não há par nenhum para comparar e a premium passa a ser A
+  // leitura, com o ecrã de sempre.
+  const semGratis=!IA_RES;
   iaMostrarEspera(v.nome+(v.ano?' '+v.ano:''),'premium');
-  try{IA_RES_P=await iaPedir(IA_PEDIDO,IA_VINHO,'premium');IA_ERRO_P='';}
-  catch(e){IA_RES_P=null;IA_ERRO_P=e.message;}
+  try{
+    const res=await iaPedir(IA_PEDIDO,IA_VINHO,'premium');
+    IA_ERRO_P='';
+    if(semGratis){iaMostrarResultado(res,IA_VINHO);return;}
+    IA_RES_P=res;
+  }catch(e){
+    IA_RES_P=null;IA_ERRO_P=e.message;
+    if(semGratis){iaMostrarErro(e.message);return;}
+  }
   iaMostrarResultado(IA_RES,IA_VINHO);
 }
 // Do formulário de "novo vinho": preenche os campos em vez de gravar.
@@ -2586,7 +2600,10 @@ async function iaProcurarNovo(motor){
     est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">✓ Preenchido pela ${esc(rotuloMotor(m))}${res.fontes&&res.fontes.length?' ('+res.fontes.length+' fontes)':''}. Confere antes de gravar.</div>`
       +(m==='gratis'&&temPremium()?`<button class="mini o" style="margin-top:8px" onclick="iaProcurarNovo('premium')">✨ Repetir com IA premium</button>`:'');
   }catch(e){
-    est.innerHTML=`<div class="erro">${esc(e.message)}</div>`;
+    // Mesma ideia do `iaMostrarErro`: a grátis falhou, mas quem é premium
+    // tem para onde ir.
+    est.innerHTML=`<div class="erro">${esc(e.message)}</div>`
+      +(m==='gratis'&&temPremium()?`<button class="mini o" style="margin-top:8px" onclick="iaProcurarNovo('premium')">✨ Tentar com IA premium</button>`:'');
   }
   btn.disabled=false;btn.textContent='🔎 Procurar informação';
 }
@@ -2630,10 +2647,16 @@ function iaMostrarEspera(titulo,motor){
   abrirModal('modal-ia');
 }
 function iaMostrarErro(msg){
+  /* A primeira volta é sempre a grátis. Se ela falhar, quem é premium não pode
+     ficar sem caminho nenhum — uma chave grátis avariada trancava a procura a
+     toda a gente, inclusive a quem paga. O botão desaparece depois de a
+     premium também ter falhado, para não convidar a insistir no mesmo. */
+  const tentarPremium=temPremium()&&IA_PEDIDO&&IA_VINHO&&!IA_RES_P&&!IA_ERRO_P;
   document.getElementById('modal-ia-in').innerHTML=`
     <div class="mtop"><h3>Não deu</h3><button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
     <div class="erro">${esc(msg)}</div>
-    <div class="macoes"><button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button></div>`;
+    <div class="macoes">${tentarPremium?'<button class="btn prim" onclick="iaPremium()">✨ Tentar com IA premium</button>':''}
+      <button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button></div>`;
   abrirModal('modal-ia');
 }
 

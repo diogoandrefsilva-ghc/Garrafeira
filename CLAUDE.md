@@ -664,8 +664,13 @@ descoberta de modelo, mesma escada de variantes, mesmos fallbacks.
   o admin é sempre premium. A Edge Function pergunta `garrafeira.plano_ia()`
   com o JWT de quem chamou — nunca aceita do browser um plano MAIOR do que
   esse (ver o ponto seguinte). `gratis`
-  usa exclusivamente `GEMINI_FREE_API_KEY` e os modelos fixos 2.5 Flash /
-  Flash-Lite, portanto não pode cair na chave premium. Tem cinco tentativas
+  usa exclusivamente `GEMINI_FREE_API_KEY`, portanto não pode cair na chave
+  premium. Tenta primeiro 2.5 Flash / Flash-Lite e, se a chave não os servir,
+  o que o **ListModels dessa mesma chave** disser que ela tem: os nomes eram
+  fixos e isso partiu-se no dia em que a chave grátis respondeu 404 aos dois —
+  a procura morria ali, e ainda por cima a dizer "não respondeu a tempo". O
+  que segura o custo é a CHAVE e não a lista, por isso descobrir não abre
+  porta nenhuma à chave paga. Tem cinco tentativas
   por dia por utilizador, configuráveis pelo secret `GEMINI_FREE_DAILY_LIMIT`.
   As análises registam o plano em `analises.plano_ia`; o trigger volta a
   carimbá-lo pela função SQL, mesmo se alguém falar com o PostgREST à mão.
