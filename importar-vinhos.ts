@@ -6,7 +6,39 @@ const SB_URL=Deno.env.get("SUPABASE_URL")!;
 const SB_SRV=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_KEY=Deno.env.get("GEMINI_FREE_API_KEY")??"";
 const API="https://generativelanguage.googleapis.com/v1beta";
-const MODELOS=["gemini-2.5-flash","gemini-2.5-flash-lite"];
+// Os PONTEIROS ("-latest") primeiro: apontam sempre para o que a Google tem
+// em produção agora, ao contrário de "gemini-2.5-flash" — que esta mesma
+// chave já recusa com 404 ("no longer available to new users"). Isso é o que
+// aconteceu: a lista era só nomes fixos e partiu-se assim que a Google
+// reformou o catálogo. Descobre-se o resto com a PRÓPRIA chave grátis (nunca
+// a premium), tal como em vinho-info.ts.
+const MODELOS_BASE=["gemini-flash-latest","gemini-flash-lite-latest"];
+let _modelos:string[]|null=null;
+async function candidatos(signal:AbortSignal):Promise<string[]>{
+ if(_modelos)return _modelos;
+ const vistos=new Set<string>(MODELOS_BASE),lista=[...MODELOS_BASE];
+ try{
+  const lim=comLimite(signal,8000);
+  const r=await fetch(API+"/models?pageSize=200&key="+GEMINI_KEY,{signal:lim.signal});
+  lim.limpar();
+  if(r.ok){
+   const d=await r.json();
+   (d.models??[]).forEach((m:any)=>{
+    const nome=String(m.name).replace(/^models\//,"");
+    if(!vistos.has(nome)&&(m.supportedGenerationMethods??[]).includes("generateContent")
+       &&nome.includes("flash")&&!/(8b|image|tts|live|audio|embed|exp|preview|thinking)/.test(nome)){
+     vistos.add(nome);lista.push(nome);
+    }
+   });
+  }else console.log("IMPORTAR ListModels ->",r.status);
+ }catch(_){/* fica só a base */}
+ // No máximo 4: cada candidato a mais é tempo gasto à toa quando os
+ // primeiros já respondem 404/429, e o orçamento aqui é apertado (a função
+ // corre em segundo plano com 105s ao todo).
+ _modelos=lista.slice(0,4);
+ console.log("IMPORTAR modelos:",_modelos.join(", "));
+ return _modelos;
+}
 const MAX_IMAGENS=3, MAX_BASE64=2_400_000;
 const LIMITE_GRATIS=Math.max(1,Math.min(20,Number(Deno.env.get("GEMINI_IMPORT_FREE_DAILY_LIMIT")??3)||3));
 const CORS={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, apikey, content-type","Access-Control-Allow-Methods":"POST, OPTIONS"};
@@ -45,13 +77,25 @@ function prompt(qtd:number){return [
 function comLimite(pai:AbortSignal,ms:number){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms),a=()=>c.abort();pai.addEventListener("abort",a,{once:true});return{signal:c.signal,limpar:()=>{clearTimeout(t);pai.removeEventListener("abort",a);}};}
 async function ler(imagens:{mime:string,data:string}[],signal:AbortSignal){
  if(!GEMINI_KEY)throw new Error("a importação ainda não está configurada: falta GEMINI_FREE_API_KEY");
- const parts=[{text:prompt(imagens.length)},...imagens.map(i=>({inline_data:{mime_type:i.mime,data:i.data}}))];let ultimo="";
- for(let i=0;i<MODELOS.length;i++){const modelo=MODELOS[i],lim=comLimite(signal,i?28000:72000);try{
+ const modelos=await candidatos(signal);
+ const parts=[{text:prompt(imagens.length)},...imagens.map(i=>({inline_data:{mime_type:i.mime,data:i.data}}))];
+ let ultimo="";const tentativas:{modelo:string,estado:number|string}[]=[];
+ for(let i=0;i<modelos.length;i++){const modelo=modelos[i],lim=comLimite(signal,i?18000:40000);try{
    const r=await fetch(API+"/models/"+modelo+":generateContent?key="+GEMINI_KEY,{method:"POST",headers:{"Content-Type":"application/json"},signal:lim.signal,body:JSON.stringify({contents:[{role:"user",parts}],generationConfig:{temperature:0,responseMimeType:"application/json",maxOutputTokens:8192}})});
-   lim.limpar();if(!r.ok){ultimo="Gemini respondeu "+r.status+": "+(await r.text()).slice(0,240);continue;}
+   lim.limpar();tentativas.push({modelo,estado:r.status});
+   if(!r.ok){ultimo="Gemini respondeu "+r.status+": "+(await r.text()).slice(0,240);continue;}
    const d=await r.json(),bruto=(d?.candidates?.[0]?.content?.parts??[]).map((p:any)=>p?.text??"").join(""),raw=extrairJson(bruto),lista=Array.isArray(raw?.vinhos)?raw.vinhos:[];
    return{vinhos:lista.map(normalizar).filter(Boolean).slice(0,40),aviso:texto(raw?.aviso,300),modelo};
- }catch(e){lim.limpar();if(signal.aborted)throw e;ultimo=String((e as Error).message||"a leitura falhou");}}
+ }catch(e){lim.limpar();if(signal.aborted)throw e;tentativas.push({modelo,estado:"presa"});ultimo=String((e as Error).message||"a leitura falhou");}}
+ // Uma mensagem acionável em vez do JSON cru do Gemini: 404 é a chave sem
+ // acesso ao modelo (nomeia o secret), 429 é quota do lado da Google — as
+ // duas causas já apanhadas em vinho-info.ts.
+ if(tentativas.length&&tentativas.every(t=>t.estado===404))
+  throw new Error("a chave grátis não tem acesso a nenhum destes modelos (404): "+
+    [...new Set(tentativas.map(t=>t.modelo))].join(", ")+". Confere o secret GEMINI_FREE_API_KEY no Supabase.");
+ if(tentativas.some(t=>t.estado===429))
+  throw new Error("a chave grátis está sem quota no Gemini (429): nenhum dos "+tentativas.length+
+    " modelos aceitou o pedido. É a quota do Google e não a da app — confirma o plano do projeto de onde saiu o GEMINI_FREE_API_KEY.");
  throw new Error(ultimo||"o modelo não conseguiu ler as imagens");
 }
 async function rpc(auth:string,nome:string,body:Record<string,unknown>,signal:AbortSignal){

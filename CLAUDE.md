@@ -767,8 +767,16 @@ descarta-os no fim. Não há upload para Storage nem imagens dentro da tabela
 o resultado pendente, associado ao email do JWT e à garrafeira que o editor
 pode alterar.
 
-`importar-vinhos.ts` usa só `GEMINI_FREE_API_KEY` e `gemini-2.5-flash` com
-Flash-Lite como recurso. Não usa pesquisa web nem a chave premium. O plano
+`importar-vinhos.ts` usa só `GEMINI_FREE_API_KEY`, nunca a chave premium, e
+não usa pesquisa web. Os modelos tentados começam pelos PONTEIROS
+(`gemini-flash-latest`/`gemini-flash-lite-latest`, que apontam sempre para o
+que a Google tem em produção agora) e completam-se com o que um `ListModels`
+feito com a PRÓPRIA chave grátis disser que ela tem — nomes de versão fixos
+("gemini-2.5-flash") partiram-se assim que a Google os reformou; a mensagem
+de erro do Gemini foi literal: "no longer available to new users". Se
+mesmo assim nenhum modelo responder, a mensagem distingue 404 (a chave não
+tem acesso a nenhum) de 429 (sem quota no Google) — mesma lógica do
+`vinho-info.ts`. O plano
 grátis tem o limite por utilizador `GEMINI_IMPORT_FREE_DAILY_LIMIT` (3 por
 defeito); premium não tem esse limite. A função corre a leitura em segundo
 plano com `EdgeRuntime.waitUntil`, e a app consulta `importacoes` até ficar
