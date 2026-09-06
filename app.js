@@ -1935,6 +1935,10 @@ const TIPOS=['Tinto','Branco','Rosé','Espumante','Licoroso','Frisante'];
 const ESTILOS=['','Maduro','Verde','Colheita Tardia','Palhete'];
 const MENCOES=['','Reserva','Grande Reserva','Garrafeira','Colheita Selecionada','Vinhas Velhas','Superior','Grande Escolha'];
 const CLASSIF=['','DOC','Vinho Regional','Vinho'];
+// Tamanho da GARRAFA (não do vinho): três formatos fixos, como o resto do
+// vocabulário desta app — evita "75cl"/"0.75L"/"750ml" a designarem a mesma
+// coisa de jeitos diferentes consoante quem escreveu.
+const FORMATOS=['0,75 L','1,5 L','3 L'];
 
 function abrirNovoVinho(){
   if(roGuard())return;
@@ -2020,9 +2024,11 @@ function abrirEditarVinho(id){
         <div><label>Lugar</label><input type="text" id="e-lugar" placeholder="12"></div>
       </div>
       <div class="mrow">
+        <div><label>Formato</label><select id="e-formato">${FORMATOS.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}</select></div>
         <div><label>Preço de compra (€)</label><input type="text" id="e-preco-compra" inputmode="decimal" placeholder="15.90"></div>
-        <div><label>Comprada em</label><input type="date" id="e-comprado"></div>
-      </div>`}
+      </div>
+      <label>Comprada em</label>
+      <input type="date" id="e-comprado">`}
 
     <div class="macoes">
       <button class="btn prim" id="e-guardar" onclick="guardarVinho(${id})">${id?'Guardar':'Adicionar à garrafeira'}</button>
@@ -2106,6 +2112,7 @@ async function guardarVinho(id){
         local_id:localSel&&localSel.value?parseInt(localSel.value,10):null,
         prateleira:document.getElementById('e-prat').value.trim(),
         lugar:document.getElementById('e-lugar').value.trim(),
+        formato:document.getElementById('e-formato').value,
         preco_compra:num(document.getElementById('e-preco-compra').value),
         comprado_em:document.getElementById('e-comprado').value||null
       };
@@ -2258,7 +2265,8 @@ function abrirGarrafa(gid,vinhoId){
       <div><label>Lugar</label><input type="text" id="g-lugar" value="${esc(g?g.lugar:'')}" placeholder="12"></div>
     </div>
     <div class="mrow">
-      <div><label>Formato</label><input type="text" id="g-formato" value="${esc(g?g.formato:'0,75 L')}"></div>
+      <div><label>Formato</label><select id="g-formato">${FORMATOS.map(x=>
+        `<option value="${esc(x)}"${(g?g.formato:'0,75 L')===x?' selected':''}>${esc(x)}</option>`).join('')}</select></div>
       <div><label>Preço de compra (€)</label><input type="text" id="g-preco" inputmode="decimal" value="${esc(g&&g.preco_compra!=null?g.preco_compra:'')}"></div>
     </div>
     <label>Comprada em</label>
@@ -2277,7 +2285,7 @@ async function guardarGarrafa(gid,vinhoId){
     local_id:locSel&&locSel.value?parseInt(locSel.value,10):null,
     prateleira:document.getElementById('g-prat').value.trim(),
     lugar:document.getElementById('g-lugar').value.trim(),
-    formato:document.getElementById('g-formato').value.trim()||'0,75 L',
+    formato:document.getElementById('g-formato').value,
     preco_compra:num(document.getElementById('g-preco').value),
     comprado_em:document.getElementById('g-comprado').value||null
   };
