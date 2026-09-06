@@ -1952,6 +1952,14 @@ function abrirEditarVinho(id){
   const o=(k,d)=>v?(v[k]==null?'':v[k]):(d==null?'':d);
   const opts=(arr,sel)=>arr.map(x=>`<option value="${esc(x)}"${String(sel)===String(x)?' selected':''}>${esc(x||'—')}</option>`).join('');
   const locOpts=db.locais.map(l=>`<option value="${l.id}">${esc(l.nome)}</option>`).join('');
+  // O tamanho é um campo da GARRAFA, não do vinho — mas editar vinho a
+  // vinho é onde as pessoas vão à procura dele, por isso aqui mostra-se o
+  // formato de quem já está na garrafeira (a primeira ativa, ou 0,75 L se
+  // não houver nenhuma) e gravar aplica-o a TODAS as garrafas ativas deste
+  // vinho de uma vez. Para dar tamanhos diferentes à mesma referência
+  // (uma normal e uma magnum), continua a ser a garrafa a garrafa, em
+  // "Mover" na página do vinho.
+  const formatoAtual=id?(garrafasDe(id,true)[0]||{}).formato||'0,75 L':'0,75 L';
 
   document.getElementById('modal-edit-in').innerHTML=`
     <div class="mtop"><h3>${id?'Editar vinho':'Novo vinho'}</h3>
@@ -1963,6 +1971,12 @@ function abrirEditarVinho(id){
       <div><label>Ano</label><input type="number" id="e-ano" inputmode="numeric" value="${esc(o('ano'))}" placeholder="2021"></div>
       <div><label>Produtor</label><input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado"></div>
     </div>
+
+    ${id?`<div class="mrow">
+      <div><label>Formato da garrafa</label><select id="e-formato-edit">${FORMATOS.map(x=>
+        `<option value="${esc(x)}"${formatoAtual===x?' selected':''}>${esc(x)}</option>`).join('')}</select></div>
+    </div>
+    <div class="note">Aplica-se a todas as garrafas deste vinho ainda na garrafeira.</div>`:''}
 
     ${id?'':podeUsarIA()?`<div class="aviso">Escreve o nome (e o ano, se souberes) e carrega em <b>Procurar informação</b>: a pesquisa preenche o resto — castas, região, tipo, nota do Vivino, preço médio e quando beber. Confirmas antes de gravar.</div>
       <button class="btn prim full" id="e-btn-ia" onclick="iaProcurarNovo()">🔎 Procurar informação</button>
@@ -2090,6 +2104,12 @@ async function guardarVinho(id){
     if(id){
       await sbReq('PATCH',`vinhos?id=eq.${id}`,f);
       Object.assign(IDXV[id],f);
+      const novoFormato=document.getElementById('e-formato-edit').value;
+      const ativas=garrafasDe(id,true).filter(g=>g.formato!==novoFormato);
+      if(ativas.length){
+        await sbReq('PATCH',`garrafas?vinho_id=eq.${id}&estado=eq.na_garrafeira`,{formato:novoFormato});
+        ativas.forEach(g=>g.formato=novoFormato);
+      }
     }else{
       // O vinho nasce na garrafeira que está aberta. A policy confirma que
       // ela é minha; o trigger só serve de rede se isto faltar.
@@ -4100,7 +4120,7 @@ function importarMostrarResultado(resultado){
     const detalhes=[v.tipo,v.regiao,v.mencao,v.teor?v.teor+'%':'',(v.castas||[]).join(', ')].filter(Boolean).join(' · ');
     return "<div class='ia-linha' style='display:block;margin-top:10px'>"+
       "<label style='display:flex;gap:8px;align-items:center'><input type='checkbox' class='imp-sel' data-i='"+i+"' checked><b>"+esc(v.nome||'Sem nome')+"</b></label>"+
-      "<div class='formgrid' style='margin-top:8px'><div><label>Nome</label><input class='imp-nome' data-i='"+i+"' value='"+esc(v.nome||"")+"'></div><div><label>Produtor</label><input class='imp-produtor' data-i='"+i+"' value='"+esc(v.produtor||"")+"'></div><div><label>Ano</label><input class='imp-ano' data-i='"+i+"' inputmode='numeric' value='"+esc(v.ano||"")+"'></div><div><label>Garrafas</label><input class='imp-qtd' data-i='"+i+"' type='number' min='1' max='60' value='"+esc(v.quantidade||1)+"'></div></div>"+
+      "<div class='formgrid' style='margin-top:8px'><div><label>Nome</label><input class='imp-nome' data-i='"+i+"' value='"+esc(v.nome||"")+"'></div><div><label>Produtor</label><input class='imp-produtor' data-i='"+i+"' value='"+esc(v.produtor||"")+"'></div><div><label>Ano</label><input class='imp-ano' data-i='"+i+"' inputmode='numeric' value='"+esc(v.ano||"")+"'></div><div><label>Garrafas</label><input class='imp-qtd' data-i='"+i+"' type='number' min='1' max='60' value='"+esc(v.quantidade||1)+"'></div><div><label>Formato</label><select class='imp-formato' data-i='"+i+"'>"+FORMATOS.map(function(x){return "<option value='"+esc(x)+"'>"+esc(x)+"</option>";}).join('')+"</select></div></div>"+
       (detalhes?"<div class='note' style='margin-top:6px'>"+esc(detalhes)+"</div>":"")+
       (v.aviso?"<div class='note' style='margin-top:4px'>⚠️ "+esc(v.aviso)+"</div>":"")+"</div>";
   }).join('');
@@ -4130,7 +4150,8 @@ async function importarGuardar(){
       const vinhoId=criados&&criados[0]&&criados[0].id;if(!vinhoId)throw new Error('não foi possível criar '+nome);
       if(castas.length)await sbRpc('definir_castas',{p_vinho_id:vinhoId,p_nomes:castas});
       const qtd=Math.max(1,Math.min(60,inteiro(importarValor('imp-qtd',i))||1));
-      await sbReq('POST','garrafas',Array.from({length:qtd},()=>({vinho_id:vinhoId})),{'Prefer':'return=minimal'});
+      const formato=importarValor('imp-formato',i)||'0,75 L';
+      await sbReq('POST','garrafas',Array.from({length:qtd},()=>({vinho_id:vinhoId,formato:formato})),{'Prefer':'return=minimal'});
       feitos++;
     }
     await carregarGarrafeira();await recarregarCastas();renderLista();fecharModal('modal-ia');
