@@ -115,6 +115,15 @@ async function descobrirFlash(signal: AbortSignal, plano: "gratis" | "premium"):
   } catch (_) { /* fica o fallback */ }
   return _models[plano] ?? [];
 }
+// Decisão: esta tarefa (procurar 1 vinho, preencher JSON) não precisa de
+// "pensamento" nem do modelo mais recente/caro. O Gemini 3.8 Flash gastou
+// sozinho €6.98 num único dia (contra ~€1.9 do 3.6 e ~€1.5 do 3.7 em quase
+// três meses) — o "pensamento" ligado por omissão nos flash mais recentes,
+// combinado com o grounding, é o que come os tokens. O flash-lite chega bem
+// para "procurar factos e preencher JSON"; é o mesmo raciocínio que já leva
+// o `importar-vinhos` (tarefa mais difícil, é multimodal) a usar sempre
+// flash-lite. Fixa-se aqui, não só via secret, para ficar claro qual é.
+const MODELO_PREFERIDO = "gemini-flash-lite-latest";
 const ESTAVEIS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"];
 async function candidatosModelo(signal: AbortSignal, plano: "gratis" | "premium"): Promise<string[]> {
   const vistos = new Set<string>();
@@ -131,7 +140,11 @@ async function candidatosModelo(signal: AbortSignal, plano: "gratis" | "premium"
     return [...FREE_MODELS, ...(await descobrirFlash(signal, "gratis"))]
       .filter((m) => (vistos.has(m) ? false : vistos.add(m))).slice(0, 6);
   }
-  const pinned = Deno.env.get("GEMINI_MODEL");
+  // GEMINI_MODEL continua a existir como escape hatch (troca sem deploy se a
+  // Google reformar o catálogo outra vez, como já aconteceu); na ausência
+  // dele usa-se a decisão de cima, MODELO_PREFERIDO, em vez de ir direto ao
+  // "flash mais recente" descoberto — que foi o que trouxe o 3.8 para a mesa.
+  const pinned = Deno.env.get("GEMINI_MODEL") || MODELO_PREFERIDO;
   const lista = [...(pinned ? [pinned] : []), ...ESTAVEIS, ...(await descobrirFlash(signal, "premium"))]
     .filter((m) => (vistos.has(m) ? false : vistos.add(m)));
   return lista.length ? lista : ["gemini-flash-latest"];
