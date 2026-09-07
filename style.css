@@ -369,7 +369,11 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .mslot.cheia{border-style:solid;border-color:#e8d9c3;background:#fff;cursor:pointer;box-shadow:var(--sh);font-family:inherit;text-align:left}
 .mslot.cheia:hover{border-color:var(--vh);transform:translateY(-1px)}
 .mslot.conflito{border-color:#c98660;background:#fff7f3}
+.mslot-thumb{position:relative;width:28px;height:42px;flex-shrink:0;border-radius:8px;background:linear-gradient(160deg,#fff,var(--bg2));
+  border:1px solid var(--bo);display:flex;align-items:center;justify-content:center;overflow:hidden}
 .mslot svg{width:14px;height:auto;display:block;flex-shrink:0}
+.mslot-thumb svg{width:100%;height:auto;max-height:42px;padding:4px 2px;filter:drop-shadow(0 2px 3px rgba(43,10,22,.18))}
+.mslot-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .mslot-top{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%}
 .mslot-num{font-family:var(--fd);font-size:12px;color:var(--vh);font-weight:600;line-height:1}
 .mslot-q{font-size:9.5px;font-weight:700;color:#8f4b2d;background:#f7e2d6;border-radius:99px;padding:2px 5px;line-height:1}
@@ -377,6 +381,22 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .mslot-year{font-size:10px;color:var(--mu);margin-top:auto}
 .mslot.vazia{align-items:center;justify-content:center;background:transparent}
 .mslot.vazia .mslot-num{opacity:.75}
+.mspot-pop{position:fixed;left:-9999px;top:-9999px;z-index:180;width:min(292px,calc(100vw - 16px));display:none}
+.mspot-pop.on{display:block}
+.mspot-card{background:var(--card);border:1px solid var(--bo2);border-radius:16px;padding:12px;box-shadow:0 20px 40px -18px rgba(30,8,16,.45)}
+.mspot-head{font-size:10.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--mu);margin-bottom:10px}
+.mspot-item+.mspot-item{margin-top:12px;padding-top:12px;border-top:1px solid var(--bo)}
+.mspot-top{display:flex;align-items:center;gap:11px}
+.mspot-thumb{position:relative;width:54px;height:84px;flex-shrink:0;border-radius:11px;background:linear-gradient(160deg,#fff,var(--bg2));
+  border:1px solid var(--bo);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.mspot-thumb svg{width:100%;height:auto;max-height:74px;padding:5px 3px;filter:drop-shadow(0 2px 4px rgba(43,10,22,.18))}
+.mspot-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.mspot-tx{min-width:0;flex:1}
+.mspot-nome{font-family:var(--fd);font-weight:600;font-size:16px;line-height:1.25;color:var(--tx)}
+.mspot-meta{font-size:11.5px;color:var(--mu);margin-top:4px;line-height:1.45}
+.mspot-aux{font-size:11px;color:#8f4b2d;margin-top:6px}
+.mspot-actions{display:grid;gap:7px;margin-top:12px}
+.mspot-actions .mini{display:flex;align-items:center;justify-content:center;width:100%}
 
 /* ── CONSUMIDOS ─────────────────────────────────────────────────── */
 .ccard{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:13px 15px;margin-bottom:10px;
@@ -419,6 +439,8 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .ua-row span.em{flex:1 1 100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .ua-row .tagme{font-family:var(--fd);font-size:12px;background:var(--vhp);color:var(--vh);padding:1px 9px;border-radius:99px;white-space:nowrap}
 .ll-toggle{margin-top:14px}
+.ll-toggle.chk{display:flex;align-items:center;gap:7px;margin:14px 0 0;font-size:12.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--tx);cursor:pointer}
+.ll-toggle.chk input{width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;border:none;border-radius:0;background:none;accent-color:var(--vh);box-shadow:none}
 .ll-lista{display:grid;gap:10px;margin-top:10px}
 .ll-row{display:grid;grid-template-columns:minmax(0,1fr) 112px auto;gap:10px;align-items:end}
 .ll-row .jdel.ll-del{margin:0 0 10px}

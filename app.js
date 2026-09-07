@@ -524,6 +524,12 @@ function vinhoThumb(v,qtd){
     ${img?`<img src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()">`:''}
     ${qtd>1?`<span class="vc-qtd">\u00d7${qtd}</span>`:''}</div>`;
 }
+function mapaSlotThumb(v){
+  const img=imagemDe(v);
+  return `<span class="mslot-thumb">${garrafaSVG(v,1)}
+    ${img?`<img src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()">`:''}
+  </span>`;
+}
 
 // "Nível 2" tem de vir antes de "Nível 10" — a ordenação alfabética punha o
 // 10 primeiro, e o mapa da garrafeira ficava com os níveis baralhados.
@@ -532,6 +538,9 @@ function ordPrateleira(a,b){
   const na=num(a),nb=num(b);
   if(na!==null&&nb!==null&&na!==nb)return na-nb;
   return String(a).localeCompare(String(b),'pt',{numeric:true});
+}
+function prateleirasDesc(lista){
+  return [...(lista||[])].sort((a,b)=>ordPrateleira(String((b&&b.nome)||b||''),String((a&&a.nome)||a||'')));
 }
 function layoutLocal(l){
   const raw=l&&l.layout&&Array.isArray(l.layout.prateleiras)?l.layout.prateleiras:[];
@@ -719,6 +728,7 @@ function fecharModal(id){
 document.addEventListener('click',e=>{
   if(e.target.classList&&e.target.classList.contains('modal')&&!e.target.classList.contains('pagina'))
     fecharModal(e.target.id);
+  if(MAPA_POP_LOCAL&&!e.target.closest('#mapa-pop,.mslot.cheia'))mapaPopupFechar();
 });
 
 /* ── NAVEGAÇÃO ─────────────────────────────────────────────────────── */
@@ -1441,7 +1451,7 @@ function mapaCelulaListaHTML(g){
   </button>`;
 }
 function mapaLocalListaHTML(gs){
-  const prats=[...new Set(gs.map(g=>g.prateleira||''))].sort(ordPrateleira);
+  const prats=[...new Set(gs.map(g=>g.prateleira||''))].sort((a,b)=>ordPrateleira(b,a));
   return prats.map(p=>{
     const cel=gs.filter(g=>(g.prateleira||'')===p)
       .sort((a,b)=>String(a.lugar).localeCompare(String(b.lugar),'pt',{numeric:true}));
@@ -1453,7 +1463,7 @@ function mapaLocalListaHTML(gs){
   }).join('');
 }
 function mapaLocalLayoutHTML(l,gs){
-  const prats=layoutLocal(l);
+  const prats=prateleirasDesc(layoutLocal(l));
   const occ=ocupacaoLayout(l.id);
   const extras=dadosForaLayout(l,gs);
   return prats.map(p=>{
@@ -1466,10 +1476,12 @@ function mapaLocalLayoutHTML(l,gs){
         <span class="mslot-num">${lugar}</span>
       </div>`;
       const g=lista[0],v=IDXV[g.vinho_id]||{nome:'?'};
-      return `<button class="mslot cheia${lista.length>1?' conflito':''}" onclick="verVinho(${g.vinho_id})"
+      return `<button class="mslot cheia${lista.length>1?' conflito':''}"
+        onclick="mapaPopupToggle(${l.id},'${escJs(p.nome)}',${lugar},this,event)"
+        onmouseenter="mapaPopupHover(${l.id},'${escJs(p.nome)}',${lugar},this)" onmouseleave="mapaPopupSair()"
         title="${esc(v.nome)} ${v.ano||''} · ${esc(posicaoTxt(p.nome,lugar))}${lista.length>1?` · ${lista.length} garrafas`:''}">
         <span class="mslot-top"><span class="mslot-num">${lugar}</span>${lista.length>1?`<span class="mslot-q">×${lista.length}</span>`:''}</span>
-        ${garrafaSVG(v,1)}
+        ${mapaSlotThumb(v)}
         <span class="mslot-name">${esc(v.nome)}</span>
         <span class="mslot-year">${v.ano||'s/a'}</span>
       </button>`;
@@ -1490,6 +1502,7 @@ function mapaLocalLayoutHTML(l,gs){
 function renderMapa(){
   const box=document.getElementById('mapa');
   if(!box)return;
+  mapaPopupFechar();
   const filtrando=haFiltros();
   let ativas=db.garrafas.filter(naGarrafeira);
   if(filtrando){
@@ -1528,6 +1541,104 @@ function renderMapa(){
       ${temLayoutLocal(l)?mapaLocalLayoutHTML(l,gs):mapaLocalListaHTML(gs)}
     </section>`;
   }).join('');
+}
+let MAPA_POP_LOCAL=0, MAPA_POP_PRAT='', MAPA_POP_LUGAR=0, MAPA_POP_FIXA=false, MAPA_POP_ANCHOR=null, MAPA_POP_T=null;
+function mapaPopupNode(){
+  let el=document.getElementById('mapa-pop');
+  if(el)return el;
+  el=document.createElement('div');
+  el.id='mapa-pop';
+  el.className='mspot-pop';
+  el.onmouseenter=()=>clearTimeout(MAPA_POP_T);
+  el.onmouseleave=()=>{if(!MAPA_POP_FIXA)mapaPopupSair();};
+  document.body.appendChild(el);
+  return el;
+}
+function mapaPopupFechar(){
+  clearTimeout(MAPA_POP_T);
+  MAPA_POP_LOCAL=0;MAPA_POP_PRAT='';MAPA_POP_LUGAR=0;MAPA_POP_FIXA=false;MAPA_POP_ANCHOR=null;
+  const el=document.getElementById('mapa-pop');
+  if(el){el.classList.remove('on');el.innerHTML='';}
+}
+function mapaPopupSair(){
+  clearTimeout(MAPA_POP_T);
+  if(MAPA_POP_FIXA)return;
+  MAPA_POP_T=setTimeout(()=>{if(!MAPA_POP_FIXA)mapaPopupFechar();},120);
+}
+function mapaPopupPos(anchor){
+  const el=document.getElementById('mapa-pop');
+  if(!el||!anchor||!anchor.isConnected)return mapaPopupFechar();
+  const r=anchor.getBoundingClientRect();
+  el.style.left='-9999px';el.style.top='-9999px';
+  const w=Math.min(el.offsetWidth||290,window.innerWidth-16);
+  const h=el.offsetHeight||180;
+  const left=Math.max(8,Math.min(window.innerWidth-w-8,r.left+r.width/2-w/2));
+  let top=r.top-h-10,dir='top';
+  if(top<8){top=r.bottom+10;dir='bottom';}
+  el.dataset.dir=dir;
+  el.style.left=left+'px';
+  el.style.top=Math.max(8,top)+'px';
+}
+function mapaPopupItemHTML(g,total){
+  const v=IDXV[g.vinho_id]||{nome:'?'};
+  const img=imagemDe(v);
+  const reg=[v.regiao,v.sub_regiao].filter(Boolean).join(' · ');
+  return `<div class="mspot-item">
+    <div class="mspot-top">
+      <div class="mspot-thumb">${garrafaSVG(v)}
+        ${img?`<img src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()">`:''}
+      </div>
+      <div class="mspot-tx">
+        <div class="mspot-nome">${esc(v.nome)}</div>
+        <div class="mspot-meta">${v.ano||'s/ ano'}${reg?` · ${esc(reg)}`:''}</div>
+        ${total>1?`<div class="mspot-aux">Uma das ${total} garrafas neste lugar.</div>`:''}
+      </div>
+    </div>
+    <div class="mspot-actions">
+      <button type="button" class="mini" onclick="mapaPopupSubstituir(${g.id})">Substituir vinho</button>
+      <button type="button" class="mini" onclick="mapaPopupMover(${g.id})">Mover vinho</button>
+      <button type="button" class="mini p" onclick="mapaPopupVerDetalhe(${g.id})">Ver detalhe</button>
+    </div>
+  </div>`;
+}
+function mapaPopupHTML(localId,prateleira,lugar,lista){
+  return `<div class="mspot-card">
+    <div class="mspot-head">${esc(nomeLocal(localId))} · ${esc(posicaoTxt(prateleira,lugar))}</div>
+    ${lista.map(g=>mapaPopupItemHTML(g,lista.length)).join('')}
+  </div>`;
+}
+function mapaPopupMostrar(localId,prateleira,lugar,anchor,fixa){
+  const lista=(ocupacaoLayout(localId)[slotLayoutKey(prateleira,lugar)]||[]).filter(naGarrafeira);
+  if(!lista.length||!anchor)return;
+  clearTimeout(MAPA_POP_T);
+  MAPA_POP_LOCAL=localId;MAPA_POP_PRAT=prateleira;MAPA_POP_LUGAR=lugar;MAPA_POP_FIXA=!!fixa;MAPA_POP_ANCHOR=anchor;
+  const el=mapaPopupNode();
+  el.innerHTML=mapaPopupHTML(localId,prateleira,lugar,lista);
+  el.classList.add('on');
+  mapaPopupPos(anchor);
+}
+function mapaPopupHover(localId,prateleira,lugar,anchor){
+  if(!window.matchMedia||!window.matchMedia('(hover:hover)').matches)return;
+  if(MAPA_POP_FIXA)return;
+  mapaPopupMostrar(localId,prateleira,lugar,anchor,false);
+}
+function mapaPopupToggle(localId,prateleira,lugar,anchor,ev){
+  if(ev)ev.stopPropagation();
+  if(MAPA_POP_FIXA&&MAPA_POP_LOCAL===localId&&MAPA_POP_PRAT===prateleira&&MAPA_POP_LUGAR===lugar){mapaPopupFechar();return;}
+  mapaPopupMostrar(localId,prateleira,lugar,anchor,true);
+}
+function mapaPopupVerDetalhe(gid){
+  const g=db.garrafas.find(x=>x.id===gid&&naGarrafeira(x));
+  mapaPopupFechar();
+  if(g)verVinho(g.vinho_id);
+}
+function mapaPopupMover(gid){
+  mapaPopupFechar();
+  abrirGarrafa(gid);
+}
+function mapaPopupSubstituir(gid){
+  mapaPopupFechar();
+  abrirSubstituirGarrafa(gid);
 }
 
 /* ── CONSUMIDOS ────────────────────────────────────────────────────
@@ -2083,7 +2194,7 @@ function renderPickerPosicoes(prefix,gid){
         </div>
         <div class="lpick-n">${livres} ${livres===1?'livre':'livres'}</div>
       </div>
-      ${prats.map(p=>`
+      ${prateleirasDesc(prats).map(p=>`
         <div class="lprat">
           <div class="lprat-t">${esc(p.nome)} <span>${p.capacidade} ${p.capacidade===1?'lugar':'lugares'}</span></div>
           <div class="lprat-grid">${Array.from({length:p.capacidade},(_,i)=>{
@@ -2533,6 +2644,47 @@ async function apagarGarrafa(gid){
     if(tabAtiva==='locais')renderMapa();
     toast('Garrafa apagada');
   }catch(e){toast('Não foi possível apagar: '+e.message,1);}
+}
+function abrirSubstituirGarrafa(gid){
+  if(roGuard())return;
+  const g=db.garrafas.find(x=>x.id===gid&&naGarrafeira(x));if(!g)return;
+  const atual=IDXV[g.vinho_id]||{nome:'?'};
+  const opts=[...db.vinhos].sort((a,b)=>
+    String(a.nome||'').localeCompare(String(b.nome||''),'pt',{numeric:true,sensitivity:'base'})||
+    String(a.ano||'').localeCompare(String(b.ano||''),'pt',{numeric:true})
+  ).map(v=>`<option value="${v.id}"${v.id===g.vinho_id?' selected':''}>${esc(v.nome)}${v.ano?` · ${esc(v.ano)}`:''}${v.regiao?` · ${esc(v.regiao)}`:''}</option>`).join('');
+  document.getElementById('modal-substituir-in').innerHTML=`
+    <div class="mtop"><div><h3>Substituir vinho</h3>
+      <div class="note" style="margin-top:3px">${esc(atual.nome)} ${atual.ano||''} · ${esc(ondeEsta(g))}</div></div>
+      <button class="mx" onclick="fecharModal('modal-substituir')">✕</button></div>
+    <label>Novo vinho neste lugar</label>
+    <select id="gs-vinho">${opts}</select>
+    <div class="note">A garrafa fica no mesmo local, prateleira e lugar — só muda a referência do vinho.</div>
+    <div class="macoes">
+      <button class="btn prim" id="gs-btn" onclick="guardarSubstituirGarrafa(${gid})">Guardar</button>
+      <button class="btn ghost" onclick="fecharModal('modal-substituir')">Cancelar</button>
+    </div>`;
+  abrirModal('modal-substituir');
+}
+async function guardarSubstituirGarrafa(gid){
+  if(roGuard())return;
+  const g=db.garrafas.find(x=>x.id===gid&&naGarrafeira(x));if(!g)return;
+  const sel=document.getElementById('gs-vinho');
+  const vinhoId=sel&&sel.value?parseInt(sel.value,10):0;
+  if(!vinhoId){toast('Escolhe um vinho',1);return;}
+  if(vinhoId===g.vinho_id){toast('Esta garrafa já está nesse vinho');return;}
+  const btn=document.getElementById('gs-btn');
+  btn.disabled=true;btn.textContent='A guardar…';
+  try{
+    await sbReq('PATCH',`garrafas?id=eq.${gid}`,{vinho_id:vinhoId});
+    g.vinho_id=vinhoId;
+    reindexar();fecharModal('modal-substituir');renderLista();refrescarVinhoAberto();
+    if(tabAtiva==='locais')renderMapa();
+    toast('Garrafa substituída ✓');
+  }catch(e){
+    toast('Não foi possível guardar: '+e.message,1);
+    btn.disabled=false;btn.textContent='Guardar';
+  }
 }
 
 /* ── IA: PROCURAR INFORMAÇÃO DO VINHO ──────────────────────────────
@@ -4487,6 +4639,8 @@ function ajustarSticky(){
   if(h)document.querySelector('.itabs').style.top=h.offsetHeight+'px';
 }
 window.addEventListener('resize',ajustarSticky);
+window.addEventListener('resize',()=>{if(MAPA_POP_LOCAL&&MAPA_POP_ANCHOR)mapaPopupPos(MAPA_POP_ANCHOR);});
+window.addEventListener('scroll',()=>{if(MAPA_POP_LOCAL&&MAPA_POP_ANCHOR)mapaPopupPos(MAPA_POP_ANCHOR);},true);
 // Noutra largura o nome do vinho quebra noutro sítio: as alturas medidas
 // deixam de servir e o cabeçalho ficava com a altura do ecrã anterior.
 window.addEventListener('resize',()=>{
@@ -4500,6 +4654,7 @@ document.addEventListener('keydown',e=>{
   // A pré-visualização da folha está por cima de tudo — sai primeiro, e
   // sozinha: fechá-la não é sair também do vinho que está por baixo.
   if(e.key==='Escape'&&document.getElementById('pdf-pre')){pdfPreFechar();return;}
+  if(e.key==='Escape'&&MAPA_POP_LOCAL){mapaPopupFechar();return;}
   if(e.key==='Escape')document.querySelectorAll('.modal.on').forEach(m=>fecharModal(m.id));
 });
 
