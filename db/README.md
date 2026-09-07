@@ -125,9 +125,10 @@ propostas antes de criar vinhos ou garrafas.
 ### Migração 10 — layout opcional dos locais (**por aplicar**)
 
 `db/migracao-layout-locais.sql`. Acrescenta `locais.layout`, o JSON com o
-desenho da estante (`prateleiras:[{nome,capacidade}]`). Vazio continua a ser
-o comportamento antigo; preenchido passa a dar ao separador Locais uma grelha
-de lugares e permite validar se uma garrafa cabe ali.
+desenho da estante (`prateleiras:[{nome,capacidade,formato}]`). Vazio continua
+a ser o comportamento antigo; preenchido passa a dar ao separador Locais uma
+grelha de lugares e permite validar se uma garrafa cabe ali. O `formato` fica
+guardado por prateleira (`fila`, `ziguezague` ou `sobrepostos`).
 
 Correr no SQL Editor:
 
