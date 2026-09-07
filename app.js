@@ -339,6 +339,7 @@ async function carregarGarrafeira(){
   await detetarImagem();
   await detetarLinks();
   await detetarAtualizado();
+  await detetarLayoutLocais();
   await assinarImagens();
   reindexar();
   aplicarPermissoes();
@@ -379,6 +380,15 @@ async function detetarAtualizado(){
   if(db.vinhos.length){TEM_ATUALIZADO=('atualizado_em' in db.vinhos[0]);return;}
   try{await sbReq('GET','vinhos?select=atualizado_em&limit=1');TEM_ATUALIZADO=true;}
   catch(e){TEM_ATUALIZADO=false;}
+}
+// `locais.layout` é coluna NOVA (ver db/schema.sql) — mesmo padrão:
+// enquanto não existir, o desenho das prateleiras fica desligado e os locais
+// continuam a comportar-se como hoje.
+let TEM_LOCAL_LAYOUT=false;
+async function detetarLayoutLocais(){
+  if(db.locais.length){TEM_LOCAL_LAYOUT=('layout' in db.locais[0]);return;}
+  try{await sbReq('GET','locais?select=layout&limit=1');TEM_LOCAL_LAYOUT=true;}
+  catch(e){TEM_LOCAL_LAYOUT=false;}
 }
 
 /* ── ÍNDICES E CÁLCULOS ────────────────────────────────────────────── */
@@ -522,6 +532,72 @@ function ordPrateleira(a,b){
   const na=num(a),nb=num(b);
   if(na!==null&&nb!==null&&na!==nb)return na-nb;
   return String(a).localeCompare(String(b),'pt',{numeric:true});
+}
+function layoutLocal(l){
+  const raw=l&&l.layout&&Array.isArray(l.layout.prateleiras)?l.layout.prateleiras:[];
+  return raw.map((p,i)=>{
+    const capacidade=Math.max(1,Math.min(240,inteiro(p&&p.capacidade)||0));
+    const nome=String((p&&p.nome)||'').trim()||`Nível ${i+1}`;
+    return capacidade?{nome,capacidade}:null;
+  }).filter(Boolean);
+}
+function temLayoutLocal(l){return layoutLocal(l).length>0;}
+function resumoLayoutLocal(l){
+  const prats=layoutLocal(l);
+  if(!prats.length)return '';
+  const n=prats.reduce((s,p)=>s+p.capacidade,0);
+  return `${prats.length} ${prats.length===1?'prateleira':'prateleiras'} · ${n} ${n===1?'lugar':'lugares'}`;
+}
+function lugarNumeroLayout(v){
+  const s=String(v==null?'':v).trim();
+  if(!s)return null;
+  const n=inteiro(s);
+  return n!=null&&String(n)===s?n:null;
+}
+function slotLayoutKey(prateleira,lugar){return `${prateleira}\n${lugar}`;}
+function ocupacaoLayout(localId,ignorarGid){
+  const occ={};
+  db.garrafas.filter(g=>naGarrafeira(g)&&g.local_id===localId&&g.id!==ignorarGid).forEach(g=>{
+    const prat=String(g.prateleira||'').trim();
+    const lug=lugarNumeroLayout(g.lugar);
+    if(!prat||lug==null)return;
+    const k=slotLayoutKey(prat,lug);
+    (occ[k]=occ[k]||[]).push(g);
+  });
+  return occ;
+}
+function posicaoTxt(prateleira,lugar){
+  return [prateleira,lugar?`lugar ${lugar}`:''].filter(Boolean).join(' · ');
+}
+function dadosForaLayout(l,gs){
+  const prats=layoutLocal(l);
+  if(!prats.length)return [];
+  const caps={};prats.forEach(p=>caps[p.nome]=p.capacidade);
+  return gs.filter(g=>{
+    const prat=String(g.prateleira||'').trim();
+    const lug=lugarNumeroLayout(g.lugar);
+    if(!prat||lug==null)return true;
+    return !caps[prat]||lug<1||lug>caps[prat];
+  }).sort((a,b)=>
+    ordPrateleira(String(a.prateleira||''),String(b.prateleira||''))||
+    String(a.lugar||'').localeCompare(String(b.lugar||''),'pt',{numeric:true}));
+}
+function validarPosicaoLayout(localId,prateleira,lugar,ignorarGid){
+  const l=IDXL[localId];
+  if(!l||!temLayoutLocal(l))return '';
+  const prat=String(prateleira||'').trim();
+  const lugRaw=String(lugar||'').trim();
+  if(!prat&&!lugRaw)return '';
+  if(!prat)return 'Escolhe também a prateleira, ou deixa os dois campos vazios para ficar por arrumar.';
+  const def=layoutLocal(l).find(p=>p.nome===prat);
+  if(!def)return `"${prat}" não existe no desenho de ${l.nome}.`;
+  if(!lugRaw)return `Escolhe também o lugar em ${prat}, ou deixa os dois campos vazios para ficar por arrumar.`;
+  const lug=lugarNumeroLayout(lugRaw);
+  if(lug==null)return 'Num local com desenho, o lugar tem de ser um número inteiro.';
+  if(lug<1||lug>def.capacidade)return `${prat} só vai até ao lugar ${def.capacidade}.`;
+  if((ocupacaoLayout(localId,ignorarGid)[slotLayoutKey(prat,lug)]||[]).length)
+    return `O ${prat} · lugar ${lug} já está ocupado.`;
+  return '';
 }
 function ondeEsta(g){
   const p=[nomeLocal(g.local_id)];
@@ -1356,6 +1432,61 @@ function renderLista(){
    aqui as duas contagens são mesmo coisas diferentes: 12 garrafas podem
    ser 9 vinhos (há repetidos). Cada lugar é uma célula com a garrafinha
    desenhada, o nome do vinho e o lugar em destaque. */
+function mapaCelulaListaHTML(g){
+  const v=IDXV[g.vinho_id]||{nome:'?'};
+  return `<button class="mcell" onclick="verVinho(${g.vinho_id})" title="${esc(v.nome)} ${v.ano||''}">
+    ${garrafaSVG(v,1)}
+    <span class="mcell-tx"><b>${esc(v.nome)}</b><span>${v.ano||'s/ ano'}</span></span>
+    ${g.lugar?`<span class="mlug">${esc(g.lugar)}</span>`:''}
+  </button>`;
+}
+function mapaLocalListaHTML(gs){
+  const prats=[...new Set(gs.map(g=>g.prateleira||''))].sort(ordPrateleira);
+  return prats.map(p=>{
+    const cel=gs.filter(g=>(g.prateleira||'')===p)
+      .sort((a,b)=>String(a.lugar).localeCompare(String(b.lugar),'pt',{numeric:true}));
+    return `<div class="mprat">
+      <div class="mprat-t">${esc(p||'Sem prateleira')}
+        <span class="mprat-n">${cel.length} ${cel.length===1?'garrafa':'garrafas'}</span></div>
+      <div class="mgrid">${cel.map(mapaCelulaListaHTML).join('')}</div>
+    </div>`;
+  }).join('');
+}
+function mapaLocalLayoutHTML(l,gs){
+  const prats=layoutLocal(l);
+  const occ=ocupacaoLayout(l.id);
+  const extras=dadosForaLayout(l,gs);
+  return prats.map(p=>{
+    let n=0;
+    const slots=Array.from({length:p.capacidade},(_,i)=>{
+      const lugar=i+1;
+      const lista=occ[slotLayoutKey(p.nome,lugar)]||[];
+      n+=lista.length;
+      if(!lista.length)return `<div class="mslot vazia" title="${esc(posicaoTxt(p.nome,lugar))}">
+        <span class="mslot-num">${lugar}</span>
+      </div>`;
+      const g=lista[0],v=IDXV[g.vinho_id]||{nome:'?'};
+      return `<button class="mslot cheia${lista.length>1?' conflito':''}" onclick="verVinho(${g.vinho_id})"
+        title="${esc(v.nome)} ${v.ano||''} · ${esc(posicaoTxt(p.nome,lugar))}${lista.length>1?` · ${lista.length} garrafas`:''}">
+        <span class="mslot-top"><span class="mslot-num">${lugar}</span>${lista.length>1?`<span class="mslot-q">×${lista.length}</span>`:''}</span>
+        ${garrafaSVG(v,1)}
+        <span class="mslot-name">${esc(v.nome)}</span>
+        <span class="mslot-year">${v.ano||'s/a'}</span>
+      </button>`;
+    }).join('');
+    return `<div class="mprat mprat-layout">
+      <div class="mprat-t">${esc(p.nome)}
+        <span class="mprat-n">${n}/${p.capacidade} ${n===1?'garrafa':'garrafas'}</span></div>
+      <div class="mshelf">${slots}</div>
+    </div>`;
+  }).join('')+(extras.length?`
+    <div class="mprat">
+      <div class="mprat-t">Por posicionar
+        <span class="mprat-n">${extras.length} ${extras.length===1?'garrafa':'garrafas'}</span></div>
+      <div class="note">Estão neste local, mas ainda sem um lugar válido no desenho.</div>
+      <div class="mgrid">${extras.map(mapaCelulaListaHTML).join('')}</div>
+    </div>`:'');
+}
 function renderMapa(){
   const box=document.getElementById('mapa');
   if(!box)return;
@@ -1365,7 +1496,8 @@ function renderMapa(){
     const okV=new Set(vinhosFiltrados().map(v=>v.id));
     ativas=ativas.filter(g=>okV.has(g.vinho_id)&&(!F.local||String(g.local_id)===F.local));
   }
-  if(!ativas.length){
+  const locaisComDesenho=!filtrando?db.locais.filter(temLayoutLocal):[];
+  if(!ativas.length&&!locaisComDesenho.length){
     box.innerHTML=filtrando
       ?'<div class="vazio"><b>Nada encontrado</b>Nenhuma garrafa corresponde a esta procura.</div>'
       :'<div class="vazio"><b>Garrafeira vazia</b>Ainda não há garrafas arrumadas.</div>';
@@ -1374,40 +1506,26 @@ function renderMapa(){
 
   // Garrafas sem local (o local foi apagado, ou nunca foi escolhido) não
   // podem sumir do mapa — é aí que se vê que estão por arrumar.
-  const grupos=db.locais.map(l=>[l,ativas.filter(g=>g.local_id===l.id)]).filter(([,g])=>g.length);
+  const grupos=db.locais.map(l=>[l,ativas.filter(g=>g.local_id===l.id)])
+    .filter(([l,g])=>g.length||(!filtrando&&temLayoutLocal(l)));
   const orfas=ativas.filter(g=>!IDXL[g.local_id]);
   if(orfas.length)grupos.push([{id:null,nome:'Por arrumar',descricao:'Garrafas sem local escolhido',cor:'#8a8a8a'},orfas]);
 
   box.innerHTML=grupos.map(([l,gs])=>{
-    const prats=[...new Set(gs.map(g=>g.prateleira||''))].sort(ordPrateleira);
     const nv=new Set(gs.map(g=>g.vinho_id)).size;
+    const sub=[l.descricao,resumoLayoutLocal(l)].filter(Boolean).join(' · ');
     return `<section class="mloc">
       <div class="mloc-head" style="--lc:${esc(l.cor||'#7b1f3d')}">
         <div class="mloc-id">
           <h3><span class="pip" style="background:${esc(l.cor||'#7b1f3d')}"></span>${esc(l.nome)}</h3>
-          ${l.descricao?`<div class="mloc-sub">${esc(l.descricao)}</div>`:''}
+          ${sub?`<div class="mloc-sub">${esc(sub)}</div>`:''}
         </div>
         <div class="mloc-n">
           <b>${nv}</b><span class="u">${nv===1?'vinho':'vinhos'}</span>
           <span>${gs.length} ${gs.length===1?'garrafa':'garrafas'}</span>
         </div>
       </div>
-      ${prats.map(p=>{
-        const cel=gs.filter(g=>(g.prateleira||'')===p)
-          .sort((a,b)=>String(a.lugar).localeCompare(String(b.lugar),'pt',{numeric:true}));
-        return `<div class="mprat">
-          <div class="mprat-t">${esc(p||'Sem prateleira')}
-            <span class="mprat-n">${cel.length} ${cel.length===1?'garrafa':'garrafas'}</span></div>
-          <div class="mgrid">${cel.map(g=>{
-            const v=IDXV[g.vinho_id]||{nome:'?'};
-            return `<button class="mcell" onclick="verVinho(${g.vinho_id})" title="${esc(v.nome)} ${v.ano||''}">
-              ${garrafaSVG(v,1)}
-              <span class="mcell-tx"><b>${esc(v.nome)}</b><span>${v.ano||'s/ ano'}</span></span>
-              ${g.lugar?`<span class="mlug">${esc(g.lugar)}</span>`:''}
-            </button>`;
-          }).join('')}</div>
-        </div>`;
-      }).join('')}
+      ${temLayoutLocal(l)?mapaLocalLayoutHTML(l,gs):mapaLocalListaHTML(gs)}
     </section>`;
   }).join('');
 }
@@ -1939,6 +2057,64 @@ const CLASSIF=['','DOC','Vinho Regional','Vinho'];
 // vocabulário desta app — evita "75cl"/"0.75L"/"750ml" a designarem a mesma
 // coisa de jeitos diferentes consoante quem escreveu.
 const FORMATOS=['0,75 L','1,5 L','3 L'];
+function renderPickerPosicoes(prefix,gid){
+  const box=document.getElementById(`${prefix}-slotpick`);
+  const locSel=document.getElementById(`${prefix}-local`);
+  if(!box||!locSel)return;
+  box.dataset.gid=String(gid||0);
+  const localId=locSel.value?parseInt(locSel.value,10):0;
+  const l=IDXL[localId];
+  if(!l||!temLayoutLocal(l)){box.innerHTML='';return;}
+  const prats=layoutLocal(l);
+  const occ=ocupacaoLayout(localId,gid||0);
+  const pratAtual=(document.getElementById(`${prefix}-prat`).value||'').trim();
+  const lugarAtual=lugarNumeroLayout(document.getElementById(`${prefix}-lugar`).value);
+  const livres=prats.reduce((s,p)=>{
+    let n=0;
+    for(let i=1;i<=p.capacidade;i++)if(!(occ[slotLayoutKey(p.nome,i)]||[]).length)n++;
+    return s+n;
+  },0);
+  box.innerHTML=`
+    <div class="lpick">
+      <div class="lpick-top">
+        <div>
+          <div class="msec">Posição no desenho</div>
+          <div class="note">Escolhe um lugar livre na estante. Se ainda não souberes onde fica, deixa em branco e a garrafa aparece por posicionar.</div>
+        </div>
+        <div class="lpick-n">${livres} ${livres===1?'livre':'livres'}</div>
+      </div>
+      ${prats.map(p=>`
+        <div class="lprat">
+          <div class="lprat-t">${esc(p.nome)} <span>${p.capacidade} ${p.capacidade===1?'lugar':'lugares'}</span></div>
+          <div class="lprat-grid">${Array.from({length:p.capacidade},(_,i)=>{
+            const lugar=i+1;
+            const lista=occ[slotLayoutKey(p.nome,lugar)]||[];
+            const sel=pratAtual===p.nome&&lugarAtual===lugar;
+            if(lista.length){
+              const v=IDXV[(lista[0]||{}).vinho_id]||{nome:'?'};
+              return `<button type="button" class="lpslot ocup" disabled title="${esc(v.nome)}">${lugar}</button>`;
+            }
+            return `<button type="button" class="lpslot${sel?' on':''}" onclick="escolherPosicaoLayout('${prefix}','${escJs(p.nome)}',${lugar})">${lugar}</button>`;
+          }).join('')}</div>
+        </div>`).join('')}
+      <div class="lpick-foot">
+        <button type="button" class="lnk" onclick="limparPosicaoLayout('${prefix}')">deixar por arrumar</button>
+      </div>
+    </div>`;
+}
+function pickerGid(prefix){
+  return parseInt((((document.getElementById(`${prefix}-slotpick`)||{}).dataset||{}).gid)||'0',10)||0;
+}
+function escolherPosicaoLayout(prefix,prateleira,lugar){
+  document.getElementById(`${prefix}-prat`).value=prateleira;
+  document.getElementById(`${prefix}-lugar`).value=String(lugar);
+  renderPickerPosicoes(prefix,pickerGid(prefix));
+}
+function limparPosicaoLayout(prefix){
+  document.getElementById(`${prefix}-prat`).value='';
+  document.getElementById(`${prefix}-lugar`).value='';
+  renderPickerPosicoes(prefix,pickerGid(prefix));
+}
 
 function abrirNovoVinho(){
   if(roGuard())return;
@@ -2033,9 +2209,10 @@ function abrirEditarVinho(id){
         <div><label>Local</label><select id="e-local">${locOpts||'<option value="">(cria um local primeiro)</option>'}</select></div>
         <div><label>Quantas</label><input type="number" id="e-qtd" inputmode="numeric" value="1" min="1" max="60"></div>
       </div>
+      <div id="e-slotpick"></div>
       <div class="mrow">
-        <div><label>Prateleira</label><input type="text" id="e-prat" placeholder="Nível 3"></div>
-        <div><label>Lugar</label><input type="text" id="e-lugar" placeholder="12"></div>
+        <div><label>Prateleira</label><input type="text" id="e-prat" placeholder="Nível 3" oninput="renderPickerPosicoes('e',0)"></div>
+        <div><label>Lugar</label><input type="text" id="e-lugar" placeholder="12" oninput="renderPickerPosicoes('e',0)"></div>
       </div>
       <div class="mrow">
         <div><label>Formato</label><select id="e-formato">${FORMATOS.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}</select></div>
@@ -2049,6 +2226,11 @@ function abrirEditarVinho(id){
       <button class="btn ghost" onclick="fecharModal('modal-edit')">Cancelar</button>
     </div>`;
   abrirModal('modal-edit');
+  if(!id){
+    const loc=document.getElementById('e-local');
+    if(loc)loc.onchange=()=>renderPickerPosicoes('e',0);
+    renderPickerPosicoes('e',0);
+  }
   setTimeout(()=>{const n=document.getElementById('e-nome');if(!id&&n)n.focus();},60);
 }
 
@@ -2087,6 +2269,20 @@ async function guardarVinho(id){
   if(!f.nome){toast('Falta o nome do vinho',1);return;}
   if(!id&&!GA_ID){toast('Não há nenhuma garrafeira aberta',1);return;}
   if(f.ano!=null&&(f.ano<1900||f.ano>2100)){toast('Ano fora do razoável',1);return;}
+  let primeiraGarrafa=null;
+  if(!id){
+    const localSel=document.getElementById('e-local');
+    primeiraGarrafa={
+      local_id:localSel&&localSel.value?parseInt(localSel.value,10):null,
+      prateleira:document.getElementById('e-prat').value.trim(),
+      lugar:document.getElementById('e-lugar').value.trim(),
+      formato:document.getElementById('e-formato').value,
+      preco_compra:num(document.getElementById('e-preco-compra').value),
+      comprado_em:document.getElementById('e-comprado').value||null
+    };
+    const erroPos=validarPosicaoLayout(primeiraGarrafa.local_id,primeiraGarrafa.prateleira,primeiraGarrafa.lugar,0);
+    if(erroPos){toast(erroPos,1);return;}
+  }
   const castas=f._castas;delete f._castas;
   // O formulário não tem campos para o resumo/notas de prova/link do Vivino:
   // a procura da IA deixou-os em `_iaExtraNovo` e é aqui que se juntam. Só na
@@ -2126,16 +2322,7 @@ async function guardarVinho(id){
 
     if(!id){
       const qtd=Math.max(1,Math.min(60,inteiro(document.getElementById('e-qtd').value)||1));
-      const localSel=document.getElementById('e-local');
-      const base={
-        vinho_id:vinhoId,
-        local_id:localSel&&localSel.value?parseInt(localSel.value,10):null,
-        prateleira:document.getElementById('e-prat').value.trim(),
-        lugar:document.getElementById('e-lugar').value.trim(),
-        formato:document.getElementById('e-formato').value,
-        preco_compra:num(document.getElementById('e-preco-compra').value),
-        comprado_em:document.getElementById('e-comprado').value||null
-      };
+      const base=Object.assign({vinho_id:vinhoId},primeiraGarrafa);
       // Várias garrafas iguais: só a primeira fica com o lugar escrito. Duas
       // garrafas no MESMO lugar é uma informação falsa sobre a garrafeira —
       // as outras ficam sem lugar, para se arrumarem depois.
@@ -2280,9 +2467,10 @@ function abrirGarrafa(gid,vinhoId){
       <div><label>Local</label><select id="g-local">${locOpts||'<option value="">(cria um local primeiro)</option>'}</select></div>
       ${gid?'':'<div><label>Quantas</label><input type="number" id="g-qtd" value="1" min="1" max="60" inputmode="numeric"></div>'}
     </div>
+    <div id="g-slotpick"></div>
     <div class="mrow">
-      <div><label>Prateleira</label><input type="text" id="g-prat" value="${esc(g?g.prateleira:'')}" placeholder="Nível 3"></div>
-      <div><label>Lugar</label><input type="text" id="g-lugar" value="${esc(g?g.lugar:'')}" placeholder="12"></div>
+      <div><label>Prateleira</label><input type="text" id="g-prat" value="${esc(g?g.prateleira:'')}" placeholder="Nível 3" oninput="renderPickerPosicoes('g',${gid||0})"></div>
+      <div><label>Lugar</label><input type="text" id="g-lugar" value="${esc(g?g.lugar:'')}" placeholder="12" oninput="renderPickerPosicoes('g',${gid||0})"></div>
     </div>
     <div class="mrow">
       <div><label>Formato</label><select id="g-formato">${FORMATOS.map(x=>
@@ -2297,6 +2485,9 @@ function abrirGarrafa(gid,vinhoId){
       <button class="btn ghost" onclick="fecharModal('modal-garrafa')">Cancelar</button>
     </div>`;
   abrirModal('modal-garrafa');
+  const loc=document.getElementById('g-local');
+  if(loc)loc.onchange=()=>renderPickerPosicoes('g',gid||0);
+  renderPickerPosicoes('g',gid||0);
 }
 async function guardarGarrafa(gid,vinhoId){
   if(roGuard())return;
@@ -2309,6 +2500,8 @@ async function guardarGarrafa(gid,vinhoId){
     preco_compra:num(document.getElementById('g-preco').value),
     comprado_em:document.getElementById('g-comprado').value||null
   };
+  const erroPos=validarPosicaoLayout(dados.local_id,dados.prateleira,dados.lugar,gid);
+  if(erroPos){toast(erroPos,1);return;}
   const btn=document.getElementById('g-btn');
   btn.disabled=true;btn.textContent='A guardar…';
   try{
@@ -3230,14 +3423,70 @@ function renderCfgLocais(){
   if(!db.locais.length){box.innerHTML='<div class="note" style="padding:8px 0">Ainda não há locais. Cria o primeiro.</div>';return;}
   box.innerHTML=db.locais.map(l=>{
     const n=db.garrafas.filter(g=>g.local_id===l.id&&naGarrafeira(g)).length;
+    const lay=resumoLayoutLocal(l);
+    const meta=[l.descricao,lay].filter(Boolean).join(' — ');
     return `<div class="ua-row">
       <span class="pip" style="width:11px;height:11px;border-radius:50%;background:${esc(l.cor||'#7b1f3d')};flex-shrink:0"></span>
-      <span class="em"><b>${esc(l.nome)}</b>${l.descricao?' — '+esc(l.descricao):''}</span>
+      <span class="em"><b>${esc(l.nome)}</b>${meta?` — ${esc(meta)}`:''}</span>
       <span class="tagme">${n}</span>
       <button class="jdel" style="color:var(--mu)" title="Editar" onclick="editarLocal(${l.id})">✏️</button>
       <button class="jdel" title="Apagar" onclick="apagarLocal(${l.id})">✕</button>
     </div>`;
   }).join('');
+}
+let LOC_LAYOUT_EDIT=[];
+function layoutPadraoEditor(){
+  return [{nome:'Nível 1',capacidade:12},{nome:'Nível 2',capacidade:12}];
+}
+function renderLocalLayoutEditor(){
+  const box=document.getElementById('loc-layout-box');
+  const chk=document.getElementById('loc-tem-layout');
+  if(!box||!chk)return;
+  box.style.display=chk.checked?'':'none';
+  if(!chk.checked)return;
+  if(!LOC_LAYOUT_EDIT.length)LOC_LAYOUT_EDIT=layoutPadraoEditor();
+  box.innerHTML=`
+    <div class="note">A app desenha este local como estante: uma prateleira por linha, cada uma com os seus lugares numerados.</div>
+    <div class="ll-lista">${LOC_LAYOUT_EDIT.map((p,i)=>`
+      <div class="ll-row">
+        <div><label>Prateleira</label><input type="text" value="${esc(p.nome)}" oninput="locSetPratNome(${i},this.value)" placeholder="Nível ${i+1}"></div>
+        <div><label>Lugares</label><input type="number" inputmode="numeric" min="1" max="240" value="${esc(p.capacidade)}" oninput="locSetPratCap(${i},this.value)"></div>
+        <button type="button" class="jdel ll-del" title="Remover prateleira" onclick="locRemPrat(${i})">✕</button>
+      </div>`).join('')}</div>
+    <button type="button" class="btn ghost" onclick="locAddPrat()">+ Prateleira</button>`;
+}
+function locSetPratNome(i,v){
+  if(LOC_LAYOUT_EDIT[i])LOC_LAYOUT_EDIT[i].nome=v;
+}
+function locSetPratCap(i,v){
+  if(LOC_LAYOUT_EDIT[i])LOC_LAYOUT_EDIT[i].capacidade=v;
+}
+function locAddPrat(){
+  LOC_LAYOUT_EDIT.push({nome:`Nível ${LOC_LAYOUT_EDIT.length+1}`,capacidade:12});
+  renderLocalLayoutEditor();
+}
+function locRemPrat(i){
+  if(LOC_LAYOUT_EDIT.length<=1)return;
+  LOC_LAYOUT_EDIT.splice(i,1);
+  renderLocalLayoutEditor();
+}
+function lerLayoutLocalModal(){
+  if(!TEM_LOCAL_LAYOUT)return null;
+  const chk=document.getElementById('loc-tem-layout');
+  if(!chk||!chk.checked)return {prateleiras:[]};
+  const prateleiras=LOC_LAYOUT_EDIT.map((p,i)=>{
+    const nome=String((p&&p.nome)||'').trim()||`Nível ${i+1}`;
+    const capacidade=Math.max(1,Math.min(240,inteiro((p&&p.capacidade))||0));
+    return capacidade?{nome,capacidade}:null;
+  }).filter(Boolean);
+  if(!prateleiras.length)throw new Error('Cria pelo menos uma prateleira para ligar o desenho.');
+  const vistos=new Set();
+  for(const p of prateleiras){
+    const k=chave(p.nome);
+    if(vistos.has(k))throw new Error('Cada prateleira precisa de um nome diferente.');
+    vistos.add(k);
+  }
+  return {prateleiras};
 }
 function novoLocal(){
   if(roGuard())return;
@@ -3249,6 +3498,7 @@ function editarLocal(id){
   abrirLocalModal(l);
 }
 function abrirLocalModal(l){
+  LOC_LAYOUT_EDIT=layoutLocal(l);
   document.getElementById('modal-local-in').innerHTML=`
     <div class="mtop"><h3>${l?'Editar local':'Novo local'}</h3>
       <button class="mx" onclick="fecharModal('modal-local')">✕</button></div>
@@ -3256,16 +3506,23 @@ function abrirLocalModal(l){
     <input type="text" id="loc-nome" value="${esc(l?l.nome:'')}" placeholder="Frigorífico da cozinha">
     <label>Descrição (opcional)</label>
     <input type="text" id="loc-desc" value="${esc(l?l.descricao:'')}" placeholder="Níveis 1 a 14">
+    ${TEM_LOCAL_LAYOUT?`<label class="chk ll-toggle"><input type="checkbox" id="loc-tem-layout" ${temLayoutLocal(l)?'checked':''} onchange="renderLocalLayoutEditor()">Desenhar este local como estante</label>
+    <div id="loc-layout-box"></div>`:`<div class="note" style="margin-top:12px">O desenho das prateleiras fica disponível depois de correres a migração 10 da base de dados.</div>`}
     <div class="macoes">
       <button class="btn prim" id="loc-btn" onclick="guardarLocalModal(${l?l.id:0})">Guardar</button>
       <button class="btn ghost" onclick="fecharModal('modal-local')">Cancelar</button>
     </div>`;
   abrirModal('modal-local');
+  renderLocalLayoutEditor();
 }
 async function guardarLocalModal(id){
   const nome=document.getElementById('loc-nome').value.trim();
   if(!nome){toast('O nome é obrigatório',1);return;}
   const dados={nome,descricao:document.getElementById('loc-desc').value.trim()};
+  try{
+    const layout=lerLayoutLocalModal();
+    if(layout)dados.layout=layout;
+  }catch(e){toast(e.message,1);return;}
   const btn=document.getElementById('loc-btn');
   btn.disabled=true;btn.textContent='A guardar…';
   try{
