@@ -544,6 +544,7 @@ function prateleirasDesc(lista){
 }
 const FORMATOS_PRATELEIRA=[['fila','Fila'],['ziguezague','Ziguezague'],['sobrepostos','Sobrepostos']];
 const FORMATO_PRAT_LABEL=Object.fromEntries(FORMATOS_PRATELEIRA);
+const SOBREPOSTOS_IMPAR=[['cima','Mais em cima'],['baixo','Mais em baixo']];
 function normalizarFormatoPrateleira(v){
   const f=chave(v).replace(/\s+/g,'');
   if(f==='ziguezague')return 'ziguezague';
@@ -551,13 +552,39 @@ function normalizarFormatoPrateleira(v){
   return 'fila';
 }
 function formatoPrateleiraNome(v){return FORMATO_PRAT_LABEL[normalizarFormatoPrateleira(v)]||'Fila';}
+function normalizarSobrepostosMaisEm(v){
+  return chave(v)==='baixo'?'baixo':'cima';
+}
+function prateleiraLayoutInfo(p,opt){
+  const preview=!!(opt&&opt.preview);
+  const formato=normalizarFormatoPrateleira(p&&p.formato);
+  const mais_em=normalizarSobrepostosMaisEm(p&&p.mais_em);
+  const capMax=preview?7:240;
+  const capacidade=Math.max(1,Math.min(capMax,inteiro((p&&p.capacidade))||0));
+  let slots=[];
+  if(formato==='ziguezague'){
+    slots=Array.from({length:capacidade},(_,i)=>({lugar:i+1,col:i+1,row:(i%2)+1}));
+  }else if(formato==='sobrepostos'){
+    slots=Array.from({length:capacidade},(_,i)=>({
+      lugar:i+1,
+      col:Math.floor(i/2)+1,
+      row:i%2===0?(mais_em==='baixo'?2:1):(mais_em==='baixo'?1:2)
+    }));
+  }else{
+    slots=Array.from({length:capacidade},(_,i)=>({lugar:i+1,col:i+1,row:1}));
+  }
+  const cols=slots.reduce((m,s)=>Math.max(m,s.col),0)||1;
+  const rows=slots.reduce((m,s)=>Math.max(m,s.row),0)||1;
+  return {formato,mais_em,capacidade,slots,cols,rows};
+}
 function layoutLocal(l){
   const raw=l&&l.layout&&Array.isArray(l.layout.prateleiras)?l.layout.prateleiras:[];
   return raw.map((p,i)=>{
     const capacidade=Math.max(1,Math.min(240,inteiro(p&&p.capacidade)||0));
     const nome=String((p&&p.nome)||'').trim()||`Nível ${i+1}`;
     const formato=normalizarFormatoPrateleira(p&&p.formato);
-    return capacidade?{nome,capacidade,formato}:null;
+    const mais_em=normalizarSobrepostosMaisEm(p&&p.mais_em);
+    return capacidade?{nome,capacidade,formato,mais_em}:null;
   }).filter(Boolean);
 }
 function temLayoutLocal(l){return layoutLocal(l).length>0;}
@@ -587,6 +614,11 @@ function ocupacaoLayout(localId,ignorarGid){
 }
 function posicaoTxt(prateleira,lugar){
   return [prateleira,lugar?`lugar ${lugar}`:''].filter(Boolean).join(' · ');
+}
+function prateleiraPreviewHTML(p){
+  const info=prateleiraLayoutInfo(p,{preview:true});
+  return `<span class="llprev llprev-${info.formato}" style="--cols:${info.cols};--rows:${info.rows}">${info.slots.map(s=>
+    `<span class="llprev-dot" style="grid-column:${s.col};grid-row:${s.row}"></span>`).join('')}</span>`;
 }
 function dadosForaLayout(l,gs){
   const prats=layoutLocal(l);
@@ -1477,30 +1509,33 @@ function mapaLocalLayoutHTML(l,gs){
   const occ=ocupacaoLayout(l.id);
   const extras=dadosForaLayout(l,gs);
   return prats.map(p=>{
+    const info=prateleiraLayoutInfo(p);
+    const compacto=p.formato!=='fila';
     let n=0;
-    const slots=Array.from({length:p.capacidade},(_,i)=>{
-      const lugar=i+1;
+    const slots=info.slots.map(s=>{
+      const lugar=s.lugar;
       const lista=occ[slotLayoutKey(p.nome,lugar)]||[];
+      const pos=` style="grid-column:${s.col};grid-row:${s.row}"`;
       n+=lista.length;
-      if(!lista.length)return `<div class="mslot vazia" title="${esc(posicaoTxt(p.nome,lugar))}">
+      if(!lista.length)return `<div class="mslot mslot-${p.formato}${compacto?' mini':''} vazia"${pos} title="${esc(posicaoTxt(p.nome,lugar))}">
         <span class="mslot-num">${lugar}</span>
       </div>`;
       const g=lista[0],v=IDXV[g.vinho_id]||{nome:'?'};
-      return `<button class="mslot cheia${lista.length>1?' conflito':''}"
+      return `<button class="mslot mslot-${p.formato}${compacto?' mini':''} cheia${lista.length>1?' conflito':''}"${pos}
         onclick="mapaPopupToggle(${l.id},'${escJs(p.nome)}',${lugar},this,event)"
         onmouseenter="mapaPopupHover(${l.id},'${escJs(p.nome)}',${lugar},this)" onmouseleave="mapaPopupSair()"
         title="${esc(v.nome)} ${v.ano||''} · ${esc(posicaoTxt(p.nome,lugar))}${lista.length>1?` · ${lista.length} garrafas`:''}">
         <span class="mslot-top"><span class="mslot-num">${lugar}</span>${lista.length>1?`<span class="mslot-q">×${lista.length}</span>`:''}</span>
         ${mapaSlotThumb(v)}
-        <span class="mslot-name">${esc(v.nome)}</span>
-        <span class="mslot-year">${v.ano||'s/a'}</span>
+        ${compacto?'':`<span class="mslot-name">${esc(v.nome)}</span>
+        <span class="mslot-year">${v.ano||'s/a'}</span>`}
       </button>`;
     }).join('');
     return `<div class="mprat mprat-layout">
       <div class="mprat-t">${esc(p.nome)}
         <span class="mprat-f">${esc(formatoPrateleiraNome(p.formato))}</span>
         <span class="mprat-n">${n}/${p.capacidade} ${n===1?'garrafa':'garrafas'}</span></div>
-      <div class="mshelf">${slots}</div>
+      <div class="mshelf mshelf-${p.formato}" style="--cols:${info.cols};--rows:${info.rows}">${slots}</div>
     </div>`;
   }).join('')+(extras.length?`
     <div class="mprat">
@@ -2206,19 +2241,21 @@ function renderPickerPosicoes(prefix,gid){
         <div class="lpick-n">${livres} ${livres===1?'livre':'livres'}</div>
       </div>
       ${prateleirasDesc(prats).map(p=>`
-        <div class="lprat">
+        ${(()=>{const info=prateleiraLayoutInfo(p);const compacto=p.formato!=='fila';return `<div class="lprat">
           <div class="lprat-t">${esc(p.nome)} <span>${p.capacidade} ${p.capacidade===1?'lugar':'lugares'}</span><i class="lprat-f">${esc(formatoPrateleiraNome(p.formato))}</i></div>
-          <div class="lprat-grid">${Array.from({length:p.capacidade},(_,i)=>{
-            const lugar=i+1;
+          <div class="lprat-grid lprat-grid-${p.formato}" style="--cols:${info.cols};--rows:${info.rows}">${info.slots.map(s=>{
+            const lugar=s.lugar;
+            const pos=` style="grid-column:${s.col};grid-row:${s.row}"`;
             const lista=occ[slotLayoutKey(p.nome,lugar)]||[];
             const sel=pratAtual===p.nome&&lugarAtual===lugar;
             if(lista.length){
               const v=IDXV[(lista[0]||{}).vinho_id]||{nome:'?'};
-              return `<button type="button" class="lpslot ocup" disabled title="${esc(v.nome)}">${lugar}</button>`;
+              return `<button type="button" class="lpslot${compacto?' mini':''} ocup" disabled${pos} title="${esc(v.nome)} · ${esc(posicaoTxt(p.nome,lugar))}">${garrafaSVG(v,1)}<span>${lugar}</span></button>`;
             }
-            return `<button type="button" class="lpslot${sel?' on':''}" onclick="escolherPosicaoLayout('${prefix}','${escJs(p.nome)}',${lugar})">${lugar}</button>`;
+            return `<button type="button" class="lpslot${compacto?' mini':''}${sel?' on':''}"${pos} onclick="escolherPosicaoLayout('${prefix}','${escJs(p.nome)}',${lugar})" title="${esc(posicaoTxt(p.nome,lugar))}"><span>${lugar}</span></button>`;
           }).join('')}</div>
-        </div>`).join('')}
+        </div>`;})()}
+      `).join('')}
       <div class="lpick-foot">
         <button type="button" class="lnk" onclick="limparPosicaoLayout('${prefix}')">deixar por arrumar</button>
       </div>
@@ -3599,7 +3636,7 @@ function renderCfgLocais(){
 }
 let LOC_LAYOUT_EDIT=[];
 function layoutPadraoEditor(){
-  return [{nome:'Nível 1',capacidade:12,formato:'fila'},{nome:'Nível 2',capacidade:12,formato:'fila'}];
+  return [{nome:'Nível 1',capacidade:12,formato:'fila',mais_em:'cima'},{nome:'Nível 2',capacidade:12,formato:'fila',mais_em:'cima'}];
 }
 function renderLocalLayoutEditor(){
   const box=document.getElementById('loc-layout-box');
@@ -3608,14 +3645,34 @@ function renderLocalLayoutEditor(){
   box.style.display=chk.checked?'':'none';
   if(!chk.checked)return;
   if(!LOC_LAYOUT_EDIT.length)LOC_LAYOUT_EDIT=layoutPadraoEditor();
+  const fmtBtns=(i,p)=>`<div class="llfmt">${FORMATOS_PRATELEIRA.map(([id,n])=>{
+    const on=normalizarFormatoPrateleira(p.formato)===id;
+    return `<button type="button" class="llfmt-opt${on?' on':''}" onclick="locSetPratFormato(${i},'${id}')">
+      ${prateleiraPreviewHTML(Object.assign({},p,{formato:id}))}
+      <span>${n}</span>
+    </button>`;
+  }).join('')}</div>`;
+  const oddBtns=(i,p)=>{
+    const cap=Math.max(1,Math.min(240,inteiro((p&&p.capacidade))||0));
+    if(normalizarFormatoPrateleira(p.formato)!=='sobrepostos'||!(cap%2))return '';
+    return `<div class="llodd">
+      <div class="llodd-lab">Se faltar um lugar</div>
+      <div class="llfmt llfmt-odd">${SOBREPOSTOS_IMPAR.map(([id,n])=>{
+        const on=normalizarSobrepostosMaisEm(p.mais_em)===id;
+        return `<button type="button" class="llfmt-opt llodd-opt${on?' on':''}" onclick="locSetPratMaisEm(${i},'${id}')">
+          ${prateleiraPreviewHTML(Object.assign({},p,{formato:'sobrepostos',mais_em:id}))}
+          <span>${n}</span>
+        </button>`;
+      }).join('')}</div>
+    </div>`;
+  };
   box.innerHTML=`
     <div class="note">A app desenha este local como estante: uma prateleira por linha, cada uma com os seus lugares numerados.</div>
     <div class="ll-lista">${LOC_LAYOUT_EDIT.map((p,i)=>`
       <div class="ll-row">
         <div><label>Prateleira</label><input type="text" value="${esc(p.nome)}" oninput="locSetPratNome(${i},this.value)" placeholder="Nível ${i+1}"></div>
-        <div><label>Lugares</label><input type="number" inputmode="numeric" min="1" max="240" value="${esc(p.capacidade)}" oninput="locSetPratCap(${i},this.value)"></div>
-        <div><label>Formato</label><select onchange="locSetPratFormato(${i},this.value)">${FORMATOS_PRATELEIRA.map(([id,n])=>
-          `<option value="${id}"${normalizarFormatoPrateleira(p.formato)===id?' selected':''}>${n}</option>`).join('')}</select></div>
+        <div><label>Lugares</label><input type="number" inputmode="numeric" min="1" max="240" value="${esc(p.capacidade)}" oninput="locSetPratCap(${i},this.value)" onchange="renderLocalLayoutEditor()"></div>
+        <div class="llfmt-box"><label>Formato</label>${fmtBtns(i,p)}${oddBtns(i,p)}</div>
         <button type="button" class="jdel ll-del" title="Remover prateleira" onclick="locRemPrat(${i})">✕</button>
       </div>`).join('')}</div>
     <button type="button" class="btn ghost" onclick="locAddPrat()">+ Prateleira</button>`;
@@ -3627,10 +3684,18 @@ function locSetPratCap(i,v){
   if(LOC_LAYOUT_EDIT[i])LOC_LAYOUT_EDIT[i].capacidade=v;
 }
 function locSetPratFormato(i,v){
-  if(LOC_LAYOUT_EDIT[i])LOC_LAYOUT_EDIT[i].formato=normalizarFormatoPrateleira(v);
+  if(LOC_LAYOUT_EDIT[i]){
+    LOC_LAYOUT_EDIT[i].formato=normalizarFormatoPrateleira(v);
+    LOC_LAYOUT_EDIT[i].mais_em=normalizarSobrepostosMaisEm(LOC_LAYOUT_EDIT[i].mais_em);
+  }
+  renderLocalLayoutEditor();
+}
+function locSetPratMaisEm(i,v){
+  if(LOC_LAYOUT_EDIT[i])LOC_LAYOUT_EDIT[i].mais_em=normalizarSobrepostosMaisEm(v);
+  renderLocalLayoutEditor();
 }
 function locAddPrat(){
-  LOC_LAYOUT_EDIT.push({nome:`Nível ${LOC_LAYOUT_EDIT.length+1}`,capacidade:12,formato:'fila'});
+  LOC_LAYOUT_EDIT.push({nome:`Nível ${LOC_LAYOUT_EDIT.length+1}`,capacidade:12,formato:'fila',mais_em:'cima'});
   renderLocalLayoutEditor();
 }
 function locRemPrat(i){
@@ -3646,7 +3711,8 @@ function lerLayoutLocalModal(){
     const nome=String((p&&p.nome)||'').trim()||`Nível ${i+1}`;
     const capacidade=Math.max(1,Math.min(240,inteiro((p&&p.capacidade))||0));
     const formato=normalizarFormatoPrateleira(p&&p.formato);
-    return capacidade?{nome,capacidade,formato}:null;
+    const mais_em=normalizarSobrepostosMaisEm(p&&p.mais_em);
+    return capacidade?Object.assign({nome,capacidade,formato},formato==='sobrepostos'&&capacidade%2?{mais_em}:{}) : null;
   }).filter(Boolean);
   if(!prateleiras.length)throw new Error('Cria pelo menos uma prateleira para ligar o desenho.');
   const vistos=new Set();
