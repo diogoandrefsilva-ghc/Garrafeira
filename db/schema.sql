@@ -173,10 +173,12 @@ CREATE TABLE IF NOT EXISTS garrafeira.locais (
   nome      text NOT NULL,
   descricao text NOT NULL DEFAULT '',
   cor       text NOT NULL DEFAULT '#7b1f3d',
-  -- Desenho opcional do local: [{nome,capacidade}] em `prateleiras`. Se vier
-  -- vazio, o local continua a funcionar como sempre — só com texto livre nas
-  -- garrafas. Quando existe, a app passa a desenhar os lugares e a validar se
-  -- a posição escolhida cabe nessa prateleira.
+  -- Desenho opcional do local: [{nome,capacidade,formato}] em `prateleiras`.
+  -- `formato` é guardado por prateleira (fila/ziguezague/sobrepostos) para
+  -- manter o tipo de arrumação além da capacidade. Se vier vazio, o local
+  -- continua a funcionar como sempre — só com texto livre nas garrafas.
+  -- Quando existe, a app passa a desenhar os lugares e a validar se a posição
+  -- escolhida cabe nessa prateleira.
   layout    jsonb NOT NULL DEFAULT '{"prateleiras":[]}'::jsonb,
   ordem     integer NOT NULL DEFAULT 0,
   criado_em timestamptz NOT NULL DEFAULT now(),

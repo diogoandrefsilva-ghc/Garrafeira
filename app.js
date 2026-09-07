@@ -542,12 +542,22 @@ function ordPrateleira(a,b){
 function prateleirasDesc(lista){
   return [...(lista||[])].sort((a,b)=>ordPrateleira(String((b&&b.nome)||b||''),String((a&&a.nome)||a||'')));
 }
+const FORMATOS_PRATELEIRA=[['fila','Fila'],['ziguezague','Ziguezague'],['sobrepostos','Sobrepostos']];
+const FORMATO_PRAT_LABEL=Object.fromEntries(FORMATOS_PRATELEIRA);
+function normalizarFormatoPrateleira(v){
+  const f=chave(v).replace(/\s+/g,'');
+  if(f==='ziguezague')return 'ziguezague';
+  if(f==='sobrepostos')return 'sobrepostos';
+  return 'fila';
+}
+function formatoPrateleiraNome(v){return FORMATO_PRAT_LABEL[normalizarFormatoPrateleira(v)]||'Fila';}
 function layoutLocal(l){
   const raw=l&&l.layout&&Array.isArray(l.layout.prateleiras)?l.layout.prateleiras:[];
   return raw.map((p,i)=>{
     const capacidade=Math.max(1,Math.min(240,inteiro(p&&p.capacidade)||0));
     const nome=String((p&&p.nome)||'').trim()||`Nível ${i+1}`;
-    return capacidade?{nome,capacidade}:null;
+    const formato=normalizarFormatoPrateleira(p&&p.formato);
+    return capacidade?{nome,capacidade,formato}:null;
   }).filter(Boolean);
 }
 function temLayoutLocal(l){return layoutLocal(l).length>0;}
@@ -1488,6 +1498,7 @@ function mapaLocalLayoutHTML(l,gs){
     }).join('');
     return `<div class="mprat mprat-layout">
       <div class="mprat-t">${esc(p.nome)}
+        <span class="mprat-f">${esc(formatoPrateleiraNome(p.formato))}</span>
         <span class="mprat-n">${n}/${p.capacidade} ${n===1?'garrafa':'garrafas'}</span></div>
       <div class="mshelf">${slots}</div>
     </div>`;
@@ -2196,7 +2207,7 @@ function renderPickerPosicoes(prefix,gid){
       </div>
       ${prateleirasDesc(prats).map(p=>`
         <div class="lprat">
-          <div class="lprat-t">${esc(p.nome)} <span>${p.capacidade} ${p.capacidade===1?'lugar':'lugares'}</span></div>
+          <div class="lprat-t">${esc(p.nome)} <span>${p.capacidade} ${p.capacidade===1?'lugar':'lugares'}</span><i class="lprat-f">${esc(formatoPrateleiraNome(p.formato))}</i></div>
           <div class="lprat-grid">${Array.from({length:p.capacidade},(_,i)=>{
             const lugar=i+1;
             const lista=occ[slotLayoutKey(p.nome,lugar)]||[];
@@ -3588,7 +3599,7 @@ function renderCfgLocais(){
 }
 let LOC_LAYOUT_EDIT=[];
 function layoutPadraoEditor(){
-  return [{nome:'Nível 1',capacidade:12},{nome:'Nível 2',capacidade:12}];
+  return [{nome:'Nível 1',capacidade:12,formato:'fila'},{nome:'Nível 2',capacidade:12,formato:'fila'}];
 }
 function renderLocalLayoutEditor(){
   const box=document.getElementById('loc-layout-box');
@@ -3603,6 +3614,8 @@ function renderLocalLayoutEditor(){
       <div class="ll-row">
         <div><label>Prateleira</label><input type="text" value="${esc(p.nome)}" oninput="locSetPratNome(${i},this.value)" placeholder="Nível ${i+1}"></div>
         <div><label>Lugares</label><input type="number" inputmode="numeric" min="1" max="240" value="${esc(p.capacidade)}" oninput="locSetPratCap(${i},this.value)"></div>
+        <div><label>Formato</label><select onchange="locSetPratFormato(${i},this.value)">${FORMATOS_PRATELEIRA.map(([id,n])=>
+          `<option value="${id}"${normalizarFormatoPrateleira(p.formato)===id?' selected':''}>${n}</option>`).join('')}</select></div>
         <button type="button" class="jdel ll-del" title="Remover prateleira" onclick="locRemPrat(${i})">✕</button>
       </div>`).join('')}</div>
     <button type="button" class="btn ghost" onclick="locAddPrat()">+ Prateleira</button>`;
@@ -3613,8 +3626,11 @@ function locSetPratNome(i,v){
 function locSetPratCap(i,v){
   if(LOC_LAYOUT_EDIT[i])LOC_LAYOUT_EDIT[i].capacidade=v;
 }
+function locSetPratFormato(i,v){
+  if(LOC_LAYOUT_EDIT[i])LOC_LAYOUT_EDIT[i].formato=normalizarFormatoPrateleira(v);
+}
 function locAddPrat(){
-  LOC_LAYOUT_EDIT.push({nome:`Nível ${LOC_LAYOUT_EDIT.length+1}`,capacidade:12});
+  LOC_LAYOUT_EDIT.push({nome:`Nível ${LOC_LAYOUT_EDIT.length+1}`,capacidade:12,formato:'fila'});
   renderLocalLayoutEditor();
 }
 function locRemPrat(i){
@@ -3629,7 +3645,8 @@ function lerLayoutLocalModal(){
   const prateleiras=LOC_LAYOUT_EDIT.map((p,i)=>{
     const nome=String((p&&p.nome)||'').trim()||`Nível ${i+1}`;
     const capacidade=Math.max(1,Math.min(240,inteiro((p&&p.capacidade))||0));
-    return capacidade?{nome,capacidade}:null;
+    const formato=normalizarFormatoPrateleira(p&&p.formato);
+    return capacidade?{nome,capacidade,formato}:null;
   }).filter(Boolean);
   if(!prateleiras.length)throw new Error('Cria pelo menos uma prateleira para ligar o desenho.');
   const vistos=new Set();
