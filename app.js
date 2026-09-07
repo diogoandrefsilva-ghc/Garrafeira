@@ -524,13 +524,6 @@ function vinhoThumb(v,qtd){
     ${img?`<img src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()">`:''}
     ${qtd>1?`<span class="vc-qtd">\u00d7${qtd}</span>`:''}</div>`;
 }
-function mapaSlotThumb(v){
-  const img=imagemDe(v);
-  return `<span class="mslot-thumb">${garrafaSVG(v,1)}
-    ${img?`<img src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()">`:''}
-  </span>`;
-}
-
 // "Nível 2" tem de vir antes de "Nível 10" — a ordenação alfabética punha o
 // 10 primeiro, e o mapa da garrafeira ficava com os níveis baralhados.
 function ordPrateleira(a,b){
@@ -770,7 +763,7 @@ function fecharModal(id){
 document.addEventListener('click',e=>{
   if(e.target.classList&&e.target.classList.contains('modal')&&!e.target.classList.contains('pagina'))
     fecharModal(e.target.id);
-  if(MAPA_POP_LOCAL&&!e.target.closest('#mapa-pop,.mslot.cheia'))mapaPopupFechar();
+  if(MAPA_POP_LOCAL&&!e.target.closest('#mapa-pop,.msdot.cheia'))mapaPopupFechar();
 });
 
 /* ── NAVEGAÇÃO ─────────────────────────────────────────────────────── */
@@ -1510,25 +1503,22 @@ function mapaLocalLayoutHTML(l,gs){
   const extras=dadosForaLayout(l,gs);
   return prats.map(p=>{
     const info=prateleiraLayoutInfo(p);
-    const compacto=p.formato!=='fila';
     let n=0;
     const slots=info.slots.map(s=>{
       const lugar=s.lugar;
       const lista=occ[slotLayoutKey(p.nome,lugar)]||[];
       const pos=` style="grid-column:${s.col};grid-row:${s.row}"`;
       n+=lista.length;
-      if(!lista.length)return `<div class="mslot mslot-${p.formato}${compacto?' mini':''} vazia"${pos} title="${esc(posicaoTxt(p.nome,lugar))}">
-        <span class="mslot-num">${lugar}</span>
+      if(!lista.length)return `<div class="msdot msdot-${p.formato} vazia"${pos} title="${esc(posicaoTxt(p.nome,lugar))}">
+        <span class="msdot-id">${lugar}</span>
       </div>`;
       const g=lista[0],v=IDXV[g.vinho_id]||{nome:'?'};
-      return `<button class="mslot mslot-${p.formato}${compacto?' mini':''} cheia${lista.length>1?' conflito':''}"${pos}
+      return `<button class="msdot msdot-${p.formato} cheia${lista.length>1?' conflito':''}"${pos}
         onclick="mapaPopupToggle(${l.id},'${escJs(p.nome)}',${lugar},this,event)"
         onmouseenter="mapaPopupHover(${l.id},'${escJs(p.nome)}',${lugar},this)" onmouseleave="mapaPopupSair()"
         title="${esc(v.nome)} ${v.ano||''} · ${esc(posicaoTxt(p.nome,lugar))}${lista.length>1?` · ${lista.length} garrafas`:''}">
-        <span class="mslot-top"><span class="mslot-num">${lugar}</span>${lista.length>1?`<span class="mslot-q">×${lista.length}</span>`:''}</span>
-        ${mapaSlotThumb(v)}
-        ${compacto?'':`<span class="mslot-name">${esc(v.nome)}</span>
-        <span class="mslot-year">${v.ano||'s/a'}</span>`}
+        <span class="msdot-id">${g.vinho_id}</span>
+        ${lista.length>1?`<span class="msdot-q">×${lista.length}</span>`:''}
       </button>`;
     }).join('');
     return `<div class="mprat mprat-layout">
@@ -3645,25 +3635,20 @@ function renderLocalLayoutEditor(){
   box.style.display=chk.checked?'':'none';
   if(!chk.checked)return;
   if(!LOC_LAYOUT_EDIT.length)LOC_LAYOUT_EDIT=layoutPadraoEditor();
-  const fmtBtns=(i,p)=>`<div class="llfmt">${FORMATOS_PRATELEIRA.map(([id,n])=>{
-    const on=normalizarFormatoPrateleira(p.formato)===id;
-    return `<button type="button" class="llfmt-opt${on?' on':''}" onclick="locSetPratFormato(${i},'${id}')">
-      ${prateleiraPreviewHTML(Object.assign({},p,{formato:id}))}
-      <span>${n}</span>
-    </button>`;
-  }).join('')}</div>`;
-  const oddBtns=(i,p)=>{
+  const fmtSel=(i,p)=>`<div class="llfmt-inline">
+    <select onchange="locSetPratFormato(${i},this.value)">
+      ${FORMATOS_PRATELEIRA.map(([id,n])=>`<option value="${id}"${normalizarFormatoPrateleira(p.formato)===id?' selected':''}>${n}</option>`).join('')}
+    </select>
+    ${prateleiraPreviewHTML(p)}
+  </div>`;
+  const oddSel=(i,p)=>{
     const cap=Math.max(1,Math.min(240,inteiro((p&&p.capacidade))||0));
     if(normalizarFormatoPrateleira(p.formato)!=='sobrepostos'||!(cap%2))return '';
-    return `<div class="llodd">
-      <div class="llodd-lab">Se faltar um lugar</div>
-      <div class="llfmt llfmt-odd">${SOBREPOSTOS_IMPAR.map(([id,n])=>{
-        const on=normalizarSobrepostosMaisEm(p.mais_em)===id;
-        return `<button type="button" class="llfmt-opt llodd-opt${on?' on':''}" onclick="locSetPratMaisEm(${i},'${id}')">
-          ${prateleiraPreviewHTML(Object.assign({},p,{formato:'sobrepostos',mais_em:id}))}
-          <span>${n}</span>
-        </button>`;
-      }).join('')}</div>
+    return `<div class="llodd llfmt-inline">
+      <select onchange="locSetPratMaisEm(${i},this.value)">
+        ${SOBREPOSTOS_IMPAR.map(([id,n])=>`<option value="${id}"${normalizarSobrepostosMaisEm(p.mais_em)===id?' selected':''}>${n}</option>`).join('')}
+      </select>
+      ${prateleiraPreviewHTML(Object.assign({},p,{formato:'sobrepostos',mais_em:p.mais_em}))}
     </div>`;
   };
   box.innerHTML=`
@@ -3672,7 +3657,7 @@ function renderLocalLayoutEditor(){
       <div class="ll-row">
         <div><label>Prateleira</label><input type="text" value="${esc(p.nome)}" oninput="locSetPratNome(${i},this.value)" placeholder="Nível ${i+1}"></div>
         <div><label>Lugares</label><input type="number" inputmode="numeric" min="1" max="240" value="${esc(p.capacidade)}" oninput="locSetPratCap(${i},this.value)" onchange="renderLocalLayoutEditor()"></div>
-        <div class="llfmt-box"><label>Formato</label>${fmtBtns(i,p)}${oddBtns(i,p)}</div>
+        <div class="llfmt-box"><label>Formato</label>${fmtSel(i,p)}${oddSel(i,p)}</div>
         <button type="button" class="jdel ll-del" title="Remover prateleira" onclick="locRemPrat(${i})">✕</button>
       </div>`).join('')}</div>
     <button type="button" class="btn ghost" onclick="locAddPrat()">+ Prateleira</button>`;
@@ -3816,15 +3801,21 @@ function renderCfgGarrafeira(){
   }
 
   const minha=souDonoDaGarrafeira(g);
-  // O seletor só aparece quando há mesmo escolha — com uma garrafeira só,
-  // um dropdown de um item é uma pergunta sem resposta possível.
-  const opcoes=GA_LISTA.map(x=>`<option value="${x.id}"${x.id===GA_ID?' selected':''}>${
-    esc(x.nome)}${souDonoDaGarrafeira(x)?'':' — de '+esc(x.dono)}</option>`).join('');
+  // A navegação só aparece quando há escolha — com uma garrafeira só,
+  // setas não fazem nada.
+  const idxAtivo=Math.max(0,GA_LISTA.findIndex(x=>x.id===GA_ID));
+  const ant=GA_LISTA[(idxAtivo-1+GA_LISTA.length)%GA_LISTA.length];
+  const seg=GA_LISTA[(idxAtivo+1)%GA_LISTA.length];
+  const rot=x=>`${esc(x.nome)}${souDonoDaGarrafeira(x)?'':' — de '+esc(x.dono)}`;
 
   box.innerHTML=`
     ${GA_LISTA.length>1?`
       <label>A ver agora</label>
-      <select id="ga-sel" onchange="trocarGarrafeira(parseInt(this.value,10))">${opcoes}</select>`
+      <div class="ga-nav">
+        <button type="button" class="ga-nav-btn" title="Anterior: ${rot(ant)}" onclick="trocarGarrafeiraDelta(-1)">‹</button>
+        <div class="ga-nav-now"><b>${rot(g)}</b></div>
+        <button type="button" class="ga-nav-btn" title="Seguinte: ${rot(seg)}" onclick="trocarGarrafeiraDelta(1)">›</button>
+      </div>`
     :`<div class="ua-row"><span class="em"><b>${esc(g.nome)}</b></span>
         <span class="tagme">${minha?'tua':'de '+esc(g.dono)}</span></div>`}
 
@@ -3954,6 +3945,13 @@ async function trocarGarrafeira(id){
   }
   renderLista();renderCfg();
   toast('A ver: '+nomeGarrafeira());
+}
+function trocarGarrafeiraDelta(delta){
+  if(!GA_LISTA.length||GA_ID==null)return;
+  const i=GA_LISTA.findIndex(g=>g.id===GA_ID);
+  if(i<0)return;
+  const n=(i+delta+GA_LISTA.length)%GA_LISTA.length;
+  trocarGarrafeira(GA_LISTA[n].id);
 }
 
 async function renderPartilhas(){
