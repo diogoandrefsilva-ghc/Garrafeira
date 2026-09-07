@@ -2269,6 +2269,20 @@ async function guardarVinho(id){
   if(!f.nome){toast('Falta o nome do vinho',1);return;}
   if(!id&&!GA_ID){toast('Não há nenhuma garrafeira aberta',1);return;}
   if(f.ano!=null&&(f.ano<1900||f.ano>2100)){toast('Ano fora do razoável',1);return;}
+  let primeiraGarrafa=null;
+  if(!id){
+    const localSel=document.getElementById('e-local');
+    primeiraGarrafa={
+      local_id:localSel&&localSel.value?parseInt(localSel.value,10):null,
+      prateleira:document.getElementById('e-prat').value.trim(),
+      lugar:document.getElementById('e-lugar').value.trim(),
+      formato:document.getElementById('e-formato').value,
+      preco_compra:num(document.getElementById('e-preco-compra').value),
+      comprado_em:document.getElementById('e-comprado').value||null
+    };
+    const erroPos=validarPosicaoLayout(primeiraGarrafa.local_id,primeiraGarrafa.prateleira,primeiraGarrafa.lugar,0);
+    if(erroPos){toast(erroPos,1);return;}
+  }
   const castas=f._castas;delete f._castas;
   // O formulário não tem campos para o resumo/notas de prova/link do Vivino:
   // a procura da IA deixou-os em `_iaExtraNovo` e é aqui que se juntam. Só na
@@ -2308,18 +2322,7 @@ async function guardarVinho(id){
 
     if(!id){
       const qtd=Math.max(1,Math.min(60,inteiro(document.getElementById('e-qtd').value)||1));
-      const localSel=document.getElementById('e-local');
-      const base={
-        vinho_id:vinhoId,
-        local_id:localSel&&localSel.value?parseInt(localSel.value,10):null,
-        prateleira:document.getElementById('e-prat').value.trim(),
-        lugar:document.getElementById('e-lugar').value.trim(),
-        formato:document.getElementById('e-formato').value,
-        preco_compra:num(document.getElementById('e-preco-compra').value),
-        comprado_em:document.getElementById('e-comprado').value||null
-      };
-      const erroPos=validarPosicaoLayout(base.local_id,base.prateleira,base.lugar,0);
-      if(erroPos)throw new Error(erroPos);
+      const base=Object.assign({vinho_id:vinhoId},primeiraGarrafa);
       // Várias garrafas iguais: só a primeira fica com o lugar escrito. Duas
       // garrafas no MESMO lugar é uma informação falsa sobre a garrafeira —
       // as outras ficam sem lugar, para se arrumarem depois.
