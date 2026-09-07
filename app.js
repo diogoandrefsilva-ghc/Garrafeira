@@ -1469,14 +1469,160 @@ function renderLista(){
 }
 
 /* ── MAPA DOS LOCAIS ───────────────────────────────────────────────
-   O desenho da garrafeira: local -> prateleira -> lugares. Só garrafas que
-   lá estão — o histórico dos consumos vive no separador próprio.
+   Dois níveis, e não uma lista com tudo aberto: primeiro o CONJUNTO
+   (`mapaConjuntoHTML`: um local em destaque, com a estante desenhada, e
+   um cartão pequeno por local), depois a ESTANTE de um local só
+   (`mapaLocalHTML`: nível a nível, cada lugar um círculo com o nº do vinho
+   se está cheio ou o nº do lugar se está vazio). Ter os locais todos
+   abertos uns por baixo dos outros era uma coluna de círculos sem fim, e a
+   pergunta "onde está" começa sempre por escolher o sítio.
 
-   Os contadores: continuam lá, mas em serifa e COM A PALAVRA à frente —
-   "9 vinhos", "12 garrafas". Um número solto num canto não diz de quê, e
-   aqui as duas contagens são mesmo coisas diferentes: 12 garrafas podem
-   ser 9 vinhos (há repetidos). Cada lugar é uma célula com a garrafinha
-   desenhada, o nome do vinho e o lugar em destaque. */
+   `MAPA_ABERTO` é o local cuja estante está aberta (0 = o conjunto);
+   `MAPA_DESTAQUE` é o que está no cartão grande do conjunto. São ids da
+   BD e valem só enquanto o local existir — `renderMapa()` volta ao
+   conjunto sozinho se o local for apagado ou se trocar a garrafeira.
+   Abrir uma estante gasta um passo na história do browser (ver
+   `mapaHistEntrar`), como a página do vinho: o voltar do telemóvel fecha-a.
+
+   Só garrafas que lá estão — o histórico dos consumos vive no separador
+   próprio. Com a procura ligada, o conjunto só mostra os locais com
+   garrafas que passam nela, e na estante os lugares ocupados por garrafas
+   que NÃO passam ficam apagados — a resposta a "onde estão as minhas
+   garrafas de Syrah" é o que fica a cor.
+
+   As garrafas sem local (o local foi apagado, ou nunca foi escolhido) não
+   podem sumir do mapa — é aqui que se vê que estão por arrumar. Entram
+   como um local a fingir, `POR_ARRUMAR`, que não se edita. */
+let MAPA_ABERTO=0, MAPA_DESTAQUE=0, ML_HIST=false;
+const POR_ARRUMAR={id:-1,nome:'Por arrumar',descricao:'Garrafas sem local escolhido',cor:'#8a8a8a',layout:{prateleiras:[]}};
+
+function mapaGrupos(){
+  const filtrando=haFiltros();
+  const todas=db.garrafas.filter(naGarrafeira);
+  let passam=todas;
+  if(filtrando){
+    const okV=new Set(vinhosFiltrados().map(v=>v.id));
+    passam=todas.filter(g=>okV.has(g.vinho_id)&&(!F.local||String(g.local_id)===F.local));
+  }
+  const okG=new Set(passam.map(g=>g.id));
+  const grupos=db.locais.map(l=>({l,gs:todas.filter(g=>g.local_id===l.id)}));
+  const orfas=todas.filter(g=>!IDXL[g.local_id]);
+  if(orfas.length)grupos.push({l:POR_ARRUMAR,gs:orfas});
+  grupos.forEach(x=>{x.n=filtrando?x.gs.filter(g=>okG.has(g.id)).length:x.gs.length;});
+  return {filtrando,okG,grupos,visiveis:filtrando?grupos.filter(x=>x.n):grupos};
+}
+function capacidadeLocal(l){return layoutLocal(l).reduce((s,p)=>s+p.capacidade,0);}
+function mapaSubtitulo(l){
+  return [l.descricao,resumoLayoutLocal(l)].filter(Boolean).join(' · ');
+}
+// "37 / 45 garrafas" num local com desenho; "12 garrafas · 9 vinhos" sem
+// ele; com a procura ligada, o que interessa é quantas passaram.
+function mapaContagemHTML(x,d){
+  const cap=capacidadeLocal(x.l);
+  if(d.filtrando)return `<b>${x.n}</b> ${x.n===1?'encontrada':'encontradas'} · de ${x.gs.length}`;
+  if(cap)return `<b>${x.gs.length}</b> / ${cap} garrafas`;
+  const nv=new Set(x.gs.map(g=>g.vinho_id)).size;
+  return `<b>${x.gs.length}</b> ${x.gs.length===1?'garrafa':'garrafas'} · ${nv} ${nv===1?'vinho':'vinhos'}`;
+}
+function mapaContagemCurta(x,d){
+  const cap=capacidadeLocal(x.l);
+  if(d.filtrando)return `${x.n} ${x.n===1?'encontrada':'encontradas'}`;
+  if(cap)return `${x.gs.length} / ${cap}`;
+  return `${x.gs.length} ${x.gs.length===1?'garrafa':'garrafas'}`;
+}
+
+/* A estante DESENHADA, em SVG, a partir do próprio layout do local: dois
+   montantes, uma tábua por prateleira e um círculo por lugar, no formato
+   de cada prateleira (fila, ziguezague, sobrepostos). Cheio = há garrafa;
+   com a procura ligada, o que não passa fica apagado. Não é uma imagem
+   genérica de propósito — é ESTE local, e muda quando ele muda (a mesma
+   razão por que a garrafa é desenhada e não uma pasta de imagens). Um
+   local sem desenho mostra um caixote com uma bolinha por garrafa. */
+function estanteSVG(l,gs,d,mini){
+  const W=200,PX=12,IN=6;
+  const wood1='#e8d9bf',wood2='#d4bf9c',dark='#c3a97f';
+  const filtrando=!!(d&&d.filtrando),okG=d?d.okG:null;
+  const prats=prateleirasDesc(layoutLocal(l));
+  const out=[];let y=4;
+  const f1=n=>n.toFixed(1);
+  const circ=(cx,cy,r,estado)=>{
+    if(estado==='cheia')return `<circle cx="${f1(cx)}" cy="${f1(cy)}" r="${f1(r)}" fill="#7b1f3d"/><circle cx="${f1(cx-r*.32)}" cy="${f1(cy-r*.32)}" r="${f1(r*.26)}" fill="#fff" opacity=".2"/>`;
+    if(estado==='fora')return `<circle cx="${f1(cx)}" cy="${f1(cy)}" r="${f1(r)}" fill="#ddd3d6"/>`;
+    return `<circle cx="${f1(cx)}" cy="${f1(cy)}" r="${f1(r)}" fill="#fcf8f9" stroke="#cfb0ba" stroke-width="1"${mini?'':' stroke-dasharray="2.4 2"'}/>`;
+  };
+  if(prats.length){
+    const occ={};
+    gs.forEach(g=>{
+      const prat=String(g.prateleira||'').trim(),lug=lugarNumeroLayout(g.lugar);
+      if(!prat||lug==null)return;
+      const k=slotLayoutKey(prat,lug),passa=!filtrando||okG.has(g.id);
+      if(passa||!occ[k])occ[k]=passa?'cheia':'fora';
+    });
+    prats.forEach(p=>{
+      const info=prateleiraLayoutInfo(p);
+      const innerW=W-2*PX-2*IN,cell=innerW/info.cols;
+      const r=Math.max(2.4,Math.min(cell*.4,9));
+      const duas=info.rows>1;
+      const bandH=duas?r*4+8:r*2+8;
+      const cy=row=>duas&&row===1?y+4+r:y+bandH-4-r;
+      const cx=col=>PX+IN+(col-.5)*cell;
+      if(info.formato==='ziguezague'){
+        const f=info.slots[0],u=info.slots[info.slots.length-1];
+        const pts=info.slots.map(s=>`${f1(cx(s.col))},${f1(cy(s.row))}`);
+        // prolonga uma célula para cada lado, na fila oposta — a fita não
+        // acaba no último lugar, acaba na parede
+        pts.unshift(`${f1(cx(f.col)-cell)},${f1(cy(f.row===1?2:1))}`);
+        pts.push(`${f1(cx(u.col)+cell)},${f1(cy(u.row===1?2:1))}`);
+        out.push(`<polyline points="${pts.join(' ')}" fill="none" stroke="${wood2}" stroke-width="${f1(r*1.5)}" stroke-linejoin="round" stroke-linecap="round"/>`);
+        out.push(`<polyline points="${pts.join(' ')}" fill="none" stroke="${wood1}" stroke-width="${f1(r*1.05)}" stroke-linejoin="round" stroke-linecap="round"/>`);
+      }else{
+        out.push(`<rect x="${PX}" y="${f1(y+1)}" width="${W-2*PX}" height="${f1(bandH-1)}" rx="${f1(r*.8)}" fill="${wood1}" stroke="${dark}" stroke-width=".8"/>`);
+      }
+      info.slots.forEach(s=>out.push(circ(cx(s.col),cy(s.row),r,occ[slotLayoutKey(p.nome,s.lugar)]||'vazia')));
+      y+=bandH;
+      out.push(`<rect x="${PX-3}" y="${f1(y)}" width="${W-2*PX+6}" height="4" rx="1.2" fill="${wood2}" stroke="${dark}" stroke-width=".6"/>`);
+      y+=9;
+    });
+    out.unshift(`<rect x="4" y="0" width="8" height="${f1(y)}" rx="2" fill="${wood2}" stroke="${dark}" stroke-width=".8"/><rect x="${W-12}" y="0" width="8" height="${f1(y)}" rx="2" fill="${wood2}" stroke="${dark}" stroke-width=".8"/>`);
+  }else{
+    const n=gs.filter(g=>!filtrando||okG.has(g.id)).length,cols=8,r=8;
+    const cell=(W-2*PX-2*IN)/cols;
+    const rows=Math.max(1,Math.min(3,Math.ceil(n/cols)));
+    const H=rows*(2*r+6)+10;
+    out.push(`<rect x="${PX}" y="${y}" width="${W-2*PX}" height="${H}" rx="8" fill="${wood1}" stroke="${dark}" stroke-width=".8"/>`);
+    for(let i=0;i<Math.min(n,cols*3);i++){
+      const c=i%cols,rw=Math.floor(i/cols);
+      out.push(circ(PX+IN+(c+.5)*cell,y+8+r+rw*(2*r+6),r,'cheia'));
+    }
+    y+=H+4;
+  }
+  return `<svg class="est-svg${mini?' mini':''}" viewBox="0 0 ${W} ${f1(y)}" aria-hidden="true" focusable="false">${out.join('')}</svg>`;
+}
+
+/* A prateleira desenhada em HTML (a que se toca): o formato dá o fundo de
+   madeira — barra para a fila, bloco para os sobrepostos, fita em
+   ziguezague por trás dos lugares — e a grelha põe cada lugar na coluna e
+   fila que `prateleiraLayoutInfo` lhe deu. É a MESMA função para a
+   estante do local e para o seletor de posição da garrafa: os lugares
+   são o que muda (`slotsHTML`), a madeira não. */
+function estanteHTML(p,info,slotsHTML,cls){
+  return `<div class="est est-${info.formato}${cls?' '+cls:''}" style="--cols:${info.cols};--rows:${info.rows}">${
+    info.formato==='ziguezague'?ziguezagueBgSVG(info):''}${slotsHTML}</div>`;
+}
+/* A fita do ziguezague passa pelo CENTRO de cada lugar. Só dá certo porque
+   a grelha do ziguezague não tem gap nenhum (`.est-ziguezague{gap:0}`) e
+   as duas filas têm a mesma altura: assim a coluna i está centrada em
+   (i-½)/cols e as filas a 25% e 75%. O traço é `non-scaling-stroke` — o
+   viewBox estica-se à caixa (`preserveAspectRatio:none`) e sem isso a
+   fita ficava mais grossa nas diagonais do que nas pontas. */
+function ziguezagueBgSVG(info){
+  const cell=100/info.cols,yy=r=>info.rows>1?(r===1?25:75):50;
+  const f=info.slots[0],u=info.slots[info.slots.length-1];
+  const pts=[[f.col-1.5,yy(f.row===1?2:1)],...info.slots.map(s=>[s.col-.5,yy(s.row)]),[u.col+.5,yy(u.row===1?2:1)]];
+  const d=pts.map(([c,y],i)=>`${i?'L':'M'}${(c*cell).toFixed(2)} ${y}`).join(' ');
+  return `<svg class="est-bg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="${d}" class="est-zz1"/><path d="${d}" class="est-zz2"/></svg>`;
+}
+
 function mapaCelulaListaHTML(g){
   const v=IDXV[g.vinho_id]||{nome:'?'};
   return `<button class="mcell" onclick="verVinho(${g.vinho_id})" title="${esc(v.nome)} ${v.ano||''}">
@@ -1485,10 +1631,14 @@ function mapaCelulaListaHTML(g){
     ${g.lugar?`<span class="mlug">${esc(g.lugar)}</span>`:''}
   </button>`;
 }
-function mapaLocalListaHTML(gs){
-  const prats=[...new Set(gs.map(g=>g.prateleira||''))].sort((a,b)=>ordPrateleira(b,a));
+// Um local SEM desenho: as prateleiras que as garrafas dizem ter, cada
+// uma com a lista das garrafas.
+function mapaLocalListaHTML(gs,d){
+  const lista=d.filtrando?gs.filter(g=>d.okG.has(g.id)):gs;
+  if(!lista.length)return '<div class="vazio ml-vazio"><b>Sem garrafas</b>Ainda não há garrafas arrumadas neste local.</div>';
+  const prats=[...new Set(lista.map(g=>g.prateleira||''))].sort((a,b)=>ordPrateleira(b,a));
   return prats.map(p=>{
-    const cel=gs.filter(g=>(g.prateleira||'')===p)
+    const cel=lista.filter(g=>(g.prateleira||'')===p)
       .sort((a,b)=>String(a.lugar).localeCompare(String(b.lugar),'pt',{numeric:true}));
     return `<div class="mprat">
       <div class="mprat-t">${esc(p||'Sem prateleira')}
@@ -1497,23 +1647,23 @@ function mapaLocalListaHTML(gs){
     </div>`;
   }).join('');
 }
-function mapaLocalLayoutHTML(l,gs){
+// Um local COM desenho: nível a nível, de cima para baixo como na estante
+// a sério (o Nível 1 é o de baixo).
+function mapaEstanteHTML(l,gs,d){
   const prats=prateleirasDesc(layoutLocal(l));
   const occ=ocupacaoLayout(l.id);
-  const extras=dadosForaLayout(l,gs);
+  const extras=dadosForaLayout(l,gs).filter(g=>!d.filtrando||d.okG.has(g.id));
   return prats.map(p=>{
     const info=prateleiraLayoutInfo(p);
     let n=0;
     const slots=info.slots.map(s=>{
-      const lugar=s.lugar;
-      const lista=occ[slotLayoutKey(p.nome,lugar)]||[];
+      const lugar=s.lugar,lista=occ[slotLayoutKey(p.nome,lugar)]||[];
       const pos=` style="grid-column:${s.col};grid-row:${s.row}"`;
+      if(!lista.length)return `<div class="msdot vazia"${pos} title="${esc(posicaoTxt(p.nome,lugar))}"><span class="msdot-id">${lugar}</span></div>`;
       n+=lista.length;
-      if(!lista.length)return `<div class="msdot msdot-${p.formato} vazia"${pos} title="${esc(posicaoTxt(p.nome,lugar))}">
-        <span class="msdot-id">${lugar}</span>
-      </div>`;
-      const g=lista[0],v=IDXV[g.vinho_id]||{nome:'?'};
-      return `<button class="msdot msdot-${p.formato} cheia${lista.length>1?' conflito':''}"${pos}
+      const passam=d.filtrando?lista.filter(g=>d.okG.has(g.id)):lista;
+      const g=passam[0]||lista[0],v=IDXV[g.vinho_id]||{nome:'?'};
+      return `<button class="msdot cheia${lista.length>1?' conflito':''}${d.filtrando&&!passam.length?' fora':''}"${pos}
         onclick="mapaPopupToggle(${l.id},'${escJs(p.nome)}',${lugar},this,event)"
         onmouseenter="mapaPopupHover(${l.id},'${escJs(p.nome)}',${lugar},this)" onmouseleave="mapaPopupSair()"
         title="${esc(v.nome)} ${v.ano||''} · ${esc(posicaoTxt(p.nome,lugar))}${lista.length>1?` · ${lista.length} garrafas`:''}">
@@ -1522,61 +1672,119 @@ function mapaLocalLayoutHTML(l,gs){
       </button>`;
     }).join('');
     return `<div class="mprat mprat-layout">
-      <div class="mprat-t">${esc(p.nome)}
-        <span class="mprat-f">${esc(formatoPrateleiraNome(p.formato))}</span>
-        <span class="mprat-n">${n}/${p.capacidade} ${n===1?'garrafa':'garrafas'}</span></div>
-      <div class="mshelf mshelf-${p.formato}" style="--cols:${info.cols};--rows:${info.rows}">${slots}</div>
+      <div class="mprat-t">${esc(p.nome)}<span class="mprat-n">${n}/${p.capacidade}</span></div>
+      <div class="est-wrap">${estanteHTML(p,info,slots)}</div>
     </div>`;
   }).join('')+(extras.length?`
     <div class="mprat">
-      <div class="mprat-t">Por posicionar
-        <span class="mprat-n">${extras.length} ${extras.length===1?'garrafa':'garrafas'}</span></div>
-      <div class="note">Estão neste local, mas ainda sem um lugar válido no desenho.</div>
+      <div class="mprat-t">Por posicionar<span class="mprat-n">${extras.length}</span></div>
+      <div class="note" style="margin-bottom:8px">Estão neste local, mas ainda sem um lugar válido no desenho.</div>
       <div class="mgrid">${extras.map(mapaCelulaListaHTML).join('')}</div>
-    </div>`:'');
+    </div>`:'')+`
+    <div class="ml-leg"><span><i class="cheia"></i>Ocupado · nº do vinho</span><span><i class="vazia"></i>Vazio · nº do lugar</span></div>`;
+}
+
+function mapaConjuntoHTML(d){
+  const vis=d.visiveis;
+  if(!vis.length){
+    return d.filtrando
+      ?'<div class="vazio"><b>Nada encontrado</b>Nenhuma garrafa corresponde a esta procura.</div>'
+      :`<div class="vazio"><b>Ainda não há locais</b>Cria o primeiro sítio onde as garrafas moram — e, se quiseres, desenha-lhe as prateleiras.
+          <div class="ro-hide"><button class="btn prim" onclick="novoLocal()">+ Novo local</button></div></div>`;
+  }
+  const i=Math.max(0,vis.findIndex(x=>x.l.id===MAPA_DESTAQUE));
+  const x=vis[i],varios=vis.length>1;
+  return `<div class="mv">
+    <section class="mv-hero" style="--lc:${esc(x.l.cor||'#7b1f3d')}">
+      ${varios?`<button class="mv-nav mv-prev" onclick="mapaDestacar(-1)" aria-label="Local anterior">‹</button>
+      <button class="mv-nav mv-next" onclick="mapaDestacar(1)" aria-label="Local seguinte">›</button>`:''}
+      <button class="mv-heroin" onclick="mapaAbrirLocal(${x.l.id})">
+        <h3>${esc(x.l.nome)}</h3>
+        <div class="mv-sub">${esc(mapaSubtitulo(x.l))||'&nbsp;'}</div>
+        <div class="mv-ill">${estanteSVG(x.l,x.gs,d)}</div>
+        <div class="mv-cnt">${mapaContagemHTML(x,d)}</div>
+      </button>
+      ${varios?`<div class="mv-dots">${vis.map((y,j)=>`<button class="mv-dot${j===i?' on':''}" onclick="mapaDestacarId(${y.l.id})" aria-label="${esc(y.l.nome)}"></button>`).join('')}</div>`:''}
+    </section>
+    <div class="mv-grid">${vis.map(y=>`
+      <button class="mv-card${y.l.id===x.l.id?' on':''}" onclick="mapaAbrirLocal(${y.l.id})">
+        <b>${esc(y.l.nome)}</b>
+        <span class="mv-mini">${estanteSVG(y.l,y.gs,d,true)}</span>
+        <span class="mv-n">${mapaContagemCurta(y,d)}</span>
+      </button>`).join('')}
+    </div>
+    <div class="mv-add ro-hide"><button class="btn ghost" onclick="novoLocal()">+ Novo local</button></div>
+  </div>`;
+}
+function mapaLocalHTML(x,d){
+  const l=x.l,pseudo=l.id<0;
+  return `<div class="ml" style="--lc:${esc(l.cor||'#7b1f3d')}">
+    <div class="ml-bar">
+      <button class="ml-back" onclick="mapaFecharLocal()" aria-label="Voltar aos locais">‹</button>
+      <div class="ml-t"><h3>${esc(l.nome)}</h3><div class="ml-sub">${mapaContagemHTML(x,d)}</div></div>
+      ${pseudo?'<span class="ml-sp on"></span>':`<button class="ml-edit ro-hide" onclick="editarLocal(${l.id})" title="Editar local" aria-label="Editar local">✎</button><span class="ml-sp"></span>`}
+    </div>
+    ${pseudo?`<div class="note ml-nota">${esc(l.descricao)}. Abre cada vinho e usa "Mover" para lhes dar um local.</div>`:''}
+    ${d.filtrando&&!x.n?'<div class="note ml-nota">Nenhuma garrafa deste local passa na procura.</div>':''}
+    ${temLayoutLocal(l)?mapaEstanteHTML(l,x.gs,d):mapaLocalListaHTML(x.gs,d)}
+  </div>`;
 }
 function renderMapa(){
   const box=document.getElementById('mapa');
   if(!box)return;
   mapaPopupFechar();
-  const filtrando=haFiltros();
-  let ativas=db.garrafas.filter(naGarrafeira);
-  if(filtrando){
-    const okV=new Set(vinhosFiltrados().map(v=>v.id));
-    ativas=ativas.filter(g=>okV.has(g.vinho_id)&&(!F.local||String(g.local_id)===F.local));
-  }
-  const locaisComDesenho=!filtrando?db.locais.filter(temLayoutLocal):[];
-  if(!ativas.length&&!locaisComDesenho.length){
-    box.innerHTML=filtrando
-      ?'<div class="vazio"><b>Nada encontrado</b>Nenhuma garrafa corresponde a esta procura.</div>'
-      :'<div class="vazio"><b>Garrafeira vazia</b>Ainda não há garrafas arrumadas.</div>';
-    return;
-  }
-
-  // Garrafas sem local (o local foi apagado, ou nunca foi escolhido) não
-  // podem sumir do mapa — é aí que se vê que estão por arrumar.
-  const grupos=db.locais.map(l=>[l,ativas.filter(g=>g.local_id===l.id)])
-    .filter(([l,g])=>g.length||(!filtrando&&temLayoutLocal(l)));
-  const orfas=ativas.filter(g=>!IDXL[g.local_id]);
-  if(orfas.length)grupos.push([{id:null,nome:'Por arrumar',descricao:'Garrafas sem local escolhido',cor:'#8a8a8a'},orfas]);
-
-  box.innerHTML=grupos.map(([l,gs])=>{
-    const nv=new Set(gs.map(g=>g.vinho_id)).size;
-    const sub=[l.descricao,resumoLayoutLocal(l)].filter(Boolean).join(' · ');
-    return `<section class="mloc">
-      <div class="mloc-head" style="--lc:${esc(l.cor||'#7b1f3d')}">
-        <div class="mloc-id">
-          <h3><span class="pip" style="background:${esc(l.cor||'#7b1f3d')}"></span>${esc(l.nome)}</h3>
-          ${sub?`<div class="mloc-sub">${esc(sub)}</div>`:''}
-        </div>
-        <div class="mloc-n">
-          <b>${nv}</b><span class="u">${nv===1?'vinho':'vinhos'}</span>
-          <span>${gs.length} ${gs.length===1?'garrafa':'garrafas'}</span>
-        </div>
-      </div>
-      ${temLayoutLocal(l)?mapaLocalLayoutHTML(l,gs):mapaLocalListaHTML(gs)}
-    </section>`;
-  }).join('');
+  const d=mapaGrupos();
+  const aberto=MAPA_ABERTO?d.grupos.find(x=>x.l.id===MAPA_ABERTO):null;
+  if(MAPA_ABERTO&&!aberto){MAPA_ABERTO=0;mapaHistSair();}
+  if(!d.visiveis.some(x=>x.l.id===MAPA_DESTAQUE))MAPA_DESTAQUE=d.visiveis.length?d.visiveis[0].l.id:0;
+  box.innerHTML=aberto?mapaLocalHTML(aberto,d):mapaConjuntoHTML(d);
+  const hero=box.querySelector('.mv-hero');
+  if(hero)mapaSwipe(hero);
+}
+function mapaDestacar(dir){
+  const vis=mapaGrupos().visiveis;
+  if(vis.length<2)return;
+  const i=Math.max(0,vis.findIndex(x=>x.l.id===MAPA_DESTAQUE));
+  MAPA_DESTAQUE=vis[(i+dir+vis.length)%vis.length].l.id;
+  renderMapa();
+}
+function mapaDestacarId(id){MAPA_DESTAQUE=id;renderMapa();}
+// Arrastar o cartão grande de lado passa ao local seguinte/anterior. Só
+// pega num gesto claramente horizontal, senão roubava o scroll da página.
+function mapaSwipe(el){
+  let x0=null,y0=null;
+  el.addEventListener('touchstart',e=>{const t=e.touches[0];x0=t.clientX;y0=t.clientY;},{passive:true});
+  el.addEventListener('touchend',e=>{
+    if(x0==null)return;
+    const t=e.changedTouches[0],dx=t.clientX-x0,dy=t.clientY-y0;x0=null;
+    if(Math.abs(dx)>48&&Math.abs(dx)>Math.abs(dy)*1.5)mapaDestacar(dx<0?1:-1);
+  },{passive:true});
+}
+function mapaAbrirLocal(id){
+  MAPA_ABERTO=id;MAPA_DESTAQUE=id;
+  mapaHistEntrar();
+  renderMapa();
+  window.scrollTo({top:0,behavior:'instant'});
+}
+function mapaFecharLocal(){
+  if(!MAPA_ABERTO)return;
+  MAPA_ABERTO=0;
+  mapaHistSair();
+  renderMapa();
+  window.scrollTo({top:0,behavior:'instant'});
+}
+/* Um passo na história por estante aberta — o mesmo desenho da página do
+   vinho (`pgEntrarHistoria`), e os dois convivem porque o `popstate` olha
+   ao ESTADO que ficou (ver lá): fechar o vinho que se abriu de cima de uma
+   estante volta à estante, não ao conjunto. */
+function mapaHistEntrar(){
+  if(ML_HIST)return;
+  try{history.pushState({gfLocal:1},'');ML_HIST=true;}catch(e){}
+}
+function mapaHistSair(){
+  if(!ML_HIST)return;
+  ML_HIST=false;
+  try{history.back();}catch(e){}
 }
 let MAPA_POP_LOCAL=0, MAPA_POP_PRAT='', MAPA_POP_LUGAR=0, MAPA_POP_FIXA=false, MAPA_POP_ANCHOR=null, MAPA_POP_T=null;
 function mapaPopupNode(){
@@ -1839,12 +2047,22 @@ function pgSairHistoria(){
   PG_HIST=false;
   try{history.back();}catch(e){}
 }
-window.addEventListener('popstate',()=>{
-  if(!PG_HIST)return;
-  PG_HIST=false;
-  // Voltar fecha a página e o que estiver aberto POR CIMA dela (editar,
-  // consumir, foto): são todos o mesmo contexto — este vinho.
-  document.querySelectorAll('.modal.on').forEach(m=>m.classList.remove('on'));
+window.addEventListener('popstate',e=>{
+  // Olha ao ESTADO em que se ficou e não só à bandeira: a estante de um
+  // local (`mapaHistEntrar`) também gasta um passo, e o `history.back()`
+  // com que a página do vinho se fecha por cima dela cai aqui — se fosse
+  // só pela bandeira, esse voltar fechava a estante por tabela.
+  const st=e.state||{};
+  if(PG_HIST&&!st.gfVinho){
+    PG_HIST=false;
+    // Voltar fecha a página e o que estiver aberto POR CIMA dela (editar,
+    // consumir, foto): são todos o mesmo contexto — este vinho.
+    document.querySelectorAll('.modal.on').forEach(m=>m.classList.remove('on'));
+  }
+  if(ML_HIST&&!st.gfLocal&&!st.gfVinho){
+    ML_HIST=false;MAPA_ABERTO=0;
+    renderMapa();
+  }
 });
 
 /* Arrastar de lado para sair. Segue o dedo nos DOIS sentidos: pediu-se
@@ -2232,8 +2450,8 @@ function renderPickerPosicoes(prefix,gid){
       </div>
       ${prateleirasDesc(prats).map(p=>`
         ${(()=>{const info=prateleiraLayoutInfo(p);const compacto=p.formato!=='fila';return `<div class="lprat">
-          <div class="lprat-t">${esc(p.nome)} <span>${p.capacidade} ${p.capacidade===1?'lugar':'lugares'}</span><i class="lprat-f">${esc(formatoPrateleiraNome(p.formato))}</i></div>
-          <div class="lprat-grid lprat-grid-${p.formato}" style="--cols:${info.cols};--rows:${info.rows}">${info.slots.map(s=>{
+          <div class="lprat-t">${esc(p.nome)} <span>${p.capacidade} ${p.capacidade===1?'lugar':'lugares'}</span></div>
+          ${estanteHTML(p,info,info.slots.map(s=>{
             const lugar=s.lugar;
             const pos=` style="grid-column:${s.col};grid-row:${s.row}"`;
             const lista=occ[slotLayoutKey(p.nome,lugar)]||[];
@@ -2243,7 +2461,7 @@ function renderPickerPosicoes(prefix,gid){
               return `<button type="button" class="lpslot${compacto?' mini':''} ocup" disabled${pos} title="${esc(v.nome)} · ${esc(posicaoTxt(p.nome,lugar))}">${garrafaSVG(v,1)}<span>${lugar}</span></button>`;
             }
             return `<button type="button" class="lpslot${compacto?' mini':''}${sel?' on':''}"${pos} onclick="escolherPosicaoLayout('${prefix}','${escJs(p.nome)}',${lugar})" title="${esc(posicaoTxt(p.nome,lugar))}"><span>${lugar}</span></button>`;
-          }).join('')}</div>
+          }).join(''),'est-pick')}
         </div>`;})()}
       `).join('')}
       <div class="lpick-foot">
@@ -3626,8 +3844,15 @@ function renderCfgLocais(){
 }
 let LOC_LAYOUT_EDIT=[];
 function layoutPadraoEditor(){
-  return [{nome:'Nível 1',capacidade:12,formato:'fila',mais_em:'cima'},{nome:'Nível 2',capacidade:12,formato:'fila',mais_em:'cima'}];
+  return [{nome:'Nível 1',capacidade:6,formato:'fila',mais_em:'cima'},{nome:'Nível 2',capacidade:6,formato:'fila',mais_em:'cima'}];
 }
+/* O desenho das prateleiras, uma por linha: o nome (que se edita no
+   sítio, sem caixa à volta — é um título, não um formulário), e por baixo
+   o FORMATO e os LUGARES. O formato é um botão com os pontinhos do
+   desenho atual e abre uma folha com as três opções ilustradas
+   (`abrirFormatoPrat`) — um <select> não mostra desenhos, e aqui a
+   diferença entre os três é o desenho. O "lugar a mais" dos sobrepostos
+   ímpares só aparece quando existe. */
 function renderLocalLayoutEditor(){
   const box=document.getElementById('loc-layout-box');
   const chk=document.getElementById('loc-tem-layout');
@@ -3635,38 +3860,64 @@ function renderLocalLayoutEditor(){
   box.style.display=chk.checked?'':'none';
   if(!chk.checked)return;
   if(!LOC_LAYOUT_EDIT.length)LOC_LAYOUT_EDIT=layoutPadraoEditor();
-  const fmtSel=(i,p)=>`<div class="llfmt-inline">
-    <select onchange="locSetPratFormato(${i},this.value)">
-      ${FORMATOS_PRATELEIRA.map(([id,n])=>`<option value="${id}"${normalizarFormatoPrateleira(p.formato)===id?' selected':''}>${n}</option>`).join('')}
-    </select>
-    ${prateleiraPreviewHTML(p)}
-  </div>`;
+  const caret='<svg class="ll-caret" viewBox="0 0 12 20" aria-hidden="true"><path d="M2 7l4-4 4 4M2 13l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const oddSel=(i,p)=>{
     const cap=Math.max(1,Math.min(240,inteiro((p&&p.capacidade))||0));
     if(normalizarFormatoPrateleira(p.formato)!=='sobrepostos'||!(cap%2))return '';
-    return `<div class="llodd llfmt-inline">
-      <select onchange="locSetPratMaisEm(${i},this.value)">
-        ${SOBREPOSTOS_IMPAR.map(([id,n])=>`<option value="${id}"${normalizarSobrepostosMaisEm(p.mais_em)===id?' selected':''}>${n}</option>`).join('')}
-      </select>
-      ${prateleiraPreviewHTML(Object.assign({},p,{formato:'sobrepostos',mais_em:p.mais_em}))}
+    const cur=normalizarSobrepostosMaisEm(p.mais_em);
+    return `<div class="ll-odd"><span>Lugar a mais</span>
+      <div class="segbtns">${SOBREPOSTOS_IMPAR.map(([id,n])=>`<button type="button" class="segbtn${cur===id?' on':''}" onclick="locSetPratMaisEm(${i},'${id}')">${n.replace(/^Mais /,'')}</button>`).join('')}</div>
     </div>`;
   };
+  const uma=LOC_LAYOUT_EDIT.length<=1;
   box.innerHTML=`
-    <div class="note">A app desenha este local como estante: uma prateleira por linha, cada uma com os seus lugares numerados.</div>
+    <div class="note">A app desenha este local como estante: uma prateleira por linha, cada uma com os seus lugares numerados. O Nível 1 é o de baixo.</div>
     <div class="ll-lista">${LOC_LAYOUT_EDIT.map((p,i)=>`
       <div class="ll-row">
-        <div><label>Prateleira</label><input type="text" value="${esc(p.nome)}" oninput="locSetPratNome(${i},this.value)" placeholder="Nível ${i+1}"></div>
-        <div><label>Lugares</label><input type="number" inputmode="numeric" min="1" max="240" value="${esc(p.capacidade)}" oninput="locSetPratCap(${i},this.value)" onchange="renderLocalLayoutEditor()"></div>
-        <div class="llfmt-box"><label>Formato</label>${fmtSel(i,p)}${oddSel(i,p)}</div>
-        <button type="button" class="jdel ll-del" title="Remover prateleira" onclick="locRemPrat(${i})">✕</button>
+        <div class="ll-head">
+          <input type="text" class="ll-nome" value="${esc(p.nome)}" oninput="locSetPratNome(${i},this.value)" placeholder="Nível ${i+1}" aria-label="Nome da prateleira">
+          <button type="button" class="jdel ll-del" title="Remover prateleira" onclick="locRemPrat(${i})"${uma?' disabled':''}>✕</button>
+        </div>
+        <div class="ll-fields">
+          <div><label>Formato</label>
+            <button type="button" class="ll-fmt" onclick="abrirFormatoPrat(${i})" title="${esc(formatoPrateleiraNome(p.formato))}" aria-label="Formato: ${esc(formatoPrateleiraNome(p.formato))}">${prateleiraPreviewHTML(p)}${caret}</button></div>
+          <div><label>Lugares</label>
+            <input type="number" inputmode="numeric" min="1" max="240" value="${esc(p.capacidade)}" oninput="locSetPratCap(${i},this.value)" onchange="locCapMudou(${i})"></div>
+        </div>
+        ${oddSel(i,p)}
       </div>`).join('')}</div>
-    <button type="button" class="btn ghost" onclick="locAddPrat()">+ Prateleira</button>`;
+    <button type="button" class="btn ghost ll-add" onclick="locAddPrat()">+ Adicionar prateleira</button>`;
+}
+const FORMATOS_PRAT_DESC={fila:'Uma fila, lado a lado',ziguezague:'Duas filas alternadas',sobrepostos:'Duas filas, uma sobre a outra'};
+function abrirFormatoPrat(i){
+  const p=LOC_LAYOUT_EDIT[i];if(!p)return;
+  const atual=normalizarFormatoPrateleira(p.formato);
+  document.getElementById('modal-formato-in').innerHTML=`
+    <div class="mtop"><h3>Formato da prateleira</h3>
+      <button class="mx" onclick="fecharModal('modal-formato')">✕</button></div>
+    <div class="fmt-lista">${FORMATOS_PRATELEIRA.map(([id,n])=>`
+      <button type="button" class="fmt-opt${id===atual?' on':''}" onclick="locEscolherFormato(${i},'${id}')">
+        ${prateleiraPreviewHTML({formato:id,capacidade:5,mais_em:'cima'})}
+        <span class="fmt-tx"><b>${n}</b><i>${FORMATOS_PRAT_DESC[id]}</i></span>
+        <span class="fmt-ok">✓</span>
+      </button>`).join('')}</div>`;
+  abrirModal('modal-formato');
+}
+function locEscolherFormato(i,v){
+  fecharModal('modal-formato');
+  locSetPratFormato(i,v);
 }
 function locSetPratNome(i,v){
   if(LOC_LAYOUT_EDIT[i])LOC_LAYOUT_EDIT[i].nome=v;
 }
 function locSetPratCap(i,v){
   if(LOC_LAYOUT_EDIT[i])LOC_LAYOUT_EDIT[i].capacidade=v;
+}
+// Só redesenha quando a paridade importa (sobrepostos): redesenhar a cada
+// número escrito tirava o foco da caixa a meio de escrever "12".
+function locCapMudou(i){
+  const p=LOC_LAYOUT_EDIT[i];
+  if(p&&normalizarFormatoPrateleira(p.formato)==='sobrepostos')renderLocalLayoutEditor();
 }
 function locSetPratFormato(i,v){
   if(LOC_LAYOUT_EDIT[i]){
@@ -3679,8 +3930,11 @@ function locSetPratMaisEm(i,v){
   if(LOC_LAYOUT_EDIT[i])LOC_LAYOUT_EDIT[i].mais_em=normalizarSobrepostosMaisEm(v);
   renderLocalLayoutEditor();
 }
+// A prateleira nova copia a anterior (formato e lugares): numa estante a
+// sério os níveis são quase sempre iguais uns aos outros.
 function locAddPrat(){
-  LOC_LAYOUT_EDIT.push({nome:`Nível ${LOC_LAYOUT_EDIT.length+1}`,capacidade:12,formato:'fila',mais_em:'cima'});
+  const ult=LOC_LAYOUT_EDIT[LOC_LAYOUT_EDIT.length-1]||{capacidade:6,formato:'fila',mais_em:'cima'};
+  LOC_LAYOUT_EDIT.push({nome:`Nível ${LOC_LAYOUT_EDIT.length+1}`,capacidade:ult.capacidade,formato:ult.formato,mais_em:ult.mais_em});
   renderLocalLayoutEditor();
 }
 function locRemPrat(i){
@@ -4736,6 +4990,10 @@ document.addEventListener('keydown',e=>{
   // sozinha: fechá-la não é sair também do vinho que está por baixo.
   if(e.key==='Escape'&&document.getElementById('pdf-pre')){pdfPreFechar();return;}
   if(e.key==='Escape'&&MAPA_POP_LOCAL){mapaPopupFechar();return;}
+  // A folha do formato está por cima do modal do local: sai só ela, senão
+  // levava atrás o que já se tinha escrito no local.
+  if(e.key==='Escape'&&document.getElementById('modal-formato').classList.contains('on')){fecharModal('modal-formato');return;}
+  if(e.key==='Escape'&&!document.querySelector('.modal.on')&&MAPA_ABERTO&&tabAtiva==='locais'){mapaFecharLocal();return;}
   if(e.key==='Escape')document.querySelectorAll('.modal.on').forEach(m=>fecharModal(m.id));
 });
 
