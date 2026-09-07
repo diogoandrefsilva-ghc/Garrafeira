@@ -122,6 +122,17 @@ conta no plano grátis pode fazer três pedidos/dia. Altera-se pelo secret
 opcional `GEMINI_IMPORT_FREE_DAILY_LIMIT` (1–20). A app mostra sempre as
 propostas antes de criar vinhos ou garrafas.
 
+### Migração 10 — layout opcional dos locais (**por aplicar**)
+
+`db/migracao-layout-locais.sql`. Acrescenta `locais.layout`, o JSON com o
+desenho da estante (`prateleiras:[{nome,capacidade}]`). Vazio continua a ser
+o comportamento antigo; preenchido passa a dar ao separador Locais uma grelha
+de lugares e permite validar se uma garrafa cabe ali.
+
+Correr no SQL Editor:
+
+1. `db/migracao-layout-locais.sql`
+
 ### `vinhos.imagem_url` (já aplicada)
 
 Link para uma foto do rótulo/garrafa — a `vinho-info` (Edge Function) tenta
