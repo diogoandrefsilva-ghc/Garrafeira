@@ -99,8 +99,9 @@ Correr no SQL Editor, por esta ordem:
 2. `db/functions.sql`
 
 Depois publicar a nova `vinho-info` e definir o secret `GEMINI_FREE_API_KEY`.
-O limite diário do plano grátis é cinco pesquisas por utilizador, mas pode ser
-alterado pelo secret opcional `GEMINI_FREE_DAILY_LIMIT` (1–50).
+O limite diário do modo **IA sem pesquisa web** é cinco pesquisas por
+utilizador, mas pode ser alterado pelo secret opcional
+`GEMINI_FREE_DAILY_LIMIT` (1–50).
 
 ### Migração 09 — importação a partir de imagens (**por aplicar**)
 
@@ -118,9 +119,9 @@ Correr no SQL Editor, por esta ordem:
 Depois publicar `importar-vinhos`. A função usa exclusivamente
 `GEMINI_FREE_API_KEY`, mesmo para o plano premium: não pesquisa na internet e
 não usa a chave paga. Aceita até três imagens por pedido; por defeito, uma
-conta no plano grátis pode fazer três pedidos/dia. Altera-se pelo secret
-opcional `GEMINI_IMPORT_FREE_DAILY_LIMIT` (1–20). A app mostra sempre as
-propostas antes de criar vinhos ou garrafas.
+conta no modo **IA sem pesquisa web** pode fazer três pedidos/dia. Altera-se
+pelo secret opcional `GEMINI_IMPORT_FREE_DAILY_LIMIT` (1–20). A app mostra
+sempre as propostas antes de criar vinhos ou garrafas.
 
 ### Migração 10 — layout opcional dos locais (**por aplicar**)
 
@@ -251,7 +252,7 @@ Estes não se fazem por SQL:
    `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
    Para a `vinho-info` com pesquisa externa, acrescentar `SEARCH_API_KEY`
    (opcionalmente `SEARCH_API_URL` e `VINHO_CACHE_TTL_HOURS`).
-   Para as funções com plano grátis (`vinho-info` legado / `importar-vinhos`),
+   Para as funções no modo IA sem pesquisa web (`vinho-info` legado / `importar-vinhos`),
    manter `GEMINI_FREE_API_KEY`; `GEMINI_FREE_DAILY_LIMIT` é opcional e vale 5
    por defeito.
 4. **Deploy da função:** `supabase functions deploy vinho-info` (o ficheiro

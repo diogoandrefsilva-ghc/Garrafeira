@@ -10,7 +10,7 @@ const API="https://generativelanguage.googleapis.com/v1beta";
 // em produção agora, ao contrário de "gemini-2.5-flash" — que esta mesma
 // chave já recusa com 404 ("no longer available to new users"). Isso é o que
 // aconteceu: a lista era só nomes fixos e partiu-se assim que a Google
-// reformou o catálogo. Descobre-se o resto com a PRÓPRIA chave grátis (nunca
+// reformou o catálogo. Descobre-se o resto com a PRÓPRIA chave do modo sem web (nunca
 // a premium), tal como em vinho-info.ts.
 const MODELOS_BASE=["gemini-flash-latest","gemini-flash-lite-latest"];
 let _modelos:string[]|null=null;
@@ -91,10 +91,10 @@ async function ler(imagens:{mime:string,data:string}[],signal:AbortSignal){
  // acesso ao modelo (nomeia o secret), 429 é quota do lado da Google — as
  // duas causas já apanhadas em vinho-info.ts.
  if(tentativas.length&&tentativas.every(t=>t.estado===404))
-  throw new Error("a chave grátis não tem acesso a nenhum destes modelos (404): "+
+  throw new Error("a chave do modo sem pesquisa web não tem acesso a nenhum destes modelos (404): "+
     [...new Set(tentativas.map(t=>t.modelo))].join(", ")+". Confere o secret GEMINI_FREE_API_KEY no Supabase.");
  if(tentativas.some(t=>t.estado===429))
-  throw new Error("a chave grátis está sem quota no Gemini (429): nenhum dos "+tentativas.length+
+  throw new Error("a chave do modo sem pesquisa web está sem quota no Gemini (429): nenhum dos "+tentativas.length+
     " modelos aceitou o pedido. É a quota do Google e não a da app — confirma o plano do projeto de onde saiu o GEMINI_FREE_API_KEY.");
  throw new Error(ultimo||"o modelo não conseguiu ler as imagens");
 }
@@ -131,10 +131,9 @@ Deno.serve(async(req)=>{
   for(const x of recebidas){const mime=String(x?.mime??"").toLowerCase(),data=String(x?.data??"").replace(/\s/g,"");if(!/^(image\/jpeg|image\/png|image\/webp)$/.test(mime)||data.length<100||data.length>MAX_BASE64||!/^[A-Za-z0-9+/]+={0,2}$/.test(data))return json({error:"uma das imagens não é válida ou ficou demasiado grande"},400);imagens.push({mime,data});}
   const token=req.headers.get("Authorization")??"",auth=await autorizar(token,gid,ctrl.signal);quem=auth.email;
   if(!auth.ok)return json({error:"não autorizado para importar nesta garrafeira"},403);
-  if(auth.plano==="gratis"&&!(await quota(token,quem,ctrl.signal)))return json({error:"atingiste o limite diário de "+LIMITE_GRATIS+" importações grátis — tenta amanhã ou pede acesso premium"},429);
+  if(auth.plano==="gratis"&&!(await quota(token,quem,ctrl.signal)))return json({error:"atingiste o limite diário de "+LIMITE_GRATIS+" importações sem pesquisa web — tenta amanhã ou pede acesso ao modo com pesquisa web"},429);
   const id=await criar(token,gid,imagens.length,ctrl.signal);await registar("pedido",{id,garrafeira_id:gid,imagens:imagens.length,plano:auth.plano},quem);
   EdgeRuntime.waitUntil((async()=>{const proc=new AbortController(),t=setTimeout(()=>proc.abort(),105000);try{const resultado=await ler(imagens,proc.signal);await fechar(id,quem,{estado:"concluido",resultado});await registar("ok",{id,vinhos:resultado.vinhos.length,modelo:resultado.modelo},quem);}catch(e){const erro=texto((e as Error).message||"a importação falhou",400);await fechar(id,quem,{estado:"erro",erro});await registar("erro",{id,passo:"gemini",erro},quem);}finally{clearTimeout(t);}})());
   return json({id,estado:"pendente"});
  }catch(e){const erro=texto((e as Error).message||"erro inesperado",300);await registar("erro",{passo:"entrada",erro},quem||null);return json({error:erro},500);}finally{clearTimeout(timer);}
 });
-
