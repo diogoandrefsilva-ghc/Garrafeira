@@ -3283,7 +3283,7 @@ function iaMostrarEspera(titulo,motor){
 }
 function iaMostrarErro(msg){
   /* Se o motor do plano falhar, quem é premium ainda tem o outro à mão — e
-     foi o que valeu quando a chave grátis ficou sem quota. O botão desaparece
+     foi o que valeu quando a chave do modo sem pesquisa web ficou sem quota. O botão desaparece
      depois de o segundo motor também ter falhado, para não convidar a
      insistir no mesmo. */
   const outro=temPremium()&&IA_PEDIDO&&IA_VINHO&&!IA_RES2&&!IA_ERRO2;
@@ -3296,7 +3296,7 @@ function iaMostrarErro(msg){
 }
 
 /* `IA_RES` é a primeira leitura e `IA_MOTOR` o motor que a produziu — o do
-   PLANO de quem procura (premium a quem o tem, grátis aos outros). `IA_RES2`
+   PLANO de quem procura (premium a quem o tem, modo sem pesquisa web aos outros). `IA_RES2`
    é a segunda opinião, o outro motor, e só existe se alguém premium a pedir.
 
    Com uma leitura só, cada campo é uma CAIXA, como sempre foi. Com duas, os

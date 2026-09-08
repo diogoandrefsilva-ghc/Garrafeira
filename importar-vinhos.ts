@@ -10,7 +10,7 @@ const API="https://generativelanguage.googleapis.com/v1beta";
 // em produção agora, ao contrário de "gemini-2.5-flash" — que esta mesma
 // chave já recusa com 404 ("no longer available to new users"). Isso é o que
 // aconteceu: a lista era só nomes fixos e partiu-se assim que a Google
-// reformou o catálogo. Descobre-se o resto com a PRÓPRIA chave grátis (nunca
+// reformou o catálogo. Descobre-se o resto com a PRÓPRIA chave do modo sem web (nunca
 // a premium), tal como em vinho-info.ts.
 const MODELOS_BASE=["gemini-flash-latest","gemini-flash-lite-latest"];
 let _modelos:string[]|null=null;
@@ -91,10 +91,10 @@ async function ler(imagens:{mime:string,data:string}[],signal:AbortSignal){
  // acesso ao modelo (nomeia o secret), 429 é quota do lado da Google — as
  // duas causas já apanhadas em vinho-info.ts.
  if(tentativas.length&&tentativas.every(t=>t.estado===404))
-  throw new Error("a chave grátis não tem acesso a nenhum destes modelos (404): "+
+  throw new Error("a chave do modo sem pesquisa web não tem acesso a nenhum destes modelos (404): "+
     [...new Set(tentativas.map(t=>t.modelo))].join(", ")+". Confere o secret GEMINI_FREE_API_KEY no Supabase.");
  if(tentativas.some(t=>t.estado===429))
-  throw new Error("a chave grátis está sem quota no Gemini (429): nenhum dos "+tentativas.length+
+  throw new Error("a chave do modo sem pesquisa web está sem quota no Gemini (429): nenhum dos "+tentativas.length+
     " modelos aceitou o pedido. É a quota do Google e não a da app — confirma o plano do projeto de onde saiu o GEMINI_FREE_API_KEY.");
  throw new Error(ultimo||"o modelo não conseguiu ler as imagens");
 }
