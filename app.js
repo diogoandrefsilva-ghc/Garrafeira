@@ -182,7 +182,7 @@ function podeUsarIA(){return planoIA()==='gratis'||planoIA()==='premium';}
 // uma segunda opinião ao outro para os comparar (ver a secção da IA).
 function temPremium(){return planoIA()==='premium';}
 function motorDoPlano(){return temPremium()?'premium':'gratis';}
-function rotuloMotor(m){return m==='premium'?'IA premium':'IA grátis';}
+function rotuloMotor(m){return m==='premium'?'IA com pesquisa web (Grounding Search)':'IA sem pesquisa web';}
 // Duas portas, e só duas: a minha garrafeira, ou uma em que o dono deu
 // 'edicao' ao admin. Uma partilha nunca abre esta — é sempre só de ver.
 function podeEditar(){
@@ -2523,7 +2523,7 @@ function abrirEditarVinho(id){
 
     ${id?'':podeUsarIA()?`<div class="aviso">Escreve o nome (e o ano, se souberes) e carrega em <b>Procurar informação</b>: a pesquisa preenche o resto — castas, região, tipo, nota do Vivino, preço médio e quando beber. Confirmas antes de gravar.</div>
       <button class="btn prim full" id="e-btn-ia" onclick="iaProcurarNovo()">🔎 Procurar informação</button>
-      <div id="e-ia-estado"></div>`:'<div class="note">A pesquisa por IA não está incluída no teu acesso. Pede ao admin para te atribuir o plano grátis ou premium.</div>'}
+      <div id="e-ia-estado"></div>`:'<div class="note">A pesquisa por IA não está incluída no teu acesso. Pede ao admin para te atribuir um modo com IA.</div>'}
 
     <div class="mrow">
       <div><label>Tipo</label><select id="e-tipo">${opts(TIPOS,o('tipo','Tinto'))}</select></div>
@@ -3053,7 +3053,7 @@ function iaEscolher(vinhoId){
 
     <div class="aviso">Escolhe o que queres procurar. <b>Quanto menos pedires, melhor a procura</b> —
       o modelo concentra-se nisso em vez de andar atrás de tudo. Já vêm marcados os campos vazios.
-      ${temPremium()?'Procura-se com a <b>IA premium</b>; no fim podes repetir com a grátis e comparar as duas.':''}</div>
+      ${temPremium()?'Procura-se com a <b>IA com pesquisa web</b>; no fim podes repetir sem pesquisa web e comparar as duas.':''}</div>
 
     <div class="ia-escbar">
       <button class="mini" onclick="iaEscTodos(true)">Marcar tudo</button>
@@ -4334,8 +4334,8 @@ async function admRecusar(email){
 let _admUsers=[];
 const IA_PLANOS=[
   {v:'sem_ia',r:'sem IA'},
-  {v:'gratis',r:'IA grátis'},
-  {v:'premium',r:'IA premium'}
+  {v:'gratis',r:'IA sem pesquisa web'},
+  {v:'premium',r:'IA com pesquisa web (Grounding Search)'}
 ];
 async function admRenderUtilizadores(){
   const box=document.getElementById('adm-users-list');
@@ -4347,7 +4347,7 @@ async function admRenderUtilizadores(){
     const eAdmin=u.email.toLowerCase()===String(ADMIN_EMAIL).toLowerCase();
     return `<div class="ua-row">
       <span class="em">${esc(u.email)}${u.nome?' ('+esc(u.nome)+')':''}</span>
-      ${eAdmin?'<span class="tagme">admin · IA premium</span>'
+      ${eAdmin?'<span class="tagme">admin · IA com pesquisa web</span>'
         :`<div class="ua-ctrls">
             <label class="chk" title="Tem garrafeira própria e pode mexer-lhe"><input type="checkbox"${u.pode_editar?' checked':''}
               onchange="admToggleEditor('${escJs(u.email)}',this.checked)"> Editor</label>

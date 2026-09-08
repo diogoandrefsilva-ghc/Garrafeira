@@ -16,9 +16,10 @@
 // "demorou demasiado", por mais tempo que se lhe desse: o tecto não era
 // nosso. Sem `assincrono` mantém-se a resposta completa de uma vez.
 //
-// Esta versão usa sempre a chave premium (`GEMINI_API_KEY`) e reduz custo por
-// fluxo: cache -> pesquisa externa -> modelo barato -> escalado se faltar
-// confiança mínima.
+// Esta versão expõe DOIS modos de procura:
+//   · com grounding search (Gemini com pesquisa web do próprio modelo);
+//   · sem grounding search (pesquisa externa + extração JSON pelo modelo).
+// A escolha vem do plano de IA, sem nunca confiar no que o browser pede.
 //
 // Secrets do projeto (partilhados por todas as functions):
 //   GEMINI_API_KEY · SEARCH_API_KEY
@@ -67,10 +68,11 @@ type CacheItem = { resultado: Record<string, unknown>; fontes: Fonte[]; modelo: 
 function semAcentos(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
-function chaveCache(nome: string, ano: number | null, produtor: string, regiao: string, campos: string[] | null): string {
+function chaveCache(modo: "gratis" | "premium", nome: string, ano: number | null, produtor: string, regiao: string, campos: string[] | null): string {
   const camposTag = campos?.length ? [...campos].sort().join(",") : "*";
   return [
     CACHE_VERSAO,
+    modo,
     semAcentos(nome.toLowerCase()).replace(/[^a-z0-9]+/g, " ").trim(),
     ano ?? "",
     semAcentos(produtor.toLowerCase()).replace(/[^a-z0-9]+/g, " ").trim(),
@@ -230,6 +232,60 @@ REGRAS, e são a sério:
    site do produtor ou de uma loja. Não é o link da página, é o da imagem. Se
    não tiveres a certeza, deixa vazio: uma imagem errada é pior do que nenhuma,
    porque quem olha para a ficha fica a pensar que é aquele o vinho.
+
+Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
+{
+  "encontrado": true,
+  "produtor": "",
+  "ano": ${ano ?? "null"},
+  "tipo": "um de: ${TIPOS.join(" | ")}",
+  "estilo": "vazio, ou um de: Maduro | Verde | Colheita Tardia | Palhete",
+  "regiao": "região vitivinícola (Douro, Alentejo, Bairrada, Dão, Tejo, Península de Setúbal, Vinho Verde, …)",
+  "subRegiao": "",
+  "mencao": "vazio, ou um de: ${MENCOES.filter(Boolean).join(" | ")}",
+  "classificacao": "vazio, ou um de: DOC | Vinho Regional | Vinho",
+  "castas": ["Touriga Nacional", "Touriga Franca"],
+  "teor": 14.5,
+  "estagioMeses": 18,
+  "estagioTexto": "18 meses em barrica de carvalho francês",
+  "vivinoNota": 4.1,
+  "vivinoAvaliacoes": 1234,
+  "vivinoUrl": "",
+  "imagemUrl": "",
+  "precoMedio": 18.5,
+  "beberDe": 2026,
+  "beberAte": 2034,
+  "notasProva": "duas ou três frases sobre aroma, boca e final",
+  "harmonizacao": "com que pratos",
+  "resumo": "duas ou três frases sobre o vinho e o produtor",
+  "aviso": "vazio, ou o que ficou por confirmar"
+}
+
+Se não conseguires identificar o vinho de todo, responde
+{"encontrado": false, "aviso": "porquê"}.`;
+
+const promptComGrounding = (
+  nome: string, ano: number | null, produtor: string, regiao: string, hoje: string, campos: string[] | null,
+) => `
+És um enólogo a preencher a ficha de um vinho para a garrafeira de uma casa particular.
+Usa pesquisa web (grounding search) para confirmar os dados.
+
+VINHO A IDENTIFICAR:
+  Nome: ${nome}
+${ano ? `  Ano (colheita): ${ano}\n` : ""}${produtor ? `  Produtor indicado: ${produtor}\n` : ""}${regiao ? `  Região indicada: ${regiao}\n` : ""}
+Hoje é ${hoje}.
+${campos && campos.length ? `
+SÓ INTERESSAM ESTES CAMPOS: ${campos.map((k) => CAMPOS[k]).join(", ")}.
+Concentra a pesquisa NELES e deixa os outros fora da resposta.
+` : ""}
+
+REGRAS:
+1. NÃO INVENTES. Campo sem confirmação fica fora do JSON (ou null).
+2. Vivino: "vivinoNota", "vivinoAvaliacoes" e "vivinoUrl" têm de vir da MESMA página do Vivino e do vinho certo.
+3. "imagemUrl" tem de ser link DIRETO de imagem (.jpg/.jpeg/.png/.webp/.avif), não link de página.
+4. Se houver dúvida de homónimo, prioriza ano + produtor + região e explica no "aviso".
+5. Castas separadas por nome (nunca "blend"/"lote"/"várias castas").
+6. "beberDe"/"beberAte" são anos.
 
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
 {
@@ -479,12 +535,28 @@ async function ehEditor(auth: string, signal: AbortSignal): Promise<{ ok: boolea
    devolve o corpo final ou o erro já com o status certo. */
 type Res = { ok: true; corpo: Record<string, unknown> } | { ok: false; status: number; erro: string };
 
-async function chamarGemini(modelo: string, textoPrompt: string, signal: AbortSignal, maxTokens = 2048, semThinking = true) {
+function fontesGrounding(body: any): Fonte[] {
+  const chunks = body?.candidates?.[0]?.groundingMetadata?.groundingChunks;
+  if (!Array.isArray(chunks)) return [];
+  const out: Fonte[] = [];
+  for (const ch of chunks) {
+    const url = String(ch?.web?.uri || "").trim();
+    const titulo = String(ch?.web?.title || url || "").trim();
+    if (!/^https?:\/\//i.test(url)) continue;
+    out.push({ titulo: titulo.slice(0, 120), url: url.slice(0, 400) });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+async function chamarGemini(
+  modelo: string, textoPrompt: string, signal: AbortSignal, maxTokens = 2048, semThinking = true, comGrounding = false,
+) {
   const generationConfig: Record<string, unknown> = {
     temperature: 0,
-    response_mime_type: "application/json",
     maxOutputTokens: maxTokens,
   };
+  if (!comGrounding) generationConfig.response_mime_type = "application/json";
   if (semThinking) generationConfig.thinkingConfig = { thinkingBudget: 0 };
   const r = await fetch(`${GAPI}/models/${modelo}:generateContent?key=${GEMINI_KEY}`, {
     method: "POST",
@@ -493,6 +565,7 @@ async function chamarGemini(modelo: string, textoPrompt: string, signal: AbortSi
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: textoPrompt }] }],
       generationConfig,
+      ...(comGrounding ? { tools: [{ google_search: {} }] } : {}),
     }),
   });
   const txt = await r.text();
@@ -507,7 +580,7 @@ async function chamarGemini(modelo: string, textoPrompt: string, signal: AbortSi
   const bruto = (cand?.content?.parts ?? []).map((p: any) => p?.text ?? "").join("").trim();
   const parsed = extrairJson(bruto);
   if (!parsed) return { ok: false as const, status: 502, erro: "resposta ilegível do modelo" };
-  return { ok: true as const, parsed };
+  return { ok: true as const, parsed, fontes: comGrounding ? fontesGrounding(body) : [] };
 }
 function qualidadeMinima(ficha: Record<string, unknown>) {
   const criticos = ["tipo", "regiao", "castas", "vivino_nota", "preco_medio"];
@@ -520,14 +593,16 @@ function qualidadeMinima(ficha: Record<string, unknown>) {
 }
 
 async function produzirFicha(
+  modoIA: "gratis" | "premium",
   nome: string, ano: number | null, produtor: string, regiao: string,
   quem: string | null, signal: AbortSignal, budgetMs: number,
   campos: string[] | null = null,
 ): Promise<Res> {
-  if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a pesquisa premium ainda não está configurada (falta GEMINI_API_KEY)" };
-  if (!SEARCH_API_KEY) return { ok: false, status: 503, erro: "a pesquisa externa ainda não está configurada (falta SEARCH_API_KEY)" };
+  if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
+  if (modoIA === "gratis" && !SEARCH_API_KEY)
+    return { ok: false, status: 503, erro: "a IA sem pesquisa web ainda não está configurada (falta SEARCH_API_KEY)" };
   const inicio = Date.now();
-  const chave = chaveCache(nome, ano, produtor, regiao, campos);
+  const chave = chaveCache(modoIA, nome, ano, produtor, regiao, campos);
   const cache = await cacheLer(chave, signal);
   if (cache?.resultado) {
     await registar("ok", {
@@ -536,29 +611,35 @@ async function produzirFicha(
     }, quem);
     return {
       ok: true,
-      corpo: { ...cache.resultado, fontes: cache.fontes.slice(0, 8), pesquisa: true, plano: "premium", modelo: cache.modelo, geradoEm: new Date().toISOString() },
+      corpo: { ...cache.resultado, fontes: cache.fontes.slice(0, 8), pesquisa: true, plano: modoIA, modelo: cache.modelo, geradoEm: new Date().toISOString() },
     };
   }
 
   const query = [nome, ano || "", produtor, regiao, "vivino garrafeira nacional vinho portugal"].filter(Boolean).join(" ");
-  let pesquisa: PesquisaWeb;
-  try {
-    pesquisa = await obterResultadosPesquisa(query, signal);
-  } catch (e) {
-    await registar("erro", { passo: "search-api", erro: String((e as Error).message || "").slice(0, 300) }, quem);
-    return { ok: false, status: 503, erro: "não consegui obter resultados de pesquisa agora — tenta outra vez daqui a pouco" };
+  let pesquisa: PesquisaWeb = { texto: "", fontes: [], status: "grounding:google_search" };
+  if (modoIA === "gratis") {
+    try {
+      pesquisa = await obterResultadosPesquisa(query, signal);
+    } catch (e) {
+      await registar("erro", { passo: "search-api", erro: String((e as Error).message || "").slice(0, 300) }, quem);
+      return { ok: false, status: 503, erro: "não consegui obter resultados de pesquisa agora — tenta outra vez daqui a pouco" };
+    }
   }
 
-  const texto0 = prompt(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos, pesquisa.texto);
+  const texto0 = modoIA === "premium"
+    ? promptComGrounding(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos)
+    : prompt(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos, pesquisa.texto);
   const tentativas: { modelo: string; modo: string; estado: number | string }[] = [];
+  let fontesGround: Fonte[] = [];
   const run = async (modelo: string, modo: string, maxTokens: number, semThinking: boolean) => {
     const ms = Math.max(8_000, Math.min(GEMINI_TIMEOUT_MS, budgetMs - (Date.now() - inicio) - 2_000));
     if (ms < 2_000) return null;
     const { signal: sp, limpar } = comLimiteProprio(signal, ms);
     try {
-      const g = await chamarGemini(modelo, texto0, sp, maxTokens, semThinking);
+      const g = await chamarGemini(modelo, texto0, sp, maxTokens, semThinking, modoIA === "premium");
       limpar();
       tentativas.push({ modelo, modo, estado: g.ok ? 200 : g.status });
+      if (g.ok && g.fontes?.length) fontesGround = g.fontes;
       return g;
     } catch (e) {
       limpar();
@@ -599,9 +680,9 @@ async function produzirFicha(
 
   await cacheEscrever(
     chave,
-    { nome, ano, produtor, regiao, campos, query, fonte: pesquisa.status },
+    { nome, ano, produtor, regiao, campos, query, fonte: pesquisa.status, modo_ia: modoIA },
     ficha,
-    pesquisa.fontes,
+    (modoIA === "premium" ? fontesGround : pesquisa.fontes),
     usadoModelo,
     usadoModo,
     signal,
@@ -617,9 +698,9 @@ async function produzirFicha(
     ok: true,
     corpo: {
       ...ficha,
-      fontes: pesquisa.fontes.slice(0, 8),
+      fontes: (modoIA === "premium" ? fontesGround : pesquisa.fontes).slice(0, 8),
       pesquisa: true,
-      plano: "premium",
+      plano: modoIA,
       modelo: usadoModelo,
       modo: usadoModo,
       custoEstimadoEur: custoEstimado,
@@ -650,7 +731,7 @@ Deno.serve(async (req) => {
     }
     if (auth.plano !== "gratis" && auth.plano !== "premium") {
       await registar("erro", { passo: "plano", plano: auth.plano }, quem);
-      return json({ error: "não tens acesso à pesquisa por IA — pede ao admin para te atribuir o plano grátis ou premium" }, 403);
+      return json({ error: "não tens acesso à pesquisa por IA — pede ao admin para te atribuir um modo com IA" }, 403);
     }
 
     const body = await req.json().catch(() => ({}));
@@ -671,6 +752,8 @@ Deno.serve(async (req) => {
       ? [...new Set<string>(body.campos.map((c: unknown) => String(c)).filter((c: string) => c in CAMPOS))]
       : null;
     const camposPedidos = campos && campos.length && campos.length < Object.keys(CAMPOS).length ? campos : null;
+    const pedidoModo: "gratis" | "premium" = body?.plano === "premium" ? "premium" : "gratis";
+    const modoIA: "gratis" | "premium" = auth.plano === "premium" ? pedidoModo : "gratis";
 
     /* ── MODO ASSÍNCRONO ──
        Responde já com o `id` e faz o trabalho depois, com muito mais tempo
@@ -686,7 +769,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-            const res = await produzirFicha(nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos);
+          const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -704,7 +787,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = await produzirFicha(nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos);
+    const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";

@@ -131,10 +131,9 @@ Deno.serve(async(req)=>{
   for(const x of recebidas){const mime=String(x?.mime??"").toLowerCase(),data=String(x?.data??"").replace(/\s/g,"");if(!/^(image\/jpeg|image\/png|image\/webp)$/.test(mime)||data.length<100||data.length>MAX_BASE64||!/^[A-Za-z0-9+/]+={0,2}$/.test(data))return json({error:"uma das imagens não é válida ou ficou demasiado grande"},400);imagens.push({mime,data});}
   const token=req.headers.get("Authorization")??"",auth=await autorizar(token,gid,ctrl.signal);quem=auth.email;
   if(!auth.ok)return json({error:"não autorizado para importar nesta garrafeira"},403);
-  if(auth.plano==="gratis"&&!(await quota(token,quem,ctrl.signal)))return json({error:"atingiste o limite diário de "+LIMITE_GRATIS+" importações grátis — tenta amanhã ou pede acesso premium"},429);
+  if(auth.plano==="gratis"&&!(await quota(token,quem,ctrl.signal)))return json({error:"atingiste o limite diário de "+LIMITE_GRATIS+" importações sem pesquisa web — tenta amanhã ou pede acesso ao modo com pesquisa web"},429);
   const id=await criar(token,gid,imagens.length,ctrl.signal);await registar("pedido",{id,garrafeira_id:gid,imagens:imagens.length,plano:auth.plano},quem);
   EdgeRuntime.waitUntil((async()=>{const proc=new AbortController(),t=setTimeout(()=>proc.abort(),105000);try{const resultado=await ler(imagens,proc.signal);await fechar(id,quem,{estado:"concluido",resultado});await registar("ok",{id,vinhos:resultado.vinhos.length,modelo:resultado.modelo},quem);}catch(e){const erro=texto((e as Error).message||"a importação falhou",400);await fechar(id,quem,{estado:"erro",erro});await registar("erro",{id,passo:"gemini",erro},quem);}finally{clearTimeout(t);}})());
   return json({id,estado:"pendente"});
  }catch(e){const erro=texto((e as Error).message||"erro inesperado",300);await registar("erro",{passo:"entrada",erro},quem||null);return json({error:erro},500);}finally{clearTimeout(timer);}
 });
-
