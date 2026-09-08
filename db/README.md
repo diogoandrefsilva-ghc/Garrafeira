@@ -273,7 +273,7 @@ Estes não se fazem por SQL:
 | `garrafas` | a coisa FÍSICA: onde está, quanto custou, e quando/onde foi bebida |
 | `analises` | as procuras à IA em curso (o polling da app lê daqui) |
 | `catalogo_vinhos_cache` | cache técnica da `vinho-info` para reduzir chamadas repetidas e custo |
-| `sync_log` | rasto de cada procura, para quando o browser só diz "502" |
+| `sync_log` | rasto de cada procura, para quando o browser só diz "502", incluindo os `usageMetadata` devolvidos pelo Gemini |
 
 **Vinho ≠ garrafa.** Duas garrafas do mesmo vinho em prateleiras diferentes
 são duas linhas em `garrafas` e **uma** em `vinhos`. É isso que evita ter a

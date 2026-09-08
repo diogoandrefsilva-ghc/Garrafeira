@@ -43,6 +43,18 @@ const MAX_IMAGENS=3, MAX_BASE64=2_400_000;
 const LIMITE_GRATIS=Math.max(1,Math.min(20,Number(Deno.env.get("GEMINI_IMPORT_FREE_DAILY_LIMIT")??3)||3));
 const CORS={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, apikey, content-type","Access-Control-Allow-Methods":"POST, OPTIONS"};
 const texto=(v:unknown,n:number)=>String(v??"").replace(/\s+/g," ").trim().slice(0,n);
+type UsageMetadata={promptTokenCount:number;candidatesTokenCount:number;totalTokenCount:number};
+function usageMetadata(raw:any):UsageMetadata|null{
+ const toInt=(v:unknown)=>{const n=typeof v==="number"?v:Number(v);return Number.isFinite(n)&&n>=0?Math.round(n):0;};
+ const src=raw?.usageMetadata;if(!src||typeof src!=="object")return null;
+ const out={promptTokenCount:toInt(src.promptTokenCount),candidatesTokenCount:toInt(src.candidatesTokenCount),totalTokenCount:toInt(src.totalTokenCount)};
+ return out.promptTokenCount||out.candidatesTokenCount||out.totalTokenCount?out:null;
+}
+function somarUsage(total:UsageMetadata|null,add:UsageMetadata|null){
+ if(!add)return total;
+ if(!total)return{...add};
+ return{promptTokenCount:total.promptTokenCount+add.promptTokenCount,candidatesTokenCount:total.candidatesTokenCount+add.candidatesTokenCount,totalTokenCount:total.totalTokenCount+add.totalTokenCount};
+}
 const TIPOS=["Tinto","Branco","Rosé","Espumante","Licoroso","Frisante"];
 const ESTILOS=["","Maduro","Verde","Colheita Tardia","Palhete"];
 const MENCOES=["","Reserva","Grande Reserva","Garrafeira","Colheita Selecionada","Vinhas Velhas","Superior","Grande Escolha"];
@@ -79,13 +91,14 @@ async function ler(imagens:{mime:string,data:string}[],signal:AbortSignal){
  if(!GEMINI_KEY)throw new Error("a importação ainda não está configurada: falta GEMINI_FREE_API_KEY");
  const modelos=await candidatos(signal);
  const parts=[{text:prompt(imagens.length)},...imagens.map(i=>({inline_data:{mime_type:i.mime,data:i.data}}))];
- let ultimo="";const tentativas:{modelo:string,estado:number|string}[]=[];
+ let ultimo="";const tentativas:{modelo:string,estado:number|string,usageMetadata?:UsageMetadata}[]=[];let usageTotal:UsageMetadata|null=null;
  for(let i=0;i<modelos.length;i++){const modelo=modelos[i],lim=comLimite(signal,i?18000:40000);try{
    const r=await fetch(API+"/models/"+modelo+":generateContent?key="+GEMINI_KEY,{method:"POST",headers:{"Content-Type":"application/json"},signal:lim.signal,body:JSON.stringify({contents:[{role:"user",parts}],generationConfig:{temperature:0,responseMimeType:"application/json",maxOutputTokens:8192}})});
-   lim.limpar();tentativas.push({modelo,estado:r.status});
-   if(!r.ok){ultimo="Gemini respondeu "+r.status+": "+(await r.text()).slice(0,240);continue;}
-   const d=await r.json(),bruto=(d?.candidates?.[0]?.content?.parts??[]).map((p:any)=>p?.text??"").join(""),raw=extrairJson(bruto),lista=Array.isArray(raw?.vinhos)?raw.vinhos:[];
-   return{vinhos:lista.map(normalizar).filter(Boolean).slice(0,40),aviso:texto(raw?.aviso,300),modelo};
+   lim.limpar();
+   if(!r.ok){tentativas.push({modelo,estado:r.status});ultimo="Gemini respondeu "+r.status+": "+(await r.text()).slice(0,240);continue;}
+   const d=await r.json(),uso=usageMetadata(d),bruto=(d?.candidates?.[0]?.content?.parts??[]).map((p:any)=>p?.text??"").join(""),raw=extrairJson(bruto),lista=Array.isArray(raw?.vinhos)?raw.vinhos:[];
+   usageTotal=somarUsage(usageTotal,uso);tentativas.push({modelo,estado:r.status,...(uso?{usageMetadata:uso}:{})});
+   return{vinhos:lista.map(normalizar).filter(Boolean).slice(0,40),aviso:texto(raw?.aviso,300),modelo,...(usageTotal?{usageMetadata:usageTotal}:{}),tentativas};
  }catch(e){lim.limpar();if(signal.aborted)throw e;tentativas.push({modelo,estado:"presa"});ultimo=String((e as Error).message||"a leitura falhou");}}
  // Uma mensagem acionável em vez do JSON cru do Gemini: 404 é a chave sem
  // acesso ao modelo (nomeia o secret), 429 é quota do lado da Google — as
@@ -133,7 +146,7 @@ Deno.serve(async(req)=>{
   if(!auth.ok)return json({error:"não autorizado para importar nesta garrafeira"},403);
   if(auth.plano==="gratis"&&!(await quota(token,quem,ctrl.signal)))return json({error:"atingiste o limite diário de "+LIMITE_GRATIS+" importações sem pesquisa web — tenta amanhã ou pede acesso ao modo com pesquisa web"},429);
   const id=await criar(token,gid,imagens.length,ctrl.signal);await registar("pedido",{id,garrafeira_id:gid,imagens:imagens.length,plano:auth.plano},quem);
-  EdgeRuntime.waitUntil((async()=>{const proc=new AbortController(),t=setTimeout(()=>proc.abort(),105000);try{const resultado=await ler(imagens,proc.signal);await fechar(id,quem,{estado:"concluido",resultado});await registar("ok",{id,vinhos:resultado.vinhos.length,modelo:resultado.modelo},quem);}catch(e){const erro=texto((e as Error).message||"a importação falhou",400);await fechar(id,quem,{estado:"erro",erro});await registar("erro",{id,passo:"gemini",erro},quem);}finally{clearTimeout(t);}})());
+  EdgeRuntime.waitUntil((async()=>{const proc=new AbortController(),t=setTimeout(()=>proc.abort(),105000);try{const resultado=await ler(imagens,proc.signal);await fechar(id,quem,{estado:"concluido",resultado});await registar("ok",{id,vinhos:resultado.vinhos.length,modelo:resultado.modelo,...(resultado.usageMetadata?{usageMetadata:resultado.usageMetadata}:{}),...(resultado.tentativas?{tentativas:resultado.tentativas}:{} )},quem);}catch(e){const erro=texto((e as Error).message||"a importação falhou",400);await fechar(id,quem,{estado:"erro",erro});await registar("erro",{id,passo:"gemini",erro},quem);}finally{clearTimeout(t);}})());
   return json({id,estado:"pendente"});
  }catch(e){const erro=texto((e as Error).message||"erro inesperado",300);await registar("erro",{passo:"entrada",erro},quem||null);return json({error:erro},500);}finally{clearTimeout(timer);}
 });

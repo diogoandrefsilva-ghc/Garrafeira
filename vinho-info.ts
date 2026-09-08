@@ -64,6 +64,31 @@ function comLimiteProprio(sinalPai: AbortSignal, ms: number) {
 type Fonte = { titulo: string; url: string };
 type PesquisaWeb = { texto: string; fontes: Fonte[]; status: string };
 type CacheItem = { resultado: Record<string, unknown>; fontes: Fonte[]; modelo: string; modo: string; expira_em: string; id?: number };
+type UsageMetadata = { promptTokenCount: number; candidatesTokenCount: number; totalTokenCount: number };
+
+function usageMetadata(raw: any): UsageMetadata | null {
+  const toInt = (v: unknown) => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n) : 0;
+  };
+  const src = raw?.usageMetadata;
+  if (!src || typeof src !== "object") return null;
+  const out = {
+    promptTokenCount: toInt(src.promptTokenCount),
+    candidatesTokenCount: toInt(src.candidatesTokenCount),
+    totalTokenCount: toInt(src.totalTokenCount),
+  };
+  return (out.promptTokenCount || out.candidatesTokenCount || out.totalTokenCount) ? out : null;
+}
+function somarUsage(total: UsageMetadata | null, add: UsageMetadata | null): UsageMetadata | null {
+  if (!add) return total;
+  if (!total) return { ...add };
+  return {
+    promptTokenCount: total.promptTokenCount + add.promptTokenCount,
+    candidatesTokenCount: total.candidatesTokenCount + add.candidatesTokenCount,
+    totalTokenCount: total.totalTokenCount + add.totalTokenCount,
+  };
+}
 
 function semAcentos(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -576,11 +601,12 @@ async function chamarGemini(
   }
   let body: any = null;
   try { body = JSON.parse(txt); } catch (_) { /**/ }
+  const usage = usageMetadata(body);
   const cand = body?.candidates?.[0];
   const bruto = (cand?.content?.parts ?? []).map((p: any) => p?.text ?? "").join("").trim();
   const parsed = extrairJson(bruto);
-  if (!parsed) return { ok: false as const, status: 502, erro: "resposta ilegível do modelo" };
-  return { ok: true as const, parsed, fontes: comGrounding ? fontesGrounding(body) : [] };
+  if (!parsed) return { ok: false as const, status: 502, erro: "resposta ilegível do modelo", usage };
+  return { ok: true as const, parsed, fontes: comGrounding ? fontesGrounding(body) : [], usage };
 }
 function qualidadeMinima(ficha: Record<string, unknown>) {
   const criticos = ["tipo", "regiao", "castas", "vivino_nota", "preco_medio"];
@@ -629,7 +655,8 @@ async function produzirFicha(
   const texto0 = modoIA === "premium"
     ? promptComGrounding(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos)
     : prompt(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos, pesquisa.texto);
-  const tentativas: { modelo: string; modo: string; estado: number | string }[] = [];
+  const tentativas: { modelo: string; modo: string; estado: number | string; usageMetadata?: UsageMetadata }[] = [];
+  let usageTotal: UsageMetadata | null = null;
   let fontesGround: Fonte[] = [];
   const run = async (modelo: string, modo: string, maxTokens: number, semThinking: boolean) => {
     const ms = Math.max(8_000, Math.min(GEMINI_TIMEOUT_MS, budgetMs - (Date.now() - inicio) - 2_000));
@@ -638,7 +665,8 @@ async function produzirFicha(
     try {
       const g = await chamarGemini(modelo, texto0, sp, maxTokens, semThinking, modoIA === "premium");
       limpar();
-      tentativas.push({ modelo, modo, estado: g.ok ? 200 : g.status });
+      usageTotal = somarUsage(usageTotal, g.usage ?? null);
+      tentativas.push({ modelo, modo, estado: g.ok ? 200 : g.status, ...(g.usage ? { usageMetadata: g.usage } : {}) });
       if (g.ok && g.fontes?.length) fontesGround = g.fontes;
       return g;
     } catch (e) {
@@ -674,6 +702,7 @@ async function produzirFicha(
     await registar("erro", {
       passo: "vazio", nome, modo: usadoModo, modelo: usadoModelo,
       tentativas, erro: erroUltimo.slice(0, 300), ms: Date.now() - inicio,
+      ...(usageTotal ? { usageMetadata: usageTotal } : {}),
     }, quem);
     return { ok: false, status: 404, erro: `não encontrei informação fiável sobre "${nome}". Confere o nome do rótulo e tenta outra vez.` };
   }
@@ -693,6 +722,7 @@ async function produzirFicha(
     nome, ano, modo: usadoModo, modelo: usadoModelo,
     pesquisa: pesquisa.status, campos: Object.keys(ficha).length,
     ms: dur, tentativas, custo_estimado_eur: custoEstimado,
+    ...(usageTotal ? { usageMetadata: usageTotal } : {}),
   }, quem);
   return {
     ok: true,
@@ -704,6 +734,8 @@ async function produzirFicha(
       modelo: usadoModelo,
       modo: usadoModo,
       custoEstimadoEur: custoEstimado,
+      ...(usageTotal ? { usageMetadata: usageTotal } : {}),
+      ...(tentativas.length ? { tentativas } : {}),
       geradoEm: new Date().toISOString(),
     },
   };
