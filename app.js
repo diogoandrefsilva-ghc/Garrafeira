@@ -4923,6 +4923,22 @@ function exportarJSON(){
 }
 
 /* ── DIAGNÓSTICO ───────────────────────────────────────────────────── */
+function diagUsageHTML(d){
+  const u=d&&d.usageMetadata;
+  const n=v=>Number.isFinite(Number(v))?Math.round(Number(v)):0;
+  if(!u||typeof u!=='object')return '';
+  const prompt=n(u.promptTokenCount),resp=n(u.candidatesTokenCount),total=n(u.totalTokenCount);
+  if(!(prompt||resp||total))return '';
+  return `<div class="note">Tokens Gemini · prompt <b>${esc(String(prompt))}</b> · resposta <b>${esc(String(resp))}</b> · total <b>${esc(String(total))}</b></div>`;
+}
+function diagMetaHTML(d){
+  const bits=[
+    d&&d.modelo?`modelo ${esc(String(d.modelo))}`:'',
+    d&&d.ms!=null?`${esc(String(d.ms))} ms`:'',
+    d&&d.campos!=null?`${esc(String(d.campos))} campos`:''
+  ].filter(Boolean);
+  return bits.length?`<div class="note">${bits.join(' · ')}</div>`:'';
+}
 async function renderDiag(){
   const box=document.getElementById('diag-box');
   box.innerHTML='<div class="note">A ler…</div>';
@@ -4931,7 +4947,10 @@ async function renderDiag(){
     if(!l||!l.length){box.innerHTML='<div class="note">Sem registos ainda.</div>';return;}
     box.innerHTML=l.map(r=>`<div class="diag-l">
       <b>${esc(r.estado)}</b> · ${esc(String(r.criado_em).slice(0,19).replace('T',' '))} · ${esc(r.origem)}
-      ${r.quem?' · '+esc(r.quem):''}<br>${esc(JSON.stringify(r.detalhe||{}).slice(0,300))}</div>`).join('');
+      ${r.acao?' · '+esc(r.acao):''}${r.quem?' · '+esc(r.quem):''}
+      ${diagMetaHTML(r.detalhe||{})}
+      ${diagUsageHTML(r.detalhe||{})}
+      <div class="note">${esc(JSON.stringify(r.detalhe||{}).slice(0,500))}</div></div>`).join('');
   }catch(e){
     box.innerHTML=`<div class="note">${/relation|does not exist/i.test(e.message)
       ?'A tabela sync_log ainda não existe (corre o db/schema.sql).':esc(e.message)}</div>`;
