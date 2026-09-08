@@ -4,11 +4,7 @@
 // Irmã da `calendario-sporting` do Goals e da `fatura-restaurante` do
 // SplitBill: mesmo projeto Supabase, mesma descoberta de modelo, mesmos
 // fallbacks. As diferenças que interessam:
-//   · usa GROUNDING com pesquisa Google (`tools:[{google_search:{}}]`).
-//     Sem isso o modelo inventa notas do Vivino e preços de memória — que é
-//     precisamente o que não se quer a entrar numa base de dados;
-//   · por causa da pesquisa, a API RECUSA `response_mime_type: json`, por
-//     isso o JSON vem em texto e é extraído aqui (`extrairJson`);
+//   · pesquisa externa desacoplada (Search API) e Gemini só para extração JSON;
 //   · quem pode chamar é qualquer EDITOR da garrafeira (não só o admin):
 //     numa garrafeira de casa quem arruma as garrafas é quem procura.
 //     A verificação é do servidor (RPC `garrafeira.is_editor()`), não da UI.
@@ -20,14 +16,12 @@
 // "demorou demasiado", por mais tempo que se lhe desse: o tecto não era
 // nosso. Sem `assincrono` mantém-se a resposta completa de uma vez.
 //
-// O MOTOR vem no corpo do pedido e por omissão é o GRÁTIS, mesmo para quem é
-// premium: a chave cara só sai quando o browser pede `plano:"premium"` e a BD
-// confirma que essa pessoa o é. É o que deixa a app pôr as duas leituras lado
-// a lado sem gastar sempre a cara — e o cliente só consegue pedir MENOS do
-// que tem, nunca mais.
+// Esta versão usa sempre a chave premium (`GEMINI_API_KEY`) e reduz custo por
+// fluxo: cache -> pesquisa externa -> modelo barato -> escalado se faltar
+// confiança mínima.
 //
 // Secrets do projeto (partilhados por todas as functions):
-//   GEMINI_API_KEY (premium) · GEMINI_FREE_API_KEY (plano grátis)
+//   GEMINI_API_KEY · SEARCH_API_KEY
 //   SUPABASE_URL · SUPABASE_SERVICE_ROLE_KEY
 // Deploy: supabase functions deploy vinho-info
 // =====================================================================
@@ -35,18 +29,20 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY")!;
-const GEMINI_FREE_KEY = Deno.env.get("GEMINI_FREE_API_KEY") ?? "";
+const SEARCH_API_KEY = Deno.env.get("SEARCH_API_KEY") ?? "";
+const SEARCH_API_URL = Deno.env.get("SEARCH_API_URL") || "https://google.serper.dev/search";
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_SRV = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GAPI = "https://generativelanguage.googleapis.com/v1beta";
-const FREE_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
-const FREE_DAILY_LIMIT = Math.max(1, Math.min(50, Number(Deno.env.get("GEMINI_FREE_DAILY_LIMIT") ?? 5) || 5));
+const MODELO_BARATO = Deno.env.get("GEMINI_CHEAP_MODEL") || "gemini-2.5-flash-lite";
+const MODELO_ESCALADO = Deno.env.get("GEMINI_FALLBACK_MODEL") || Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
+const CACHE_TTL_HORAS = Math.max(1, Math.min(24 * 90, Number(Deno.env.get("VINHO_CACHE_TTL_HOURS") ?? 24 * 30) || 24 * 30));
+const CACHE_VERSAO = "v2";
+const SEARCH_RESULTADOS = 5;
 
 const TIMEOUT_MS = 55_000;        // modo síncrono, preso ao browser
 const PROC_TIMEOUT_MS = 110_000;  // segundo plano — já não depende do browser
-// Janela curta reservada ao fallback SEM pesquisa, que responde sempre
-// depressa por não ter o tool. A tentativa COM pesquisa leva o resto.
-const FALLBACK_TENTATIVA_TIMEOUT_MS = 9_000;
+const GEMINI_TIMEOUT_MS = 28_000;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -54,11 +50,6 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-/* ── Escolha do modelo ──
-   Os nomes dos modelos Gemini mudam com o tempo. Em vez de fixar um,
-   pergunta-se à API que modelos a chave tem e ordenam-se os "flash" do
-   melhor para o pior; devolve-se a LISTA para se poder cair no seguinte
-   quando o preferido falha (404 se foi reformado, 503 se está cheio). */
 function comLimiteProprio(sinalPai: AbortSignal, ms: number) {
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), ms);
@@ -69,85 +60,101 @@ function comLimiteProprio(sinalPai: AbortSignal, ms: number) {
     limpar: () => { clearTimeout(t); sinalPai.removeEventListener("abort", propagar); },
   };
 }
-// A descoberta é por CHAVE, não global: cada uma vê o seu próprio catálogo, e
-// misturá-los era oferecer ao plano grátis nomes que só a chave paga tem.
-const _models: Record<string, string[] | null> = { gratis: null, premium: null };
-function rankFlash(names: string[], comLite = false): string[] {
-  const base = names.filter((n) =>
-    n.includes("flash") && !/(8b|image|tts|live|audio|embed|exp|preview|thinking)/.test(n));
-  const ok = [...new Set(comLite ? base : base.filter((n) => !n.includes("lite")))];
-  const score = (n: string): number => {
-    if (n.includes("lite")) return -1;             // só como último recurso
-    if (n === "gemini-flash-latest") return 100;   // apontador sempre atualizado
-    const m = n.match(/^gemini-(\d+(?:\.\d+)?)-flash$/);
-    return m ? parseFloat(m[1]) : 0;
-  };
-  return ok.sort((a, b) => score(b) - score(a) || a.localeCompare(b));
+type Fonte = { titulo: string; url: string };
+type PesquisaWeb = { texto: string; fontes: Fonte[]; status: string };
+type CacheItem = { resultado: Record<string, unknown>; fontes: Fonte[]; modelo: string; modo: string; expira_em: string; id?: number };
+
+function semAcentos(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
-async function descobrirFlash(signal: AbortSignal, plano: "gratis" | "premium"): Promise<string[]> {
-  if (_models[plano]) return _models[plano]!;
-  const key = plano === "gratis" ? GEMINI_FREE_KEY : GEMINI_KEY;
-  if (!key) return [];
+function chaveCache(nome: string, ano: number | null, produtor: string, regiao: string, campos: string[] | null): string {
+  const camposTag = campos?.length ? [...campos].sort().join(",") : "*";
+  return [
+    CACHE_VERSAO,
+    semAcentos(nome.toLowerCase()).replace(/[^a-z0-9]+/g, " ").trim(),
+    ano ?? "",
+    semAcentos(produtor.toLowerCase()).replace(/[^a-z0-9]+/g, " ").trim(),
+    semAcentos(regiao.toLowerCase()).replace(/[^a-z0-9]+/g, " ").trim(),
+    camposTag,
+  ].join("|");
+}
+function milisIso(ms: number) {
+  return new Date(ms).toISOString();
+}
+async function cacheLer(chave: string, signal: AbortSignal): Promise<CacheItem | null> {
   try {
-    const names: string[] = [];
-    let page = "";
-    for (let i = 0; i < 3; i++) {
-      // 8s por página: se o ListModels ficar preso cai-se depressa no
-      // fallback, em vez de gastar aqui o orçamento todo.
-      const { signal: sp, limpar } = comLimiteProprio(signal, 8_000);
-      let r: Response;
-      try { r = await fetch(`${GAPI}/models?pageSize=200${page ? `&pageToken=${page}` : ""}&key=${key}`, { signal: sp }); }
-      catch (_) { limpar(); break; }
-      limpar();
-      if (!r.ok) { console.log("VINHO ListModels", plano, "->", r.status); break; }
-      const d = await r.json();
-      (d.models ?? []).forEach((m: any) => {
-        if ((m.supportedGenerationMethods ?? []).includes("generateContent")) {
-          names.push(String(m.name).replace(/^models\//, ""));
-        }
-      });
-      page = d.nextPageToken ?? "";
-      if (!page) break;
-    }
-    const ranked = rankFlash(names, plano === "gratis");
-    if (ranked.length) _models[plano] = ranked;
-    console.log("VINHO modelos", plano, ":", ranked.slice(0, 8).join(", ") || "(nenhum)");
-  } catch (_) { /* fica o fallback */ }
-  return _models[plano] ?? [];
+    const agora = encodeURIComponent(new Date().toISOString());
+    const r = await fetch(
+      `${SB_URL}/rest/v1/catalogo_vinhos_cache?select=id,resultado,fontes,modelo,modo,expira_em&chave=eq.${encodeURIComponent(chave)}&expira_em=gt.${agora}&limit=1`,
+      { headers: { apikey: SB_SRV, Authorization: 'Bearer '+SB_SRV, "Content-Profile": "garrafeira" }, signal },
+    );
+    if (!r.ok) return null;
+    const row = (await r.json())?.[0];
+    if (!row?.resultado || typeof row.resultado !== "object") return null;
+    return {
+      id: row.id,
+      resultado: row.resultado,
+      fontes: Array.isArray(row.fontes) ? row.fontes.slice(0, 8) : [],
+      modelo: String(row.modelo || ""),
+      modo: String(row.modo || "cache"),
+      expira_em: String(row.expira_em || ""),
+    };
+  } catch (_) { return null; }
 }
-// Decisão: esta tarefa (procurar 1 vinho, preencher JSON) não precisa de
-// "pensamento" nem do modelo mais recente/caro. O Gemini 3.8 Flash gastou
-// sozinho €6.98 num único dia (contra ~€1.9 do 3.6 e ~€1.5 do 3.7 em quase
-// três meses) — o "pensamento" ligado por omissão nos flash mais recentes,
-// combinado com o grounding, é o que come os tokens. O flash-lite chega bem
-// para "procurar factos e preencher JSON"; é o mesmo raciocínio que já leva
-// o `importar-vinhos` (tarefa mais difícil, é multimodal) a usar sempre
-// flash-lite. Fixa-se aqui, não só via secret, para ficar claro qual é.
-const MODELO_PREFERIDO = "gemini-flash-lite-latest";
-const ESTAVEIS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"];
-async function candidatosModelo(signal: AbortSignal, plano: "gratis" | "premium"): Promise<string[]> {
-  const vistos = new Set<string>();
-  if (plano === "gratis") {
-    /* Os nomes fixos primeiro, e a seguir o que a CHAVE GRÁTIS diz mesmo ter.
-       Eram só os fixos, e isso partiu-se assim que a chave grátis não serviu
-       nenhum dos dois: o Gemini respondia 404 aos dois e a procura morria ali
-       (a dizer "não respondeu a tempo", que nem era verdade). O que segura o
-       custo é a CHAVE, não a lista — por isso descobrir aqui não abre porta
-       nenhuma à chave paga: esta pergunta é feita com a grátis. */
-    // Seis chegam: vêm ordenados do melhor para o pior, e quando a chave está
-    // sem quota cada nome a mais são ~750ms de espera à toa antes de se
-    // chegar à última tentativa sem pesquisa.
-    return [...FREE_MODELS, ...(await descobrirFlash(signal, "gratis"))]
-      .filter((m) => (vistos.has(m) ? false : vistos.add(m))).slice(0, 6);
+async function cacheEscrever(
+  chave: string, pedido: Record<string, unknown>, resultado: Record<string, unknown>,
+  fontes: Fonte[], modelo: string, modo: string, signal: AbortSignal,
+) {
+  try {
+    const now = Date.now();
+    await fetch(`${SB_URL}/rest/v1/catalogo_vinhos_cache?on_conflict=chave`, {
+      method: "POST",
+      headers: {
+        apikey: SB_SRV, Authorization: 'Bearer '+SB_SRV, "Content-Type": "application/json", "Content-Profile": "garrafeira",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify([{
+        chave, pedido, resultado, fontes: fontes.slice(0, 8), modelo, modo,
+        atualizado_em: milisIso(now), expira_em: milisIso(now + CACHE_TTL_HORAS * 3600 * 1000),
+      }]),
+      signal,
+    });
+  } catch (_) { /* não falha a resposta por causa da cache */ }
+}
+function extrairHost(url: string) {
+  try { return new URL(url).hostname; } catch (_) { return ""; }
+}
+async function obterResultadosPesquisa(query: string, signal: AbortSignal): Promise<PesquisaWeb> {
+  if (!SEARCH_API_KEY) throw new Error("a pesquisa externa não está configurada: falta SEARCH_API_KEY");
+  const { signal: ss, limpar } = comLimiteProprio(signal, 12_000);
+  try {
+    const r = await fetch(SEARCH_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-KEY": SEARCH_API_KEY },
+      body: JSON.stringify({ q: query, gl: "pt", hl: "pt", num: SEARCH_RESULTADOS }),
+      signal: ss,
+    });
+    limpar();
+    if (!r.ok) throw new Error(`pesquisa externa ${r.status}`);
+    const d = await r.json();
+    const rows = Array.isArray(d?.organic) ? d.organic : [];
+    const fontes: Fonte[] = rows.slice(0, SEARCH_RESULTADOS).map((x: any) => ({
+      titulo: String(x?.title || x?.link || "").slice(0, 120),
+      url: String(x?.link || "").slice(0, 400),
+    })).filter((x: Fonte) => /^https?:\/\//i.test(x.url));
+    if (!fontes.length) throw new Error("pesquisa externa sem resultados");
+    const texto = rows.slice(0, SEARCH_RESULTADOS).map((x: any, i: number) => {
+      const title = String(x?.title || "").trim();
+      const snip = String(x?.snippet || "").replace(/\s+/g, " ").trim();
+      const link = String(x?.link || "").trim();
+      return `[${i + 1}] ${title}\nURL: ${link}\nResumo: ${snip}`;
+    }).join("\n\n");
+    const estado = `search-api:${extrairHost(SEARCH_API_URL) || "externa"}`;
+    return { texto: texto.slice(0, 6000), fontes, status: estado };
+  } catch (e) {
+    limpar();
+    throw e;
   }
-  // GEMINI_MODEL continua a existir como escape hatch (troca sem deploy se a
-  // Google reformar o catálogo outra vez, como já aconteceu); na ausência
-  // dele usa-se a decisão de cima, MODELO_PREFERIDO, em vez de ir direto ao
-  // "flash mais recente" descoberto — que foi o que trouxe o 3.8 para a mesa.
-  const pinned = Deno.env.get("GEMINI_MODEL") || MODELO_PREFERIDO;
-  const lista = [...(pinned ? [pinned] : []), ...ESTAVEIS, ...(await descobrirFlash(signal, "premium"))]
-    .filter((m) => (vistos.has(m) ? false : vistos.add(m)));
-  return lista.length ? lista : ["gemini-flash-latest"];
 }
 
 /* ── Vocabulário fechado ──
@@ -178,8 +185,10 @@ const CAMPOS: Record<string, string> = {
   harmonizacao: "harmonizacao", ai_resumo: "resumo",
 };
 
-const prompt = (nome: string, ano: number | null, produtor: string, regiao: string, hoje: string,
-                campos: string[] | null) => `
+const prompt = (
+  nome: string, ano: number | null, produtor: string, regiao: string, hoje: string,
+  campos: string[] | null, textosPesquisa: string,
+) => `
 És um enólogo a preencher a ficha de um vinho para a garrafeira de uma casa particular.
 
 VINHO A IDENTIFICAR:
@@ -193,30 +202,30 @@ resposta — não vale a pena gastar procura com o que já está preenchido do
 lado de cá.
 ` : ""}
 
-PROCURA na internet e responde com o que ENCONTRARES. Fontes boas: o site do
-produtor, Vivino, Wine.com.pt, Garrafeira Nacional, Adegga, revistas de vinho
-portuguesas.
+BASE DE EVIDÊNCIA (trechos de pesquisa web já recolhidos):
+${textosPesquisa}
 
 REGRAS, e são a sério:
-1. NÃO INVENTES. Um campo que não consigas confirmar fica FORA do JSON (ou a
+1. RESPONDE APENAS COM BASE NA BASE DE EVIDÊNCIA acima. Não procures na net.
+2. NÃO INVENTES. Um campo que não consigas confirmar fica FORA do JSON (ou a
    null). Uma ficha com metade dos campos certos vale mais do que uma cheia
    com metade inventada — quem lê isto vai decidir o que abre ao jantar.
-2. A nota do Vivino, o número de avaliações e o "vivinoUrl" têm de vir da
+3. A nota do Vivino, o número de avaliações e o "vivinoUrl" têm de vir da
    MESMA página do Vivino, que tenhas mesmo visto. Confirma que essa página é
    DESTE vinho exato (mesmo produtor, ano e região) e não a de um homónimo —
    há vários vinhos com nomes parecidos, de produtores diferentes, e uma
    pesquisa por texto pode trazer a página errada. Se tiveres qualquer dúvida
    de que é o mesmo vinho, deixa "vivinoUrl" e "vivinoNota" vazios em vez de
    arriscar.
-3. Se houver DÚVIDA entre dois vinhos com nome parecido, escolhe o que bate
+4. Se houver DÚVIDA entre dois vinhos com nome parecido, escolhe o que bate
    certo com o ano e a região dados, e diz a hesitação no campo "aviso".
-4. O preço é o de UMA garrafa de 0,75 L, em EUROS, em Portugal.
-5. As castas vão SEPARADAS, uma a uma, com o nome português corrente
+5. O preço é o de UMA garrafa de 0,75 L, em EUROS, em Portugal.
+6. As castas vão SEPARADAS, uma a uma, com o nome português corrente
    ("Touriga Nacional", "Alicante Bouschet", "Aragonez"). Nunca "blend",
    "lote" nem "várias castas" — isso é contado do lado da app.
-6. "beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que o vinho
+7. "beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que o vinho
    está no ponto. Para um vinho para beber já, "beberAte" é daqui a 2-3 anos.
-7. "imagemUrl" é o link DIRECTO de uma fotografia da garrafa ou do rótulo
+8. "imagemUrl" é o link DIRECTO de uma fotografia da garrafa ou do rótulo
    (termina em .jpg/.jpeg/.png/.webp), de uma página que tenhas mesmo visto —
    site do produtor ou de uma loja. Não é o link da página, é o da imagem. Se
    não tiveres a certeza, deixa vazio: uma imagem errada é pior do que nenhuma,
@@ -253,9 +262,8 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
 Se não conseguires identificar o vinho de todo, responde
 {"encontrado": false, "aviso": "porquê"}.`;
 
-/* Com o tool de pesquisa ligado a API recusa response_mime_type=json, por
-   isso a resposta vem em texto: pode trazer blocos ``` e frases à volta.
-   Aqui apanha-se o primeiro objeto JSON equilibrado do texto. */
+/* Mesmo pedindo JSON, alguns modelos devolvem texto com blocos ``` e frases
+   à volta. Aqui apanha-se o primeiro objeto JSON equilibrado do texto. */
 function extrairJson(txt: string): any | null {
   const s = String(txt || "").trim();
   if (!s) return null;
@@ -380,7 +388,7 @@ async function registar(estado: string, detalhe: Record<string, unknown>, quem: 
     const r = await fetch(`${SB_URL}/rest/v1/sync_log`, {
       method: "POST",
       headers: {
-        apikey: SB_SRV, Authorization: `Bearer ${SB_SRV}`,
+        apikey: SB_SRV, Authorization: 'Bearer '+SB_SRV,
         "Content-Type": "application/json", "Content-Profile": "garrafeira",
         Prefer: "return=minimal",
       },
@@ -423,7 +431,7 @@ async function fecharAnalise(id: number, quem: string, patch: Record<string, unk
     const r = await fetch(`${SB_URL}/rest/v1/analises?id=eq.${id}&quem=eq.${encodeURIComponent(quem)}`, {
       method: "PATCH",
       headers: {
-        apikey: SB_SRV, Authorization: `Bearer ${SB_SRV}`, "Content-Type": "application/json",
+        apikey: SB_SRV, Authorization: 'Bearer '+SB_SRV, "Content-Type": "application/json",
         "Content-Profile": "garrafeira", Prefer: "return=minimal",
       },
       body: JSON.stringify(patch),
@@ -465,210 +473,158 @@ async function ehEditor(auth: string, signal: AbortSignal): Promise<{ ok: boolea
   } catch (e) { console.log("VINHO is_editor excecao:", String((e as Error).message).slice(0, 200)); return { ok: false, email, plano: "sem_ia" }; }
 }
 
-// A quota é verificada no servidor, com o JWT do próprio utilizador. Conta
-// tentativas (inclusive erros): sem isso, uma falha repetida esgotava a quota
-// global e deixava o resto sem pesquisa. O limite vem de secret para poder
-// ser afinado sem redeploy.
-async function temQuotaGratis(auth: string, quem: string, signal: AbortSignal): Promise<boolean> {
-  const hoje = new Date().toISOString().slice(0, 10) + "T00:00:00.000Z";
-  try {
-    const r = await fetch(`${SB_URL}/rest/v1/analises?select=id&quem=eq.${encodeURIComponent(quem)}&plano_ia=eq.gratis&criado_em=gte.${encodeURIComponent(hoje)}&limit=${FREE_DAILY_LIMIT}`, {
-      headers: { apikey: SB_SRV, Authorization: auth, "Content-Profile": "garrafeira" }, signal,
-    });
-    if (!r.ok) { console.log("VINHO quota grátis:", r.status); return false; }
-    return (await r.json()).length < FREE_DAILY_LIMIT;
-  } catch (e) { console.log("VINHO quota grátis excecao:", String((e as Error).message).slice(0, 200)); return false; }
-}
-
 /* ── O TRABALHO A SÉRIO ──
    Toda a conversa com o Gemini num sítio só, para poder correr nos DOIS
    modos: à espera, ou em segundo plano. Nunca escreve na resposta HTTP —
    devolve o corpo final ou o erro já com o status certo. */
 type Res = { ok: true; corpo: Record<string, unknown> } | { ok: false; status: number; erro: string };
 
+async function chamarGemini(modelo: string, textoPrompt: string, signal: AbortSignal, maxTokens = 2048, semThinking = true) {
+  const generationConfig: Record<string, unknown> = {
+    temperature: 0,
+    response_mime_type: "application/json",
+    maxOutputTokens: maxTokens,
+  };
+  if (semThinking) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  const r = await fetch(`${GAPI}/models/${modelo}:generateContent?key=${GEMINI_KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: textoPrompt }] }],
+      generationConfig,
+    }),
+  });
+  const txt = await r.text();
+  if (!r.ok) {
+    let msg = "";
+    try { msg = JSON.parse(txt)?.error?.message ?? ""; } catch (_) { /**/ }
+    return { ok: false as const, status: r.status, erro: msg || txt.slice(0, 800) };
+  }
+  let body: any = null;
+  try { body = JSON.parse(txt); } catch (_) { /**/ }
+  const cand = body?.candidates?.[0];
+  const bruto = (cand?.content?.parts ?? []).map((p: any) => p?.text ?? "").join("").trim();
+  const parsed = extrairJson(bruto);
+  if (!parsed) return { ok: false as const, status: 502, erro: "resposta ilegível do modelo" };
+  return { ok: true as const, parsed };
+}
+function qualidadeMinima(ficha: Record<string, unknown>) {
+  const criticos = ["tipo", "regiao", "castas", "vivino_nota", "preco_medio"];
+  const presentes = criticos.filter((k) => {
+    const v = (ficha as any)[k];
+    return Array.isArray(v) ? v.length > 0 : v !== undefined && v !== null && v !== "";
+  });
+  const score = presentes.length;
+  return { score, ok: score >= 2 || ("vivino_url" in ficha && "vivino_nota" in ficha) };
+}
+
 async function produzirFicha(
   nome: string, ano: number | null, produtor: string, regiao: string,
   quem: string | null, signal: AbortSignal, budgetMs: number,
-  // A omissão é o GRÁTIS: se um dia alguém chamar isto sem dizer o motor, o
-  // engano sai barato. Ao contrário, saía a chave paga sem ninguém a pedir.
-  campos: string[] | null = null, plano: "gratis" | "premium" = "gratis",
+  campos: string[] | null = null,
 ): Promise<Res> {
-  const geminiKey = plano === "gratis" ? GEMINI_FREE_KEY : GEMINI_KEY;
-  if (!geminiKey) return { ok: false, status: 503, erro: `a pesquisa ${plano === "gratis" ? "grátis" : "premium"} ainda não está configurada (falta o secret da chave)` };
+  if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a pesquisa premium ainda não está configurada (falta GEMINI_API_KEY)" };
+  if (!SEARCH_API_KEY) return { ok: false, status: 503, erro: "a pesquisa externa ainda não está configurada (falta SEARCH_API_KEY)" };
   const inicio = Date.now();
-  const restante = () => budgetMs - (Date.now() - inicio) - 2_000;
-  const searchMs = Math.max(15_000, budgetMs - 14_000);
-  const texto0 = prompt(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos);
-
-  /* Cada variante é a mesma pergunta pedida de outra maneira. A ordem
-     depende do ORÇAMENTO: em segundo plano há tempo para o modelo pensar e
-     é isso que dá uma leitura boa; no modo síncrono (55s presos ao browser)
-     o pensamento não cabe, e aí mais vale uma resposta pobre do que
-     nenhuma. Os modelos recentes trazem o "pensamento" LIGADO por omissão e
-     com o tool de pesquisa isso é um custo de latência grande. */
-  type V = { search: boolean; semThinking: boolean; label: string };
-  const pensarCabe = budgetMs >= 90_000;
-  const VARIANTES: V[] = pensarCabe
-    ? [{ search: true, semThinking: false, label: "pesquisa" },
-       { search: true, semThinking: true, label: "pesquisa+sem-pensar" },
-       { search: false, semThinking: false, label: "sem-pesquisa" }]
-    : [{ search: true, semThinking: true, label: "pesquisa+sem-pensar" },
-       { search: true, semThinking: false, label: "pesquisa" },
-       { search: false, semThinking: false, label: "sem-pesquisa" }];
-
-  const chamar = (model: string, v: V, sinal: AbortSignal) => {
-    const generationConfig: Record<string, unknown> = v.search
-      ? { temperature: 0 }
-      : { temperature: 0, response_mime_type: "application/json" };
-    if (v.semThinking) generationConfig.thinkingConfig = { thinkingBudget: 0 };
-    const corpo: Record<string, unknown> = {
-      contents: [{ role: "user", parts: [{ text: texto0 }] }], generationConfig,
+  const chave = chaveCache(nome, ano, produtor, regiao, campos);
+  const cache = await cacheLer(chave, signal);
+  if (cache?.resultado) {
+    await registar("ok", {
+      nome, ano, modo: "cache", modelo: cache.modelo, ms: Date.now() - inicio,
+      campos: Object.keys(cache.resultado).length,
+    }, quem);
+    return {
+      ok: true,
+      corpo: { ...cache.resultado, fontes: cache.fontes.slice(0, 8), pesquisa: true, plano: "premium", modelo: cache.modelo, geradoEm: new Date().toISOString() },
     };
-    if (v.search) corpo.tools = [{ google_search: {} }];
-    return fetch(`${GAPI}/models/${model}:generateContent?key=${geminiKey}`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      signal: sinal, body: JSON.stringify(corpo),
-    });
-  };
-  /* O rasto de CADA tentativa. Sem isto, "não deu" chegava ao Diagnóstico sem
-     dizer porquê e a causa só se via nos logs da função — foi assim que se
-     perdeu tempo com uns 404 que pareciam um timeout. */
-  const tentativas: { modelo: string; estado: number | string }[] = [];
-  const tentar = async (model: string, v: V): Promise<Response | null> => {
-    const ms = Math.min(v.search ? searchMs : FALLBACK_TENTATIVA_TIMEOUT_MS, restante());
+  }
+
+  const query = [nome, ano || "", produtor, regiao, "vivino garrafeira nacional vinho portugal"].filter(Boolean).join(" ");
+  let pesquisa: PesquisaWeb;
+  try {
+    pesquisa = await obterResultadosPesquisa(query, signal);
+  } catch (e) {
+    await registar("erro", { passo: "search-api", erro: String((e as Error).message || "").slice(0, 300) }, quem);
+    return { ok: false, status: 503, erro: "não consegui obter resultados de pesquisa agora — tenta outra vez daqui a pouco" };
+  }
+
+  const texto0 = prompt(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos, pesquisa.texto);
+  const tentativas: { modelo: string; modo: string; estado: number | string }[] = [];
+  const run = async (modelo: string, modo: string, maxTokens: number, semThinking: boolean) => {
+    const ms = Math.max(8_000, Math.min(GEMINI_TIMEOUT_MS, budgetMs - (Date.now() - inicio) - 2_000));
     if (ms < 2_000) return null;
-    const { signal: sinal, limpar } = comLimiteProprio(signal, ms);
+    const { signal: sp, limpar } = comLimiteProprio(signal, ms);
     try {
-      const r = await chamar(model, v, sinal);
+      const g = await chamarGemini(modelo, texto0, sp, maxTokens, semThinking);
       limpar();
-      console.log("VINHO tentativa:", model, v.label, "->", r.status);
-      tentativas.push({ modelo: model, estado: r.status });
-      return r;
+      tentativas.push({ modelo, modo, estado: g.ok ? 200 : g.status });
+      return g;
     } catch (e) {
       limpar();
       if (signal.aborted) throw e;
-      console.log("VINHO tentativa presa:", model, v.label);
-      tentativas.push({ modelo: model, estado: "presa" });
+      tentativas.push({ modelo, modo, estado: "presa" });
       return null;
     }
   };
-  const transitorio = (s: number) => s === 429 || s === 500 || s === 503;
-  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  const candidatos = await candidatosModelo(signal, plano);
-  if (signal.aborted) throw new DOMException("timeout", "AbortError");
-  let model = candidatos[0] ?? (plano === "gratis" ? FREE_MODELS[0] : "gemini-flash-latest");
-  let comPesquisa = true;
-  let g: Response | null = null;
+  const primeira = await run(MODELO_BARATO, "barato", 1800, true);
+  let usadoModelo = MODELO_BARATO;
+  let usadoModo = "barato";
+  let parsed: any = primeira && primeira.ok ? primeira.parsed : null;
+  let erroUltimo = primeira && !primeira.ok ? primeira.erro : "";
 
-  for (let ci = 0; ci < candidatos.length && !signal.aborted; ci++) {
-    model = candidatos[ci];
-    // Assim que uma variante responde, fica-se por ela. Não há retry da
-    // MESMA variante: uma tentativa que fica presa não fica presa "um
-    // bocadinho menos" à segunda, e esse tempo rende mais na seguinte.
-    for (const v of VARIANTES) {
-      if (signal.aborted || restante() < 2_000) break;
-      comPesquisa = v.search;
-      g = await tentar(model, v);
-      if (!g) continue;
-      if (g.status === 400) { console.log("VINHO 400:", (await g.clone().text()).slice(0, 300)); g = null; continue; }
-      if (g.status === 404) { _models[plano] = null; g = null; break; }   // saiu do catálogo
-      if (transitorio(g.status)) { await sleep(700); g = null; break; }   // cheio: outro modelo
-      break;
+  let ficha = parsed ? normalizar(parsed, ano, campos) : null;
+  const q1 = ficha ? qualidadeMinima(ficha) : { ok: false, score: 0 };
+  const precisaEscalar = !ficha || !q1.ok;
+  if (precisaEscalar && MODELO_ESCALADO !== MODELO_BARATO) {
+    const segunda = await run(MODELO_ESCALADO, "escalado", 2800, false);
+    if (segunda && segunda.ok) {
+      usadoModelo = MODELO_ESCALADO;
+      usadoModo = "escalado";
+      parsed = segunda.parsed;
+      ficha = normalizar(parsed, ano, campos);
+    } else if (segunda && !segunda.ok) {
+      erroUltimo = segunda.erro;
     }
-    if (g && g.ok) break;
-    if (g && !transitorio(g.status) && g.status !== 404) break;
   }
 
-  /* TUDO a 429 com o tool de pesquisa ligado — e o ciclo acima nunca chega a
-     tentar SEM ele: um 429 salta já para o modelo seguinte, e a variante
-     "sem-pesquisa" vive dentro do modelo que acabou de ser descartado. Só que
-     o grounding tem uma quota à PARTE, e muito mais curta, do que a geração
-     normal: é o primeiro a ser recusado e leva a procura toda atrás dele.
-     Daí esta última tentativa sem pesquisa antes de desistir — vale uma
-     leitura de memória, que a app marca como tal, contra não ter nada. */
-  if (!g && tentativas.some((t) => t.estado === 429) && restante() > 3_000) {
-    model = candidatos[0] ?? model;
-    comPesquisa = false;
-    g = await tentar(model, { search: false, semThinking: false, label: "sem-pesquisa (último recurso)" });
-    if (g && !g.ok && g.status === 404) g = null;
-  }
-
-  if (!g) {
-    await registar("erro", { passo: "sem-resposta", nome, plano, tentativas, orcamento_ms: budgetMs }, quem);
-    /* Tudo a 404, ou tudo a 429, não é um timeout — e dizer "não respondeu a
-       tempo" mandava quem lê tentar outra vez para sempre. O nome do secret
-       vai na mensagem porque é isso que resolve o problema. */
-    const chave = plano === "gratis" ? "grátis" : "premium";
-    const secret = plano === "gratis" ? "GEMINI_FREE_API_KEY" : "GEMINI_API_KEY";
-    /* A ordem é pela ACIONABILIDADE, não pela contagem: basta um 429 no meio
-       para o problema ser quota (o 404 nos outros modelos é só o catálogo
-       desse projeto a ser mais curto). Uma lista mista de 404 e 429 é
-       exatamente o que se viu na prática. */
-    if (tentativas.some((t) => t.estado === 429)) {
-      return { ok: false, status: 503, erro:
-        `a chave ${chave} está sem quota no Gemini (429): nenhum dos ${tentativas.length} modelos aceitou o pedido, ` +
-        `nem sequer sem pesquisa na net. É a quota do Google e não a da app — confirma o plano do projeto de onde saiu o ${secret}.` };
-    }
-    if (tentativas.length > 0 && tentativas.every((t) => t.estado === 404)) {
-      return { ok: false, status: 502, erro:
-        `a chave ${chave} não tem acesso a nenhum destes modelos (404): ` +
-        `${[...new Set(tentativas.map((t) => t.modelo))].join(", ")}. Confere o secret ${secret} no Supabase.` };
-    }
-    return { ok: false, status: 504, erro: "o modelo não respondeu a tempo — tenta outra vez daqui a pouco" };
-  }
-  if (!g.ok) {
-    const status = g.status, detail = await g.text();
-    let msg = ""; try { msg = JSON.parse(detail)?.error?.message ?? ""; } catch (_) { /**/ }
-    await registar("erro", { passo: "gemini", status, modelo: model, plano, pesquisa: comPesquisa, erro: (msg || detail).slice(0, 800) }, quem);
-    // Um 429 que sobreviva até aqui é quota, não "muita procura": a diferença
-    // é entre esperar um minuto e ir tratar da conta no Google.
-    if (status === 429) return { ok: false, status: 503, erro:
-      `a chave ${plano === "gratis" ? "grátis" : "premium"} está sem quota no Gemini (429). É a quota do Google e não a da app — ` +
-      `confirma o plano do projeto de onde saiu o ${plano === "gratis" ? "GEMINI_FREE_API_KEY" : "GEMINI_API_KEY"}.` };
-    if (transitorio(status)) return { ok: false, status: 503, erro: "o serviço está com muita procura agora — espera um minuto e tenta outra vez" };
-    return { ok: false, status: 502, erro: `gemini ${status} (${model})${msg ? ": " + msg.slice(0, 200) : ""}` };
-  }
-
-  const gd = await g.json();
-  const cand = gd?.candidates?.[0];
-  const bruto = (cand?.content?.parts ?? []).map((p: any) => p?.text ?? "").join("").trim();
-  const parsed = extrairJson(bruto);
-  if (!parsed) {
-    await registar("erro", { passo: "json", modelo: model, plano, pesquisa: comPesquisa, amostra: bruto.slice(0, 800) }, quem);
-    return { ok: false, status: 502, erro: "resposta ilegível do modelo" };
-  }
-  const ficha = normalizar(parsed, ano, campos);
   if (!ficha) {
-    await registar("erro", { passo: "vazio", modelo: model, plano, pesquisa: comPesquisa, nome, amostra: bruto.slice(0, 500) }, quem);
-    // Sem pesquisa o modelo só conhece o que aprendeu no treino, e um vinho
-    // de uma quinta pequena é exatamente o que ele não sabe — devolve vazio
-    // em vez de inventar, que é o que se lhe pede. Não é "este vinho não
-    // existe": são coisas diferentes e merecem mensagens diferentes.
-    return {
-      ok: false, status: comPesquisa ? 404 : 503,
-      erro: comPesquisa
-        ? `não encontrei informação fiável sobre "${nome}". Confere o nome (o do rótulo, com o produtor) e tenta outra vez.`
-        : "só consegui responder sem pesquisa na net, e sem ela não conheço este vinho — tenta outra vez daqui a uns minutos",
-    };
+    await registar("erro", {
+      passo: "vazio", nome, modo: usadoModo, modelo: usadoModelo,
+      tentativas, erro: erroUltimo.slice(0, 300), ms: Date.now() - inicio,
+    }, quem);
+    return { ok: false, status: 404, erro: `não encontrei informação fiável sobre "${nome}". Confere o nome do rótulo e tenta outra vez.` };
   }
 
-  // As fontes que o grounding usou — a app mostra-as para se poder conferir.
-  const fontes: { titulo: string; url: string }[] = [];
-  (cand?.groundingMetadata?.groundingChunks ?? []).forEach((c: any) => {
-    const w = c?.web;
-    if (w?.uri && !fontes.some((f) => f.url === w.uri)) {
-      fontes.push({ titulo: String(w.title ?? w.uri).slice(0, 80), url: String(w.uri) });
-    }
-  });
+  await cacheEscrever(
+    chave,
+    { nome, ano, produtor, regiao, campos, query, fonte: pesquisa.status },
+    ficha,
+    pesquisa.fontes,
+    usadoModelo,
+    usadoModo,
+    signal,
+  );
+  const dur = Date.now() - inicio;
+  const custoEstimado = usadoModo === "barato" ? 0.001 : 0.0035;
   await registar("ok", {
-    nome, ano, modelo: model, plano, pesquisa: comPesquisa,
-    campos: Object.keys(ficha).length, fontes: fontes.map((f) => f.url).slice(0, 8),
+    nome, ano, modo: usadoModo, modelo: usadoModelo,
+    pesquisa: pesquisa.status, campos: Object.keys(ficha).length,
+    ms: dur, tentativas, custo_estimado_eur: custoEstimado,
   }, quem);
-
   return {
     ok: true,
-    corpo: { ...ficha, fontes: fontes.slice(0, 8), pesquisa: comPesquisa, plano, modelo: model, geradoEm: new Date().toISOString() },
+    corpo: {
+      ...ficha,
+      fontes: pesquisa.fontes.slice(0, 8),
+      pesquisa: true,
+      plano: "premium",
+      modelo: usadoModelo,
+      modo: usadoModo,
+      custoEstimadoEur: custoEstimado,
+      geradoEm: new Date().toISOString(),
+    },
   };
 }
 
@@ -696,25 +652,8 @@ Deno.serve(async (req) => {
       await registar("erro", { passo: "plano", plano: auth.plano }, quem);
       return json({ error: "não tens acesso à pesquisa por IA — pede ao admin para te atribuir o plano grátis ou premium" }, 403);
     }
-    const direito = auth.plano as "gratis" | "premium";
 
     const body = await req.json().catch(() => ({}));
-    /* O MOTOR desta procura, que NÃO é o mesmo que o direito de quem a pede.
-       Por omissão é o grátis, mesmo para quem é premium: a chave cara só sai
-       quando o browser a pede à letra E a BD confirma que essa pessoa o é.
-       Ou seja, o cliente consegue pedir MENOS do que tem, nunca mais — a
-       regra que interessa (ninguém se promove sozinho) fica de pé, e a chave
-       paga deixa de sair por omissão, o que é mais apertado do que antes. */
-    const plano: "gratis" | "premium" =
-      body?.plano === "premium" && direito === "premium" ? "premium" : "gratis";
-    /* A quota é do DIREITO e não do motor: quem só tem grátis continua com as
-       cinco por dia, e um premium a fazer a primeira volta no grátis não
-       gasta a quota de ninguém — a linha de `analises` é carimbada pelo
-       trigger com o direito, não com o motor que acabou por correr. */
-    if (direito === "gratis" && !(await temQuotaGratis(authHeader, quem!, ctrl.signal))) {
-      await registar("erro", { passo: "quota-gratis", limite_dia: FREE_DAILY_LIMIT }, quem);
-      return json({ error: `atingiste o limite diário de ${FREE_DAILY_LIMIT} pesquisas grátis — tenta amanhã ou pede acesso premium` }, 429);
-    }
     const nome = String(body?.nome ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
     if (nome.length < 3) {
       await registar("erro", { passo: "nome", recebido: String(body?.nome ?? "").slice(0, 60) }, quem);
@@ -747,7 +686,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-            const res = await produzirFicha(nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, plano);
+            const res = await produzirFicha(nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -765,7 +704,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = await produzirFicha(nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, plano);
+    const res = await produzirFicha(nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";
