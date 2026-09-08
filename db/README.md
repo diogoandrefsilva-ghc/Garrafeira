@@ -136,6 +136,17 @@ Correr no SQL Editor:
 
 1. `db/migracao-layout-locais.sql`
 
+### Migração 11 — cache da pesquisa de vinhos (**por aplicar**)
+
+`db/migracao-cache-vinho-info.sql`. Cria `garrafeira.catalogo_vinhos_cache`,
+uma cache técnica da Edge Function `vinho-info` (chave normalizada + resultado
+normalizado + fontes + modelo + validade). Serve para evitar repetir chamadas
+à pesquisa externa e ao Gemini para pedidos iguais.
+
+Correr no SQL Editor:
+
+1. `db/migracao-cache-vinho-info.sql`
+
 ### `vinhos.imagem_url` (já aplicada)
 
 Link para uma foto do rótulo/garrafa — a `vinho-info` (Edge Function) tenta
@@ -237,9 +248,12 @@ Estes não se fazem por SQL:
    recuperação de password.
 3. **Secrets da Edge Function.** Já existem no projeto e são partilhados por
    todas as functions (são por PROJETO, não por function):
-   `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. Para os
-   planos de IA, acrescentar `GEMINI_FREE_API_KEY`; `GEMINI_FREE_DAILY_LIMIT`
-   é opcional e vale 5 por defeito.
+   `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+   Para a `vinho-info` com pesquisa externa, acrescentar `SEARCH_API_KEY`
+   (opcionalmente `SEARCH_API_URL` e `VINHO_CACHE_TTL_HOURS`).
+   Para as funções com plano grátis (`vinho-info` legado / `importar-vinhos`),
+   manter `GEMINI_FREE_API_KEY`; `GEMINI_FREE_DAILY_LIMIT` é opcional e vale 5
+   por defeito.
 4. **Deploy da função:** `supabase functions deploy vinho-info` (o ficheiro
    está na raiz do repo, `vinho-info.ts`).
 
@@ -257,6 +271,7 @@ Estes não se fazem por SQL:
 | `castas` + `vinho_castas` | as castas, normalizadas, para se poder procurar por elas |
 | `garrafas` | a coisa FÍSICA: onde está, quanto custou, e quando/onde foi bebida |
 | `analises` | as procuras à IA em curso (o polling da app lê daqui) |
+| `catalogo_vinhos_cache` | cache técnica da `vinho-info` para reduzir chamadas repetidas e custo |
 | `sync_log` | rasto de cada procura, para quando o browser só diz "502" |
 
 **Vinho ≠ garrafa.** Duas garrafas do mesmo vinho em prateleiras diferentes
