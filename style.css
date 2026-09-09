@@ -381,15 +381,20 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    contagem à direita. O nome já teve linha própria por cima (com o
    filete a atravessar) e custava ~24px por nível — em oito níveis, um
    terço da altura do ecrã gasto em rótulos. */
-.mprat-layout{display:flex;align-items:center;gap:8px;padding:0 10px;margin-top:calc(var(--slot,34px) * .14);
-  /* a linha vale o que o seu conteúdo mede e fica centrada: esticada à
-     largura do cartão, o nome do nível ficava a meio metro da estante,
-     um em cada canto */
-  width:fit-content;max-width:100%;margin-left:auto;margin-right:auto}
-.mp-lbl{flex:0 0 52px;min-width:0;font-size:9.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;
-  color:var(--mu);line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+.mprat-layout{display:flex;align-items:center;gap:7px;padding:0 12px;margin-top:calc(var(--slot,34px) * .14);
+  /* num ecrã largo a linha não se estica até ao infinito: o nome do nível
+     ficava a meio metro da estante, um em cada canto do cartão */
+  max-width:680px;margin-left:auto;margin-right:auto}
+/* O nome do nível fica ENCOSTADO À ESQUERDA e a estante ao meio: o que os
+   liga é um fio tracejado, como numa legenda de planta. Antes a linha
+   encolhia ao conteúdo e o nome andava colado à estante — mudava de sítio
+   de nível para nível, conforme a prateleira era mais larga ou mais
+   estreita, e a coluna dos nomes deixava de se ler de uma vez. */
+.mp-lbl{flex:0 0 auto;max-width:84px;font-size:8.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;
+  color:var(--mu);line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
   overflow-wrap:anywhere}
-.mp-n{flex:0 0 auto;min-width:30px;text-align:right;font-family:var(--fd);font-size:12px;font-weight:600;
+.mp-fio{flex:1 1 6px;min-width:6px;height:0;border-bottom:1px dashed var(--bo2);opacity:.65}
+.mp-n{flex:0 0 auto;min-width:26px;text-align:right;font-family:var(--fd);font-size:11.5px;font-weight:600;
   color:var(--vh);font-variant-numeric:lining-nums}
 .mprat-t{display:flex;align-items:center;gap:9px;font-size:10.5px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;
   color:var(--mu);margin-bottom:8px}
@@ -420,7 +425,7 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    mede alguma coisa aqui sai dele — o espaço entre lugares, o padding da
    madeira, o corpo do número. Um `56px` fixo cabia numa garrafeira de
    três níveis e obrigava a rolar meia página numa de oito. */
-.est-wrap{flex:1;min-width:0;overflow-x:auto}
+.est-wrap{flex:0 1 auto;min-width:0;overflow-x:auto}
 .est{position:relative;display:grid;
   grid-template-columns:repeat(var(--gcols,var(--cols)),minmax(0,1fr));grid-template-rows:repeat(var(--rows),auto);
   gap:calc(var(--slot) * .16);align-items:center;

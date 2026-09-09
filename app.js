@@ -1628,7 +1628,9 @@ function mapaEstanteHTML(l,gs,d){
     }).join('');
     return `<div class="mprat-layout">
       <span class="mp-lbl">${esc(p.nome)}</span>
+      <span class="mp-fio"></span>
       <div class="est-wrap">${estanteHTML(p,info,slots)}</div>
+      <span class="mp-fio"></span>
       <span class="mp-n">${n}/${p.capacidade}</span>
     </div>`;
   }).join('')+`

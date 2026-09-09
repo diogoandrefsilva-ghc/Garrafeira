@@ -143,10 +143,15 @@ com o nº do vinho** ou **vazio com o nº do lugar**, com a legenda no fim.
 **A estante inteira tem de caber no ecrã sem scroll** — é essa a medida
 de tudo o resto aqui, e é o que separa este ecrã de uma lista. Duas
 coisas o garantem:
-- cada nível é **uma linha só** (`.mprat-layout`): o nome à esquerda, a
-  estante no meio, a contagem à direita. O nome já teve linha própria por
-  cima, com o filete a atravessar, e custava ~24px por nível — em oito
-  níveis, um terço da altura do ecrã gasto em rótulos;
+- cada nível é **uma linha só** (`.mprat-layout`): o nome encostado à
+  esquerda, a estante no meio, a contagem à direita, e um **fio
+  tracejado** (`.mp-fio`) a ligá-los, como numa legenda de planta. O nome
+  já teve linha própria por cima, com o filete a atravessar, e custava
+  ~24px por nível — em oito níveis, um terço da altura do ecrã gasto em
+  rótulos. E encosta-se à esquerda em vez de andar colado à estante:
+  colado, mudava de sítio de nível para nível conforme a prateleira era
+  mais larga ou mais estreita, e a coluna dos nomes deixava de se ler de
+  uma vez;
 - o tamanho de um lugar (`--slot`) é **calculado**, não escrito no CSS
   (`ajustarEstantes`). Mede-se o que sobra do ecrã abaixo do cartão e
   procura-se por bissecção o maior lugar que ainda cabe, entre
