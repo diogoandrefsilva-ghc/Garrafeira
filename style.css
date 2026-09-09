@@ -328,64 +328,31 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .fbar select{padding:6px 9px;border:1px solid var(--bo);border-radius:8px;font-size:12px;font-family:inherit;background:var(--bg)}
 
 /* ── MAPA DOS LOCAIS ──────────────────────────────────────────────
-   Dois níveis: o CONJUNTO (`.mv`: um local em destaque com a estante
-   desenhada, setas e pontos para passar ao seguinte, e um cartão pequeno
-   por local) e a ESTANTE de um local (`.ml`: barra com ‹ voltar, nome e
-   contagem, e por baixo as prateleiras nível a nível). O desenho da
-   estante é SVG feito a partir do layout do local (`estanteSVG`), com a
-   madeira em tons de papel e os lugares em bordô — nada de imagens. */
-.mv-hero{position:relative;background:var(--card);border:1px solid var(--bo);border-radius:var(--r2);box-shadow:var(--sh);
-  padding:14px 46px 12px;margin-bottom:12px;overflow:hidden}
-.mv-hero::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--lc,var(--vh))}
-.mv-heroin{display:block;width:100%;background:none;border:none;padding:0;font-family:inherit;color:inherit;cursor:pointer;
-  text-align:center;-webkit-tap-highlight-color:transparent}
-.mv-heroin h3{font-family:var(--fd);font-weight:600;font-size:19px;letter-spacing:.2px;line-height:1.2}
-.mv-sub{font-size:11.5px;color:var(--mu);margin-top:2px;min-height:1.4em}
-.mv-ill{margin:12px auto 10px;max-width:300px}
-.mv-ill svg{display:block;width:100%;height:200px;filter:drop-shadow(0 8px 12px rgba(78,18,40,.16))}
-.mv-cnt{font-family:var(--fd);font-size:14px;color:var(--mu)}
-.mv-cnt b{font-weight:600;font-size:19px;color:var(--vh);font-variant-numeric:lining-nums}
-.mv-nav{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;border:1px solid var(--bo2);
-  background:#fff;color:var(--vh);font-family:var(--fd);font-size:24px;line-height:1;cursor:pointer;display:flex;align-items:center;
-  justify-content:center;padding:0 0 3px;box-shadow:var(--sh);z-index:2;transition:all .15s}
-.mv-prev{left:8px}.mv-next{right:8px}
-.mv-nav:hover{background:var(--vhp);border-color:var(--vh)}
-.mv-nav:active{transform:translateY(-50%) scale(.94)}
-.mv-dots{display:flex;justify-content:center;gap:6px;margin-top:10px}
-.mv-dot{width:7px;height:7px;border-radius:99px;border:none;background:var(--bo2);padding:0;cursor:pointer;transition:all .18s}
-.mv-dot.on{background:var(--vh);width:18px}
-.mv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:10px}
-.mv-card{display:flex;flex-direction:column;align-items:center;gap:7px;padding:11px 8px 10px;min-width:0;
-  background:var(--card);border:1px solid var(--bo);border-radius:var(--r);box-shadow:var(--sh);cursor:pointer;font-family:inherit;
-  color:var(--tx);transition:transform .12s,box-shadow .18s,border-color .18s;-webkit-tap-highlight-color:transparent}
-.mv-card:hover{box-shadow:var(--sh2)}
-.mv-card:active{transform:scale(.97)}
-.mv-card.on{border-color:var(--vh);box-shadow:0 0 0 1px var(--vh),var(--sh)}
-.mv-card b{font-family:var(--fd);font-weight:600;font-size:13px;line-height:1.2;text-align:center;overflow:hidden;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:2.4em;display:flex;align-items:center}
-.mv-mini{display:flex;align-items:center;justify-content:center;width:100%;height:50px}
-.mv-mini svg{display:block;width:100%;height:50px}
-.mv-n{font-family:var(--fd);font-size:13px;color:var(--vh);font-variant-numeric:lining-nums}
-.mv-add{margin-top:6px;text-align:center}
-.mv-add .btn{margin-top:8px}
-.vazio .ro-hide{margin-top:12px}
-
+   UM local de cada vez (`.ml`): barra com ‹ › para os locais vizinhos, o
+   nome e a contagem, os pontos de "onde estou", e por baixo as
+   prateleiras nível a nível. A madeira em tons de papel, os lugares em
+   bordô — nada de imagens. */
 .ml{background:var(--card);border:1px solid var(--bo);border-radius:var(--r2);box-shadow:var(--sh);overflow:hidden;padding-bottom:12px}
-.ml-bar{display:flex;align-items:center;gap:6px;padding:9px 10px;position:relative;
+.ml-bar{display:flex;align-items:center;gap:4px;padding:9px 8px;position:relative;
   background:linear-gradient(180deg,rgba(255,255,255,.6),transparent),var(--bg);border-bottom:1px solid var(--bo)}
 .ml-bar::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--lc,var(--vh))}
-.ml-back,.ml-edit{width:34px;height:34px;border-radius:50%;border:none;background:none;color:var(--vh);font-family:var(--fd);
-  font-size:26px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0 0 3px;transition:background .15s}
-.ml-edit{font-family:inherit;font-size:17px;padding:0}
-.ml-back:hover,.ml-edit:hover{background:var(--vhp)}
-/* O espaço do botão de editar, para o título ficar centrado também quando
-   ele não está (só leitura, ou o local a fingir "Por arrumar"). */
-.ml-sp{width:34px;flex-shrink:0;display:none}
-.ml-sp.on,body.readonly .ml-sp{display:block}
+.ml-nav{width:36px;height:36px;border-radius:50%;border:1px solid var(--bo2);background:#fff;color:var(--vh);font-family:var(--fd);
+  font-size:24px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0 0 3px;
+  box-shadow:var(--sh);transition:all .15s}
+.ml-nav:hover{background:var(--vhp);border-color:var(--vh)}
+.ml-nav:active{transform:scale(.94)}
+.ml-nav:disabled{opacity:.25;cursor:default;box-shadow:none}
 .ml-t{flex:1;min-width:0;text-align:center}
 .ml-t h3{font-family:var(--fd);font-weight:600;font-size:17px;letter-spacing:.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ml-sub{font-family:var(--fd);font-size:12.5px;color:var(--mu);margin-top:1px}
+.ml-edit{width:24px;height:24px;margin-left:4px;border-radius:50%;border:none;background:none;color:var(--vh);font-family:inherit;
+  font-size:13px;line-height:1;cursor:pointer;vertical-align:middle;opacity:.7}
+.ml-edit:hover{background:var(--vhp);opacity:1}
+.ml-sub{font-family:var(--fd);font-size:12.5px;color:var(--mu);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ml-sub b{font-weight:600;color:var(--vh);font-variant-numeric:lining-nums}
+.ml-sub i{font-style:normal;font-family:var(--ff);font-size:11px}
+.ml-dots{display:flex;justify-content:center;gap:6px;padding:9px 0 0}
+.ml-dot{width:7px;height:7px;border-radius:99px;border:none;background:var(--bo2);padding:0;cursor:pointer;transition:all .18s}
+.ml-dot.on{background:var(--vh);width:18px}
 .ml-nota{padding:10px 14px 0}
 .ml-vazio{padding:26px 18px 14px}
 .ml-leg{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:center;padding:14px 12px 2px;font-size:11px;color:var(--mu)}
@@ -393,6 +360,8 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .ml-leg i{width:16px;height:16px;border-radius:50%;flex-shrink:0;display:inline-block}
 .ml-leg .cheia{background:var(--vh)}
 .ml-leg .vazia{border:1.5px dashed #c9a1af}
+.ml-add{margin-top:8px;text-align:center}
+.vazio .ro-hide{margin-top:12px}
 .mprat{padding:0 12px;margin-top:12px}
 .mprat-t{display:flex;align-items:center;gap:9px;font-size:10.5px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;
   color:var(--mu);margin-bottom:8px}
@@ -417,23 +386,26 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    é o que deixa a fita passar exatamente pelo centro de cada lugar (ver
    `ziguezagueBgSVG`). O espaço entre lugares vem da margem de cada um. */
 .est-wrap{overflow-x:auto;padding-bottom:2px}
-.est{position:relative;display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));grid-template-rows:repeat(var(--rows),auto);
+.est{position:relative;display:grid;grid-template-columns:repeat(var(--gcols,var(--cols)),minmax(0,1fr));grid-template-rows:repeat(var(--rows),auto);
   gap:6px;align-items:center;min-width:calc(var(--cols) * 30px);
-  /* num ecrã largo a prateleira não estica até à borda: com os lugares a
-     44px, seis lugares em 1300px eram seis bolinhas perdidas e um
-     ziguezague achatado */
-  max-width:calc(var(--cols) * 66px);margin:0 auto}
+  /* num ecrã largo a prateleira cresce COM os lugares e não além deles:
+     o teto é o que os lugares (`.msdot`, 56px) e o espaço entre eles
+     ocupam. Sem teto, seis bolinhas de 44px espalhavam-se por 1000px com
+     um ziguezague achatado no meio; com um teto apertado de mais,
+     sobrava meio ecrã branco de cada lado. */
+  max-width:calc(var(--cols) * 78px);margin:0 auto}
 .est-fila,.est-sobrepostos{padding:8px 10px;border-radius:14px;border:1px solid #dccbb0;
   background:linear-gradient(180deg,#f4ecdf,#e8dbc5);box-shadow:inset 0 1px 0 rgba(255,255,255,.75),inset 0 -2px 0 rgba(120,90,50,.12)}
-.est-sobrepostos{row-gap:5px;padding:9px 10px}
+.est-sobrepostos{row-gap:5px;column-gap:0;padding:9px 10px}
+.est-sobrepostos .msdot{width:calc(100% - 6px)}
 .est-ziguezague{gap:0;padding:6px 4px;overflow:hidden}   /* a fita corta na borda, não acaba em ponta redonda a meio do nada */
 .est-bg{position:absolute;left:4px;top:6px;width:calc(100% - 8px);height:calc(100% - 12px);pointer-events:none;overflow:visible}
 .est-zz1{fill:none;stroke:#d9c7a8;stroke-width:26;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
 .est-zz2{fill:none;stroke:#f1e7d6;stroke-width:20;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
-.msdot{position:relative;z-index:1;aspect-ratio:1/1;width:100%;max-width:44px;min-height:26px;margin:0 auto;border-radius:999px;
+.msdot{position:relative;z-index:1;aspect-ratio:1/1;width:100%;max-width:56px;min-height:26px;margin:0 auto;border-radius:999px;
   border:1px solid #c9a1af;background:#f3e8ec;display:flex;align-items:center;justify-content:center;
-  font-family:var(--fd);font-size:12px;color:var(--vh);font-weight:600;line-height:1;font-variant-numeric:lining-nums}
-.est-ziguezague .msdot{width:calc(100% - 8px);max-width:44px;margin:4px auto}
+  font-family:var(--fd);font-size:clamp(11px,2.6vw,14px);color:var(--vh);font-weight:600;line-height:1;font-variant-numeric:lining-nums}
+.est-ziguezague .msdot{width:calc(100% - 8px);max-width:56px;margin:4px auto}
 .msdot.vazia{border-style:dashed;border-color:#cdb1ba;background:rgba(255,255,255,.55);color:var(--mu);font-weight:400}
 .msdot.cheia{background:var(--vh);border-color:var(--vh);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;
   box-shadow:0 2px 4px rgba(78,18,40,.25),inset 0 1px 0 rgba(255,255,255,.18);transition:transform .12s,box-shadow .15s}
@@ -534,6 +506,8 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .llprev{display:grid;grid-template-columns:repeat(var(--cols),auto);grid-template-rows:repeat(var(--rows),auto);
   gap:3px 4px;align-items:center;justify-items:center;width:auto}
 .llprev-ziguezague{gap:0 2px}
+.llprev-sobrepostos{gap:3px 0}
+.llprev-sobrepostos .llprev-dot{margin:0 2px}
 .llprev-dot{display:block;width:10px;height:10px;border-radius:50%;background:linear-gradient(180deg,#9a3656,#6d1837);box-shadow:inset 0 0 0 1px rgba(67,15,34,.18)}
 .ll-odd{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:12px;color:var(--mu)}
 .ll-odd .segbtn{padding:5px 11px;font-size:11.5px}
@@ -561,12 +535,13 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .lprat-t span{font-family:var(--fd);font-size:12px;font-weight:400;color:var(--vh)}
 /* No seletor os lugares têm largura fixa (cabe a garrafinha e o número)
    e a prateleira rola de lado se for comprida. */
-.est-pick{--slot:46px;grid-template-columns:repeat(var(--cols),minmax(var(--slot),1fr));width:100%;min-width:calc(var(--cols) * var(--slot));max-width:none;margin:0;align-items:stretch}
+.est-pick{--slot:46px;grid-template-columns:repeat(var(--gcols,var(--cols)),minmax(calc(var(--slot) / var(--span,1)),1fr));width:100%;min-width:calc(var(--cols) * var(--slot));max-width:none;margin:0;align-items:stretch}
 .est-pick.est-ziguezague,.est-pick.est-sobrepostos{--slot:44px}
 /* Todos os lugares com a MESMA altura (com ou sem garrafinha): é o que
    deixa a fita do ziguezague passar pelo centro de cada um. */
 .est-pick .lpslot{height:100%;min-height:52px}
 .est-pick.est-ziguezague .lpslot{margin:3px;height:calc(100% - 6px)}
+.est-pick.est-sobrepostos .lpslot{margin:0 3px}
 .lpslot{position:relative;z-index:1;border:1px solid var(--bo2);border-radius:10px;background:#fff;padding:7px 0 6px;font-family:inherit;color:var(--vh);cursor:pointer;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:50px}
 .lpslot span{font-family:var(--fd);font-size:12.5px;line-height:1}
@@ -593,11 +568,6 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .chk input{width:auto;margin:0}
 .diag-l{font-size:11px;font-family:ui-monospace,Menlo,monospace;padding:6px 0;border-bottom:1px solid var(--bo);line-height:1.5;word-break:break-word}
 
-@media (max-width:560px){
-.mv-hero{padding:12px 40px 12px}
-.mv-ill svg{height:180px}
-.mv-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-}
 
 /* ── FAB ────────────────────────────────────────────────────────── */
 .fab{position:fixed;right:18px;bottom:calc(20px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:50%;

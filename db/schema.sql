@@ -176,11 +176,13 @@ CREATE TABLE IF NOT EXISTS garrafeira.locais (
   -- Desenho opcional do local: [{nome,capacidade,formato,mais_em}] em
   -- `prateleiras`. `formato` é guardado por prateleira
   -- (fila/ziguezague/sobrepostos) para manter o tipo de arrumação além da
-  -- capacidade; em `sobrepostos` com capacidade ímpar, `mais_em`
-  -- (`cima`/`baixo`) decide em que fila fica o lugar a mais. Se vier vazio, o
-  -- local continua a funcionar como sempre — só com texto livre nas garrafas.
-  -- Quando existe, a app passa a desenhar os lugares e a validar se a posição
-  -- escolhida cabe nessa prateleira.
+  -- capacidade. `mais_em` (`cima`/`baixo`) responde a duas perguntas
+  -- consoante o formato: em `sobrepostos` com capacidade ímpar, em que fila
+  -- fica o lugar a mais (a outra fica centrada); em `ziguezague`, em que
+  -- fila começa o lugar 1. Se vier vazio, o local continua a funcionar
+  -- como sempre — só com texto livre nas garrafas. Quando existe, a app
+  -- passa a desenhar os lugares e a validar se a posição escolhida cabe
+  -- nessa prateleira.
   layout    jsonb NOT NULL DEFAULT '{"prateleiras":[]}'::jsonb,
   ordem     integer NOT NULL DEFAULT 0,
   criado_em timestamptz NOT NULL DEFAULT now(),

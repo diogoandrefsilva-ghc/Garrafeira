@@ -23,7 +23,7 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   **DB** (`carregar` + `carregarGarrafeira`) · Índices e cálculos ·
   Navegação · **Resumo** (ecrã
   inicial) · Pesquisa (Detalhe + Locais) · Filtros · **Detalhe** (lista
-  organizada) · **Mapa dos locais** (conjunto + estante de um local) · Consumidos · **Página do vinho** ·
+  organizada) · **Mapa dos locais** (um local de cada vez) · Consumidos · **Página do vinho** ·
   Modal editar/novo · Consumir garrafa · Modal da garrafa · **IA** ·
   Auth (Supabase) · Definições · Locais · **Garrafeiras** ·
   **Utilizadores (admin)** · Exportar · Diagnóstico · Init.
@@ -133,41 +133,53 @@ inteira; a pergunta que sobra é em que parte da janela se está, e *a fechar*
 ficha do vinho escreve (`FASES`) — quem filtra por uma tem de a reconhecer
 quando abre o vinho.
 
-`Locais` (`renderMapa`) tem **dois níveis**, e não os locais todos abertos
-uns por baixo dos outros (era uma coluna de círculos sem fim). Primeiro o
-**conjunto** (`mapaConjuntoHTML`): um local em destaque, com a **estante
-desenhada em SVG a partir do próprio layout** (`estanteSVG` — montantes,
-uma tábua por prateleira, um círculo por lugar, no formato de cada uma;
-cheio = há garrafa), setas/pontos/arrastar de lado para passar ao seguinte
-(`MAPA_DESTAQUE`), um cartão pequeno por local com a estante em miniatura
-e "37 / 45", e o botão "+ Novo local". Tocar em qualquer cartão (ou no
-destaque) abre a **estante desse local** (`mapaLocalHTML`, `MAPA_ABERTO`):
-barra com ‹ voltar, nome, "**37** / 45 garrafas" e ✎ editar; por baixo, as
-prateleiras nível a nível, de cima para baixo como na estante a sério (o
-Nível 1 é o de baixo, `prateleirasDesc`), cada lugar um círculo **cheio
-com o nº do vinho** ou **vazio com o nº do lugar**, e a legenda no fim.
-Um local sem desenho mostra a lista de sempre (`mapaLocalListaHTML`), e as
-garrafas sem local entram como o local a fingir `POR_ARRUMAR`.
+`Locais` (`renderMapa`) é **um local de cada vez, a ocupar o ecrã**: a
+barra com ‹ › (o nome, a contagem "**35** / 45 garrafas" e ✎ editar ao
+lado), os pontos que dizem em que local se está, e por baixo as
+prateleiras nível a nível — de cima para baixo como na estante a sério (o
+Nível 1 é o de baixo, `prateleirasDesc`). Cada lugar é um círculo **cheio
+com o nº do vinho** ou **vazio com o nº do lugar**, com a legenda no fim.
+Passa-se de local com os ‹ ›, com os pontos, ou **arrastando de lado**
+(`mapaSwipe` — exceto sobre uma prateleira que rola de lado, que aí o
+gesto é dela). Dá a volta: do último passa ao primeiro.
 
-A estante em HTML é **uma função só** (`estanteHTML`) para a página do
-local e para o seletor de posição da garrafa (`renderPickerPosicoes`): o
-formato dá a madeira — barra na fila, bloco nos sobrepostos, e no
-ziguezague uma **fita** que é um SVG esticado por trás dos lugares
-(`ziguezagueBgSVG`, `non-scaling-stroke`). A grelha do ziguezague **não
-tem gap** de propósito: é o que garante que a fita passa pelo centro de
-cada lugar (colunas a (i-½)/cols, filas a 25% e 75%).
+**Não há vista de conjunto nem cartões de pré-visualização.** Chegou a
+haver (um local em destaque com a estante em miniatura, mais um cartão por
+local) e eram dois ecrãs para a mesma pergunta: os locais são poucos,
+andar de lado chega, e o que se quer ver são as garrafas. Por isso também
+não há passo na história do browser nem ‹ voltar — não se "entra" em
+lado nenhum, muda-se de local. `MAPA_LOCAL` é o que está no ecrã (fica no
+`localStorage` como preferência e só vale enquanto o local existir;
+`renderMapa()` passa ao primeiro sozinho se for apagado ou se trocar a
+garrafeira). Um local sem desenho mostra a lista de sempre
+(`mapaLocalListaHTML`), e as garrafas sem local entram como o local a
+fingir `POR_ARRUMAR`, que não se edita.
 
-Abrir uma estante gasta **um passo na história** do browser (`mapaHistEntrar`,
-`ML_HIST`), como a página do vinho — e os dois convivem porque o
-`popstate` olha ao `history.state` que ficou e não só às bandeiras: fechar
-um vinho aberto de cima da estante volta à estante, não ao conjunto.
-`renderMapa()` volta ao conjunto sozinho se o local aberto deixar de
-existir (apagado, ou trocou-se de garrafeira).
+A estante em HTML é **uma função só** (`estanteHTML`) para o ecrã do local
+e para o seletor de posição da garrafa (`renderPickerPosicoes`): o formato
+dá a madeira — barra na fila, bloco nos sobrepostos, e no ziguezague uma
+**fita** que é um SVG esticado por trás dos lugares (`ziguezagueBgSVG`,
+`non-scaling-stroke`). A grelha do ziguezague **não tem gap** de
+propósito: é o que garante que a fita passa pelo centro de cada lugar
+(colunas a (i-½)/cols, filas a 25% e 75%).
 
-Com a procura ligada, o conjunto só mostra os locais com garrafas que
-passam nela ("3 encontradas · de 37") e, na estante, os lugares ocupados
-por garrafas que NÃO passam ficam **apagados** (`.msdot.fora`) — o que
-fica a cor é a resposta a "onde estão as minhas garrafas de Syrah".
+**Onde fica cada lugar é `prateleiraLayoutInfo`**, e `mais_em`
+(`cima`/`baixo`) responde a duas perguntas diferentes conforme o formato:
+- **ziguezague** — em que fila começa o lugar 1. As estantes reais tanto
+  arrancam em cima como em baixo, e obrigar a uma delas era pedir para
+  contar os lugares ao contrário do que se vê;
+- **sobrepostos** com capacidade **ímpar** — em que fila fica o lugar a
+  mais. A outra fila fica **centrada** e não encostada à esquerda: numa
+  estante a sério a fila mais curta assenta no meio da de baixo. É por
+  isso que a grelha dos sobrepostos é em **meias-colunas**
+  (`gridCols = 2 × cols`, cada lugar com `span:2`) — a fila curta começa
+  meia coluna à frente, e meia coluna é exatamente o desencontro que se
+  quer. Uma grelha de colunas inteiras não sabe fazer meio passo.
+
+Com a procura ligada, só se anda pelos locais com garrafas que passam nela
+(a contagem passa a "4 encontradas · de 35") e os lugares ocupados por
+garrafas que NÃO passam ficam **apagados** (`.msdot.fora`) — o que fica a
+cor é a resposta a "onde estão as minhas garrafas de Syrah".
 
 O **editor do local** (`abrirLocalModal`, `renderLocalLayoutEditor`) é uma
 linha por prateleira: o nome editável no sítio (sem caixa — é um título),
@@ -176,8 +188,10 @@ pontinhos do desenho atual (`prateleiraPreviewHTML`) que abre a folha
 "Formato da prateleira" (`#modal-formato`, `abrirFormatoPrat`) com as três
 opções ilustradas — um `<select>` não mostra desenhos, e aqui a diferença
 entre os três É o desenho. A folha abre por cima do modal do local e o
-Escape fecha só a folha. O "lugar a mais" dos sobrepostos ímpares só
-aparece quando existe; a prateleira nova copia a anterior.
+Escape fecha só a folha. O terceiro campo (`MAIS_EM`) só aparece onde tem
+resposta — "Começa" no ziguezague, "Lugar a mais" nos sobrepostos ímpares
+— e a prateleira nova copia a anterior, que numa estante os níveis são
+quase sempre iguais.
 
 Quando a procura tem **texto**, cada cartão que passou por causa de um campo
 que o cartão não mostra ganha a **faixa do match** por baixo — ver "A

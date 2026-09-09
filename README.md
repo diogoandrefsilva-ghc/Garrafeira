@@ -21,7 +21,7 @@ que já se bebeu.
 |---|---|
 | **Garrafeira** | resumo + procura: barra de texto sempre à vista e os filtros (local, tipo, região, **casta**, monocasta/várias castas, ano, menção, maturação) atrás do botão *Filtros* |
 | **Detalhe** | a lista toda, organizada por região ou por ano |
-| **Locais** | o mapa: os locais em conjunto (cada um com a estante desenhada) e, ao tocar num, a estante nível a nível, lugar a lugar |
+| **Locais** | a estante de um local, nível a nível e lugar a lugar; ‹ › (ou arrastar) para os outros locais |
 | **Consumidos** | o histórico — quando, onde e o que se achou de cada garrafa bebida |
 | **Definições** | conta, **garrafeiras** (trocar de garrafeira, partilhar, passar a outra pessoa), locais, utilizadores (admin), migração dos dados antigos, exportação e diagnóstico |
 
