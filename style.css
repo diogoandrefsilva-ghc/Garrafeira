@@ -469,11 +469,19 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    é o que deixa a garrafa assentar dentro dele em vez de flutuar por cima. */
 .est-regua{padding:0 0 calc(var(--slot) * .22);
   background:none;border:none;box-shadow:none;border-radius:0;overflow:visible}
-/* Nos sobrepostos a régua é a mesma, só que a caixa tem duas filas: um
-   pouco de folga em cima e as duas filas encostadas, que é como uma
-   garrafa assenta na outra. A tábua maciça saiu daqui também — um móvel
-   com dois desenhos de prateleira lia-se como dois móveis. */
+/* Nos sobrepostos a caixa tem duas filas: um pouco de folga em cima e as
+   duas filas encostadas, que é como uma garrafa assenta na outra. A folga
+   de baixo é menor do que na régua — a garrafa assenta EM CIMA da tábua
+   lisa, não dentro de um berço, por isso só precisa da espessura dela. */
 .est-regua.est-sobrepostos{padding:calc(var(--slot) * .08) 0 calc(var(--slot) * .22);row-gap:0}
+.est-regua.est-lisa{padding-bottom:calc(var(--slot) * .1)}
+/* A TÁBUA LISA do formato sobrepostos: a mesma madeira da régua (as duas
+   cores dos traços dela, pela mesma ordem) e a mesma espessura, para o
+   móvel se ler como um só. Vive colada ao fundo da caixa, como a régua. */
+.est-bg-l{position:absolute;left:0;right:0;bottom:0;height:calc(var(--slot) * .1);
+  border-radius:calc(var(--slot) * .05);pointer-events:none;
+  background:linear-gradient(180deg,#fffdf7 42%,#cbb894);
+  box-shadow:0 1px 2px rgba(90,60,25,.18)}
 /* Capacidade ÍMPAR: as duas filas ficam desencontradas meia coluna, e aí a
    de cima assenta nos vãos da de baixo em vez de flutuar por cima dela — é
    como se empilham garrafas a sério, e é o mesmo passo (0,8) do

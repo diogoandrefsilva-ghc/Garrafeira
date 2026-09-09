@@ -1669,11 +1669,22 @@ function mapaContagemHTML(x,d){
    mediam, e uma estante de 4/3/4/3 lia-se como uma pilha de tábuas
    irregulares em vez de um móvel. A folga é o que deixa uma prateleira
    desviar-se meia coluna sem sair da caixa. */
+/* Duas madeiras, e é o FORMATO que escolhe: uma prateleira de uma fila
+   leva a régua com berços (`ondaBgSVG`) porque é nela que a garrafa
+   assenta deitada; uma de garrafas SOBREPOSTAS leva uma tábua lisa. As
+   duas tinham a régua, e nos sobrepostos ela dizia meia verdade: o berço
+   vai só sob a fila de baixo (as de cima assentam nas de baixo), e uma
+   fila com berços debaixo de outra sem eles lia-se como uma prateleira
+   inacabada. Num frigorífico — o móvel que este formato representa — a
+   garrafa assenta é numa prateleira lisa, e é isso que a tábua diz.
+   As duas partilham a cor e a espessura, para continuar a ler-se como o
+   mesmo móvel. */
 function estanteHTML(p,info,slotsHTML,cls){
   const regua=!!(p&&p.ondulada);
-  return `<div class="est est-${info.formato}${regua?' est-regua':''}${info.desenc?' desenc':''}${cls?' '+cls:''}"
+  const tabua=regua&&info.formato==='sobrepostos';
+  return `<div class="est est-${info.formato}${regua?' est-regua':''}${tabua?' est-lisa':''}${info.desenc?' desenc':''}${cls?' '+cls:''}"
     style="--cols:${info.cols};--colsw:${info.colsw};--gcols:${info.gridCols};--span:${info.span}">${
-    regua?ondaBgSVG(info):''}${slotsHTML}</div>`;
+    regua?(tabua?'<span class="est-bg-l" aria-hidden="true"></span>':ondaBgSVG(info)):''}${slotsHTML}</div>`;
 }
 // O `style` de um lugar na grelha. `span` é a unidade dos sobrepostos:
 // cada lugar ocupa DUAS meias-colunas, e é isso que deixa a fila mais
@@ -1694,9 +1705,11 @@ function slotGridStyle(s){return `grid-column:${s.col} / span ${s.span||1};grid-
    a metade de baixo da caixa e lia-se como um bloco de madeira com o
    cimo às ondas, não como a prateleira que é.
 
-   O fundo do berço é achatado de propósito (as curvas entram e saem
-   quase na horizontal): uma onda de seno punha a garrafa a assentar num
-   ponto só, e o que segura uma garrafa é o berço inteiro.
+   O fundo do berço é um ASSENTO reto e não duas curvas a juntarem-se num
+   ponto: uma onda de seno (ou um V, mesmo muito aberto) punha a garrafa a
+   assentar num ponto só, e o que segura uma garrafa é o berço inteiro.
+   As paredes sobem desse assento e o que sobra entre dois berços é a
+   crista.
 
    A tira atravessa o móvel INTEIRO (a caixa é sempre da largura do
    local), mas os berços têm de cair sob os lugares — que estão centrados
@@ -1708,7 +1721,7 @@ function ondaBgSVG(info){
      (`fila`) ou duas (`sobrepostos`, que é o dobro da altura). Com o SVG
      esticado à caixa inteira, o mesmo `viewBox` dava alturas diferentes
      conforme o formato e os berços fugiam dos lugares. */
-  const colsw=info.colsw||info.cols,PICO=10,VALE=82;
+  const colsw=info.colsw||info.cols,PICO=10,VALE=74;
   const larg=100/colsw;                          // uma coluna, em % da caixa
   /* Os berços vão sob a fila de BAIXO e só sob ela: é nela que as garrafas
      assentam na madeira. Nos `sobrepostos`, as de cima assentam nas de
@@ -1723,15 +1736,40 @@ function ondaBgSVG(info){
      Atravessar o móvel todo dava-lhe dois troços retos e compridos, um de
      cada lado — e o que se lia era uma linha contínua a ir do nome do
      nível até ao outro extremo da linha, não uma prateleira. */
-  const PONTA=.3;                                // o que sobra depois do berço, em colunas
-  let d=`M${f(Math.max(0,cxs[0]-larg*(.5+PONTA)))} ${PICO}`;
+  const PONTA=.24;                               // o que sobra depois do berço, em colunas
+  /* O berço tem TRÊS partes: uma zona de contacto RETA no fundo
+     (`ASSENTO`), onde a garrafa assenta de facto, e duas paredes
+     (`PAREDE`) que sobem dela até à crista. Antes as duas curvas
+     juntavam-se no centro e, mesmo com as tangentes quase horizontais, o
+     fundo continuava a ser um V muito aberto: a garrafa tocava-lhe num
+     ponto e lia-se pousada em cima da régua, não deitada dentro dela.
+
+     A BOCA do berço (assento + duas paredes) tem de ser MAIOR do que a
+     garrafa, e a garrafa mede `1/colr` colunas — no espaçamento mais
+     apertado (`COL_MIN`) são 0,85 da coluna. Daí a boca sair do próprio
+     `COL_MIN` com uma folga, e não de um valor a meio da gama: as paredes
+     são o desenho todo, e a meio da gama metade dos casos punha-as
+     inteiramente ATRÁS do círculo do lugar (que é opaco e vem por cima,
+     ver `.msdot`) — sobrava a crista reta e a régua voltava a ler-se como
+     uma tábua contínua. E é o caso mais comum, não o raro: cai-se em
+     `COL_MIN` exatamente nos níveis com muitos lugares num ecrã estreito.
+
+     Não se lê o `--colr` a sério aqui de propósito: ele é escrito no `.ml`
+     DEPOIS deste SVG existir e sem redesenhar o mapa, por isso um berço
+     calculado a partir dele ficaria a discordar do espaçamento no
+     primeiro desenho. */
+  const BOCA=1.08/COL_MIN;                       // a boca, em colunas: a garrafa mais 8%
+  const ASSENTO=larg*BOCA*.38,PAREDE=larg*BOCA*.31;
+  const boca=cx=>cx-ASSENTO/2-PAREDE,fim=cx=>cx+ASSENTO/2+PAREDE;
+  let d=`M${f(Math.max(0,boca(cxs[0])-larg*PONTA))} ${PICO}`;
   cxs.forEach(cx=>{
-    const e=cx-larg/2,dir=cx+larg/2;
+    const e=boca(cx),dir=fim(cx),ae=cx-ASSENTO/2,ad=cx+ASSENTO/2;
     d+=` L${f(e)} ${PICO}`;                      // reto até à boca do berço
-    d+=` C${f(e+larg*.24)} ${PICO} ${f(cx-larg*.26)} ${VALE} ${f(cx)} ${VALE}`;
-    d+=` C${f(cx+larg*.26)} ${VALE} ${f(dir-larg*.24)} ${PICO} ${f(dir)} ${PICO}`;
+    d+=` C${f(e+PAREDE*.5)} ${PICO} ${f(ae-PAREDE*.42)} ${VALE} ${f(ae)} ${VALE}`;
+    d+=` L${f(ad)} ${VALE}`;                     // o assento: onde a garrafa toca
+    d+=` C${f(ad+PAREDE*.42)} ${VALE} ${f(dir-PAREDE*.5)} ${PICO} ${f(dir)} ${PICO}`;
   });
-  d+=` L${f(Math.min(100,cxs[cxs.length-1]+larg*(.5+PONTA)))} ${PICO}`;
+  d+=` L${f(Math.min(100,fim(cxs[cxs.length-1])+larg*PONTA))} ${PICO}`;
   return `<svg class="est-bg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
     <path d="${d}" class="est-reg-s" transform="translate(0 7)"/><path d="${d}" class="est-reg"/>
   </svg>`;
@@ -1851,6 +1889,12 @@ function mapaLocalHTML(x,d){
    scroll onde estiver (`rect.top + scrollY` é a posição no documento) —
    o que interessa é caber quando se chega ao separador, com a página no
    topo. */
+/* Quanto mede uma coluna, em lugares. `COL_MIN` é o espaçamento apertado
+   (garrafas quase a tocarem-se, que é o que o encaixe precisa) e `COL_MAX`
+   o folgado. Vive aqui, fora do `ajustarEstantes`, porque a `ondaBgSVG`
+   também precisa dele: a boca do berço tem de ser maior do que a garrafa
+   no caso mais apertado. */
+const COL_MIN=1.18, COL_MAX=1.36;
 const SLOT_MIN=18, SLOT_MAX=54;
 function ajustarEstantes(){
   const box=document.getElementById('mapa');
@@ -1897,7 +1941,6 @@ function ajustarEstantes(){
      no meio de um vão onde cabia outra, e não entre duas. Era 1,28–1,8
      ("as garrafas devem respirar") e o resultado foram filas soltas em
      vez de um ziguezague. */
-  const COL_MIN=1.18,COL_MAX=1.36;
   const ajustar=v=>{
     const r=livre>0?Math.min(COL_MAX,Math.max(COL_MIN,livre/(colsw*v))):COL_MAX;
     ml.style.setProperty('--colr',r.toFixed(3));
