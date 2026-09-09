@@ -535,16 +535,15 @@ function ordPrateleira(a,b){
 function prateleirasDesc(lista){
   return [...(lista||[])].sort((a,b)=>ordPrateleira(String((b&&b.nome)||b||''),String((a&&a.nome)||a||'')));
 }
-const FORMATOS_PRATELEIRA=[['fila','Fila'],['ziguezague','Ziguezague'],['sobrepostos','Sobrepostos']];
+/* Dois formatos, e só dois: uma fila de lugares, ou duas filas sobrepostas
+   (garrafas em profundidade). O ziguezague foi-se — ver `layoutLocal`. */
+const FORMATOS_PRATELEIRA=[['fila','Fila'],['sobrepostos','Sobrepostos']];
 const FORMATO_PRAT_LABEL=Object.fromEntries(FORMATOS_PRATELEIRA);
-// As duas respostas do `mais_em`: onde fica o lugar a mais (sobrepostos
-// ímpar) ou em que fila começa o lugar 1 (ziguezague).
+// Onde fica o lugar a mais numa prateleira de sobrepostos com capacidade
+// ímpar. Era usado também pelo ziguezague, que já não existe.
 const MAIS_EM=[['cima','Em cima'],['baixo','Em baixo']];
 function normalizarFormatoPrateleira(v){
-  const f=chave(v).replace(/\s+/g,'');
-  if(f==='ziguezague')return 'ziguezague';
-  if(f==='sobrepostos')return 'sobrepostos';
-  return 'fila';
+  return chave(v).replace(/\s+/g,'')==='sobrepostos'?'sobrepostos':'fila';
 }
 function formatoPrateleiraNome(v){return FORMATO_PRAT_LABEL[normalizarFormatoPrateleira(v)]||'Fila';}
 function normalizarSobrepostosMaisEm(v){
@@ -552,14 +551,13 @@ function normalizarSobrepostosMaisEm(v){
 }
 /* Onde fica cada lugar: coluna e fila na grelha, por formato.
    - fila: um por coluna;
-   - ziguezague: alterna fila de cima/fila de baixo; `mais_em` diz em qual
-     começa o lugar 1 ('cima' por defeito, 'baixo' para uma estante que
-     começa com o lugar em baixo);
    - sobrepostos: enche a fila de cima e a de baixo aos pares (1 em cima, 2
      em baixo, 3 em cima…), e com capacidade ímpar `mais_em` diz onde fica o
      lugar a mais. A grelha dos sobrepostos é em MEIAS-colunas (`span:2`):
      é o que deixa a fila mais curta começar meia coluna à frente e ficar
      CENTRADA em vez de encostada à esquerda.
+   O NÚMERO de cada lugar sai do `base` da prateleira (ver `layoutLocal`):
+   a numeração é corrida no local, não recomeça em cada nível.
    `cols` são as colunas a sério (para larguras); `gridCols` as unidades da
    grelha (iguais, ou o dobro nos sobrepostos). */
 function prateleiraLayoutInfo(p,opt){
@@ -568,14 +566,19 @@ function prateleiraLayoutInfo(p,opt){
   const mais_em=normalizarSobrepostosMaisEm(p&&p.mais_em);
   const capMax=preview?7:240;
   const capacidade=Math.max(1,Math.min(capMax,inteiro((p&&p.capacidade))||0));
-  let slots=[],span=1;
-  if(formato==='ziguezague'){
-    const primeira=mais_em==='baixo'?2:1;
-    slots=Array.from({length:capacidade},(_,i)=>({lugar:i+1,col:i+1,row:i%2?3-primeira:primeira}));
-  }else if(formato==='sobrepostos'){
-    span=2;
-    const cima=Math.ceil(capacidade/2),baixo=Math.floor(capacidade/2);
-    const longa=Math.max(cima,baixo);
+  const base=preview?0:Math.max(0,inteiro(p&&p.base)||0);
+  const cols=formato==='sobrepostos'?Math.max(Math.ceil(capacidade/2),Math.floor(capacidade/2)):capacidade;
+  /* A grelha é sempre a do MÓVEL (`colsw` colunas), em MEIAS-colunas e em
+     frações: a prateleira ocupa a largura toda e os lugares ficam
+     centrados nela, deslocando-se meia coluna quando têm de desencontrar.
+     Com colunas de largura fixa isto transbordava assim que o móvel era
+     mais largo do que o espaço, e os lugares encostavam à esquerda em vez
+     de ficarem centrados — o desenho deixava de bater com a madeira. */
+  const colsw=preview?cols:Math.max(cols,inteiro(p&&p.colsw)||cols);
+  const meia=(!preview&&p&&p.desvio)?1:0;
+  const off=colsw-cols+meia;              // meias-colunas livres à esquerda
+  let slots=[];
+  if(formato==='sobrepostos'){
     // a fila que tem o lugar a mais (se houver) é a comprida; a outra
     // começa meia coluna à frente
     const filaCheia=mais_em==='baixo'?2:1;
@@ -584,32 +587,84 @@ function prateleiraLayoutInfo(p,opt){
       const row=i%2===0?filaCheia:3-filaCheia;
       const k=row===1?nCima++:nBaixo++;
       const curta=(row!==filaCheia)&&(capacidade%2===1);
-      return {lugar:i+1,row,col:2*k+1+(curta?1:0),span:2};
+      return {lugar:base+i+1,row,col:off+2*k+1+(curta?1:0),span:2};
     });
     if(capacidade===1)slots[0].row=1;
-    return {formato,mais_em,capacidade,slots,cols:longa,rows:capacidade>1?2:1,gridCols:2*longa,span};
-  }else{
-    slots=Array.from({length:capacidade},(_,i)=>({lugar:i+1,col:i+1,row:1}));
+    return {formato,mais_em,capacidade,base,slots,cols,colsw,rows:capacidade>1?2:1,gridCols:2*colsw,span:2};
   }
-  const cols=slots.reduce((m,s)=>Math.max(m,s.col),0)||1;
-  const rows=slots.reduce((m,s)=>Math.max(m,s.row),0)||1;
-  return {formato,mais_em,capacidade,slots,cols,rows,gridCols:cols,span};
+  slots=Array.from({length:capacidade},(_,i)=>({lugar:base+i+1,col:off+2*i+1,row:1,span:2}));
+  return {formato,mais_em,capacidade,base,slots,cols,colsw,rows:1,gridCols:2*colsw,span:2};
 }
+/* A LEITURA DO DESENHO — e é aqui que moram duas decisões.
+
+   **Os lugares são numerados de forma CORRIDA no local**, não dentro de
+   cada prateleira: um Nível 1 de 4 lugares tem 1 a 4 e o Nível 2 a seguir
+   começa no 5. É como se numera uma estante a sério (cada garrafa tem um
+   número só dela no móvel) e é como os dados desta app já estavam
+   gravados antes de haver desenho nenhum. Cada prateleira leva por isso um
+   `base` — quantos lugares vêm antes dela — e a ORDEM DO ARRAY é que
+   manda: trocar prateleiras de ordem renumera os lugares.
+
+   **Um ziguezague são DOIS níveis**, não um. Era um formato (uma
+   prateleira com duas filas alternadas) e não é o que está no móvel: a
+   fila de baixo e a de cima são prateleiras diferentes, com contagens
+   diferentes (4 e 3, tipicamente) — foi um entendido de vinhos que o
+   apontou, e os dados desta app já estavam gravados assim. Os layouts
+   antigos são convertidos AQUI, ao ler, e não numa migração da base de
+   dados: assim qualquer garrafeira fica certa sem ninguém correr nada, e
+   os dados só mudam quando alguém guardar o local. A metade de baixo fica
+   com o nome de sempre (é o que as garrafas gravadas dizem), a de cima
+   ganha " · cima".
+
+   O que sobra do ziguezague é o **`encaixe`**: uma marca de desenho a
+   dizer que esta prateleira assenta na de baixo, desencontrada. Não muda
+   nada nos lugares — só como se desenha.
+
+   O `desvio` é o desencontro horizontal, em frações de coluna. Com as duas
+   prateleiras centradas, os lugares já caem uns entre os outros quando as
+   capacidades têm paridades diferentes (4 e 3): aí não é preciso desviar
+   nada. Quando têm a mesma (4 e 4), ficariam alinhados e é preciso meia
+   coluna. `ondulada` é quem desenha a tábua em onda: a que encaixa e a que
+   está por baixo dela, para o conjunto se ler como um ziguezague. */
 function layoutLocal(l){
   const raw=l&&l.layout&&Array.isArray(l.layout.prateleiras)?l.layout.prateleiras:[];
-  return raw.map((p,i)=>{
+  const out=[];
+  raw.forEach((p,i)=>{
     const capacidade=Math.max(1,Math.min(240,inteiro(p&&p.capacidade)||0));
+    if(!capacidade)return;
     const nome=String((p&&p.nome)||'').trim()||`Nível ${i+1}`;
-    const formato=normalizarFormatoPrateleira(p&&p.formato);
-    const mais_em=normalizarSobrepostosMaisEm(p&&p.mais_em);
-    return capacidade?{nome,capacidade,formato,mais_em}:null;
-  }).filter(Boolean);
+    if(chave(p&&p.formato).replace(/\s+/g,'')==='ziguezague'){
+      // o antigo `mais_em` dizia em que fila ficava o lugar 1; com ele em
+      // cima, a fila de cima é a que leva o lugar a mais
+      const nCima=normalizarSobrepostosMaisEm(p&&p.mais_em)==='cima'?Math.ceil(capacidade/2):Math.floor(capacidade/2);
+      out.push({nome,capacidade:capacidade-nCima,formato:'fila',mais_em:'cima',encaixe:false});
+      if(nCima)out.push({nome:`${nome} · cima`,capacidade:nCima,formato:'fila',mais_em:'cima',encaixe:true});
+      return;
+    }
+    out.push({nome,capacidade,formato:normalizarFormatoPrateleira(p&&p.formato),
+      mais_em:normalizarSobrepostosMaisEm(p&&p.mais_em),encaixe:!!(p&&p.encaixe)});
+  });
+  let base=0;
+  out.forEach((p,i)=>{
+    p.base=base;base+=p.capacidade;
+    const ant=i?out[i-1]:null;
+    p.encaixe=!!(p.encaixe&&ant);      // a primeira não tem em que encaixar
+    p.desvio=p.encaixe?((ant.desvio||0)+(((p.capacidade-ant.capacidade)%2===0)?.5:0))%1:0;
+  });
+  out.forEach((p,i)=>{p.ondulada=!!(p.encaixe||(out[i+1]&&out[i+1].encaixe));});
+  // A largura do móvel: o nível mais largo, mais uma coluna de folga de
+  // CADA lado. Meia coluna de folga não chegava — uma prateleira desviada
+  // gastava-a toda e o último lugar ficava cortado pela borda.
+  const colsMax=out.reduce((m,p)=>Math.max(m,p.formato==='sobrepostos'?Math.ceil(p.capacidade/2):p.capacidade),1);
+  out.forEach(p=>{p.colsw=colsMax+2;});
+  return out;
 }
 function temLayoutLocal(l){return layoutLocal(l).length>0;}
+function lugaresLocal(l){return layoutLocal(l).reduce((s,p)=>s+p.capacidade,0);}
 function resumoLayoutLocal(l){
   const prats=layoutLocal(l);
   if(!prats.length)return '';
-  const n=prats.reduce((s,p)=>s+p.capacidade,0);
+  const n=lugaresLocal(l);
   return `${prats.length} ${prats.length===1?'prateleira':'prateleiras'} · ${n} ${n===1?'lugar':'lugares'}`;
 }
 function lugarNumeroLayout(v){
@@ -618,15 +673,39 @@ function lugarNumeroLayout(v){
   const n=inteiro(s);
   return n!=null&&String(n)===s?n:null;
 }
-function slotLayoutKey(prateleira,lugar){return `${prateleira}\n${lugar}`;}
+/* Com a numeração corrida, o número do lugar diz sozinho em que prateleira
+   ele está. */
+function prateleiraDoLugar(prats,lug){
+  return (prats||[]).find(p=>lug>p.base&&lug<=p.base+p.capacidade)||null;
+}
+function nomeDaPosicao(localId,lugar){
+  const l=IDXL[localId];
+  const lug=lugarNumeroLayout(lugar);
+  if(!l||lug==null)return '';
+  const def=prateleiraDoLugar(layoutLocal(l),lug);
+  return def?def.nome:'';
+}
+/* Quem está em cada lugar do desenho, indexado pelo NÚMERO do lugar (que
+   com a numeração corrida é único no local).
+
+   O nome da prateleira gravado na garrafa é uma confirmação, não a chave:
+   vale quando bate com a prateleira a que o número pertence, e vale
+   também quando está vazio (garrafas antigas, de antes de haver desenho,
+   que só têm o número). Quando CONTRADIZ o desenho a garrafa não entra —
+   vai para "por posicionar", que é onde se vê que há ali uma discordância
+   para resolver, em vez de a app escolher sozinha entre duas versões. */
 function ocupacaoLayout(localId,ignorarGid){
+  const l=IDXL[localId];
+  const prats=l?layoutLocal(l):[];
   const occ={};
   db.garrafas.filter(g=>naGarrafeira(g)&&g.local_id===localId&&g.id!==ignorarGid).forEach(g=>{
-    const prat=String(g.prateleira||'').trim();
     const lug=lugarNumeroLayout(g.lugar);
-    if(!prat||lug==null)return;
-    const k=slotLayoutKey(prat,lug);
-    (occ[k]=occ[k]||[]).push(g);
+    if(lug==null)return;
+    const def=prateleiraDoLugar(prats,lug);
+    if(!def)return;
+    const prat=String(g.prateleira||'').trim();
+    if(prat&&prat!==def.nome)return;
+    (occ[lug]=occ[lug]||[]).push(g);
   });
   return occ;
 }
@@ -641,31 +720,29 @@ function prateleiraPreviewHTML(p){
 function dadosForaLayout(l,gs){
   const prats=layoutLocal(l);
   if(!prats.length)return [];
-  const caps={};prats.forEach(p=>caps[p.nome]=p.capacidade);
   return gs.filter(g=>{
-    const prat=String(g.prateleira||'').trim();
     const lug=lugarNumeroLayout(g.lugar);
-    if(!prat||lug==null)return true;
-    return !caps[prat]||lug<1||lug>caps[prat];
+    if(lug==null)return true;
+    const def=prateleiraDoLugar(prats,lug);
+    if(!def)return true;
+    const prat=String(g.prateleira||'').trim();
+    return !!prat&&prat!==def.nome;
   }).sort((a,b)=>
     ordPrateleira(String(a.prateleira||''),String(b.prateleira||''))||
     String(a.lugar||'').localeCompare(String(b.lugar||''),'pt',{numeric:true}));
 }
-function validarPosicaoLayout(localId,prateleira,lugar,ignorarGid){
+/* O lugar é o que se valida; a prateleira deduz-se dele. */
+function validarPosicaoLayout(localId,lugar,ignorarGid){
   const l=IDXL[localId];
   if(!l||!temLayoutLocal(l))return '';
-  const prat=String(prateleira||'').trim();
-  const lugRaw=String(lugar||'').trim();
-  if(!prat&&!lugRaw)return '';
-  if(!prat)return 'Escolhe também a prateleira, ou deixa os dois campos vazios para ficar por arrumar.';
-  const def=layoutLocal(l).find(p=>p.nome===prat);
-  if(!def)return `"${prat}" não existe no desenho de ${l.nome}.`;
-  if(!lugRaw)return `Escolhe também o lugar em ${prat}, ou deixa os dois campos vazios para ficar por arrumar.`;
-  const lug=lugarNumeroLayout(lugRaw);
+  const raw=String(lugar==null?'':lugar).trim();
+  if(!raw)return '';
+  const lug=lugarNumeroLayout(raw);
   if(lug==null)return 'Num local com desenho, o lugar tem de ser um número inteiro.';
-  if(lug<1||lug>def.capacidade)return `${prat} só vai até ao lugar ${def.capacidade}.`;
-  if((ocupacaoLayout(localId,ignorarGid)[slotLayoutKey(prat,lug)]||[]).length)
-    return `O ${prat} · lugar ${lug} já está ocupado.`;
+  const total=lugaresLocal(l);
+  if(lug<1||lug>total)return `${l.nome} vai do lugar 1 ao ${total}.`;
+  if((ocupacaoLayout(localId,ignorarGid)[lug]||[]).length)
+    return `O lugar ${lug} já está ocupado.`;
   return '';
 }
 function ondeEsta(g){
@@ -1554,26 +1631,54 @@ function mapaContagemHTML(x,d){
    `prateleiraLayoutInfo` lhe deu. É a MESMA função para a estante do
    local e para o seletor de posição da garrafa: os lugares são o que muda
    (`slotsHTML`), a madeira não. */
+/* TODAS as prateleiras de um local têm a MESMA largura — a do nível mais
+   largo, mais uma coluna de folga (`colsw`) — e os lugares ficam
+   centrados nela. Antes cada prateleira valia o que os seus lugares
+   mediam, e uma estante de 4/3/4/3 lia-se como uma pilha de tábuas
+   irregulares em vez de um móvel. A folga é o que deixa uma prateleira
+   desviar-se meia coluna sem sair da caixa. */
 function estanteHTML(p,info,slotsHTML,cls){
-  return `<div class="est est-${info.formato}${cls?' '+cls:''}" style="--cols:${info.cols};--gcols:${info.gridCols};--span:${info.span}">${
-    info.formato==='ziguezague'?ziguezagueBgSVG(info):''}${slotsHTML}</div>`;
+  const onda=!!(p&&p.ondulada)&&info.formato==='fila';
+  return `<div class="est est-${info.formato}${onda?' est-onda':''}${cls?' '+cls:''}"
+    style="--cols:${info.cols};--colsw:${info.colsw};--gcols:${info.gridCols};--span:${info.span}">${
+    onda?ondaBgSVG(info,(p&&p.desvio)||0):''}${slotsHTML}</div>`;
 }
 // O `style` de um lugar na grelha. `span` é a unidade dos sobrepostos:
 // cada lugar ocupa DUAS meias-colunas, e é isso que deixa a fila mais
 // curta começar meia coluna à frente e ficar centrada.
 function slotGridStyle(s){return `grid-column:${s.col} / span ${s.span||1};grid-row:${s.row}`;}
-/* A fita do ziguezague passa pelo CENTRO de cada lugar. Só dá certo porque
-   a grelha do ziguezague não tem gap nenhum (`.est-ziguezague{gap:0}`) e
-   as duas filas têm a mesma altura: assim a coluna i está centrada em
-   (i-½)/cols e as filas a 25% e 75%. O traço é `non-scaling-stroke` — o
-   viewBox estica-se à caixa (`preserveAspectRatio:none`) e sem isso a
-   fita ficava mais grossa nas diagonais do que nas pontas. */
-function ziguezagueBgSVG(info){
-  const cell=100/info.cols,yy=r=>info.rows>1?(r===1?25:75):50;
-  const f=info.slots[0],u=info.slots[info.slots.length-1];
-  const pts=[[f.col-1.5,yy(f.row===1?2:1)],...info.slots.map(s=>[s.col-.5,yy(s.row)]),[u.col+.5,yy(u.row===1?2:1)]];
-  const d=pts.map(([c,y],i)=>`${i?'L':'M'}${(c*cell).toFixed(2)} ${y}`).join(' ');
-  return `<svg class="est-bg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="${d}" class="est-zz1"/><path d="${d}" class="est-zz2"/></svg>`;
+/* A TÁBUA EM ONDA das prateleiras que encaixam: os lugares assentam nos
+   VALES e a madeira sobe entre eles, que é como uma prateleira de
+   ziguezague é feita. Cada prateleira desenha a sua; empilhadas e
+   desencontradas, leem-se como o ziguezague de sempre.
+
+   O traço é `non-scaling-stroke` — o viewBox estica-se à caixa
+   (`preserveAspectRatio:none`) e sem isso a onda ficava mais grossa nas
+   diagonais do que nas pontas. */
+/* A tábua atravessa o móvel INTEIRO (a caixa é sempre da largura do
+   local), mas os vales têm de cair sob os lugares — que estão centrados
+   nela e podem estar desviados meia coluna. Daí a conta: a primeira
+   coluna ocupada começa a meio do que sobra. */
+function ondaBgSVG(info,desvio){
+  const colsw=info.colsw||info.cols,PICO=12,VALE=48;
+  const larg=100/colsw;                        // uma coluna, em % da caixa
+  const off=(colsw-info.cols)/2+(desvio||0);   // colunas livres à esquerda
+  // curvas e não bicos: a tábua de uma prateleira de ziguezague é
+  // ondulada, e a traço reto lia-se como uma serra
+  const f=n=>n.toFixed(2);
+  let topo=`M0 ${PICO}`;
+  const q=(x,y,px)=>{topo+=` Q${f(px)} ${f(y===VALE?PICO:VALE)} ${f(x)} ${y}`;};
+  // `s.col` está em MEIAS-colunas da grelha; aqui conta-se por lugar
+  info.slots.forEach((s,i)=>{
+    const xv=(off+i+.5)*larg,xp=(off+i+1)*larg;
+    q(xv,VALE,xv-larg/4);
+    q(xp,PICO,xp-larg/4);
+  });
+  if(info.slots.length&&(off+info.slots.length)*larg<100)topo+=` L100 ${PICO}`;
+  return `<svg class="est-bg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+    <path d="${topo} L100 100 L0 100 Z" class="est-onda-f"/>
+    <path d="${topo}" class="est-onda-l"/>
+  </svg>`;
 }
 
 function mapaCelulaListaHTML(g){
@@ -1610,7 +1715,7 @@ function mapaEstanteHTML(l,gs,d){
     const info=prateleiraLayoutInfo(p);
     let n=0;
     const slots=info.slots.map(s=>{
-      const lugar=s.lugar,lista=occ[slotLayoutKey(p.nome,lugar)]||[];
+      const lugar=s.lugar,lista=occ[lugar]||[];
       const pos=` style="${slotGridStyle(s)}"`;
       if(!lista.length)return `<button class="msdot vazia"${pos}
         onclick="mapaLugarVazio(${l.id},'${escJs(p.nome)}',${lugar})"
@@ -1626,7 +1731,7 @@ function mapaEstanteHTML(l,gs,d){
         ${lista.length>1?`<span class="msdot-q">×${lista.length}</span>`:''}
       </button>`;
     }).join('');
-    return `<div class="mprat-layout">
+    return `<div class="mprat-layout${p.encaixe?' encaixa':''}">
       <span class="mp-lbl">${esc(p.nome)}</span>
       <span class="mp-fio"></span>
       <div class="est-wrap">${estanteHTML(p,info,slots)}</div>
@@ -1718,9 +1823,25 @@ function ajustarEstantes(){
   // que vem por baixo é uma ação, não faz parte da estante, e obrigar a
   // que ele também coubesse custava dois pixels em cada lugar
   const alturaCom=v=>{ml.style.setProperty('--slot',v.toFixed(1)+'px');return ml.offsetHeight;};
-  if(alturaCom(SLOT_MAX)<=disponivel)return;
+  /* O teto do lugar não é só a ALTURA que sobra: uma prateleira tem a
+     largura do móvel (`--colsw` colunas de 1,34 lugares), e num ecrã
+     estreito é a largura que manda primeiro — sem isto, a estante cabia
+     em altura e saía pelo lado, a rolar. Mede-se com o lugar no mínimo,
+     que é quando a caixa está mais folgada. */
+  alturaCom(SLOT_MIN);
+  const linha=ml.querySelector('.mprat-layout');
+  const colsw=[...ml.querySelectorAll('.est')].reduce((m,e)=>
+    Math.max(m,parseFloat(getComputedStyle(e).getPropertyValue('--colsw'))||1),1);
+  // o espaço que a prateleira tem: a linha menos o nome, a contagem e o
+  // mínimo dos fios. Medir o `.est-wrap` não servia — ele encolhe ao que a
+  // estante mede, e a estante mede o que o lugar der: era circular.
+  const larg=el=>el?el.getBoundingClientRect().width:0;
+  const livre=linha?linha.clientWidth-larg(linha.querySelector('.mp-lbl'))-larg(linha.querySelector('.mp-n'))-44:0;
+  const porLargura=livre>0?livre/(colsw*1.34):SLOT_MAX;
+  const teto=Math.max(SLOT_MIN,Math.min(SLOT_MAX,porLargura));
+  if(alturaCom(teto)<=disponivel)return;
   if(alturaCom(SLOT_MIN)>disponivel)return;       // nem no mínimo cabe: fica no mínimo e rola
-  let lo=SLOT_MIN,hi=SLOT_MAX;
+  let lo=SLOT_MIN,hi=teto;
   for(let i=0;i<6;i++){const m=(lo+hi)/2;if(alturaCom(m)<=disponivel)lo=m;else hi=m;}
   alturaCom(lo);
 }
@@ -1843,7 +1964,7 @@ function mapaPopupHTML(localId,prateleira,lugar,lista){
   </div>`;
 }
 function mapaPopupMostrar(localId,prateleira,lugar,anchor,fixa){
-  const lista=(ocupacaoLayout(localId)[slotLayoutKey(prateleira,lugar)]||[]).filter(naGarrafeira);
+  const lista=(ocupacaoLayout(localId)[lugar]||[]).filter(naGarrafeira);
   if(!lista.length||!anchor)return;
   clearTimeout(MAPA_POP_T);
   MAPA_POP_LOCAL=localId;MAPA_POP_PRAT=prateleira;MAPA_POP_LUGAR=lugar;MAPA_POP_FIXA=!!fixa;MAPA_POP_ANCHOR=anchor;
@@ -1918,7 +2039,7 @@ async function guardarLugarVazio(localId,prateleira,lugar){
   const sel=document.getElementById('lv-vinho');
   const vinhoId=sel&&sel.value?parseInt(sel.value,10):0;
   if(!vinhoId){toast('Escolhe um vinho',1);return;}
-  const erro=validarPosicaoLayout(localId,prateleira,String(lugar));
+  const erro=validarPosicaoLayout(localId,lugar);
   if(erro){toast(erro,1);return;}
   const dados={local_id:localId,prateleira,lugar:String(lugar)};
   // uma garrafa deste vinho que ainda não tenha lugar; a que já está neste
@@ -2481,14 +2602,34 @@ function renderPickerPosicoes(prefix,gid){
   box.dataset.gid=String(gid||0);
   const localId=locSel.value?parseInt(locSel.value,10):0;
   const l=IDXL[localId];
-  if(!l||!temLayoutLocal(l)){box.innerHTML='';return;}
+  if(!l||!temLayoutLocal(l)){
+    box.innerHTML='';
+    // sem desenho, a prateleira volta a ser texto livre
+    const pi=document.getElementById(`${prefix}-prat`),pb=document.getElementById(`${prefix}-pratbox`),lb=document.getElementById(`${prefix}-lugarlbl`);
+    if(pi){pi.readOnly=false;pi.placeholder='Nível 3';}
+    if(pb)pb.classList.remove('derivado');
+    if(lb)lb.textContent='Lugar';
+    return;
+  }
   const prats=layoutLocal(l);
   const occ=ocupacaoLayout(localId,gid||0);
-  const pratAtual=(document.getElementById(`${prefix}-prat`).value||'').trim();
   const lugarAtual=lugarNumeroLayout(document.getElementById(`${prefix}-lugar`).value);
+  // Com a numeração corrida a prateleira sai do número, e escrevê-la à mão
+  // noutro campo só dava para os dois se contradizerem: aqui ela deixa de
+  // se editar e passa a mostrar o que o lugar diz.
+  const pratBox=document.getElementById(`${prefix}-pratbox`);
+  const pratIn=document.getElementById(`${prefix}-prat`);
+  if(pratIn){
+    pratIn.readOnly=true;
+    pratIn.value=nomeDaPosicao(localId,lugarAtual)||'';
+    pratIn.placeholder='(pelo lugar)';
+  }
+  if(pratBox)pratBox.classList.add('derivado');
+  const lbl=document.getElementById(`${prefix}-lugarlbl`);
+  if(lbl)lbl.textContent=`Lugar (1 a ${lugaresLocal(l)})`;
   const livres=prats.reduce((s,p)=>{
     let n=0;
-    for(let i=1;i<=p.capacidade;i++)if(!(occ[slotLayoutKey(p.nome,i)]||[]).length)n++;
+    for(let i=1;i<=p.capacidade;i++)if(!(occ[p.base+i]||[]).length)n++;
     return s+n;
   },0);
   box.innerHTML=`
@@ -2501,18 +2642,18 @@ function renderPickerPosicoes(prefix,gid){
         <div class="lpick-n">${livres} ${livres===1?'livre':'livres'}</div>
       </div>
       ${prateleirasDesc(prats).map(p=>`
-        ${(()=>{const info=prateleiraLayoutInfo(p);const compacto=p.formato!=='fila';return `<div class="lprat">
-          <div class="lprat-t">${esc(p.nome)} <span>${p.capacidade} ${p.capacidade===1?'lugar':'lugares'}</span></div>
-          ${estanteHTML(p,info,info.slots.map(s=>{
+        ${(()=>{const pp=Object.assign({},p,{ondulada:false,desvio:0});const info=prateleiraLayoutInfo(pp);const compacto=p.formato!=='fila';return `<div class="lprat">
+          <div class="lprat-t">${esc(p.nome)} <span>${p.capacidade===1?`lugar ${p.base+1}`:`lugares ${p.base+1}–${p.base+p.capacidade}`}</span></div>
+          ${estanteHTML(pp,info,info.slots.map(s=>{
             const lugar=s.lugar;
             const pos=` style="${slotGridStyle(s)}"`;
-            const lista=occ[slotLayoutKey(p.nome,lugar)]||[];
-            const sel=pratAtual===p.nome&&lugarAtual===lugar;
+            const lista=occ[lugar]||[];
+            const sel=lugarAtual===lugar;
             if(lista.length){
               const v=IDXV[(lista[0]||{}).vinho_id]||{nome:'?'};
               return `<button type="button" class="lpslot${compacto?' mini':''} ocup" disabled${pos} title="${esc(v.nome)} · ${esc(posicaoTxt(p.nome,lugar))}">${garrafaSVG(v,1)}<span>${lugar}</span></button>`;
             }
-            return `<button type="button" class="lpslot${compacto?' mini':''}${sel?' on':''}"${pos} onclick="escolherPosicaoLayout('${prefix}','${escJs(p.nome)}',${lugar})" title="${esc(posicaoTxt(p.nome,lugar))}"><span>${lugar}</span></button>`;
+            return `<button type="button" class="lpslot${compacto?' mini':''}${sel?' on':''}"${pos} onclick="escolherPosicaoLayout('${prefix}',${lugar})" title="${esc(posicaoTxt(p.nome,lugar))}"><span>${lugar}</span></button>`;
           }).join(''),'est-pick')}
         </div>`;})()}
       `).join('')}
@@ -2524,8 +2665,7 @@ function renderPickerPosicoes(prefix,gid){
 function pickerGid(prefix){
   return parseInt((((document.getElementById(`${prefix}-slotpick`)||{}).dataset||{}).gid)||'0',10)||0;
 }
-function escolherPosicaoLayout(prefix,prateleira,lugar){
-  document.getElementById(`${prefix}-prat`).value=prateleira;
+function escolherPosicaoLayout(prefix,lugar){
   document.getElementById(`${prefix}-lugar`).value=String(lugar);
   renderPickerPosicoes(prefix,pickerGid(prefix));
 }
@@ -2699,7 +2839,11 @@ async function guardarVinho(id){
       preco_compra:num(document.getElementById('e-preco-compra').value),
       comprado_em:document.getElementById('e-comprado').value||null
     };
-    const erroPos=validarPosicaoLayout(primeiraGarrafa.local_id,primeiraGarrafa.prateleira,primeiraGarrafa.lugar,0);
+    // num local com desenho o nome da prateleira sai do número do lugar:
+    // é o número que a pessoa escolhe, e escrevê-lo à mão noutro campo só
+    // dava para os dois se contradizerem
+    primeiraGarrafa.prateleira=nomeDaPosicao(primeiraGarrafa.local_id,primeiraGarrafa.lugar)||primeiraGarrafa.prateleira;
+    const erroPos=validarPosicaoLayout(primeiraGarrafa.local_id,primeiraGarrafa.lugar,0);
     if(erroPos){toast(erroPos,1);return;}
   }
   const castas=f._castas;delete f._castas;
@@ -2888,8 +3032,8 @@ function abrirGarrafa(gid,vinhoId){
     </div>
     <div id="g-slotpick"></div>
     <div class="mrow">
-      <div><label>Prateleira</label><input type="text" id="g-prat" value="${esc(g?g.prateleira:'')}" placeholder="Nível 3" oninput="renderPickerPosicoes('g',${gid||0})"></div>
-      <div><label>Lugar</label><input type="text" id="g-lugar" value="${esc(g?g.lugar:'')}" placeholder="12" oninput="renderPickerPosicoes('g',${gid||0})"></div>
+      <div id="g-pratbox"><label>Prateleira</label><input type="text" id="g-prat" value="${esc(g?g.prateleira:'')}" placeholder="Nível 3" oninput="renderPickerPosicoes('g',${gid||0})"></div>
+      <div><label id="g-lugarlbl">Lugar</label><input type="text" id="g-lugar" value="${esc(g?g.lugar:'')}" placeholder="12" inputmode="numeric" oninput="renderPickerPosicoes('g',${gid||0})"></div>
     </div>
     <div class="mrow">
       <div><label>Formato</label><select id="g-formato">${FORMATOS.map(x=>
@@ -2919,7 +3063,8 @@ async function guardarGarrafa(gid,vinhoId){
     preco_compra:num(document.getElementById('g-preco').value),
     comprado_em:document.getElementById('g-comprado').value||null
   };
-  const erroPos=validarPosicaoLayout(dados.local_id,dados.prateleira,dados.lugar,gid);
+  dados.prateleira=nomeDaPosicao(dados.local_id,dados.lugar)||dados.prateleira;
+  const erroPos=validarPosicaoLayout(dados.local_id,dados.lugar,gid);
   if(erroPos){toast(erroPos,1);return;}
   const btn=document.getElementById('g-btn');
   btn.disabled=true;btn.textContent='A guardar…';
@@ -3913,21 +4058,24 @@ function renderLocalLayoutEditor(){
   if(!chk.checked)return;
   if(!LOC_LAYOUT_EDIT.length)LOC_LAYOUT_EDIT=layoutPadraoEditor();
   const caret='<svg class="ll-caret" viewBox="0 0 12 20" aria-hidden="true"><path d="M2 7l4-4 4 4M2 13l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  // Sobrepostos ímpar: onde fica o lugar a mais. Ziguezague: em que fila
-  // começa o lugar 1. É o mesmo campo (`mais_em`) com duas perguntas.
+  // Só nos sobrepostos de capacidade ímpar: onde fica o lugar a mais.
   const oddSel=(i,p)=>{
     const cap=Math.max(1,Math.min(240,inteiro((p&&p.capacidade))||0));
-    const f=normalizarFormatoPrateleira(p.formato);
-    const zz=f==='ziguezague';
-    if(!zz&&(f!=='sobrepostos'||!(cap%2)))return '';
+    if(normalizarFormatoPrateleira(p.formato)!=='sobrepostos'||!(cap%2))return '';
     const cur=normalizarSobrepostosMaisEm(p.mais_em);
-    return `<div class="ll-odd"><span>${zz?'Começa':'Lugar a mais'}</span>
+    return `<div class="ll-odd"><span>Lugar a mais</span>
       <div class="segbtns">${MAIS_EM.map(([id,n])=>`<button type="button" class="segbtn${cur===id?' on':''}" onclick="locSetPratMaisEm(${i},'${id}')">${n}</button>`).join('')}</div>
     </div>`;
   };
+  /* A MARCA DE ENCAIXE — o que restou do ziguezague. Uma prateleira
+     encaixada assenta na de baixo, desencontrada, e desenha-se com a
+     tábua em onda; é só isso, não muda os lugares nem a contagem. A
+     primeira prateleira não a tem: não há nada por baixo dela. */
+  const encSel=(i,p)=>i===0?'':`<label class="ll-enc"><input type="checkbox"${p.encaixe?' checked':''}
+      onchange="locSetPratEncaixe(${i},this.checked)"><span>Encaixa na de baixo <i>(ziguezague)</i></span></label>`;
   const uma=LOC_LAYOUT_EDIT.length<=1;
   box.innerHTML=`
-    <div class="note">A app desenha este local como estante: uma prateleira por linha, cada uma com os seus lugares numerados. O Nível 1 é o de baixo.</div>
+    <div class="note">A app desenha este local como estante: uma prateleira por linha, o Nível 1 em baixo. Os lugares são numerados de seguida ao longo do móvel — se o primeiro nível tem 4 lugares, o segundo começa no 5.</div>
     <div class="ll-lista">${LOC_LAYOUT_EDIT.map((p,i)=>`
       <div class="ll-row">
         <div class="ll-head">
@@ -3940,11 +4088,11 @@ function renderLocalLayoutEditor(){
           <div><label>Lugares</label>
             <input type="number" inputmode="numeric" min="1" max="240" value="${esc(p.capacidade)}" oninput="locSetPratCap(${i},this.value)" onchange="locCapMudou(${i})"></div>
         </div>
-        ${oddSel(i,p)}
+        ${oddSel(i,p)}${encSel(i,p)}
       </div>`).join('')}</div>
     <button type="button" class="btn ghost ll-add" onclick="locAddPrat()">+ Adicionar prateleira</button>`;
 }
-const FORMATOS_PRAT_DESC={fila:'Uma fila, lado a lado',ziguezague:'Duas filas alternadas',sobrepostos:'Duas filas, uma sobre a outra'};
+const FORMATOS_PRAT_DESC={fila:'Uma fila, lado a lado',sobrepostos:'Duas filas, uma sobre a outra'};
 function abrirFormatoPrat(i){
   const p=LOC_LAYOUT_EDIT[i];if(!p)return;
   const atual=normalizarFormatoPrateleira(p.formato);
@@ -3982,6 +4130,10 @@ function locSetPratFormato(i,v){
   }
   renderLocalLayoutEditor();
 }
+function locSetPratEncaixe(i,v){
+  if(LOC_LAYOUT_EDIT[i])LOC_LAYOUT_EDIT[i].encaixe=!!v;
+  renderLocalLayoutEditor();
+}
 function locSetPratMaisEm(i,v){
   if(LOC_LAYOUT_EDIT[i])LOC_LAYOUT_EDIT[i].mais_em=normalizarSobrepostosMaisEm(v);
   renderLocalLayoutEditor();
@@ -3990,7 +4142,8 @@ function locSetPratMaisEm(i,v){
 // sério os níveis são quase sempre iguais uns aos outros.
 function locAddPrat(){
   const ult=LOC_LAYOUT_EDIT[LOC_LAYOUT_EDIT.length-1]||{capacidade:6,formato:'fila',mais_em:'cima'};
-  LOC_LAYOUT_EDIT.push({nome:`Nível ${LOC_LAYOUT_EDIT.length+1}`,capacidade:ult.capacidade,formato:ult.formato,mais_em:ult.mais_em});
+  LOC_LAYOUT_EDIT.push({nome:`Nível ${LOC_LAYOUT_EDIT.length+1}`,capacidade:ult.capacidade,
+    formato:ult.formato,mais_em:ult.mais_em,encaixe:!!ult.encaixe});
   renderLocalLayoutEditor();
 }
 function locRemPrat(i){
@@ -4007,9 +4160,12 @@ function lerLayoutLocalModal(){
     const capacidade=Math.max(1,Math.min(240,inteiro((p&&p.capacidade))||0));
     const formato=normalizarFormatoPrateleira(p&&p.formato);
     const mais_em=normalizarSobrepostosMaisEm(p&&p.mais_em);
-    // `mais_em` só se guarda onde conta: sobrepostos ímpar (o lugar a
-    // mais) e ziguezague (a fila do lugar 1)
-    return capacidade?Object.assign({nome,capacidade,formato},(formato==='sobrepostos'&&capacidade%2)||formato==='ziguezague'?{mais_em}:{}) : null;
+    // `mais_em` só se guarda onde conta (sobrepostos de capacidade ímpar),
+    // e `encaixe` só onde é verdade — um layout que não os precise fica
+    // sem eles em vez de os levar a falso por todo o lado
+    const enc=!!(p&&p.encaixe)&&i>0;
+    return capacidade?Object.assign({nome,capacidade,formato},
+      formato==='sobrepostos'&&capacidade%2?{mais_em}:{}, enc?{encaixe:true}:{}) : null;
   }).filter(Boolean);
   if(!prateleiras.length)throw new Error('Cria pelo menos uma prateleira para ligar o desenho.');
   const vistos=new Set();

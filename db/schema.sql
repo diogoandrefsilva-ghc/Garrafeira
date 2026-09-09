@@ -173,16 +173,17 @@ CREATE TABLE IF NOT EXISTS garrafeira.locais (
   nome      text NOT NULL,
   descricao text NOT NULL DEFAULT '',
   cor       text NOT NULL DEFAULT '#7b1f3d',
-  -- Desenho opcional do local: [{nome,capacidade,formato,mais_em}] em
-  -- `prateleiras`. `formato` é guardado por prateleira
-  -- (fila/ziguezague/sobrepostos) para manter o tipo de arrumação além da
-  -- capacidade. `mais_em` (`cima`/`baixo`) responde a duas perguntas
-  -- consoante o formato: em `sobrepostos` com capacidade ímpar, em que fila
-  -- fica o lugar a mais (a outra fica centrada); em `ziguezague`, em que
-  -- fila começa o lugar 1. Se vier vazio, o local continua a funcionar
-  -- como sempre — só com texto livre nas garrafas. Quando existe, a app
-  -- passa a desenhar os lugares e a validar se a posição escolhida cabe
-  -- nessa prateleira.
+  -- Desenho opcional do local: [{nome,capacidade,formato,mais_em,encaixe}]
+  -- em `prateleiras`. Os LUGARES são numerados de forma corrida no local
+  -- (um nível de 4 lugares tem 1 a 4 e o seguinte começa no 5), e a ORDEM
+  -- deste array é que a define. `formato` é `fila` ou `sobrepostos`;
+  -- `mais_em` (`cima`/`baixo`) só conta em `sobrepostos` de capacidade
+  -- ímpar, para dizer em que fila fica o lugar a mais. `encaixe` é só
+  -- desenho: a prateleira assenta na de baixo, desencontrada (o que era
+  -- o formato `ziguezague`, que a app converte ao ler — um ziguezague são
+  -- dois níveis, não um). Se vier vazio, o local continua a funcionar
+  -- como sempre, só com texto livre nas garrafas; quando existe, a app
+  -- desenha os lugares e valida se a posição escolhida cabe.
   layout    jsonb NOT NULL DEFAULT '{"prateleiras":[]}'::jsonb,
   ordem     integer NOT NULL DEFAULT 0,
   criado_em timestamptz NOT NULL DEFAULT now(),

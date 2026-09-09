@@ -426,33 +426,46 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    madeira, o corpo do número. Um `56px` fixo cabia numa garrafeira de
    três níveis e obrigava a rolar meia página numa de oito. */
 .est-wrap{flex:0 1 auto;min-width:0;overflow-x:auto}
-.est{position:relative;display:grid;
-  grid-template-columns:repeat(var(--gcols,var(--cols)),minmax(0,1fr));grid-template-rows:repeat(var(--rows),auto);
-  gap:calc(var(--slot) * .16);align-items:center;
-  /* a prateleira acompanha os lugares e não estica até à borda: com dois
-     lugares numa fila larga ficavam duas bolinhas perdidas no meio */
-  width:calc(var(--cols) * var(--slot) * 1.34 + 18px);max-width:100%;margin:0 auto}
-.est-fila,.est-sobrepostos{padding:calc(var(--slot) * .16 + 2px) calc(var(--slot) * .2);border-radius:calc(var(--slot) * .38);
+.est{--colw:calc(var(--slot) * 1.34);position:relative;display:grid;
+  grid-template-columns:repeat(var(--gcols,var(--cols)),calc(var(--colw) / 2));
+  grid-template-rows:repeat(var(--rows),auto);align-items:center;
+  /* A caixa é a largura do MÓVEL — o nível mais largo, mais uma coluna de
+     folga (`--colsw`, ver `layoutLocal`) — e é igual em todas as
+     prateleiras do local. Antes cada uma valia o que os seus lugares
+     mediam, e uma estante de 4/3/4/3 lia-se como uma pilha de tábuas
+     irregulares em vez de um móvel; a folga é o que deixa uma prateleira
+     desviar-se meia coluna sem sair da caixa. O espaço entre lugares vem
+     da margem de cada um e não de um `gap`, para a coluna medir sempre o
+     mesmo e os vales da onda caírem debaixo dos lugares. */
+  width:calc(var(--colsw,var(--cols)) * var(--colw));margin:0 auto}
+.est-fila,.est-sobrepostos{padding:calc(var(--slot) * .16 + 2px) 0;border-radius:calc(var(--slot) * .38);
   border:1px solid #dccbb0;background:linear-gradient(180deg,#f4ecdf,#e8dbc5);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.75),inset 0 -2px 0 rgba(120,90,50,.12)}
-.est-sobrepostos{row-gap:calc(var(--slot) * .1);column-gap:0}
+.est-sobrepostos{row-gap:calc(var(--slot) * .1)}
 .est-sobrepostos .msdot{width:calc(100% - var(--slot) * .12)}
-/* As duas filas do ziguezague NÃO se sobrepõem, apesar de numa estante a
-   sério as garrafas alternadas encaixarem umas nas outras. Tentou-se
-   (margem negativa, quase um quinto da altura poupado) e o que se perdia
-   era a FITA: com os centros a menos de um diâmetro de distância, os
-   lugares tapavam-na e sobravam uns arcos soltos que não se liam como
-   uma prateleira. O tamanho do lugar que se ganhava era menos do que o
-   que se perdia em clareza — e o mesmo espaço veio de deixar o "+ Novo
-   local" fora do que tem de caber no ecrã (ver `ajustarEstantes`). */
-.est-ziguezague{--pv:calc(var(--slot) * .1 + 2px);gap:0;padding:var(--pv) 4px;overflow:hidden}
-.est-ziguezague .msdot{width:calc(100% - var(--slot) * .16)}
-.est-bg{position:absolute;left:4px;top:var(--pv);width:calc(100% - 8px);height:calc(100% - 2 * var(--pv));
+.est-fila .msdot{width:calc(100% - var(--slot) * .26)}
+/* A TÁBUA EM ONDA das prateleiras que encaixam na de baixo (o que restou
+   do formato ziguezague): os lugares assentam nos vales e a madeira sobe
+   entre eles. Cada prateleira desenha a sua; empilhadas e desencontradas
+   leem-se como o ziguezague de sempre — e agora cada fila é um nível seu,
+   que é o que está no móvel.
+
+   `--desvio` é o desencontro horizontal em frações de coluna e vem do JS
+   (`layoutLocal`): com as duas prateleiras centradas, os lugares já caem
+   uns entre os outros quando as capacidades têm paridades diferentes (4 e
+   3), e só é preciso desviar quando são iguais. */
+/* A prateleira ondulada não leva a barra reta por baixo: a madeira dela É
+   o desenho da onda (`ondaBgSVG`), preenchida, com um vale sob cada lugar
+   e um pico entre eles. */
+.est-onda{--pv:calc(var(--slot) * .09 + 2px);padding:var(--pv) 0;
+  background:none;border:none;box-shadow:none;border-radius:0;overflow:visible}
+.est-onda-f{fill:#e9dcc7}
+.est-onda-l{fill:none;stroke:#d3bf9d;stroke-width:1.2;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+/* Uma prateleira encaixada cola-se à de baixo: é o encaixe que se está a
+   desenhar, e um intervalo entre elas dizia o contrário. */
+.mprat-layout.encaixa{margin-top:calc(var(--slot,34px) * -.02)}
+.est-bg{position:absolute;left:0;top:var(--pv);width:100%;height:calc(100% - 2 * var(--pv));
   pointer-events:none;overflow:visible}
-.est-zz1{fill:none;stroke:#d9c7a8;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke;
-  stroke-width:calc(var(--slot) * .40)}
-.est-zz2{fill:none;stroke:#f1e7d6;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke;
-  stroke-width:calc(var(--slot) * .26)}
 .msdot{position:relative;z-index:1;aspect-ratio:1/1;width:100%;max-width:var(--slot);margin:0 auto;border-radius:999px;
   border:1px solid #c9a1af;background:#f3e8ec;display:flex;align-items:center;justify-content:center;
   font-family:var(--fd);font-size:clamp(8px,calc(var(--slot) * .42),15px);color:var(--vh);font-weight:600;
@@ -562,11 +575,15 @@ body:not(.readonly) .msdot.vazia:hover{background:#fff;border-color:var(--vh);co
 .ll-caret{width:11px;height:18px;flex-shrink:0;opacity:.6}
 .llprev{display:grid;grid-template-columns:repeat(var(--cols),auto);grid-template-rows:repeat(var(--rows),auto);
   gap:3px 4px;align-items:center;justify-items:center;width:auto}
-.llprev-ziguezague{gap:0 2px}
 .llprev-sobrepostos{gap:3px 0}
 .llprev-sobrepostos .llprev-dot{margin:0 2px}
 .llprev-dot{display:block;width:10px;height:10px;border-radius:50%;background:linear-gradient(180deg,#9a3656,#6d1837);box-shadow:inset 0 0 0 1px rgba(67,15,34,.18)}
 .ll-odd{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:12px;color:var(--mu)}
+.mbox label.ll-enc{display:flex;align-items:center;gap:8px;margin:10px 0 0;padding:0;font-size:12px;
+  letter-spacing:0;text-transform:none;color:var(--tx);cursor:pointer}
+.mbox label.ll-enc input{width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;border:none;border-radius:0;
+  background:none;accent-color:var(--vh);box-shadow:none}
+.ll-enc i{font-style:normal;color:var(--mu)}
 .ll-odd .segbtn{padding:5px 11px;font-size:11.5px}
 .ll-add{margin-top:12px}
 /* A folha "Formato da prateleira": três opções ilustradas, a escolhida
@@ -595,12 +612,12 @@ body:not(.readonly) .msdot.vazia:hover{background:#fff;border-color:var(--vh);co
 .est-pick{--slot:46px;grid-template-columns:repeat(var(--gcols,var(--cols)),minmax(calc(var(--slot) / var(--span,1)),1fr));
   width:100%;min-width:calc(var(--cols) * var(--slot));max-width:none;margin:0;align-items:stretch;gap:7px;padding:8px 10px}
 .est-pick.est-sobrepostos{row-gap:5px;column-gap:0}
-.est-pick.est-ziguezague{gap:0;padding:6px 4px}
-.est-pick.est-ziguezague,.est-pick.est-sobrepostos{--slot:44px}
-/* Todos os lugares com a MESMA altura (com ou sem garrafinha): é o que
-   deixa a fita do ziguezague passar pelo centro de cada um. */
+/* No seletor a prateleira é para se TOCAR: os lugares ficam do mesmo
+   tamanho em todos os formatos e a tábua em onda não desvia nada (o
+   desencontro é desenho, e aqui o que interessa é acertar com o dedo). */
+.est-pick.est-sobrepostos{--slot:44px}
+.est-pick.est-onda{padding:6px 4px;transform:none}
 .est-pick .lpslot{height:100%;min-height:52px}
-.est-pick.est-ziguezague .lpslot{margin:3px;height:calc(100% - 6px)}
 .est-pick.est-sobrepostos .lpslot{margin:0 3px}
 .lpslot{position:relative;z-index:1;border:1px solid var(--bo2);border-radius:10px;background:#fff;padding:7px 0 6px;font-family:inherit;color:var(--vh);cursor:pointer;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:50px}
@@ -661,6 +678,10 @@ input[type=date]{-webkit-appearance:none;appearance:none;display:block;min-width
   background-clip:padding-box;text-align:left}
 input[type=date]::-webkit-date-and-time-value{text-align:left;margin:0;min-width:0}
 input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto}
+/* Num local com desenho a prateleira não se escreve: sai do número do
+   lugar (ver `renderPickerPosicoes`). Fica à vista, apagada, porque é
+   informação — o que se edita é o lugar. */
+#g-pratbox.derivado input{background:var(--bg2);color:var(--mu);border-style:dashed}
 .mrow{display:flex;gap:10px}
 .mrow>div{flex:1;min-width:0}
 .macoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}

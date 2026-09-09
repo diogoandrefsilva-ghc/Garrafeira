@@ -239,18 +239,75 @@ dá a madeira — barra na fila, bloco nos sobrepostos, e no ziguezague uma
 propósito: é o que garante que a fita passa pelo centro de cada lugar
 (colunas a (i-½)/cols, filas a 25% e 75%).
 
-**Onde fica cada lugar é `prateleiraLayoutInfo`**, e `mais_em`
-(`cima`/`baixo`) responde a duas perguntas diferentes conforme o formato:
-- **ziguezague** — em que fila começa o lugar 1. As estantes reais tanto
-  arrancam em cima como em baixo, e obrigar a uma delas era pedir para
-  contar os lugares ao contrário do que se vê;
-- **sobrepostos** com capacidade **ímpar** — em que fila fica o lugar a
-  mais. A outra fila fica **centrada** e não encostada à esquerda: numa
-  estante a sério a fila mais curta assenta no meio da de baixo. É por
-  isso que a grelha dos sobrepostos é em **meias-colunas**
-  (`gridCols = 2 × cols`, cada lugar com `span:2`) — a fila curta começa
-  meia coluna à frente, e meia coluna é exatamente o desencontro que se
-  quer. Uma grelha de colunas inteiras não sabe fazer meio passo.
+**OS LUGARES SÃO NUMERADOS DE FORMA CORRIDA NO LOCAL** e não dentro de
+cada prateleira: um Nível 1 de 4 lugares tem 1 a 4 e o Nível 2 a seguir
+começa no 5. É como se numera uma estante a sério (cada garrafa tem um
+número só dela no móvel) e é como os dados desta app já estavam gravados
+antes de haver desenho nenhum. Cada prateleira leva por isso um `base`
+(quantos lugares vêm antes dela) e **a ordem do array é que manda**:
+trocar prateleiras de ordem renumera os lugares.
+
+Daí que o número do lugar diga sozinho em que prateleira ele está
+(`prateleiraDoLugar`) — e é por isso que a chave da ocupação é o NÚMERO e
+não o par prateleira+lugar. O nome gravado na garrafa passou a ser uma
+confirmação: vale quando bate com a prateleira a que o número pertence, e
+vale também quando está VAZIO (garrafas antigas, de antes de haver
+desenho, que só têm o número). Quando CONTRADIZ o desenho, a garrafa não
+entra — vai para "por posicionar", que é onde se vê que há uma
+discordância para resolver, em vez de a app escolher sozinha entre duas
+versões. Ao gravar, é a app que preenche o nome (`nomeDaPosicao`): no
+modal da garrafa o campo da prateleira fica só de leitura num local com
+desenho, porque dois campos a dizer a mesma coisa só dão para se
+contradizerem.
+
+**UM ZIGUEZAGUE SÃO DOIS NÍVEIS**, não um. Era um formato — uma
+prateleira com duas filas alternadas — e não é o que está no móvel: a
+fila de baixo e a de cima são prateleiras diferentes, com contagens
+diferentes (4 e 3, tipicamente). Foi um entendido de vinhos que o
+apontou, e os dados desta app já estavam gravados assim, com os lugares
+corridos a alternar 4 e 3 — era o DESENHO que discordava deles. Sobram
+dois formatos: `fila` e `sobrepostos`.
+
+Os layouts antigos são convertidos em `layoutLocal`, **ao ler**, e não
+numa migração da base de dados: assim qualquer garrafeira fica certa sem
+ninguém correr nada, e os dados só mudam quando alguém guardar o local. A
+metade de baixo fica com o nome de sempre (é o que as garrafas gravadas
+dizem) e a de cima ganha " · cima".
+
+O que restou do ziguezague é o **`encaixe`**: uma marca por prateleira a
+dizer que ela assenta na de baixo, desencontrada. Não muda lugares nem
+contagens — só o desenho:
+- **`desvio`** é o desencontro horizontal em frações de coluna. Com as
+  duas prateleiras centradas na mesma largura, os lugares já caem uns
+  entre os outros quando as capacidades têm paridades diferentes (4 e 3);
+  quando são iguais (4 e 4) ficariam alinhados e é preciso meia coluna;
+- **`ondulada`** é quem desenha a tábua em onda (`ondaBgSVG`): a que
+  encaixa e a que está por baixo dela. Os lugares assentam nos vales e a
+  madeira sobe entre eles, em curvas — a traço reto lia-se como uma
+  serra;
+- **todas as prateleiras de um local têm a largura do MÓVEL** (`colsw`: o
+  nível mais largo, mais uma coluna de folga de cada lado) e os lugares
+  ficam centrados nela. Antes cada prateleira valia o que os seus lugares
+  mediam, e uma estante de 4/3/4/3 lia-se como uma pilha de tábuas
+  irregulares. A folga é o que deixa uma prateleira desviar-se meia
+  coluna sem sair da caixa.
+
+A grelha é toda em **meias-colunas** (`gridCols = 2 × colsw`, cada lugar
+com `span:2`) porque meia coluna é exatamente o desencontro que se quer, e
+uma grelha de colunas inteiras não sabe fazer meio passo. As colunas têm
+largura FIXA (`--colw`, tirada do `--slot`) e não frações: em frações, a
+largura do lugar deixava de vir do `--slot` e o cálculo da altura passava
+a discordar do que se via. Por isso o `ajustarEstantes` também tem um teto
+de LARGURA — num ecrã estreito é ela que manda primeiro, e sem esse teto a
+estante cabia em altura e saía pelo lado.
+
+Em **`sobrepostos`** com capacidade ímpar, `mais_em` diz em que fila fica
+o lugar a mais; a outra fica centrada e não encostada à esquerda, que é
+como a fila mais curta assenta na de baixo num móvel a sério.
+
+No **seletor de posição** não há onda nem desencontro (`renderPickerPosicoes`
+passa uma cópia da prateleira sem eles): ali a prateleira é para se tocar,
+e o que interessa é acertar com o dedo.
 
 Com a procura ligada, só se anda pelos locais com garrafas que passam nela
 (a contagem passa a "4 encontradas · de 35") e os lugares ocupados por
