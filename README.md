@@ -25,17 +25,19 @@ que já se bebeu.
 | **Consumidos** | o histórico — quando, onde e o que se achou de cada garrafa bebida |
 | **Definições** | conta, **garrafeiras** (trocar de garrafeira, partilhar, passar a outra pessoa), locais, utilizadores (admin), migração dos dados antigos, exportação e diagnóstico |
 
-Em cada vinho há um botão **Procurar informação**: uma Edge Function
-pergunta a um modelo *com pesquisa Google ligada* e traz castas, região,
-tipo, nota do Vivino, preço médio, estágio, janela de consumo, notas de
-prova, harmonização e, quando encontra uma fotografia fiável, a imagem do
-rótulo. **Nada é gravado sem confirmação campo a campo** — as leituras
-automáticas entram como proposta, não como facto.
+Em cada vinho há um botão **Procurar informação**: a Edge Function pode
+usar dois métodos (**IA sem pesquisa web** e **IA com pesquisa web
+(Grounding Search)**) e traz castas, região, tipo, nota do Vivino, preço
+médio, estágio, janela de consumo, notas de prova, harmonização e, quando
+encontra uma fotografia fiável, a imagem do rótulo. **Nada é gravado sem
+confirmação campo a campo** — as leituras automáticas entram como proposta,
+não como facto.
 
-O admin atribui um de três planos a cada utilizador: **sem IA**, **IA grátis**
-ou **IA premium**. A decisão é confirmada pela Edge Function no servidor; a
-app nunca escolhe uma chave paga. O plano grátis usa uma chave Gemini separada
-e tem, por defeito, cinco pesquisas por utilizador/dia.
+O admin atribui um de três planos a cada utilizador: **sem IA**, **IA sem
+pesquisa web** ou **IA com pesquisa web (Grounding Search)**. A decisão é
+confirmada pela Edge Function no servidor; a app nunca promove um pedido para
+um modo acima do que a BD autoriza. O modo sem pesquisa web usa uma chave
+Gemini separada e tem, por defeito, cinco pesquisas por utilizador/dia.
 
 Em **Definições → Dados**, quem pode editar pode também importar até três
 fotografias de rótulos, prateleiras ou listas. A IA propõe os vinhos e as
@@ -64,7 +66,7 @@ qualquer registo. As fotografias não ficam guardadas.
    gratuita. `GEMINI_FREE_DAILY_LIMIT` é opcional e vale 5 por defeito.)
    A importação por imagens usa sempre essa chave gratuita; o limite opcional
    `GEMINI_IMPORT_FREE_DAILY_LIMIT` vale 3 importações/dia para cada conta
-   com plano grátis.
+   com modo sem pesquisa web.
 5. **GitHub Pages:** Settings › Pages → branch `main`.
 6. Entrar na app e, em **Definições › Dados**, carregar em *Migrar* para
    trazer os 85 vinhos que vieram do Excel e do bloco de notas.
