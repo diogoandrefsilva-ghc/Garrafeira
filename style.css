@@ -393,7 +393,12 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .mp-lbl{flex:0 0 auto;max-width:84px;font-size:8.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;
   color:var(--mu);line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
   overflow-wrap:anywhere}
-.mp-fio{flex:1 1 6px;min-width:6px;height:0;border-bottom:1px dashed var(--bo2);opacity:.65}
+/* O fio é só uma AJUDA a ler a linha — o nome à esquerda e as garrafas
+   daquele nível — e por isso é ténue e não chega à prateleira: colado ao
+   berço em U, lia-se como a continuação da régua e a prateleira parecia
+   ter uma haste a sair para o lado. A folga vem do `.est-wrap`, para os
+   dois fios pararem à mesma distância da madeira. */
+.mp-fio{flex:1 1 6px;min-width:4px;height:0;border-bottom:1px dotted var(--bo2);opacity:.4}
 .mp-n{flex:0 0 auto;min-width:26px;text-align:right;font-family:var(--fd);font-size:11.5px;font-weight:600;
   color:var(--vh);font-variant-numeric:lining-nums}
 .mprat-t{display:flex;align-items:center;gap:9px;font-size:10.5px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;
@@ -425,7 +430,7 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    mede alguma coisa aqui sai dele — o espaço entre lugares, o padding da
    madeira, o corpo do número. Um `56px` fixo cabia numa garrafeira de
    três níveis e obrigava a rolar meia página numa de oito. */
-.est-wrap{flex:0 1 auto;min-width:0;overflow-x:auto}
+.est-wrap{flex:0 1 auto;min-width:0;overflow-x:auto;margin:0 11px}
 .est{--colw:calc(var(--slot) * var(--colr,1.5));position:relative;display:grid;
   grid-template-columns:repeat(var(--gcols,var(--cols)),calc(var(--colw) / 2));
   grid-template-rows:repeat(var(--rows),auto);align-items:center;
@@ -469,15 +474,41 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .est-reg-s,.est-reg{fill:none;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round}
 .est-reg-s{stroke:#cbb894;stroke-width:calc(var(--slot) * .2)}
 .est-reg{stroke:#fffdf7;stroke-width:calc(var(--slot) * .2)}
-/* Uma prateleira encaixada cola-se à de baixo: é o encaixe que se está a
-   desenhar, e um intervalo entre elas dizia o contrário. */
-.mprat-layout.encaixa{margin-top:calc(var(--slot,34px) * -.02)}
+/* O ENCAIXE a sério: a prateleira que encaixa DESCE para dentro da de
+   baixo, e é a sobreposição que o desenha. As duas filas já estavam
+   desencontradas meia coluna — a garrafa de cima cai entre a primeira e a
+   segunda de baixo, e a última fica logo a seguir à última — mas
+   separadas por um intervalo isso lia-se como duas filas independentes,
+   não como um encaixe.
+
+   O valor é geometria e não gosto: com os lugares a quase tocarem-se, um
+   círculo que caia meia coluna à frente assenta no V entre dois de baixo
+   quando os centros ficam a ~0,8 do diâmetro; a linha mede 1,22 (o lugar
+   mais a folga onde o berço desce), logo a margem é -0,42. Menos do que
+   isso e volta a haver ar entre as filas.
+
+   Chegou a não haver sobreposição nenhuma, por causa da FITA que a
+   versão antiga desenhava por trás dos lugares — tapada, sobravam uns
+   arcos soltos. Com a régua fina de agora é o contrário: os vales dela
+   passam entre as garrafas de baixo, e é isso que se quer ver.
+
+   A margem é de BAIXO e não de cima: os níveis desenham-se ao contrário
+   (o mais alto primeiro, `prateleirasDesc`), por isso a prateleira que
+   encaixa aparece ACIMA daquela em que assenta, e é o intervalo até à
+   SEGUINTE que ela tem de fechar. Com `margin-top` fechava o de cima —
+   e cada par encaixava no par errado. As margens de irmãos colapsam, e
+   é isso que dá os -0,42 pedidos (0,14 do topo do próximo, -0,56 daqui). */
+.mprat-layout.encaixa{margin-bottom:calc(var(--slot,34px) * -.56)}
 .est-bg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
 .msdot{position:relative;z-index:1;aspect-ratio:1/1;width:100%;max-width:var(--slot);margin:0 auto;border-radius:999px;
   border:1px solid #c9a1af;background:#f3e8ec;display:flex;align-items:center;justify-content:center;
   font-family:var(--fd);font-size:clamp(8px,calc(var(--slot) * .42),15px);color:var(--vh);font-weight:600;
   line-height:1;font-variant-numeric:lining-nums}
-.msdot.vazia{border-style:dashed;border-color:#cdb1ba;background:rgba(255,255,255,.55);color:var(--mu);font-weight:400;
+/* Quase opaco e não translúcido: com as prateleiras encaixadas, a régua
+   da de cima passa por trás dos lugares da de baixo — e num lugar
+   translúcido via-se o traço a atravessar o círculo, como se a madeira
+   lhe passasse por dentro. */
+.msdot.vazia{border-style:dashed;border-color:#cdb1ba;background:rgba(255,255,255,.88);color:var(--mu);font-weight:400;
   font-family:var(--fd);padding:0;transition:background .15s,border-color .15s,transform .12s}
 /* Um lugar vazio TAMBÉM se toca (para lá pôr um vinho) — mas só onde há
    o que tocar: numa garrafeira emprestada é só um buraco desenhado. */

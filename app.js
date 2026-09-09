@@ -612,9 +612,19 @@ function prateleiraLayoutInfo(p,opt){
    apontou, e os dados desta app já estavam gravados assim. Os layouts
    antigos são convertidos AQUI, ao ler, e não numa migração da base de
    dados: assim qualquer garrafeira fica certa sem ninguém correr nada, e
-   os dados só mudam quando alguém guardar o local. A metade de baixo fica
-   com o nome de sempre (é o que as garrafas gravadas dizem), a de cima
-   ganha " · cima".
+   os dados só mudam quando alguém guardar o local.
+
+   Um ziguezague convertido dá DOIS níveis, e os níveis de um local são
+   números seguidos: por isso, num local que teve ziguezagues, todas as
+   prateleiras são renumeradas "Nível 1..N". A alternativa (a metade de
+   cima ganhar " · cima") deixava o local com dois "Nível 8" e um deles
+   com um sufixo — e um nível é um número, não uma nota de rodapé.
+   Renumerar mexe nos NOMES, e o nome gravado na garrafa é a confirmação
+   de que ela está onde diz (ver `ocupacaoLayout`) — daí o `origem`: o
+   nome que a prateleira tinha antes da conversão. Uma garrafa que diga
+   "Nível 8" continua a bater com o nível que veio dele, e não vai parar
+   a "por posicionar" só porque o desenho passou a contar de outra
+   maneira.
 
    O que sobra do ziguezague é o **`encaixe`**: uma marca de desenho a
    dizer que esta prateleira assenta na de baixo, desencontrada. Não muda
@@ -629,6 +639,7 @@ function prateleiraLayoutInfo(p,opt){
 function layoutLocal(l){
   const raw=l&&l.layout&&Array.isArray(l.layout.prateleiras)?l.layout.prateleiras:[];
   const out=[];
+  let convertido=false;
   raw.forEach((p,i)=>{
     const capacidade=Math.max(1,Math.min(240,inteiro(p&&p.capacidade)||0));
     if(!capacidade)return;
@@ -637,13 +648,18 @@ function layoutLocal(l){
       // o antigo `mais_em` dizia em que fila ficava o lugar 1; com ele em
       // cima, a fila de cima é a que leva o lugar a mais
       const nCima=normalizarSobrepostosMaisEm(p&&p.mais_em)==='cima'?Math.ceil(capacidade/2):Math.floor(capacidade/2);
-      out.push({nome,capacidade:capacidade-nCima,formato:'fila',mais_em:'cima',encaixe:false});
-      if(nCima)out.push({nome:`${nome} · cima`,capacidade:nCima,formato:'fila',mais_em:'cima',encaixe:true});
+      convertido=true;
+      out.push({nome,origem:nome,capacidade:capacidade-nCima,formato:'fila',mais_em:'cima',encaixe:false});
+      if(nCima)out.push({nome,origem:nome,capacidade:nCima,formato:'fila',mais_em:'cima',encaixe:true});
       return;
     }
-    out.push({nome,capacidade,formato:normalizarFormatoPrateleira(p&&p.formato),
+    out.push({nome,origem:nome,capacidade,formato:normalizarFormatoPrateleira(p&&p.formato),
       mais_em:normalizarSobrepostosMaisEm(p&&p.mais_em),encaixe:!!(p&&p.encaixe)});
   });
+  // Um local que teve ziguezagues passa a ter mais níveis do que tinha
+  // prateleiras: os nomes gravados deixam de servir de numeração e são
+  // refeitos de seguida. O `origem` fica a valer as garrafas antigas.
+  if(convertido)out.forEach((p,i)=>{p.nome=`Nível ${i+1}`;});
   let base=0;
   out.forEach((p,i)=>{
     p.base=base;base+=p.capacidade;
@@ -685,15 +701,21 @@ function nomeDaPosicao(localId,lugar){
   const def=prateleiraDoLugar(layoutLocal(l),lug);
   return def?def.nome:'';
 }
+/* O nome gravado na garrafa CONFIRMA o lugar, não o escolhe: vale se for
+   o da prateleira a que o número pertence, ou o `origem` dela (o nome de
+   antes de o ziguezague ter sido desdobrado e os níveis renumerados),
+   ou se estiver vazio — garrafas antigas, de antes de haver desenho, que
+   só têm o número. */
+function nomeBatePrateleira(def,prat){
+  const n=String(prat||'').trim();
+  return !n||n===def.nome||n===def.origem;
+}
 /* Quem está em cada lugar do desenho, indexado pelo NÚMERO do lugar (que
    com a numeração corrida é único no local).
 
-   O nome da prateleira gravado na garrafa é uma confirmação, não a chave:
-   vale quando bate com a prateleira a que o número pertence, e vale
-   também quando está vazio (garrafas antigas, de antes de haver desenho,
-   que só têm o número). Quando CONTRADIZ o desenho a garrafa não entra —
-   vai para "por posicionar", que é onde se vê que há ali uma discordância
-   para resolver, em vez de a app escolher sozinha entre duas versões. */
+   Quando o nome CONTRADIZ o desenho a garrafa não entra — vai para "por
+   posicionar", que é onde se vê que há ali uma discordância para
+   resolver, em vez de a app escolher sozinha entre duas versões. */
 function ocupacaoLayout(localId,ignorarGid){
   const l=IDXL[localId];
   const prats=l?layoutLocal(l):[];
@@ -703,8 +725,7 @@ function ocupacaoLayout(localId,ignorarGid){
     if(lug==null)return;
     const def=prateleiraDoLugar(prats,lug);
     if(!def)return;
-    const prat=String(g.prateleira||'').trim();
-    if(prat&&prat!==def.nome)return;
+    if(!nomeBatePrateleira(def,g.prateleira))return;
     (occ[lug]=occ[lug]||[]).push(g);
   });
   return occ;
@@ -725,8 +746,7 @@ function dadosForaLayout(l,gs){
     if(lug==null)return true;
     const def=prateleiraDoLugar(prats,lug);
     if(!def)return true;
-    const prat=String(g.prateleira||'').trim();
-    return !!prat&&prat!==def.nome;
+    return !nomeBatePrateleira(def,g.prateleira);
   }).sort((a,b)=>
     ordPrateleira(String(a.prateleira||''),String(b.prateleira||''))||
     String(a.lugar||'').localeCompare(String(b.lugar||''),'pt',{numeric:true}));
@@ -1843,8 +1863,14 @@ function ajustarEstantes(){
   // mínimo dos fios. Medir o `.est-wrap` não servia — ele encolhe ao que a
   // estante mede, e a estante mede o que o lugar der: era circular.
   const larg=el=>el?el.getBoundingClientRect().width:0;
-  const livre=linha?linha.clientWidth-larg(linha.querySelector('.mp-lbl'))-larg(linha.querySelector('.mp-n'))-44:0;
-  const COL_MIN=1.28,COL_MAX=1.8;
+  const livre=linha?linha.clientWidth-larg(linha.querySelector('.mp-lbl'))-larg(linha.querySelector('.mp-n'))-66:0;
+  /* Uma coluna mede pouco mais do que um lugar de propósito: é o que põe
+     as garrafas quase encostadas, e é isso que faz o ENCAIXE existir —
+     com colunas largas, a garrafa de cima cai meia coluna à frente mas
+     no meio de um vão onde cabia outra, e não entre duas. Era 1,28–1,8
+     ("as garrafas devem respirar") e o resultado foram filas soltas em
+     vez de um ziguezague. */
+  const COL_MIN=1.06,COL_MAX=1.3;
   const ajustar=v=>{
     const r=livre>0?Math.min(COL_MAX,Math.max(COL_MIN,livre/(colsw*v))):COL_MAX;
     ml.style.setProperty('--colr',r.toFixed(3));

@@ -145,13 +145,17 @@ de tudo o resto aqui, e é o que separa este ecrã de uma lista. Duas
 coisas o garantem:
 - cada nível é **uma linha só** (`.mprat-layout`): o nome encostado à
   esquerda, a estante no meio, a contagem à direita, e um **fio
-  tracejado** (`.mp-fio`) a ligá-los, como numa legenda de planta. O nome
+  pontilhado** (`.mp-fio`) a ligá-los, como numa legenda de planta. O nome
   já teve linha própria por cima, com o filete a atravessar, e custava
   ~24px por nível — em oito níveis, um terço da altura do ecrã gasto em
   rótulos. E encosta-se à esquerda em vez de andar colado à estante:
   colado, mudava de sítio de nível para nível conforme a prateleira era
   mais larga ou mais estreita, e a coluna dos nomes deixava de se ler de
-  uma vez;
+  uma vez. O fio é **ténue e PARA ANTES da madeira** (a folga vem do
+  `margin` do `.est-wrap`, igual dos dois lados): a régua acaba num troço
+  reto à mesma altura, e um fio a encostar-lhe lia-se como a continuação
+  dela — a prateleira parecia ter uma haste a sair para o lado. Ele só
+  ajuda a ler a linha; não faz parte do desenho da estante;
 - o tamanho de um lugar (`--slot`) é **calculado**, não escrito no CSS
   (`ajustarEstantes`). Mede-se o que sobra do ecrã abaixo do cartão e
   procura-se por bissecção o maior lugar que ainda cabe, entre
@@ -208,13 +212,25 @@ O "+ Novo local" é que fica de fora do que tem de caber — é uma ação, não
 faz parte da estante, e exigir que coubesse custava dois pixels em cada
 lugar.
 
-**As duas filas do ziguezague não se sobrepõem**, apesar de numa estante
-a sério as garrafas alternadas encaixarem umas nas outras. Tentou-se
-(margem negativa, quase um quinto da altura poupado) e o que se perdia
-era a FITA: com os centros a menos de um diâmetro de distância, os
-lugares tapavam-na e sobravam uns arcos soltos que não se liam como uma
-prateleira. O mesmo espaço veio antes de deixar o "+ Novo local" fora da
-conta.
+**A prateleira que encaixa SOBREPÕE-SE à de baixo** — é a sobreposição
+que desenha o encaixe. Chegou a não haver nenhuma (as duas filas
+separadas), por causa da FITA que a versão antiga esticava por trás dos
+lugares: tapada, sobravam uns arcos soltos. Com a régua fina de agora é
+ao contrário — os vales dela passam entre as garrafas de baixo, e é isso
+que se quer ver. Três medidas seguram-no, e não são gosto:
+- a margem é `-0,42 × slot` de pitch entre as duas linhas (a linha mede
+  1,22 — o lugar mais a folga onde o berço desce), que é onde um círculo
+  desviado meia coluna assenta no V entre dois de baixo;
+- vive em **`margin-bottom` e não `margin-top`**: os níveis desenham-se
+  do mais alto para o mais baixo (`prateleirasDesc`), por isso a
+  prateleira que encaixa aparece ACIMA daquela em que assenta e o
+  intervalo que tem de fechar é o de BAIXO. Com `margin-top` cada par
+  encaixava no par errado, e o desenho ficava certo de longe e trocado ao
+  perto;
+- os lugares VAZIOS são quase opacos. Com as linhas sobrepostas, a régua
+  de cima passa por trás dos lugares de baixo — e num círculo translúcido
+  via-se o traço a atravessá-lo, como se a madeira lhe passasse por
+  dentro.
 Passa-se de local com os ‹ ›, com os pontos, ou **arrastando de lado**
 (`mapaSwipe` — exceto sobre uma prateleira que rola de lado, que aí o
 gesto é dela). Dá a volta: do último passa ao primeiro.
@@ -270,9 +286,19 @@ dois formatos: `fila` e `sobrepostos`.
 
 Os layouts antigos são convertidos em `layoutLocal`, **ao ler**, e não
 numa migração da base de dados: assim qualquer garrafeira fica certa sem
-ninguém correr nada, e os dados só mudam quando alguém guardar o local. A
-metade de baixo fica com o nome de sempre (é o que as garrafas gravadas
-dizem) e a de cima ganha " · cima".
+ninguém correr nada, e os dados só mudam quando alguém guardar o local.
+
+**Os níveis são números seguidos.** Um local que teve ziguezagues passa a
+ter o dobro das prateleiras, e os nomes gravados deixam de servir de
+numeração: por isso são todos refeitos, "Nível 1..N". A metade de cima
+chegou a ganhar " · cima" e ficava um local com dois "Nível 8", um deles
+com um sufixo — um nível é um número, não uma nota de rodapé. Renumerar
+mexe nos NOMES, e o nome gravado na garrafa é a confirmação de que ela
+está onde diz; daí o **`origem`**, o nome que a prateleira tinha antes da
+conversão. `nomeBatePrateleira()` aceita o nome de agora, o `origem` ou
+nenhum — uma garrafa que diga "Nível 8" continua no seu lugar em vez de
+ir parar a "por posicionar" só porque o desenho passou a contar de outra
+maneira.
 
 O que restou do ziguezague é o **`encaixe`**: uma marca por prateleira a
 dizer que ela assenta na de baixo, desencontrada. Não muda lugares nem
@@ -308,13 +334,16 @@ a discordar do que se via.
 
 Por isso o `ajustarEstantes` decide **duas** coisas e não uma: a ALTURA
 disponível dá o TAMANHO do lugar (`--slot`), a LARGURA dá o ESPAÇO entre
-lugares (`--colr`, quanto mede uma coluna em lugares, entre 1,28 e 1,8).
-Numa estante de poucos lugares por nível há largura de sobra e as
-garrafas devem respirar — é o que a faz ler-se como uma estante; numa de
-muitos, aperta-se o espaçamento antes de encolher a garrafa. Com um
+lugares (`--colr`, quanto mede uma coluna em lugares, entre 1,06 e 1,3).
+Numa estante de poucos lugares por nível a coluna abre até ao teto; numa
+de muitos, aperta-se o espaçamento antes de encolher a garrafa. Com um
 espaçamento fixo, dois níveis de seis lugares num telemóvel punham o
 lugar no mínimo por causa da largura, com meio ecrã de altura vazio por
-baixo.
+baixo. O teto era 1,8 ("as garrafas devem respirar") e é aí que o
+ENCAIXE se perdia: com colunas largas, a garrafa de cima cai meia coluna
+à frente mas no meio de um vão onde cabia outra, e não entre duas —
+ficavam filas soltas em vez de um ziguezague. Pouco mais do que um lugar
+é o que as põe quase a tocarem-se, e é isso que o encaixe precisa.
 
 Em **`sobrepostos`** com capacidade ímpar, `mais_em` diz em que fila fica
 o lugar a mais; a outra fica centrada e não encostada à esquerda, que é
