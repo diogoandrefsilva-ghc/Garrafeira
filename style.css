@@ -426,7 +426,7 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    madeira, o corpo do número. Um `56px` fixo cabia numa garrafeira de
    três níveis e obrigava a rolar meia página numa de oito. */
 .est-wrap{flex:0 1 auto;min-width:0;overflow-x:auto}
-.est{--colw:calc(var(--slot) * 1.34);position:relative;display:grid;
+.est{--colw:calc(var(--slot) * var(--colr,1.5));position:relative;display:grid;
   grid-template-columns:repeat(var(--gcols,var(--cols)),calc(var(--colw) / 2));
   grid-template-rows:repeat(var(--rows),auto);align-items:center;
   /* A caixa é a largura do MÓVEL — o nível mais largo, mais uma coluna de
@@ -443,7 +443,7 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
   box-shadow:inset 0 1px 0 rgba(255,255,255,.75),inset 0 -2px 0 rgba(120,90,50,.12)}
 .est-sobrepostos{row-gap:calc(var(--slot) * .1)}
 .est-sobrepostos .msdot{width:calc(100% - var(--slot) * .12)}
-.est-fila .msdot{width:calc(100% - var(--slot) * .26)}
+.est-fila .msdot{width:calc(100% - var(--slot) * .06)}
 /* A TÁBUA EM ONDA das prateleiras que encaixam na de baixo (o que restou
    do formato ziguezague): os lugares assentam nos vales e a madeira sobe
    entre eles. Cada prateleira desenha a sua; empilhadas e desencontradas
@@ -457,15 +457,22 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 /* A prateleira ondulada não leva a barra reta por baixo: a madeira dela É
    o desenho da onda (`ondaBgSVG`), preenchida, com um vale sob cada lugar
    e um pico entre eles. */
-.est-onda{--pv:calc(var(--slot) * .09 + 2px);padding:var(--pv) 0;
+/* A folga fica em BAIXO e não repartida: é para lá que o berço desce, e
+   é o que deixa a garrafa assentar dentro dele em vez de flutuar por cima. */
+.est-onda{padding:0 0 calc(var(--slot) * .22);
   background:none;border:none;box-shadow:none;border-radius:0;overflow:visible}
-.est-onda-f{fill:#e9dcc7}
-.est-onda-l{fill:none;stroke:#d3bf9d;stroke-width:1.2;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+/* Dois traços sobre o mesmo caminho: o de baixo, mais grosso e escuro, é
+   a sombra que dá espessura à régua; o de cima é a face clara. O
+   `non-scaling-stroke` é obrigatório — o viewBox estica-se à caixa
+   (`preserveAspectRatio:none`) e sem ele a régua saía mais grossa nas
+   curvas do que nas retas. */
+.est-reg-s,.est-reg{fill:none;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round}
+.est-reg-s{stroke:#cbb894;stroke-width:calc(var(--slot) * .2)}
+.est-reg{stroke:#fffdf7;stroke-width:calc(var(--slot) * .2)}
 /* Uma prateleira encaixada cola-se à de baixo: é o encaixe que se está a
    desenhar, e um intervalo entre elas dizia o contrário. */
 .mprat-layout.encaixa{margin-top:calc(var(--slot,34px) * -.02)}
-.est-bg{position:absolute;left:0;top:var(--pv);width:100%;height:calc(100% - 2 * var(--pv));
-  pointer-events:none;overflow:visible}
+.est-bg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
 .msdot{position:relative;z-index:1;aspect-ratio:1/1;width:100%;max-width:var(--slot);margin:0 auto;border-radius:999px;
   border:1px solid #c9a1af;background:#f3e8ec;display:flex;align-items:center;justify-content:center;
   font-family:var(--fd);font-size:clamp(8px,calc(var(--slot) * .42),15px);color:var(--vh);font-weight:600;

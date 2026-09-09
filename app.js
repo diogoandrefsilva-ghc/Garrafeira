@@ -1655,29 +1655,36 @@ function slotGridStyle(s){return `grid-column:${s.col} / span ${s.span||1};grid-
    O traço é `non-scaling-stroke` — o viewBox estica-se à caixa
    (`preserveAspectRatio:none`) e sem isso a onda ficava mais grossa nas
    diagonais do que nas pontas. */
-/* A tábua atravessa o móvel INTEIRO (a caixa é sempre da largura do
-   local), mas os vales têm de cair sob os lugares — que estão centrados
-   nela e podem estar desviados meia coluna. Daí a conta: a primeira
-   coluna ocupada começa a meio do que sobra. */
+/* A RÉGUA de uma prateleira de ziguezague: uma tira fina que corre o
+   móvel todo e faz um BERÇO em U debaixo de cada lugar, subindo entre
+   eles. É o que está lá em casa — as réguas onduladas onde a garrafa
+   assenta deitada — e não uma tábua maciça: a primeira versão preenchia
+   a metade de baixo da caixa e lia-se como um bloco de madeira com o
+   cimo às ondas, não como a prateleira que é.
+
+   O fundo do berço é achatado de propósito (as curvas entram e saem
+   quase na horizontal): uma onda de seno punha a garrafa a assentar num
+   ponto só, e o que segura uma garrafa é o berço inteiro.
+
+   A tira atravessa o móvel INTEIRO (a caixa é sempre da largura do
+   local), mas os berços têm de cair sob os lugares — que estão centrados
+   nela e podem estar desviados meia coluna. Daí a conta do `off`. */
 function ondaBgSVG(info,desvio){
-  const colsw=info.colsw||info.cols,PICO=12,VALE=48;
+  // em % da caixa, que inclui a folga de baixo onde o berço desce
+  const colsw=info.colsw||info.cols,PICO=36,VALE=88;
   const larg=100/colsw;                        // uma coluna, em % da caixa
   const off=(colsw-info.cols)/2+(desvio||0);   // colunas livres à esquerda
-  // curvas e não bicos: a tábua de uma prateleira de ziguezague é
-  // ondulada, e a traço reto lia-se como uma serra
   const f=n=>n.toFixed(2);
-  let topo=`M0 ${PICO}`;
-  const q=(x,y,px)=>{topo+=` Q${f(px)} ${f(y===VALE?PICO:VALE)} ${f(x)} ${y}`;};
-  // `s.col` está em MEIAS-colunas da grelha; aqui conta-se por lugar
+  let d=`M0 ${PICO}`;
   info.slots.forEach((s,i)=>{
-    const xv=(off+i+.5)*larg,xp=(off+i+1)*larg;
-    q(xv,VALE,xv-larg/4);
-    q(xp,PICO,xp-larg/4);
+    const cx=(off+i+.5)*larg, e=cx-larg/2, dir=cx+larg/2;
+    d+=` C${f(e+larg*.24)} ${PICO} ${f(cx-larg*.26)} ${VALE} ${f(cx)} ${VALE}`;
+    d+=` C${f(cx+larg*.26)} ${VALE} ${f(dir-larg*.24)} ${PICO} ${f(dir)} ${PICO}`;
   });
-  if(info.slots.length&&(off+info.slots.length)*larg<100)topo+=` L100 ${PICO}`;
+  const fim=(off+info.slots.length)*larg;
+  if(fim<100)d+=` L100 ${PICO}`;
   return `<svg class="est-bg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-    <path d="${topo} L100 100 L0 100 Z" class="est-onda-f"/>
-    <path d="${topo}" class="est-onda-l"/>
+    <path d="${d}" class="est-reg-s" transform="translate(0 5)"/><path d="${d}" class="est-reg"/>
   </svg>`;
 }
 
@@ -1823,12 +1830,12 @@ function ajustarEstantes(){
   // que vem por baixo é uma ação, não faz parte da estante, e obrigar a
   // que ele também coubesse custava dois pixels em cada lugar
   const alturaCom=v=>{ml.style.setProperty('--slot',v.toFixed(1)+'px');return ml.offsetHeight;};
-  /* O teto do lugar não é só a ALTURA que sobra: uma prateleira tem a
-     largura do móvel (`--colsw` colunas de 1,34 lugares), e num ecrã
-     estreito é a largura que manda primeiro — sem isto, a estante cabia
-     em altura e saía pelo lado, a rolar. Mede-se com o lugar no mínimo,
-     que é quando a caixa está mais folgada. */
-  alturaCom(SLOT_MIN);
+  /* A ALTURA decide o TAMANHO do lugar; a LARGURA decide o ESPAÇO entre
+     lugares. São duas coisas e não uma: numa estante com poucos lugares
+     por nível há largura de sobra e as garrafas devem respirar, que é o
+     que a faz ler-se como uma estante; numa com muitos, aperta-se o
+     espaçamento antes de encolher a garrafa. Daí `--colr` — quanto mede
+     uma coluna, em lugares — sair daqui e não do CSS. */
   const linha=ml.querySelector('.mprat-layout');
   const colsw=[...ml.querySelectorAll('.est')].reduce((m,e)=>
     Math.max(m,parseFloat(getComputedStyle(e).getPropertyValue('--colsw'))||1),1);
@@ -1837,13 +1844,18 @@ function ajustarEstantes(){
   // estante mede, e a estante mede o que o lugar der: era circular.
   const larg=el=>el?el.getBoundingClientRect().width:0;
   const livre=linha?linha.clientWidth-larg(linha.querySelector('.mp-lbl'))-larg(linha.querySelector('.mp-n'))-44:0;
-  const porLargura=livre>0?livre/(colsw*1.34):SLOT_MAX;
-  const teto=Math.max(SLOT_MIN,Math.min(SLOT_MAX,porLargura));
-  if(alturaCom(teto)<=disponivel)return;
-  if(alturaCom(SLOT_MIN)>disponivel)return;       // nem no mínimo cabe: fica no mínimo e rola
+  const COL_MIN=1.28,COL_MAX=1.8;
+  const ajustar=v=>{
+    const r=livre>0?Math.min(COL_MAX,Math.max(COL_MIN,livre/(colsw*v))):COL_MAX;
+    ml.style.setProperty('--colr',r.toFixed(3));
+    return alturaCom(v);
+  };
+  const teto=Math.max(SLOT_MIN,livre>0?Math.min(SLOT_MAX,livre/(colsw*COL_MIN)):SLOT_MAX);
+  if(ajustar(teto)<=disponivel)return;
+  if(ajustar(SLOT_MIN)>disponivel)return;       // nem no mínimo cabe: fica no mínimo e rola
   let lo=SLOT_MIN,hi=teto;
-  for(let i=0;i<6;i++){const m=(lo+hi)/2;if(alturaCom(m)<=disponivel)lo=m;else hi=m;}
-  alturaCom(lo);
+  for(let i=0;i<6;i++){const m=(lo+hi)/2;if(ajustar(m)<=disponivel)lo=m;else hi=m;}
+  ajustar(lo);
 }
 let _estT=null;
 window.addEventListener('resize',()=>{clearTimeout(_estT);_estT=setTimeout(ajustarEstantes,120);});

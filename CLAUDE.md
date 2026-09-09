@@ -281,10 +281,17 @@ contagens — só o desenho:
   duas prateleiras centradas na mesma largura, os lugares já caem uns
   entre os outros quando as capacidades têm paridades diferentes (4 e 3);
   quando são iguais (4 e 4) ficariam alinhados e é preciso meia coluna;
-- **`ondulada`** é quem desenha a tábua em onda (`ondaBgSVG`): a que
-  encaixa e a que está por baixo dela. Os lugares assentam nos vales e a
-  madeira sobe entre eles, em curvas — a traço reto lia-se como uma
-  serra;
+- **`ondulada`** é quem desenha a RÉGUA (`ondaBgSVG`): a que encaixa e a
+  que está por baixo dela. É uma tira fina que corre o móvel todo e faz
+  um **berço em U** debaixo de cada lugar, subindo entre eles — as
+  réguas onduladas de uma garrafeira a sério, onde a garrafa assenta
+  deitada. Três coisas que se aprenderam a desenhá-la: não é uma tábua
+  MACIÇA (preencher a metade de baixo lia-se como um bloco de madeira
+  com o cimo às ondas, não como a prateleira que é); o fundo do berço é
+  ACHATADO, porque uma onda de seno punha a garrafa a assentar num ponto
+  só; e a sombra é o mesmo caminho DESCIDO, não um traço mais grosso —
+  mais grosso, ela assomava dos dois lados e lia-se como duas réguas
+  paralelas;
 - **todas as prateleiras de um local têm a largura do MÓVEL** (`colsw`: o
   nível mais largo, mais uma coluna de folga de cada lado) e os lugares
   ficam centrados nela. Antes cada prateleira valia o que os seus lugares
@@ -297,9 +304,17 @@ com `span:2`) porque meia coluna é exatamente o desencontro que se quer, e
 uma grelha de colunas inteiras não sabe fazer meio passo. As colunas têm
 largura FIXA (`--colw`, tirada do `--slot`) e não frações: em frações, a
 largura do lugar deixava de vir do `--slot` e o cálculo da altura passava
-a discordar do que se via. Por isso o `ajustarEstantes` também tem um teto
-de LARGURA — num ecrã estreito é ela que manda primeiro, e sem esse teto a
-estante cabia em altura e saía pelo lado.
+a discordar do que se via.
+
+Por isso o `ajustarEstantes` decide **duas** coisas e não uma: a ALTURA
+disponível dá o TAMANHO do lugar (`--slot`), a LARGURA dá o ESPAÇO entre
+lugares (`--colr`, quanto mede uma coluna em lugares, entre 1,28 e 1,8).
+Numa estante de poucos lugares por nível há largura de sobra e as
+garrafas devem respirar — é o que a faz ler-se como uma estante; numa de
+muitos, aperta-se o espaçamento antes de encolher a garrafa. Com um
+espaçamento fixo, dois níveis de seis lugares num telemóvel punham o
+lugar no mínimo por causa da largura, com meio ecrã de altura vazio por
+baixo.
 
 Em **`sobrepostos`** com capacidade ímpar, `mais_em` diz em que fila fica
 o lugar a mais; a outra fica centrada e não encostada à esquerda, que é
