@@ -139,6 +139,55 @@ lado), os pontos que dizem em que local se está, e por baixo as
 prateleiras nível a nível — de cima para baixo como na estante a sério (o
 Nível 1 é o de baixo, `prateleirasDesc`). Cada lugar é um círculo **cheio
 com o nº do vinho** ou **vazio com o nº do lugar**, com a legenda no fim.
+
+**A estante inteira tem de caber no ecrã sem scroll** — é essa a medida
+de tudo o resto aqui, e é o que separa este ecrã de uma lista. Duas
+coisas o garantem:
+- cada nível é **uma linha só** (`.mprat-layout`): o nome à esquerda, a
+  estante no meio, a contagem à direita. O nome já teve linha própria por
+  cima, com o filete a atravessar, e custava ~24px por nível — em oito
+  níveis, um terço da altura do ecrã gasto em rótulos;
+- o tamanho de um lugar (`--slot`) é **calculado**, não escrito no CSS
+  (`ajustarEstantes`). Mede-se o que sobra do ecrã abaixo do cartão e
+  procura-se por bissecção o maior lugar que ainda cabe, entre
+  `SLOT_MIN` (18px, onde se desiste porque o número deixa de se ler e de
+  se acertar com o dedo) e `SLOT_MAX` (54px, onde deixa de fazer sentido
+  crescer). Bissecção e não uma conta: a altura depende de paddings, do
+  número de filas de cada formato e de quanto cada nome quebra de linha —
+  refazer isso em JS era duplicar o `style.css` e ficar a discordar dele
+  no dia em que alguém lhe mexesse. Corre uma vez por desenho do mapa e
+  ao redimensionar, nunca por scroll.
+
+Duas armadilhas que isto já apanhou, e que valem para qualquer coisa que
+lhes toque:
+- **o default do `--slot` vive no `.ml` e não no `.est`.** Uma custom
+  property declarada no PRÓPRIO elemento ganha à que ele herdaria — com
+  `.est{--slot:34px}` o valor calculado nunca lá chegava, e a estante
+  ficava sempre do mesmo tamanho sem um erro à vista;
+- **o `<svg>` da fita precisa de `width` E `height` declaradas.** É um
+  elemento de substituição: a dimensão que falta sai da proporção do
+  viewBox e não do `left`/`right`/`bottom` do posicionamento. Sem as
+  duas, a fita ficava tão alta quanto a prateleira é larga (três vezes a
+  caixa) e o que se via eram as cristas de um ziguezague gigante a
+  espreitar por baixo dos lugares.
+
+**O + flutuante entra na conta** (`ajustarEstantes` reserva-lhe espaço):
+fica por cima do canto de baixo à direita, que é onde acaba o último
+nível, e com tudo a caber já não há scroll que o desvie — sem a reserva,
+o último lugar ficava à vista e sem se conseguir tocar. Nota que
+`offsetParent` de um elemento `position:fixed` é SEMPRE null (regra do
+DOM, não sinal de estar escondido), por isso ele mede-se pelo retângulo.
+O "+ Novo local" é que fica de fora do que tem de caber — é uma ação, não
+faz parte da estante, e exigir que coubesse custava dois pixels em cada
+lugar.
+
+**As duas filas do ziguezague não se sobrepõem**, apesar de numa estante
+a sério as garrafas alternadas encaixarem umas nas outras. Tentou-se
+(margem negativa, quase um quinto da altura poupado) e o que se perdia
+era a FITA: com os centros a menos de um diâmetro de distância, os
+lugares tapavam-na e sobravam uns arcos soltos que não se liam como uma
+prateleira. O mesmo espaço veio antes de deixar o "+ Novo local" fora da
+conta.
 Passa-se de local com os ‹ ›, com os pontos, ou **arrastando de lado**
 (`mapaSwipe` — exceto sobre uma prateleira que rola de lado, que aí o
 gesto é dela). Dá a volta: do último passa ao primeiro.

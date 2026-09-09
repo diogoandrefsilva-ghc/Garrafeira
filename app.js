@@ -803,6 +803,9 @@ function tab(nome,btn){
   try{localStorage.setItem('gf_tab',nome);}catch(e){}
   if(nome==='garrafeira')renderResumo();
   if(nome==='detalhe'||nome==='locais'){posicionarFiltros(nome);renderFiltrados();}
+  // só agora a secção está visível: antes disto o `ajustarEstantes` de
+  // dentro do `renderMapa` não tinha alturas para medir
+  if(nome==='locais')ajustarEstantes();
   if(nome==='consumidos')renderConsumidos();
   if(nome==='cfg')renderCfg();
   window.scrollTo({top:0,behavior:'instant'});
@@ -1621,9 +1624,10 @@ function mapaEstanteHTML(l,gs,d){
         ${lista.length>1?`<span class="msdot-q">×${lista.length}</span>`:''}
       </button>`;
     }).join('');
-    return `<div class="mprat mprat-layout">
-      <div class="mprat-t">${esc(p.nome)}<span class="mprat-n">${n}/${p.capacidade}</span></div>
+    return `<div class="mprat-layout">
+      <span class="mp-lbl">${esc(p.nome)}</span>
       <div class="est-wrap">${estanteHTML(p,info,slots)}</div>
+      <span class="mp-n">${n}/${p.capacidade}</span>
     </div>`;
   }).join('')+(extras.length?`
     <div class="mprat">
@@ -1656,6 +1660,58 @@ function mapaLocalHTML(x,d){
   </div>
   <div class="ml-add ro-hide"><button class="btn ghost" onclick="novoLocal()">+ Novo local</button></div>`;
 }
+/* A ESTANTE INTEIRA NUM ECRÃ, sem scroll — é para isso que existe o
+   `--slot`. Quantos níveis uma pessoa tem, e quantos lugares cada um, é
+   coisa dela: um tamanho fixo cabia numa garrafeira de três níveis e
+   obrigava a rolar meia página numa de oito. Aqui mede-se o que sobra do
+   ecrã abaixo do mapa e escolhe-se o maior lugar que ainda cabe.
+
+   Por BISSECÇÃO e não por conta: a altura depende de paddings, do número
+   de filas de cada formato, das margens negativas do ziguezague e de
+   quanto o nome de cada prateleira quebra de linha — refazer essa conta
+   aqui era duplicar o `style.css` e ficar a discordar dele no dia em que
+   alguém lhe mexesse. Seis passos chegam para acertar a menos de 1px, e
+   isto corre uma vez por desenho do mapa (não a cada scroll).
+
+   `SLOT_MIN` é onde se desiste: abaixo disso o número do vinho não se lê
+   nem se acerta com o dedo, e é preferível deixar rolar. Medimos com o
+   scroll onde estiver (`rect.top + scrollY` é a posição no documento) —
+   o que interessa é caber quando se chega ao separador, com a página no
+   topo. */
+const SLOT_MIN=18, SLOT_MAX=54;
+function ajustarEstantes(){
+  const box=document.getElementById('mapa');
+  const ml=box&&box.querySelector('.ml');
+  // escondido (o `renderFiltrados` refaz Locais mesmo fora dele) — medir
+  // um `display:none` dá zeros e punha tudo no mínimo
+  if(!ml||!box.offsetParent)return;
+  // O + flutuante (adicionar vinho) fica POR CIMA do canto de baixo à
+  // direita, que é onde acaba o último nível — e com tudo a caber no ecrã
+  // já não há scroll que o desvie. Por isso o cartão tem de acabar antes
+  // dele: senão o último lugar da última prateleira ficava por baixo do
+  // botão, à vista e sem se conseguir tocar.
+  // `offsetParent` de um elemento `position:fixed` é SEMPRE null (é regra
+  // do DOM, não um sinal de estar escondido) — por isso o FAB mede-se pelo
+  // retângulo. O que se reserva é o que ele ocupa acima do fundo, menos a
+  // faixa que o cartão já não usa para lugares (a legenda no fim).
+  const fab=document.querySelector('.fab');
+  const r=fab?fab.getBoundingClientRect():null;
+  const reserva=r&&r.height?Math.max(0,window.innerHeight-r.top-32):0;
+  const disponivel=window.innerHeight-(ml.getBoundingClientRect().top+window.scrollY)-10-reserva;
+  if(disponivel<120)return;
+  // o alvo é o CARTÃO DO LOCAL e não o separador todo: o "+ Novo local"
+  // que vem por baixo é uma ação, não faz parte da estante, e obrigar a
+  // que ele também coubesse custava dois pixels em cada lugar
+  const alturaCom=v=>{ml.style.setProperty('--slot',v.toFixed(1)+'px');return ml.offsetHeight;};
+  if(alturaCom(SLOT_MAX)<=disponivel)return;
+  if(alturaCom(SLOT_MIN)>disponivel)return;       // nem no mínimo cabe: fica no mínimo e rola
+  let lo=SLOT_MIN,hi=SLOT_MAX;
+  for(let i=0;i<6;i++){const m=(lo+hi)/2;if(alturaCom(m)<=disponivel)lo=m;else hi=m;}
+  alturaCom(lo);
+}
+let _estT=null;
+window.addEventListener('resize',()=>{clearTimeout(_estT);_estT=setTimeout(ajustarEstantes,120);});
+
 function renderMapa(){
   const box=document.getElementById('mapa');
   if(!box)return;
@@ -1674,6 +1730,7 @@ function renderMapa(){
   if(!x){x=vis[0];MAPA_LOCAL=x.l.id;}
   box.innerHTML=mapaLocalHTML(x,d);
   mapaSwipe(box.querySelector('.ml'));
+  ajustarEstantes();
 }
 function mapaLocalMostrar(id){
   MAPA_LOCAL=id;

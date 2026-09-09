@@ -332,11 +332,11 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    nome e a contagem, os pontos de "onde estou", e por baixo as
    prateleiras nível a nível. A madeira em tons de papel, os lugares em
    bordô — nada de imagens. */
-.ml{background:var(--card);border:1px solid var(--bo);border-radius:var(--r2);box-shadow:var(--sh);overflow:hidden;padding-bottom:12px}
-.ml-bar{display:flex;align-items:center;gap:4px;padding:9px 8px;position:relative;
+.ml{--slot:34px;background:var(--card);border:1px solid var(--bo);border-radius:var(--r2);box-shadow:var(--sh);overflow:hidden;padding-bottom:9px}
+.ml-bar{display:flex;align-items:center;gap:4px;padding:6px 8px;position:relative;
   background:linear-gradient(180deg,rgba(255,255,255,.6),transparent),var(--bg);border-bottom:1px solid var(--bo)}
 .ml-bar::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--lc,var(--vh))}
-.ml-nav{width:36px;height:36px;border-radius:50%;border:1px solid var(--bo2);background:#fff;color:var(--vh);font-family:var(--fd);
+.ml-nav{width:33px;height:33px;border-radius:50%;border:1px solid var(--bo2);background:#fff;color:var(--vh);font-family:var(--fd);
   font-size:24px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0 0 3px;
   box-shadow:var(--sh);transition:all .15s}
 .ml-nav:hover{background:var(--vhp);border-color:var(--vh)}
@@ -350,19 +350,34 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .ml-sub{font-family:var(--fd);font-size:12.5px;color:var(--mu);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ml-sub b{font-weight:600;color:var(--vh);font-variant-numeric:lining-nums}
 .ml-sub i{font-style:normal;font-family:var(--ff);font-size:11px}
-.ml-dots{display:flex;justify-content:center;gap:6px;padding:9px 0 0}
+.ml-dots{display:flex;justify-content:center;gap:6px;padding:6px 0 0}
 .ml-dot{width:7px;height:7px;border-radius:99px;border:none;background:var(--bo2);padding:0;cursor:pointer;transition:all .18s}
 .ml-dot.on{background:var(--vh);width:18px}
 .ml-nota{padding:10px 14px 0}
 .ml-vazio{padding:26px 18px 14px}
-.ml-leg{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:center;padding:14px 12px 2px;font-size:11px;color:var(--mu)}
+.ml-leg{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:center;padding:9px 12px 0;font-size:10px;color:var(--mu)}
 .ml-leg span{display:inline-flex;align-items:center;gap:6px}
-.ml-leg i{width:16px;height:16px;border-radius:50%;flex-shrink:0;display:inline-block}
+.ml-leg i{width:13px;height:13px;border-radius:50%;flex-shrink:0;display:inline-block}
 .ml-leg .cheia{background:var(--vh)}
 .ml-leg .vazia{border:1.5px dashed #c9a1af}
-.ml-add{margin-top:8px;text-align:center}
+.ml-add{margin-top:7px;text-align:center}
+.ml-add .btn{margin-top:0}
 .vazio .ro-hide{margin-top:12px}
 .mprat{padding:0 12px;margin-top:12px}
+/* Uma prateleira é UMA LINHA: o nome à esquerda, a estante no meio, a
+   contagem à direita. O nome já teve linha própria por cima (com o
+   filete a atravessar) e custava ~24px por nível — em oito níveis, um
+   terço da altura do ecrã gasto em rótulos. */
+.mprat-layout{display:flex;align-items:center;gap:8px;padding:0 10px;margin-top:calc(var(--slot,34px) * .14);
+  /* a linha vale o que o seu conteúdo mede e fica centrada: esticada à
+     largura do cartão, o nome do nível ficava a meio metro da estante,
+     um em cada canto */
+  width:fit-content;max-width:100%;margin-left:auto;margin-right:auto}
+.mp-lbl{flex:0 0 52px;min-width:0;font-size:9.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;
+  color:var(--mu);line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow-wrap:anywhere}
+.mp-n{flex:0 0 auto;min-width:30px;text-align:right;font-family:var(--fd);font-size:12px;font-weight:600;
+  color:var(--vh);font-variant-numeric:lining-nums}
 .mprat-t{display:flex;align-items:center;gap:9px;font-size:10.5px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;
   color:var(--mu);margin-bottom:8px}
 .mprat-t::after{content:'';flex:1;height:1px;background:var(--bo)}
@@ -384,28 +399,46 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    (sobrepostos) ou a fita em ziguezague, que é um SVG esticado à caixa
    por trás dos lugares. A grelha do ziguezague NÃO tem gap de propósito:
    é o que deixa a fita passar exatamente pelo centro de cada lugar (ver
-   `ziguezagueBgSVG`). O espaço entre lugares vem da margem de cada um. */
-.est-wrap{overflow-x:auto;padding-bottom:2px}
-.est{position:relative;display:grid;grid-template-columns:repeat(var(--gcols,var(--cols)),minmax(0,1fr));grid-template-rows:repeat(var(--rows),auto);
-  gap:6px;align-items:center;min-width:calc(var(--cols) * 30px);
-  /* num ecrã largo a prateleira cresce COM os lugares e não além deles:
-     o teto é o que os lugares (`.msdot`, 56px) e o espaço entre eles
-     ocupam. Sem teto, seis bolinhas de 44px espalhavam-se por 1000px com
-     um ziguezague achatado no meio; com um teto apertado de mais,
-     sobrava meio ecrã branco de cada lado. */
-  max-width:calc(var(--cols) * 78px);margin:0 auto}
-.est-fila,.est-sobrepostos{padding:8px 10px;border-radius:14px;border:1px solid #dccbb0;
-  background:linear-gradient(180deg,#f4ecdf,#e8dbc5);box-shadow:inset 0 1px 0 rgba(255,255,255,.75),inset 0 -2px 0 rgba(120,90,50,.12)}
-.est-sobrepostos{row-gap:5px;column-gap:0;padding:9px 10px}
-.est-sobrepostos .msdot{width:calc(100% - 6px)}
-.est-ziguezague{gap:0;padding:6px 4px;overflow:hidden}   /* a fita corta na borda, não acaba em ponta redonda a meio do nada */
-.est-bg{position:absolute;left:4px;top:6px;width:calc(100% - 8px);height:calc(100% - 12px);pointer-events:none;overflow:visible}
-.est-zz1{fill:none;stroke:#d9c7a8;stroke-width:26;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
-.est-zz2{fill:none;stroke:#f1e7d6;stroke-width:20;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
-.msdot{position:relative;z-index:1;aspect-ratio:1/1;width:100%;max-width:56px;min-height:26px;margin:0 auto;border-radius:999px;
+   `ziguezagueBgSVG`). O espaço entre lugares vem da margem de cada um.
+
+   **`--slot` (o tamanho de um lugar) vem do JS, não daqui**
+   (`ajustarEstantes`): é ele que faz a estante inteira caber no ecrã sem
+   scroll, e o valor depende de quantos níveis a pessoa tem. Tudo o que
+   mede alguma coisa aqui sai dele — o espaço entre lugares, o padding da
+   madeira, o corpo do número. Um `56px` fixo cabia numa garrafeira de
+   três níveis e obrigava a rolar meia página numa de oito. */
+.est-wrap{flex:1;min-width:0;overflow-x:auto}
+.est{position:relative;display:grid;
+  grid-template-columns:repeat(var(--gcols,var(--cols)),minmax(0,1fr));grid-template-rows:repeat(var(--rows),auto);
+  gap:calc(var(--slot) * .16);align-items:center;
+  /* a prateleira acompanha os lugares e não estica até à borda: com dois
+     lugares numa fila larga ficavam duas bolinhas perdidas no meio */
+  width:calc(var(--cols) * var(--slot) * 1.34 + 18px);max-width:100%;margin:0 auto}
+.est-fila,.est-sobrepostos{padding:calc(var(--slot) * .16 + 2px) calc(var(--slot) * .2);border-radius:calc(var(--slot) * .38);
+  border:1px solid #dccbb0;background:linear-gradient(180deg,#f4ecdf,#e8dbc5);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.75),inset 0 -2px 0 rgba(120,90,50,.12)}
+.est-sobrepostos{row-gap:calc(var(--slot) * .1);column-gap:0}
+.est-sobrepostos .msdot{width:calc(100% - var(--slot) * .12)}
+/* As duas filas do ziguezague NÃO se sobrepõem, apesar de numa estante a
+   sério as garrafas alternadas encaixarem umas nas outras. Tentou-se
+   (margem negativa, quase um quinto da altura poupado) e o que se perdia
+   era a FITA: com os centros a menos de um diâmetro de distância, os
+   lugares tapavam-na e sobravam uns arcos soltos que não se liam como
+   uma prateleira. O tamanho do lugar que se ganhava era menos do que o
+   que se perdia em clareza — e o mesmo espaço veio de deixar o "+ Novo
+   local" fora do que tem de caber no ecrã (ver `ajustarEstantes`). */
+.est-ziguezague{--pv:calc(var(--slot) * .1 + 2px);gap:0;padding:var(--pv) 4px;overflow:hidden}
+.est-ziguezague .msdot{width:calc(100% - var(--slot) * .16)}
+.est-bg{position:absolute;left:4px;top:var(--pv);width:calc(100% - 8px);height:calc(100% - 2 * var(--pv));
+  pointer-events:none;overflow:visible}
+.est-zz1{fill:none;stroke:#d9c7a8;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke;
+  stroke-width:calc(var(--slot) * .40)}
+.est-zz2{fill:none;stroke:#f1e7d6;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke;
+  stroke-width:calc(var(--slot) * .26)}
+.msdot{position:relative;z-index:1;aspect-ratio:1/1;width:100%;max-width:var(--slot);margin:0 auto;border-radius:999px;
   border:1px solid #c9a1af;background:#f3e8ec;display:flex;align-items:center;justify-content:center;
-  font-family:var(--fd);font-size:clamp(11px,2.6vw,14px);color:var(--vh);font-weight:600;line-height:1;font-variant-numeric:lining-nums}
-.est-ziguezague .msdot{width:calc(100% - 8px);max-width:56px;margin:4px auto}
+  font-family:var(--fd);font-size:clamp(8px,calc(var(--slot) * .42),15px);color:var(--vh);font-weight:600;
+  line-height:1;font-variant-numeric:lining-nums}
 .msdot.vazia{border-style:dashed;border-color:#cdb1ba;background:rgba(255,255,255,.55);color:var(--mu);font-weight:400}
 .msdot.cheia{background:var(--vh);border-color:var(--vh);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;
   box-shadow:0 2px 4px rgba(78,18,40,.25),inset 0 1px 0 rgba(255,255,255,.18);transition:transform .12s,box-shadow .15s}
@@ -414,8 +447,9 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 /* Ocupado, mas por uma garrafa que NÃO passa na procura: apagado, para o
    que passa ficar a cor. */
 .msdot.fora{background:#e6dee1;border-color:#e6dee1;color:#a8969c;box-shadow:none}
-.msdot-id{display:block;max-width:100%;padding:0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.msdot-q{position:absolute;right:-4px;top:-4px;font-size:9px;font-weight:700;color:#fff;background:#c36c4f;border-radius:99px;padding:1px 4px;line-height:1}
+.msdot-id{display:block;max-width:100%;padding:0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msdot-q{position:absolute;right:calc(var(--slot) * -.1);top:calc(var(--slot) * -.1);font-size:calc(var(--slot) * .3);
+  font-weight:700;color:#fff;background:#c36c4f;border-radius:99px;padding:0 3px;line-height:1.4}
 .mspot-pop{position:fixed;left:-9999px;top:-9999px;z-index:180;width:min(292px,calc(100vw - 16px));display:none}
 .mspot-pop.on{display:block}
 .mspot-card{background:var(--card);border:1px solid var(--bo2);border-radius:16px;padding:12px;box-shadow:0 20px 40px -18px rgba(30,8,16,.45)}
@@ -535,7 +569,10 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .lprat-t span{font-family:var(--fd);font-size:12px;font-weight:400;color:var(--vh)}
 /* No seletor os lugares têm largura fixa (cabe a garrafinha e o número)
    e a prateleira rola de lado se for comprida. */
-.est-pick{--slot:46px;grid-template-columns:repeat(var(--gcols,var(--cols)),minmax(calc(var(--slot) / var(--span,1)),1fr));width:100%;min-width:calc(var(--cols) * var(--slot));max-width:none;margin:0;align-items:stretch}
+.est-pick{--slot:46px;grid-template-columns:repeat(var(--gcols,var(--cols)),minmax(calc(var(--slot) / var(--span,1)),1fr));
+  width:100%;min-width:calc(var(--cols) * var(--slot));max-width:none;margin:0;align-items:stretch;gap:7px;padding:8px 10px}
+.est-pick.est-sobrepostos{row-gap:5px;column-gap:0}
+.est-pick.est-ziguezague{gap:0;padding:6px 4px}
 .est-pick.est-ziguezague,.est-pick.est-sobrepostos{--slot:44px}
 /* Todos os lugares com a MESMA altura (com ou sem garrafinha): é o que
    deixa a fita do ziguezague passar pelo centro de cada um. */
