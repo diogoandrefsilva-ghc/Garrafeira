@@ -1695,14 +1695,23 @@ function ondaBgSVG(info,desvio){
   const larg=100/colsw;                        // uma coluna, em % da caixa
   const off=(colsw-info.cols)/2+(desvio||0);   // colunas livres à esquerda
   const f=n=>n.toFixed(2);
-  let d=`M0 ${PICO}`;
+  /* A régua acaba logo a seguir ao último berço e não na borda da caixa.
+     Atravessar o móvel todo dava-lhe dois troços RETOS e compridos, um de
+     cada lado — e o que se lia era uma linha contínua a ir do nome do
+     nível até ao outro extremo da linha, não uma prateleira. O que se quer
+     ver são os U onde a garrafa encaixa; a pontinha é só o que segura a
+     ponta. Que cada nível fique com uma régua mais curta ou mais comprida
+     é o certo: é a prateleira dele, e a CAIXA continua a ser a do móvel,
+     por isso os lugares alinham-se na mesma de nível para nível. */
+  const PONTA=.3;                              // quanto sobra depois do berço, em colunas
+  const ini=Math.max(0,(off-PONTA)*larg);
+  let d=`M${f(ini)} ${PICO} L${f(off*larg)} ${PICO}`;
   info.slots.forEach((s,i)=>{
     const cx=(off+i+.5)*larg, e=cx-larg/2, dir=cx+larg/2;
     d+=` C${f(e+larg*.24)} ${PICO} ${f(cx-larg*.26)} ${VALE} ${f(cx)} ${VALE}`;
     d+=` C${f(cx+larg*.26)} ${VALE} ${f(dir-larg*.24)} ${PICO} ${f(dir)} ${PICO}`;
   });
-  const fim=(off+info.slots.length)*larg;
-  if(fim<100)d+=` L100 ${PICO}`;
+  d+=` L${f(Math.min(100,(off+info.slots.length+PONTA)*larg))} ${PICO}`;
   return `<svg class="est-bg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
     <path d="${d}" class="est-reg-s" transform="translate(0 5)"/><path d="${d}" class="est-reg"/>
   </svg>`;
@@ -1740,14 +1749,12 @@ function mapaEstanteHTML(l,gs,d){
   const extras=dadosForaLayout(l,gs).filter(g=>!d.filtrando||d.okG.has(g.id));
   return prats.map(p=>{
     const info=prateleiraLayoutInfo(p);
-    let n=0;
     const slots=info.slots.map(s=>{
       const lugar=s.lugar,lista=occ[lugar]||[];
       const pos=` style="${slotGridStyle(s)}"`;
       if(!lista.length)return `<button class="msdot vazia"${pos}
         onclick="mapaLugarVazio(${l.id},'${escJs(p.nome)}',${lugar})"
         title="${esc(posicaoTxt(p.nome,lugar))} — vazio"><span class="msdot-id">${lugar}</span></button>`;
-      n+=lista.length;
       const passam=d.filtrando?lista.filter(g=>d.okG.has(g.id)):lista;
       const g=passam[0]||lista[0],v=IDXV[g.vinho_id]||{nome:'?'};
       return `<button class="msdot cheia${lista.length>1?' conflito':''}${d.filtrando&&!passam.length?' fora':''}"${pos}
@@ -1762,8 +1769,7 @@ function mapaEstanteHTML(l,gs,d){
       <span class="mp-lbl">${esc(p.nome)}</span>
       <span class="mp-fio"></span>
       <div class="est-wrap">${estanteHTML(p,info,slots)}</div>
-      <span class="mp-fio"></span>
-      <span class="mp-n">${n}/${p.capacidade}</span>
+      <span class="mp-esp"></span>
     </div>`;
   }).join('')+`
     <div class="ml-leg"><span><i class="cheia"></i>Ocupado · nº do vinho</span><span><i class="vazia"></i>Vazio · nº do lugar</span></div>`;
@@ -1859,11 +1865,12 @@ function ajustarEstantes(){
   const linha=ml.querySelector('.mprat-layout');
   const colsw=[...ml.querySelectorAll('.est')].reduce((m,e)=>
     Math.max(m,parseFloat(getComputedStyle(e).getPropertyValue('--colsw'))||1),1);
-  // o espaço que a prateleira tem: a linha menos o nome, a contagem e o
-  // mínimo dos fios. Medir o `.est-wrap` não servia — ele encolhe ao que a
-  // estante mede, e a estante mede o que o lugar der: era circular.
+  // o espaço que a prateleira tem: a linha menos o nome, as folgas do
+  // `.est-wrap` e o mínimo que o fio e o espaçador precisam para a estante
+  // continuar CENTRADA. Medir o `.est-wrap` não servia — ele encolhe ao que
+  // a estante mede, e a estante mede o que o lugar der: era circular.
   const larg=el=>el?el.getBoundingClientRect().width:0;
-  const livre=linha?linha.clientWidth-larg(linha.querySelector('.mp-lbl'))-larg(linha.querySelector('.mp-n'))-66:0;
+  const livre=linha?linha.clientWidth-larg(linha.querySelector('.mp-lbl'))-80:0;
   /* Uma coluna mede pouco mais do que um lugar de propósito: é o que põe
      as garrafas quase encostadas, e é isso que faz o ENCAIXE existir —
      com colunas largas, a garrafa de cima cai meia coluna à frente mas

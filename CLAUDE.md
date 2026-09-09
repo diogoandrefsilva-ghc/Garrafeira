@@ -144,18 +144,22 @@ com o nº do vinho** ou **vazio com o nº do lugar**, com a legenda no fim.
 de tudo o resto aqui, e é o que separa este ecrã de uma lista. Duas
 coisas o garantem:
 - cada nível é **uma linha só** (`.mprat-layout`): o nome encostado à
-  esquerda, a estante no meio, a contagem à direita, e um **fio
-  pontilhado** (`.mp-fio`) a ligá-los, como numa legenda de planta. O nome
-  já teve linha própria por cima, com o filete a atravessar, e custava
-  ~24px por nível — em oito níveis, um terço da altura do ecrã gasto em
-  rótulos. E encosta-se à esquerda em vez de andar colado à estante:
-  colado, mudava de sítio de nível para nível conforme a prateleira era
-  mais larga ou mais estreita, e a coluna dos nomes deixava de se ler de
-  uma vez. O fio é **ténue e PARA ANTES da madeira** (a folga vem do
-  `margin` do `.est-wrap`, igual dos dois lados): a régua acaba num troço
-  reto à mesma altura, e um fio a encostar-lhe lia-se como a continuação
-  dela — a prateleira parecia ter uma haste a sair para o lado. Ele só
-  ajuda a ler a linha; não faz parte do desenho da estante;
+  esquerda e a estante no meio. O nome já teve linha própria por cima, com
+  o filete a atravessar, e custava ~24px por nível — em oito níveis, um
+  terço da altura do ecrã gasto em rótulos. E encosta-se à esquerda em vez
+  de andar colado à estante: colado, mudava de sítio de nível para nível
+  conforme a prateleira era mais larga ou mais estreita, e a coluna dos
+  nomes deixava de se ler de uma vez. Entre os dois há um **fio tracejado
+  muito leve** (`.mp-fio`), que vai do fim do nome até onde a caixa da
+  prateleira começa e mais nada — é só uma ajuda a ver de que nível são
+  aquelas garrafas, não uma peça do móvel. Do lado direito não há fio:
+  há um **espaçador** (`.mp-esp`) do mesmo tamanho, que é o que mantém a
+  estante centrada;
+- **não há contagem por nível.** Era um "3/3" à direita, e o fio que lhe
+  ia dar atravessava a linha inteira: o que se via era um traço contínuo
+  do nome do nível até ao outro extremo, com a prateleira apanhada no
+  meio. A contagem do local já está no cabeçalho ("37 / 42 garrafas");
+  garrafa a garrafa lê-se na estante, que é o que este ecrã mostra;
 - o tamanho de um lugar (`--slot`) é **calculado**, não escrito no CSS
   (`ajustarEstantes`). Mede-se o que sobra do ecrã abaixo do cartão e
   procura-se por bissecção o maior lugar que ainda cabe, entre
@@ -308,16 +312,22 @@ contagens — só o desenho:
   entre os outros quando as capacidades têm paridades diferentes (4 e 3);
   quando são iguais (4 e 4) ficariam alinhados e é preciso meia coluna;
 - **`ondulada`** é quem desenha a RÉGUA (`ondaBgSVG`): a que encaixa e a
-  que está por baixo dela. É uma tira fina que corre o móvel todo e faz
-  um **berço em U** debaixo de cada lugar, subindo entre eles — as
-  réguas onduladas de uma garrafeira a sério, onde a garrafa assenta
-  deitada. Três coisas que se aprenderam a desenhá-la: não é uma tábua
-  MACIÇA (preencher a metade de baixo lia-se como um bloco de madeira
-  com o cimo às ondas, não como a prateleira que é); o fundo do berço é
-  ACHATADO, porque uma onda de seno punha a garrafa a assentar num ponto
-  só; e a sombra é o mesmo caminho DESCIDO, não um traço mais grosso —
-  mais grosso, ela assomava dos dois lados e lia-se como duas réguas
-  paralelas;
+  que está por baixo dela. É uma tira fina que faz um **berço em U**
+  debaixo de cada lugar e sobe entre eles — as réguas onduladas de uma
+  garrafeira a sério, onde a garrafa assenta deitada. Quatro coisas que
+  se aprenderam a desenhá-la: não é uma tábua MACIÇA (preencher a metade
+  de baixo lia-se como um bloco de madeira com o cimo às ondas, não como
+  a prateleira que é); o fundo do berço é ACHATADO, porque uma onda de
+  seno punha a garrafa a assentar num ponto só; a sombra é o mesmo
+  caminho DESCIDO, não um traço mais grosso — mais grosso, ela assomava
+  dos dois lados e lia-se como duas réguas paralelas; e **a régua acaba
+  logo a seguir ao último berço** (`PONTA`, três décimos de coluna) e não
+  na borda da caixa. Atravessar o móvel todo dava-lhe dois troços retos e
+  compridos, e o que se lia era uma LINHA a ir de um extremo ao outro da
+  fila, com a prateleira apanhada no meio — em vez dos U, que são o
+  desenho todo. Que cada nível fique com uma régua mais curta ou mais
+  comprida é o certo: é a prateleira dele; a CAIXA é que continua a ser a
+  do móvel, e é ela que alinha os lugares de nível para nível;
 - **todas as prateleiras de um local têm a largura do MÓVEL** (`colsw`: o
   nível mais largo, mais uma coluna de folga de cada lado) e os lugares
   ficam centrados nela. Antes cada prateleira valia o que os seus lugares

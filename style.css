@@ -393,14 +393,17 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .mp-lbl{flex:0 0 auto;max-width:84px;font-size:8.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;
   color:var(--mu);line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
   overflow-wrap:anywhere}
-/* O fio é só uma AJUDA a ler a linha — o nome à esquerda e as garrafas
-   daquele nível — e por isso é ténue e não chega à prateleira: colado ao
-   berço em U, lia-se como a continuação da régua e a prateleira parecia
-   ter uma haste a sair para o lado. A folga vem do `.est-wrap`, para os
-   dois fios pararem à mesma distância da madeira. */
-.mp-fio{flex:1 1 6px;min-width:4px;height:0;border-bottom:1px dotted var(--bo2);opacity:.4}
-.mp-n{flex:0 0 auto;min-width:26px;text-align:right;font-family:var(--fd);font-size:11.5px;font-weight:600;
-  color:var(--vh);font-variant-numeric:lining-nums}
+/* O fio é só uma AJUDA a ver onde está cada nível: vai do nome até onde
+   a prateleira começa e mais nada. Muito leve e tracejado de propósito —
+   não é desenho da estante, e um traço a sério lia-se como uma peça do
+   móvel. Do lado direito não há nenhum: a linha que ia dali até ao
+   contador atravessava a estante toda e era ela que se via, em vez dos
+   berços. */
+.mp-fio{flex:1 1 6px;min-width:4px;height:0;border-bottom:1px dashed var(--bo2);opacity:.3}
+/* Do outro lado não há fio nenhum — há um espaçador do mesmo tamanho, que
+   é o que mantém a estante CENTRADA na linha depois de o contador sair.
+   Sem ele, o `flex:1` do fio empurrava a prateleira toda para a direita. */
+.mp-esp{flex:1 1 6px;min-width:4px}
 .mprat-t{display:flex;align-items:center;gap:9px;font-size:10.5px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;
   color:var(--mu);margin-bottom:8px}
 .mprat-t::after{content:'';flex:1;height:1px;background:var(--bo)}
