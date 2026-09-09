@@ -311,8 +311,13 @@ contagens — só o desenho:
   duas prateleiras centradas na mesma largura, os lugares já caem uns
   entre os outros quando as capacidades têm paridades diferentes (4 e 3);
   quando são iguais (4 e 4) ficariam alinhados e é preciso meia coluna;
-- **`ondulada`** é quem desenha a RÉGUA (`ondaBgSVG`): a que encaixa e a
-  que está por baixo dela. É uma tira fina que faz um **berço em U**
+- **`ondulada`** é quem desenha a RÉGUA (`ondaBgSVG`) — e é **de todas as
+  prateleiras**, seja qual for o formato. Chegou a ser só das que
+  encaixam, e um móvel com dois desenhos de prateleira (uma tábua maciça
+  aqui, berços ali) lia-se como dois móveis: uma garrafa assenta num berço
+  em U em qualquer nível, e o que o `encaixe` decide é o DESENCONTRO, não
+  a madeira. Quem fica sem ela é o seletor de posição, que passa
+  `ondulada:false`. É uma tira fina que faz um **berço em U**
   debaixo de cada lugar e sobe entre eles — as réguas onduladas de uma
   garrafeira a sério, onde a garrafa assenta deitada. Quatro coisas que
   se aprenderam a desenhá-la: não é uma tábua MACIÇA (preencher a metade
@@ -327,7 +332,19 @@ contagens — só o desenho:
   fila, com a prateleira apanhada no meio — em vez dos U, que são o
   desenho todo. Que cada nível fique com uma régua mais curta ou mais
   comprida é o certo: é a prateleira dele; a CAIXA é que continua a ser a
-  do móvel, e é ela que alinha os lugares de nível para nível;
+  do móvel, e é ela que alinha os lugares de nível para nível. Os berços
+  vão sob a fila de BAIXO e só sob ela: nos `sobrepostos` as garrafas de
+  cima assentam nas de baixo, e dar-lhes berço era desenhar uma
+  prateleira que não existe. E a régua é uma TIRA colada ao fundo da
+  caixa, com altura própria em `--slot` — não `inset:0`: esticada à caixa
+  inteira, o mesmo viewBox dava uma régua mais alta nos `sobrepostos`
+  (duas filas) do que na `fila`, e os berços fugiam de debaixo dos
+  lugares;
+- em **`sobrepostos` de capacidade ÍMPAR** as duas filas ficam
+  desencontradas meia coluna, e a de cima **assenta nos vãos** da de baixo
+  (`.desenc`) em vez de flutuar por cima dela — é como se empilham
+  garrafas a sério, e é o mesmo passo (0,8 do diâmetro) do encaixe entre
+  níveis. Com capacidade par ficam alinhadas e apenas se sobrepõem;
 - **todas as prateleiras de um local têm a largura do MÓVEL** (`colsw`: o
   nível mais largo, mais uma coluna de folga de cada lado) e os lugares
   ficam centrados nela. Antes cada prateleira valia o que os seus lugares
@@ -344,7 +361,7 @@ a discordar do que se via.
 
 Por isso o `ajustarEstantes` decide **duas** coisas e não uma: a ALTURA
 disponível dá o TAMANHO do lugar (`--slot`), a LARGURA dá o ESPAÇO entre
-lugares (`--colr`, quanto mede uma coluna em lugares, entre 1,06 e 1,3).
+lugares (`--colr`, quanto mede uma coluna em lugares, entre 1,18 e 1,36).
 Numa estante de poucos lugares por nível a coluna abre até ao teto; numa
 de muitos, aperta-se o espaçamento antes de encolher a garrafa. Com um
 espaçamento fixo, dois níveis de seis lugares num telemóvel punham o
@@ -354,6 +371,14 @@ ENCAIXE se perdia: com colunas largas, a garrafa de cima cai meia coluna
 à frente mas no meio de um vão onde cabia outra, e não entre duas —
 ficavam filas soltas em vez de um ziguezague. Pouco mais do que um lugar
 é o que as põe quase a tocarem-se, e é isso que o encaixe precisa.
+
+**`--colr` e o passo do encaixe são medidas INDEPENDENTES** — e é preciso
+que continuem a ser. O passo já saiu de uma conta a partir do `--colr`
+(para os lugares se manterem tangentes à medida que o espaçamento
+abrisse), e o efeito foi mexer no espaço entre NÍVEIS quando o que se
+tinha pedido era ar entre as garrafas do MESMO nível. O `--colr` é do ar
+dentro da prateleira; o `-0,56` do `.encaixa` é de como as prateleiras
+assentam umas nas outras.
 
 Em **`sobrepostos`** com capacidade ímpar, `mais_em` diz em que fila fica
 o lugar a mais; a outra fica centrada e não encostada à esquerda, que é

@@ -590,7 +590,13 @@ function prateleiraLayoutInfo(p,opt){
       return {lugar:base+i+1,row,col:off+2*k+1+(curta?1:0),span:2};
     });
     if(capacidade===1)slots[0].row=1;
-    return {formato,mais_em,capacidade,base,slots,cols,colsw,rows:capacidade>1?2:1,gridCols:2*colsw,span:2};
+    /* Com capacidade ÍMPAR as duas filas ficam desencontradas meia coluna
+       (a curta começa meia coluna à frente) e a de cima assenta nos vãos
+       da de baixo, como se empilham garrafas a sério; com capacidade par
+       ficam alinhadas e apenas se sobrepõem. Quem desenha isso é o
+       `.desenc` no `style.css`. */
+    const desenc=capacidade>1&&capacidade%2===1;
+    return {formato,mais_em,capacidade,base,slots,cols,colsw,rows:capacidade>1?2:1,gridCols:2*colsw,span:2,desenc};
   }
   slots=Array.from({length:capacidade},(_,i)=>({lugar:base+i+1,col:off+2*i+1,row:1,span:2}));
   return {formato,mais_em,capacidade,base,slots,cols,colsw,rows:1,gridCols:2*colsw,span:2};
@@ -667,7 +673,13 @@ function layoutLocal(l){
     p.encaixe=!!(p.encaixe&&ant);      // a primeira não tem em que encaixar
     p.desvio=p.encaixe?((ant.desvio||0)+(((p.capacidade-ant.capacidade)%2===0)?.5:0))%1:0;
   });
-  out.forEach((p,i)=>{p.ondulada=!!(p.encaixe||(out[i+1]&&out[i+1].encaixe));});
+  // A RÉGUA é de todas as prateleiras, não só das que encaixam: um móvel
+  // com dois desenhos diferentes (uma tábua maciça aqui, berços ali) lia-se
+  // como dois móveis. Uma garrafa assenta num berço em U seja qual for o
+  // formato do nível; o que o `encaixe` decide é o DESENCONTRO, não a
+  // madeira. Quem fica sem ela é o seletor de posição, que passa
+  // `ondulada:false` (ver `renderPickerPosicoes`).
+  out.forEach(p=>{p.ondulada=true;});
   // A largura do móvel: o nível mais largo, mais uma coluna de folga de
   // CADA lado. Meia coluna de folga não chegava — uma prateleira desviada
   // gastava-a toda e o último lugar ficava cortado pela borda.
@@ -1658,10 +1670,10 @@ function mapaContagemHTML(x,d){
    irregulares em vez de um móvel. A folga é o que deixa uma prateleira
    desviar-se meia coluna sem sair da caixa. */
 function estanteHTML(p,info,slotsHTML,cls){
-  const onda=!!(p&&p.ondulada)&&info.formato==='fila';
-  return `<div class="est est-${info.formato}${onda?' est-onda':''}${cls?' '+cls:''}"
+  const regua=!!(p&&p.ondulada);
+  return `<div class="est est-${info.formato}${regua?' est-regua':''}${info.desenc?' desenc':''}${cls?' '+cls:''}"
     style="--cols:${info.cols};--colsw:${info.colsw};--gcols:${info.gridCols};--span:${info.span}">${
-    onda?ondaBgSVG(info,(p&&p.desvio)||0):''}${slotsHTML}</div>`;
+    regua?ondaBgSVG(info):''}${slotsHTML}</div>`;
 }
 // O `style` de um lugar na grelha. `span` é a unidade dos sobrepostos:
 // cada lugar ocupa DUAS meias-colunas, e é isso que deixa a fila mais
@@ -1689,31 +1701,39 @@ function slotGridStyle(s){return `grid-column:${s.col} / span ${s.span||1};grid-
    A tira atravessa o móvel INTEIRO (a caixa é sempre da largura do
    local), mas os berços têm de cair sob os lugares — que estão centrados
    nela e podem estar desviados meia coluna. Daí a conta do `off`. */
-function ondaBgSVG(info,desvio){
-  // em % da caixa, que inclui a folga de baixo onde o berço desce
-  const colsw=info.colsw||info.cols,PICO=36,VALE=88;
-  const larg=100/colsw;                        // uma coluna, em % da caixa
-  const off=(colsw-info.cols)/2+(desvio||0);   // colunas livres à esquerda
+function ondaBgSVG(info){
+  /* A régua é uma TIRA colada ao fundo da caixa, com altura própria em
+     `--slot` (ver `.est-bg`) — não `inset:0`. Assim o berço cai sempre à
+     mesma distância do fundo da garrafa, quer a prateleira tenha uma fila
+     (`fila`) ou duas (`sobrepostos`, que é o dobro da altura). Com o SVG
+     esticado à caixa inteira, o mesmo `viewBox` dava alturas diferentes
+     conforme o formato e os berços fugiam dos lugares. */
+  const colsw=info.colsw||info.cols,PICO=10,VALE=82;
+  const larg=100/colsw;                          // uma coluna, em % da caixa
+  /* Os berços vão sob a fila de BAIXO e só sob ela: é nela que as garrafas
+     assentam na madeira. Nos `sobrepostos`, as de cima assentam nas de
+     baixo — dar-lhes berço era desenhar uma prateleira que não existe. */
+  const fundo=info.slots.reduce((m,s)=>Math.max(m,s.row),1);
+  const cxs=info.slots.filter(s=>s.row===fundo)
+    .map(s=>((s.col-1+(s.span||1)/2)/2)*larg)     // meias-colunas → % da caixa
+    .sort((a,b)=>a-b);
+  if(!cxs.length)return '';
   const f=n=>n.toFixed(2);
   /* A régua acaba logo a seguir ao último berço e não na borda da caixa.
-     Atravessar o móvel todo dava-lhe dois troços RETOS e compridos, um de
+     Atravessar o móvel todo dava-lhe dois troços retos e compridos, um de
      cada lado — e o que se lia era uma linha contínua a ir do nome do
-     nível até ao outro extremo da linha, não uma prateleira. O que se quer
-     ver são os U onde a garrafa encaixa; a pontinha é só o que segura a
-     ponta. Que cada nível fique com uma régua mais curta ou mais comprida
-     é o certo: é a prateleira dele, e a CAIXA continua a ser a do móvel,
-     por isso os lugares alinham-se na mesma de nível para nível. */
-  const PONTA=.3;                              // quanto sobra depois do berço, em colunas
-  const ini=Math.max(0,(off-PONTA)*larg);
-  let d=`M${f(ini)} ${PICO} L${f(off*larg)} ${PICO}`;
-  info.slots.forEach((s,i)=>{
-    const cx=(off+i+.5)*larg, e=cx-larg/2, dir=cx+larg/2;
+     nível até ao outro extremo da linha, não uma prateleira. */
+  const PONTA=.3;                                // o que sobra depois do berço, em colunas
+  let d=`M${f(Math.max(0,cxs[0]-larg*(.5+PONTA)))} ${PICO}`;
+  cxs.forEach(cx=>{
+    const e=cx-larg/2,dir=cx+larg/2;
+    d+=` L${f(e)} ${PICO}`;                      // reto até à boca do berço
     d+=` C${f(e+larg*.24)} ${PICO} ${f(cx-larg*.26)} ${VALE} ${f(cx)} ${VALE}`;
     d+=` C${f(cx+larg*.26)} ${VALE} ${f(dir-larg*.24)} ${PICO} ${f(dir)} ${PICO}`;
   });
-  d+=` L${f(Math.min(100,(off+info.slots.length+PONTA)*larg))} ${PICO}`;
+  d+=` L${f(Math.min(100,cxs[cxs.length-1]+larg*(.5+PONTA)))} ${PICO}`;
   return `<svg class="est-bg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-    <path d="${d}" class="est-reg-s" transform="translate(0 5)"/><path d="${d}" class="est-reg"/>
+    <path d="${d}" class="est-reg-s" transform="translate(0 7)"/><path d="${d}" class="est-reg"/>
   </svg>`;
 }
 
@@ -1877,7 +1897,7 @@ function ajustarEstantes(){
      no meio de um vão onde cabia outra, e não entre duas. Era 1,28–1,8
      ("as garrafas devem respirar") e o resultado foram filas soltas em
      vez de um ziguezague. */
-  const COL_MIN=1.06,COL_MAX=1.3;
+  const COL_MIN=1.18,COL_MAX=1.36;
   const ajustar=v=>{
     const r=livre>0?Math.min(COL_MAX,Math.max(COL_MIN,livre/(colsw*v))):COL_MAX;
     ml.style.setProperty('--colr',r.toFixed(3));

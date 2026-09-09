@@ -467,8 +467,27 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    e um pico entre eles. */
 /* A folga fica em BAIXO e não repartida: é para lá que o berço desce, e
    é o que deixa a garrafa assentar dentro dele em vez de flutuar por cima. */
-.est-onda{padding:0 0 calc(var(--slot) * .22);
+.est-regua{padding:0 0 calc(var(--slot) * .22);
   background:none;border:none;box-shadow:none;border-radius:0;overflow:visible}
+/* Nos sobrepostos a régua é a mesma, só que a caixa tem duas filas: um
+   pouco de folga em cima e as duas filas encostadas, que é como uma
+   garrafa assenta na outra. A tábua maciça saiu daqui também — um móvel
+   com dois desenhos de prateleira lia-se como dois móveis. */
+.est-regua.est-sobrepostos{padding:calc(var(--slot) * .08) 0 calc(var(--slot) * .22);row-gap:0}
+/* Capacidade ÍMPAR: as duas filas ficam desencontradas meia coluna, e aí a
+   de cima assenta nos vãos da de baixo em vez de flutuar por cima dela — é
+   como se empilham garrafas a sério, e é o mesmo passo (0,8) do
+   encaixe entre níveis. A primeira fila da grelha fica com uma pista mais
+   BAIXA do que o lugar: o lugar transborda-a metade para cada lado
+   (`align-items:center`), e o que sobra em cima é exatamente o
+   `padding-top`. Só com a régua — no seletor de posição (`.est-pick`) as
+   filas ficam como estão, que ali a prateleira é para se tocar.
+   Os 0,6/0,2 são o mesmo 0,8 de passo do encaixe entre níveis: a pista de
+   cima mede `2 × 0,8 - 1`, e o que o lugar transborda dela para cima é o
+   `1 - 0,8` do padding. */
+.est-regua.est-sobrepostos.desenc{
+  grid-template-rows:calc(var(--slot) * .6) auto;
+  padding-top:calc(var(--slot) * .2)}
 /* Dois traços sobre o mesmo caminho: o de baixo, mais grosso e escuro, é
    a sombra que dá espessura à régua; o de cima é a face clara. O
    `non-scaling-stroke` é obrigatório — o viewBox estica-se à caixa
@@ -484,11 +503,15 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    separadas por um intervalo isso lia-se como duas filas independentes,
    não como um encaixe.
 
-   O valor é geometria e não gosto: com os lugares a quase tocarem-se, um
+   O valor é geometria e não gosto: com os lugares quase a tocarem-se, um
    círculo que caia meia coluna à frente assenta no V entre dois de baixo
    quando os centros ficam a ~0,8 do diâmetro; a linha mede 1,22 (o lugar
-   mais a folga onde o berço desce), logo a margem é -0,42. Menos do que
-   isso e volta a haver ar entre as filas.
+   mais a folga onde o berço desce) e a seguinte traz 0,14 de margem, logo
+   -0,56 daqui (as margens de irmãos colapsam: -0,42 de passo). Chegou a
+   ser calculado a partir do `--colr` para acompanhar o espaçamento entre
+   garrafas — e o que isso fazia era mexer no espaço entre NÍVEIS, que já
+   estava como se queria. São duas medidas independentes: esta é do
+   encaixe, o `--colr` é do ar entre garrafas da MESMA prateleira.
 
    Chegou a não haver sobreposição nenhuma, por causa da FITA que a
    versão antiga desenhava por trás dos lugares — tapada, sobravam uns
@@ -502,7 +525,16 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    e cada par encaixava no par errado. As margens de irmãos colapsam, e
    é isso que dá os -0,42 pedidos (0,14 do topo do próximo, -0,56 daqui). */
 .mprat-layout.encaixa{margin-bottom:calc(var(--slot,34px) * -.56)}
-.est-bg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+/* A régua é uma TIRA colada ao fundo, com altura própria — e não
+   `inset:0`. Esticada à caixa inteira, o mesmo viewBox dava uma régua mais
+   alta nos `sobrepostos` (duas filas) do que na `fila`, e os berços fugiam
+   de debaixo dos lugares. Com altura fixa em `--slot`, o berço cai sempre
+   à mesma distância do fundo da garrafa, seja qual for o formato.
+   O `<svg>` precisa de largura E altura declaradas: é um elemento de
+   substituição, e a dimensão que falta sai da proporção do viewBox, não do
+   posicionamento. */
+.est-bg{position:absolute;left:0;right:0;bottom:0;width:100%;height:calc(var(--slot) * .85);
+  pointer-events:none;overflow:visible}
 .msdot{position:relative;z-index:1;aspect-ratio:1/1;width:100%;max-width:var(--slot);margin:0 auto;border-radius:999px;
   border:1px solid #c9a1af;background:#f3e8ec;display:flex;align-items:center;justify-content:center;
   font-family:var(--fd);font-size:clamp(8px,calc(var(--slot) * .42),15px);color:var(--vh);font-weight:600;
@@ -657,7 +689,7 @@ body:not(.readonly) .msdot.vazia:hover{background:#fff;border-color:var(--vh);co
    tamanho em todos os formatos e a tábua em onda não desvia nada (o
    desencontro é desenho, e aqui o que interessa é acertar com o dedo). */
 .est-pick.est-sobrepostos{--slot:44px}
-.est-pick.est-onda{padding:6px 4px;transform:none}
+.est-pick.est-regua{padding:6px 4px;transform:none}
 .est-pick .lpslot{height:100%;min-height:52px}
 .est-pick.est-sobrepostos .lpslot{margin:0 3px}
 .lpslot{position:relative;z-index:1;border:1px solid var(--bo2);border-radius:10px;background:#fff;padding:7px 0 6px;font-family:inherit;color:var(--vh);cursor:pointer;
