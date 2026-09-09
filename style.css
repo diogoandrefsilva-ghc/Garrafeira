@@ -360,6 +360,19 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .ml-leg i{width:13px;height:13px;border-radius:50%;flex-shrink:0;display:inline-block}
 .ml-leg .cheia{background:var(--vh)}
 .ml-leg .vazia{border:1.5px dashed #c9a1af}
+/* As garrafas por posicionar vivem FORA do cartão e fechadas: são uma
+   lista que pode ter dezenas de linhas e aberta empurrava a estante para
+   fora do ecrã. */
+.ml-extras{margin-top:9px;background:var(--card);border:1px solid var(--bo);border-radius:var(--r);box-shadow:var(--sh);
+  padding:0 14px;overflow:hidden}
+.ml-extras>summary{padding:11px 0;font-size:12.5px;color:var(--mu);cursor:pointer;list-style:none;
+  display:flex;align-items:center;gap:7px;-webkit-tap-highlight-color:transparent}
+.ml-extras>summary::-webkit-details-marker{display:none}
+.ml-extras>summary::after{content:'▾';margin-left:auto;font-size:10px;color:var(--vh);transition:transform .2s}
+.ml-extras[open]>summary::after{transform:rotate(180deg)}
+.ml-extras>summary b{font-family:var(--fd);font-size:15px;font-weight:600;color:var(--vh);font-variant-numeric:lining-nums}
+.ml-extras .note{margin-bottom:9px}
+.ml-extras .mgrid{padding-bottom:13px}
 .ml-add{margin-top:7px;text-align:center}
 .ml-add .btn{margin-top:0}
 .vazio .ro-hide{margin-top:12px}
@@ -439,7 +452,12 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
   border:1px solid #c9a1af;background:#f3e8ec;display:flex;align-items:center;justify-content:center;
   font-family:var(--fd);font-size:clamp(8px,calc(var(--slot) * .42),15px);color:var(--vh);font-weight:600;
   line-height:1;font-variant-numeric:lining-nums}
-.msdot.vazia{border-style:dashed;border-color:#cdb1ba;background:rgba(255,255,255,.55);color:var(--mu);font-weight:400}
+.msdot.vazia{border-style:dashed;border-color:#cdb1ba;background:rgba(255,255,255,.55);color:var(--mu);font-weight:400;
+  font-family:var(--fd);padding:0;transition:background .15s,border-color .15s,transform .12s}
+/* Um lugar vazio TAMBÉM se toca (para lá pôr um vinho) — mas só onde há
+   o que tocar: numa garrafeira emprestada é só um buraco desenhado. */
+body:not(.readonly) .msdot.vazia{cursor:pointer}
+body:not(.readonly) .msdot.vazia:hover{background:#fff;border-color:var(--vh);color:var(--vh);transform:translateY(-1px)}
 .msdot.cheia{background:var(--vh);border-color:var(--vh);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;
   box-shadow:0 2px 4px rgba(78,18,40,.25),inset 0 1px 0 rgba(255,255,255,.18);transition:transform .12s,box-shadow .15s}
 .msdot.cheia:hover{transform:translateY(-1px);box-shadow:0 4px 8px rgba(78,18,40,.3)}

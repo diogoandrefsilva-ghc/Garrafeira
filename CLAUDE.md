@@ -171,6 +171,28 @@ lhes toque:
   caixa) e o que se via eram as cristas de um ziguezague gigante a
   espreitar por baixo dos lugares.
 
+**As garrafas por posicionar (as que estão neste local mas sem um lugar
+válido no desenho) vivem FORA do cartão e FECHADAS** (`mapaExtrasHTML`,
+um `<details>`): são uma lista que pode ter dezenas de linhas — numa
+garrafeira acabada de importar são quase todas — e aberta, ou dentro do
+cartão, empurrava a estante para fora do ecrã, que é exatamente o que
+este separador não pode fazer. Quem as quer ver rola até elas e abre.
+Por estarem fora do `.ml`, também não entram na conta do `ajustarEstantes`.
+
+**Tocar num lugar VAZIO põe lá um vinho** (`mapaLugarVazio`,
+`guardarLugarVazio`, o `#modal-lugar`) — é a outra metade de "onde está o
+quê". Até aqui só os lugares ocupados respondiam, e a única forma de
+arrumar uma garrafa era abrir o vinho e usar "Mover": obrigava a saber de
+antemão qual o vinho, quando a pergunta que se faz à frente da estante é a
+inversa ("este buraco, o que é que lhe ponho?"). O que se guarda depende
+do que já existe, e é isso que evita duplicar: se houver uma garrafa DESTE
+vinho por arrumar (sem lugar), é ELA que se move para aqui — preferindo
+uma que já esteja neste local; só quando não há nenhuma é que se
+acrescenta uma garrafa nova. Numa garrafeira acabada de importar está tudo
+por arrumar, e sem isto cada toque criava uma segunda garrafa do mesmo
+vinho e a contagem inflava sozinha. No seletor, os vinhos com garrafas por
+arrumar vêm num grupo à parte e primeiro — são a resposta provável.
+
 **O + flutuante entra na conta** (`ajustarEstantes` reserva-lhe espaço):
 fica por cima do canto de baixo à direita, que é onde acaba o último
 nível, e com tudo a caber já não há scroll que o desvie — sem a reserva,

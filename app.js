@@ -1612,7 +1612,9 @@ function mapaEstanteHTML(l,gs,d){
     const slots=info.slots.map(s=>{
       const lugar=s.lugar,lista=occ[slotLayoutKey(p.nome,lugar)]||[];
       const pos=` style="${slotGridStyle(s)}"`;
-      if(!lista.length)return `<div class="msdot vazia"${pos} title="${esc(posicaoTxt(p.nome,lugar))}"><span class="msdot-id">${lugar}</span></div>`;
+      if(!lista.length)return `<button class="msdot vazia"${pos}
+        onclick="mapaLugarVazio(${l.id},'${escJs(p.nome)}',${lugar})"
+        title="${esc(posicaoTxt(p.nome,lugar))} — vazio"><span class="msdot-id">${lugar}</span></button>`;
       n+=lista.length;
       const passam=d.filtrando?lista.filter(g=>d.okG.has(g.id)):lista;
       const g=passam[0]||lista[0],v=IDXV[g.vinho_id]||{nome:'?'};
@@ -1629,13 +1631,23 @@ function mapaEstanteHTML(l,gs,d){
       <div class="est-wrap">${estanteHTML(p,info,slots)}</div>
       <span class="mp-n">${n}/${p.capacidade}</span>
     </div>`;
-  }).join('')+(extras.length?`
-    <div class="mprat">
-      <div class="mprat-t">Por posicionar<span class="mprat-n">${extras.length}</span></div>
-      <div class="note" style="margin-bottom:8px">Estão neste local, mas ainda sem um lugar válido no desenho.</div>
-      <div class="mgrid">${extras.map(mapaCelulaListaHTML).join('')}</div>
-    </div>`:'')+`
+  }).join('')+`
     <div class="ml-leg"><span><i class="cheia"></i>Ocupado · nº do vinho</span><span><i class="vazia"></i>Vazio · nº do lugar</span></div>`;
+}
+/* As garrafas que estão NESTE local mas sem um lugar válido no desenho.
+   Ficam FORA do cartão e FECHADAS (`<details>`): são uma lista que pode
+   ter dezenas de linhas — numa garrafeira acabada de importar são quase
+   todas — e aberta empurrava a estante para fora do ecrã, que é
+   exatamente o que este separador não pode fazer. Quem as quer ver
+   rola até elas e abre. */
+function mapaExtrasHTML(l,gs,d){
+  const extras=dadosForaLayout(l,gs).filter(g=>!d.filtrando||d.okG.has(g.id));
+  if(!extras.length)return '';
+  return `<details class="ml-extras">
+    <summary><b>${extras.length}</b> ${extras.length===1?'garrafa por posicionar':'garrafas por posicionar'}</summary>
+    <div class="note">Estão neste local, mas ainda sem um lugar válido no desenho. Toca num lugar vazio da estante para lá pôr uma.</div>
+    <div class="mgrid">${extras.map(mapaCelulaListaHTML).join('')}</div>
+  </details>`;
 }
 
 /* O ecrã de um local: barra com ‹ e › para os locais vizinhos, o nome
@@ -1658,6 +1670,7 @@ function mapaLocalHTML(x,d){
     ${pseudo?`<div class="note ml-nota">${esc(l.descricao)}. Abre cada vinho e usa "Mover" para lhes dar um local.</div>`:''}
     ${temLayoutLocal(l)?mapaEstanteHTML(l,x.gs,d):mapaLocalListaHTML(x.gs,d)}
   </div>
+  ${temLayoutLocal(l)?mapaExtrasHTML(l,x.gs,d):''}
   <div class="ml-add ro-hide"><button class="btn ghost" onclick="novoLocal()">+ Novo local</button></div>`;
 }
 /* A ESTANTE INTEIRA NUM ECRÃ, sem scroll — é para isso que existe o
@@ -1855,6 +1868,77 @@ function mapaPopupVerDetalhe(gid){
 function mapaPopupMover(gid){
   mapaPopupFechar();
   abrirGarrafa(gid);
+}
+/* TOCAR NUM LUGAR VAZIO é a outra metade de "onde está o quê": até aqui
+   só os lugares ocupados respondiam, e a única forma de arrumar uma
+   garrafa era abrir o vinho e usar "Mover" — ou seja, saber de antemão
+   qual o vinho, quando a pergunta que se faz à frente da estante é a
+   inversa ("este buraco, o que é que lhe ponho?").
+
+   O que se guarda depende do que já existe, e é isso que evita duplicar:
+   se houver uma garrafa DESTE vinho por arrumar (sem lugar), é ELA que se
+   move para aqui — preferindo uma que já esteja neste local; só quando não
+   há nenhuma é que se acrescenta uma garrafa nova. Numa garrafeira
+   acabada de importar está tudo por arrumar, e sem isto cada toque criava
+   uma segunda garrafa do mesmo vinho e a contagem inflava sozinha. */
+function mapaLugarVazio(localId,prateleira,lugar){
+  if(roGuard())return;
+  const l=IDXL[localId];if(!l)return;
+  if(!db.vinhos.length){toast('Ainda não há vinhos para pôr aqui',1);return;}
+  const soltas={};
+  db.garrafas.filter(g=>naGarrafeira(g)&&!lugarNumeroLayout(g.lugar))
+    .forEach(g=>{soltas[g.vinho_id]=(soltas[g.vinho_id]||0)+1;});
+  const ordenados=[...db.vinhos].sort((a,b)=>
+    String(a.nome||'').localeCompare(String(b.nome||''),'pt',{numeric:true,sensitivity:'base'})||
+    String(a.ano||'').localeCompare(String(b.ano||''),'pt',{numeric:true}));
+  const opt=v=>`<option value="${v.id}">${esc(v.nome)}${v.ano?` · ${esc(v.ano)}`:''}${soltas[v.id]?` · ${soltas[v.id]} por arrumar`:''}</option>`;
+  // os que têm garrafas por arrumar vêm num grupo à parte e primeiro: são
+  // a resposta provável a "o que é que ponho aqui"
+  const comSoltas=ordenados.filter(v=>soltas[v.id]);
+  document.getElementById('modal-lugar-in').innerHTML=`
+    <div class="mtop"><div><h3>Pôr um vinho aqui</h3>
+      <div class="note" style="margin-top:3px">${esc(l.nome)} · ${esc(posicaoTxt(prateleira,lugar))}</div></div>
+      <button class="mx" onclick="fecharModal('modal-lugar')">✕</button></div>
+    <label>Vinho</label>
+    <select id="lv-vinho">
+      ${comSoltas.length?`<optgroup label="Por arrumar">${comSoltas.map(opt).join('')}</optgroup>
+      <optgroup label="Todos os vinhos">${ordenados.map(opt).join('')}</optgroup>`:ordenados.map(opt).join('')}
+    </select>
+    <div class="note">Se houver uma garrafa deste vinho por arrumar, é essa que vem para aqui. Se não houver, acrescenta-se uma.</div>
+    <div class="macoes">
+      <button class="btn prim" id="lv-btn" onclick="guardarLugarVazio(${localId},'${escJs(prateleira)}',${lugar})">Guardar</button>
+      <button class="btn ghost" onclick="fecharModal('modal-lugar')">Cancelar</button>
+    </div>`;
+  abrirModal('modal-lugar');
+}
+async function guardarLugarVazio(localId,prateleira,lugar){
+  if(roGuard())return;
+  const sel=document.getElementById('lv-vinho');
+  const vinhoId=sel&&sel.value?parseInt(sel.value,10):0;
+  if(!vinhoId){toast('Escolhe um vinho',1);return;}
+  const erro=validarPosicaoLayout(localId,prateleira,String(lugar));
+  if(erro){toast(erro,1);return;}
+  const dados={local_id:localId,prateleira,lugar:String(lugar)};
+  // uma garrafa deste vinho que ainda não tenha lugar; a que já está neste
+  // local ganha à que está noutro sítio ou sem local nenhum
+  const solta=db.garrafas.filter(g=>naGarrafeira(g)&&g.vinho_id===vinhoId&&!lugarNumeroLayout(g.lugar))
+    .sort((a,b)=>(b.local_id===localId?1:0)-(a.local_id===localId?1:0))[0];
+  const btn=document.getElementById('lv-btn');
+  btn.disabled=true;btn.textContent='A guardar…';
+  try{
+    if(solta){
+      await sbReq('PATCH',`garrafas?id=eq.${solta.id}`,dados);
+      Object.assign(solta,dados);
+    }else{
+      const r=await sbReq('POST','garrafas',[Object.assign({vinho_id:vinhoId},dados)],{'Prefer':'return=representation'});
+      (r||[]).forEach(g=>db.garrafas.push(g));
+    }
+    reindexar();fecharModal('modal-lugar');renderLista();refrescarVinhoAberto();
+    toast(solta?'Garrafa arrumada ✓':'Garrafa acrescentada ✓');
+  }catch(e){
+    toast('Não foi possível guardar: '+e.message,1);
+    btn.disabled=false;btn.textContent='Guardar';
+  }
 }
 function mapaPopupSubstituir(gid){
   mapaPopupFechar();
