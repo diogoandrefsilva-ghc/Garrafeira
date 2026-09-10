@@ -3692,6 +3692,12 @@ function iaMostrarResultado(res,vinhoId){
     ? `<div class="ia-fontes">Fontes${cmp?' ('+rot+')':''}: ${r.fontes.map(f=>
         `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo||f.url)}</a>`).join(' · ')}</div>`:'';
   const semNet=IA_RES.pesquisa===false||(IA_RES2&&IA_RES2.pesquisa===false);
+  // Só vale sugerir o OUTRO motor quando há algo a ganhar: ou quem procura
+  // ainda não usou o mais forte (premium), ou o mais forte usou-se mas
+  // deixou ele próprio uma dúvida (`aviso`). Sem isto, uma pesquisa Premium
+  // completa e sem dúvidas sugeria sempre a comparação com o motor mais
+  // fraco — parecia estar a pedir desculpa por um resultado que estava bem.
+  const valeAOutro=IA_MOTOR!=='premium'||!!(IA_RES&&IA_RES.aviso);
 
   document.getElementById('modal-ia-in').innerHTML=`
     <div class="mtop"><div><h3>${cmp?esc(rot1)+' vs '+esc(rot2):'O que se encontrou'}</h3>
@@ -3699,7 +3705,7 @@ function iaMostrarResultado(res,vinhoId){
       <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
 
     ${IA_ERRO2?`<div class="erro">A segunda opinião não deu: ${esc(IA_ERRO2)}. Fica o que a ${esc(rot1)} trouxe.</div>`:''}
-    ${!cmp&&temPremium()&&linhas?`<div class="ia-prbar">
+    ${!cmp&&temPremium()&&valeAOutro&&linhas?`<div class="ia-prbar">
       <span>Isto foi a <b>${esc(rot1)}</b>. Queres ver o que a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))} diz ao lado?</span>
       <button class="mini o" onclick="iaSegundaOpiniao()">✨ Comparar</button></div>`:''}
 
