@@ -3692,12 +3692,14 @@ function iaMostrarResultado(res,vinhoId){
     ? `<div class="ia-fontes">Fontes${cmp?' ('+rot+')':''}: ${r.fontes.map(f=>
         `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo||f.url)}</a>`).join(' · ')}</div>`:'';
   const semNet=IA_RES.pesquisa===false||(IA_RES2&&IA_RES2.pesquisa===false);
-  // Só vale sugerir o OUTRO motor quando há algo a ganhar: ou quem procura
-  // ainda não usou o mais forte (premium), ou o mais forte usou-se mas
-  // deixou ele próprio uma dúvida (`aviso`). Sem isto, uma pesquisa Premium
-  // completa e sem dúvidas sugeria sempre a comparação com o motor mais
-  // fraco — parecia estar a pedir desculpa por um resultado que estava bem.
-  const valeAOutro=IA_MOTOR!=='premium'||!!(IA_RES&&IA_RES.aviso);
+  // Só vale sugerir o OUTRO motor a quem ainda não usou o premium (grounding
+  // search): esse já pesquisa o Google por dentro, e o motor "sem pesquisa
+  // web" é outra API por cima do MESMO Google — raramente vai encontrar algo
+  // que o grounding não tenha visto. Sugerir isso depois de uma pesquisa
+  // premium bem sucedida era pedir desculpa por um resultado que estava bem.
+  // (A saída para o outro motor quando o premium FALHA tecnicamente continua
+  // em `iaMostrarErro` — aí sim é um caminho a sério, não uma segunda opinião.)
+  const valeAOutro=IA_MOTOR!=='premium';
 
   document.getElementById('modal-ia-in').innerHTML=`
     <div class="mtop"><div><h3>${cmp?esc(rot1)+' vs '+esc(rot2):'O que se encontrou'}</h3>
@@ -3723,7 +3725,7 @@ function iaMostrarResultado(res,vinhoId){
         <button class="btn ghost" onclick="fecharModal('modal-ia')">Cancelar</button>
       </div>`
     :`<div class="note" style="margin-top:14px">A procura não trouxe nada de novo — o que está na ficha já bate certo com o que se encontrou.</div>
-      <div class="macoes">${!cmp&&temPremium()?`<button class="btn ghost" onclick="iaSegundaOpiniao()">✨ Tentar com a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))}</button>`:''}
+      <div class="macoes">${!cmp&&temPremium()&&valeAOutro?`<button class="btn ghost" onclick="iaSegundaOpiniao()">✨ Tentar com a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))}</button>`:''}
         <button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button></div>`}
 
     ${fontesDe(IA_RES,rot1)}${cmp?fontesDe(IA_RES2,rot2):''}
