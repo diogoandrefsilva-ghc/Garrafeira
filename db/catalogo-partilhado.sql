@@ -184,11 +184,23 @@ $$;
 -- lido numa carta: são chaves diferentes. É uma chamada à IA que se perde,
 -- e perder uma chamada é sempre melhor do que devolver o vinho errado.
 
+-- O PARÊNTESIS DO PRODUTOR NÃO ENTRA NA CHAVE. Quem escreve "Herdade dos
+-- Grous (Monte do Trevo)" ou "Quinta do Vesúvio (Symington Family Estates)"
+-- está a deixar uma NOTA a si próprio — a sociedade que o detém, a marca
+-- do grupo — e não a dizer outro produtor. Deixá-la entrar dava
+-- "grous-harvested-moon-trevo" a quem escreveu a nota e
+-- "grous-harvested-moon" a quem não escreveu: o MESMO vinho em duas
+-- linhas, cada uma a pagar a sua ida à IA. Tira-se só do PRODUTOR, nunca
+-- do NOME: um "(Branco)" no nome é a cor, e a cor não sai da chave (ver a
+-- nota acima).
 CREATE OR REPLACE FUNCTION catalogo.chave_base(p_nome text, p_produtor text)
   RETURNS text LANGUAGE sql IMMUTABLE
 AS $$
   SELECT array_to_string(
-    catalogo.tokens(COALESCE(p_nome,'') || ' ' || COALESCE(p_produtor,'')), '-');
+    catalogo.tokens(
+      COALESCE(p_nome,'') || ' ' ||
+      regexp_replace(COALESCE(p_produtor,''), '\s*\([^)]*\)', ' ', 'g')
+    ), '-');
 $$;
 
 CREATE OR REPLACE FUNCTION catalogo.chave(p_nome text, p_produtor text, p_ano integer)
@@ -253,14 +265,19 @@ $$;
 --            ano errado era estragar duas linhas de uma vez);
 --   false -> qualquer colheita do mesmo vinho, a mais preenchida primeiro
 --            (é o que `procurar` precisa quando o ano pedido não existe).
+-- `p_excluir` deixa de fora uma linha: é como o `procurar` vai buscar a
+-- colheita IRMÃ sem voltar a apanhar a que já tem na mão.
+DROP FUNCTION IF EXISTS catalogo.achar(text, text, integer, boolean);
 CREATE OR REPLACE FUNCTION catalogo.achar(
-  p_nome text, p_produtor text, p_ano integer, p_exigir_ano boolean DEFAULT true
+  p_nome text, p_produtor text, p_ano integer, p_exigir_ano boolean DEFAULT true,
+  p_excluir bigint DEFAULT NULL
 ) RETURNS bigint
   LANGUAGE sql STABLE
   SET search_path TO 'catalogo', 'public'
 AS $$
   SELECT v.id FROM catalogo.vinhos v
-   WHERE CASE WHEN p_exigir_ano THEN
+   WHERE (p_excluir IS NULL OR v.id <> p_excluir)
+     AND CASE WHEN p_exigir_ano THEN
            -- as quatro combinações das duas chaves de cada lado
            v.chave = catalogo.chave(p_nome, p_produtor, p_ano)
            OR (catalogo.chave_nome(p_nome, p_ano) IS NOT NULL
@@ -279,41 +296,6 @@ AS $$
    ORDER BY (SELECT count(*) FROM jsonb_object_keys(v.ficha)) DESC,
             v.ano DESC NULLS LAST
    LIMIT 1;
-$$;
-
--- ---------------------------------------------------------------------
--- A FORÇA de cada origem: quem é que ganha quando duas leituras discordam
---
--- Não é uma opinião sobre quem é mais inteligente — é sobre o que cada uma
--- teve à frente quando respondeu:
---   3  alguém tem a garrafa em casa e confirmou a ficha campo a campo
---      (a Garrafeira nunca grava uma leitura da IA sem um clique);
---   3  a `verificar-vinhos` — pesquisa Google a sério, pedida à mão para
---      um vinho escolhido, que é o mais caro que aqui se paga;
---   2  as pesquisas normais das duas apps (grounding search, ou pesquisa
---      externa + extração);
---   1  um vinho escrito à mão numa garrafeira que ninguém preencheu — vale
---      para encher um campo vazio, nunca para tapar uma pesquisa;
---   0  tudo o resto — E É AQUI QUE ESTÁ O PONTO: a `pontuacaoAprox` da
---      WineSelection (a estimativa de memória do modelo, sem pesquisa
---      nenhuma) tem de dar 0 e NUNCA pode entrar no catálogo. Toda a
---      WineSelection está construída à volta de não disfarçar uma
---      estimativa de verificação; deixá-la entrar aqui era pior do que
---      isso — era espalhá-la pelas duas apps com ar de facto pesquisado,
---      e depois já ninguém sabia de onde tinha vindo.
--- ---------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION catalogo.forca(p_origem text)
-  RETURNS integer LANGUAGE sql IMMUTABLE
-AS $$
-  SELECT CASE COALESCE(p_origem, '')
-    WHEN 'garrafeira'          THEN 3
-    WHEN 'ws-verificacao'      THEN 3
-    WHEN 'vinho-info-premium'  THEN 2
-    WHEN 'vinho-info-gratis'   THEN 2
-    WHEN 'ws-sugestao'         THEN 2
-    WHEN 'garrafeira-bruto'    THEN 1
-    ELSE 0
-  END;
 $$;
 
 -- ---------------------------------------------------------------------
@@ -346,6 +328,67 @@ AS $$
 $$;
 
 -- ---------------------------------------------------------------------
+-- A FORÇA de cada origem: quem é que ganha quando duas leituras discordam
+--
+-- Não é uma opinião sobre quem é mais inteligente — é sobre o que cada uma
+-- teve à frente quando respondeu:
+--   3  alguém tem a garrafa em casa e confirmou a ficha campo a campo
+--      (a Garrafeira nunca grava uma leitura da IA sem um clique);
+--   3  a `verificar-vinhos` — pesquisa Google a sério, pedida à mão para
+--      um vinho escolhido, que é o mais caro que aqui se paga;
+--   2  as pesquisas normais das duas apps (grounding search, ou pesquisa
+--      externa + extração);
+--   1  um vinho escrito à mão numa garrafeira que ninguém preencheu — vale
+--      para encher um campo vazio, nunca para tapar uma pesquisa;
+--   0  tudo o resto — E É AQUI QUE ESTÁ O PONTO: a `pontuacaoAprox` da
+--      WineSelection (a estimativa de memória do modelo, sem pesquisa
+--      nenhuma) tem de dar 0 e NUNCA pode entrar no catálogo. Toda a
+--      WineSelection está construída à volta de não disfarçar uma
+--      estimativa de verificação; deixá-la entrar aqui era pior do que
+--      isso — era espalhá-la pelas duas apps com ar de facto pesquisado,
+--      e depois já ninguém sabia de onde tinha vindo.
+-- ---------------------------------------------------------------------
+-- A FORÇA É DA ORIGEM **E DO CAMPO**, e a segunda metade não é um
+-- pormenor: é o que impede o catálogo de tomar por facto tudo o que
+-- alguém escreveu à mão.
+--
+-- Quem tem a garrafa em casa sabe melhor do que qualquer pesquisa o que
+-- está no RÓTULO: as castas, a cor, o teor, a região, a menção. Isso vale
+-- 3, e é a razão de a Garrafeira estar lá em cima.
+--
+-- Mas ninguém sabe a nota do Vivino nem o preço de mercado por ter a
+-- garrafa na mão — esses lêem-se num site, e quem os escreve na sua
+-- garrafeira está a copiar (ou a lembrar-se, ou a enganar-se). A dar-lhes
+-- a mesma força de uma pesquisa a sério, um número escrito à pressa
+-- tapava a `verificar-vinhos` para toda a gente e para sempre; e como
+-- estes campos entram no catálogo por uma app onde CADA UM ESCREVE O QUE
+-- QUISER na sua garrafeira, isto não é uma hipótese remota, é o caminho
+-- normal. Por isso um campo volátil vindo de uma garrafeira vale 2: chega
+-- para encher um campo vazio e para se manter enquanto ninguém pesquisou,
+-- e perde para a pesquisa a sério no dia em que ela existir.
+--
+-- Repara que a distinção é a MESMA de `catalogo.volatil`, e é a mesma
+-- ideia por dois lados: o que envelhece é também o que não se sabe por
+-- ter a garrafa à frente.
+DROP FUNCTION IF EXISTS catalogo.forca(text);
+CREATE OR REPLACE FUNCTION catalogo.forca(p_origem text, p_campo text DEFAULT NULL)
+  RETURNS integer LANGUAGE sql IMMUTABLE
+AS $$
+  SELECT CASE
+    WHEN COALESCE(p_origem,'') = 'garrafeira' AND catalogo.volatil(p_campo) THEN 2
+    ELSE CASE COALESCE(p_origem, '')
+      WHEN 'garrafeira'          THEN 3
+      WHEN 'ws-verificacao'      THEN 3
+      WHEN 'vinho-info-premium'  THEN 2
+      WHEN 'vinho-info-gratis'   THEN 2
+      WHEN 'ws-sugestao'         THEN 2
+      WHEN 'garrafeira-bruto'    THEN 1
+      ELSE 0
+    END
+  END;
+$$;
+
+-- ---------------------------------------------------------------------
 -- JUNTAR: escrever no catálogo sem apagar o que já lá estava
 --
 -- Campo a campo: entra se o campo estava vazio, ou se quem escreve agora
@@ -366,7 +409,10 @@ CREATE OR REPLACE FUNCTION catalogo.juntar(
   SET search_path TO 'catalogo', 'public'
 AS $$
 DECLARE
+  -- A da ORIGEM, só para a guarda de entrada: a que decide campo a
+  -- campo calcula-se DENTRO do ciclo, que a força é da origem E do campo.
   v_forca   integer := catalogo.forca(p_origem);
+  v_fcampo  integer;
   v_chave   text    := catalogo.chave(p_nome, p_produtor, p_ano);
   v_base    text    := catalogo.chave_base(p_nome, p_produtor);
   v_cnome   text    := catalogo.chave_nome(p_nome, p_ano);
@@ -412,11 +458,12 @@ BEGIN
     CONTINUE WHEN v IS NULL
                   OR jsonb_typeof(v) = 'null'
                   OR v = '""'::jsonb OR v = '[]'::jsonb OR v = '{}'::jsonb;
-    v_ant := COALESCE((v_origens -> k ->> 'f')::integer, 0);
-    IF v_forca >= v_ant THEN
+    v_fcampo := catalogo.forca(p_origem, k);
+    v_ant    := COALESCE((v_origens -> k ->> 'f')::integer, 0);
+    IF v_fcampo >= v_ant THEN
       v_ficha   := v_ficha   || jsonb_build_object(k, v);
       v_origens := v_origens || jsonb_build_object(
-        k, jsonb_build_object('o', p_origem, 'f', v_forca, 'em', now())
+        k, jsonb_build_object('o', p_origem, 'f', v_fcampo, 'em', now())
       );
       v_mexeu := true;
     END IF;
@@ -495,10 +542,14 @@ AS $$
 DECLARE
   v_id    bigint;
   r       catalogo.vinhos%ROWTYPE;
+  r2      catalogo.vinhos%ROWTYPE;   -- a colheita irmã, quando é precisa
+  v_irmao bigint;
   v_exato boolean := true;
   v_outra boolean;            -- pediram uma colheita E esta não é essa
   v_corte timestamptz := now() - make_interval(days => GREATEST(COALESCE(p_idade_dias, 30), 0));
   v_ficha jsonb;
+  v_orig  jsonb;
+  v_empr  jsonb := '[]'::jsonb;      -- campos vindos de outra colheita
   k       text;
 BEGIN
   IF catalogo.chave_base(p_nome, p_produtor) = '' THEN RETURN NULL; END IF;
@@ -519,6 +570,7 @@ BEGIN
   v_outra := p_ano IS NOT NULL AND r.ano IS DISTINCT FROM p_ano;
 
   v_ficha := r.ficha;
+  v_orig  := r.origens;
   FOR k IN SELECT key FROM jsonb_each(r.ficha) LOOP
     IF catalogo.volatil(k)
        AND (v_outra
@@ -526,6 +578,34 @@ BEGIN
       v_ficha := v_ficha - k;
     END IF;
   END LOOP;
+
+  -- A COLHEITA CERTA NÃO PODE TAPAR O QUE A IRMÃ SABE.
+  --
+  -- Achar a linha do ano pedido e ficar por aí parece o mais óbvio, e é o
+  -- que estava — mas uma linha do ano certo pode ser um espelho vazio (o
+  -- vinho que alguém acabou de escrever na sua garrafeira, sem mais nada)
+  -- enquanto a de 2022 tem dezassete campos. O que se via era o catálogo
+  -- a responder "não sei" com a resposta ao lado, e a IA a ser paga na
+  -- mesma. Foi o que aconteceu ao Grous Moon Harvested.
+  --
+  -- Por isso: o que a linha CERTA sabe manda sempre, e só o que lhe FALTA
+  -- se vai pedir emprestado à irmã — e apenas os campos ESTÁVEIS. As
+  -- castas de um Papa Figos são as mesmas em 2019 e em 2021; a nota do
+  -- Vivino e o preço não são, e esses nunca atravessam colheitas (é a
+  -- mesma regra do `v_outra` aqui em cima, e não pode ter duas versões).
+  IF v_exato THEN
+    v_irmao := catalogo.achar(p_nome, COALESCE(p_produtor,''), p_ano, false, r.id);
+    IF v_irmao IS NOT NULL THEN
+      SELECT * INTO r2 FROM catalogo.vinhos v WHERE v.id = v_irmao;
+      FOR k IN SELECT key FROM jsonb_each(r2.ficha) LOOP
+        IF NOT catalogo.volatil(k) AND NOT (v_ficha ? k) THEN
+          v_ficha := v_ficha || jsonb_build_object(k, r2.ficha -> k);
+          v_orig  := v_orig  || jsonb_build_object(k, COALESCE(r2.origens -> k, '{}'::jsonb));
+          v_empr  := v_empr  || to_jsonb(k);
+        END IF;
+      END LOOP;
+    END IF;
+  END IF;
 
   UPDATE catalogo.vinhos v SET visto_em = now() WHERE v.id = r.id;
 
@@ -535,9 +615,11 @@ BEGIN
     'produtor', r.produtor,
     'ano',      r.ano,
     'ficha',    v_ficha,
-    'origens',  r.origens,
+    'origens',  v_orig,
     'fontes',   r.fontes,
     'exato',    v_exato,
+    -- os campos estáveis que vieram de outra colheita (só para diagnóstico)
+    'emprestados', v_empr,
     -- true: é a colheita pedida · false: é OUTRA · null: não se pediu ano
     'mesmoAno', CASE WHEN p_ano IS NULL THEN NULL ELSE NOT v_outra END,
     'atualizadoEm', r.atualizado_em
@@ -706,3 +788,44 @@ GRANT EXECUTE ON FUNCTION catalogo.procurar_lote(jsonb, integer)                
 -- centenas de vinhos é instantâneo.
 -- ---------------------------------------------------------------------
 -- SELECT count(garrafeira.catalogar_vinho(id)) FROM garrafeira.vinhos;
+
+-- ---------------------------------------------------------------------
+-- REPOSIÇÃO: pôr as linhas que já lá estão de acordo com as regras acima
+--
+-- As duas correm sempre e não fazem nada quando não há nada a fazer — é
+-- de propósito: quem correr este ficheiro numa base já povoada não tem de
+-- saber que houve uma mudança, e correr outra vez não estraga.
+-- ---------------------------------------------------------------------
+
+-- 1) As chaves de quem tem uma NOTA entre parêntesis no produtor. Foram
+--    calculadas antes de o `chave_base` a deitar fora; sem isto ficavam
+--    com a chave antiga para sempre e continuavam a não encontrar o mesmo
+--    vinho escrito sem a nota. (Confirmado em produção: nenhuma delas
+--    colide com outra linha — se um dia colidir, o UPDATE falha em vez de
+--    fundir duas linhas às escondidas, que é o lado certo para onde
+--    errar.)
+UPDATE catalogo.vinhos v SET
+  chave_base = catalogo.chave_base(v.nome, v.produtor),
+  chave      = catalogo.chave(v.nome, v.produtor, v.ano),
+  base_nome  = catalogo.base_nome(v.nome),
+  chave_nome = catalogo.chave_nome(v.nome, v.ano)
+ WHERE v.produtor ~ '\(' 
+   AND v.chave_base IS DISTINCT FROM catalogo.chave_base(v.nome, v.produtor);
+
+-- 2) A força já GRAVADA nos campos voláteis que vieram de uma garrafeira.
+--    A `catalogo.forca` passou a dar-lhes 2, mas o 3 que ficou escrito no
+--    `origens` no dia em que entraram continua a valer — e enquanto valer,
+--    o catálogo está SELADO: nenhuma pesquisa a sério (que vale 3, ou 2)
+--    consegue corrigir um número que alguém escreveu à mão. Era esse o
+--    estado real desta base: as notas do Vivino e os preços de mercado
+--    todos com origem 'garrafeira' e força 3.
+UPDATE catalogo.vinhos v SET origens = (
+  SELECT jsonb_object_agg(k, CASE
+           WHEN catalogo.volatil(k) AND o ->> 'o' = 'garrafeira'
+             THEN o || jsonb_build_object('f', catalogo.forca('garrafeira', k))
+           ELSE o END)
+    FROM jsonb_each(v.origens) e(k, o))
+ WHERE EXISTS (
+   SELECT 1 FROM jsonb_each(v.origens) e(k, o)
+    WHERE catalogo.volatil(k) AND o ->> 'o' = 'garrafeira'
+      AND COALESCE((o ->> 'f')::integer, 0) > catalogo.forca('garrafeira', k));

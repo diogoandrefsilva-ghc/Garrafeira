@@ -1093,6 +1093,29 @@ vinho escrito à pressa numa garrafeira, a que ninguém tocou, vale 1 (o
 de rascunho carimbava "Tinto" por cima de uma pesquisa que dizia Branco); e
 a estimativa de memória da WineSelection vale **0** — não entra nunca.
 
+**A força é da origem E DO CAMPO**, e a segunda metade é o que impede o
+catálogo de tomar por facto tudo o que alguém escreveu à mão. Isto é uma
+app onde CADA UM ESCREVE O QUE QUISER na sua garrafeira, e o trigger leva
+isso para uma tabela que as duas apps leem: sem a distinção, um número
+escrito à pressa vale o mesmo que uma pesquisa Google e tapa-a para toda a
+gente. A linha é a do rótulo: quem tem a garrafa na mão sabe melhor do que
+qualquer pesquisa as castas, a cor, o teor, a região, a menção — isso vale
+3, e é a razão de a Garrafeira estar lá em cima. Ninguém sabe a nota do
+Vivino nem o preço de mercado por ter a garrafa na mão: esses lêem-se num
+site, e vindos de uma garrafeira valem **2** — chegam para encher um campo
+vazio, perdem para a `verificar-vinhos` no dia em que ela existir. É a
+mesma fronteira do `catalogo.volatil`, vista pelo outro lado: o que
+envelhece é também o que não se sabe por ter a garrafa à frente.
+
+O estado real desta base, antes disto, era esse: **todos** os 3104 campos
+do catálogo com origem `garrafeira` e força 3 — nota do Vivino e preço de
+mercado incluídos. Nem um único campo tinha vindo de uma pesquisa, e não
+podia: 3 tapa 2. O catálogo estava selado à volta do que estava escrito à
+mão nas garrafeiras. A migração baixou a força GRAVADA nesses campos
+voláteis (o `f` no `origens`) — sem isso a mudança na função não servia de
+nada, que o que decide é o número que ficou escrito no dia em que o campo
+entrou.
+
 **A colheita é o que separa um facto de uma invenção.** As castas de um Papa
 Figos são as mesmas em 2019 e em 2021; a nota do Vivino e o preço não são.
 Por isso `catalogo.procurar` distingue duas perguntas que parecem uma:
@@ -1101,6 +1124,25 @@ corta a nota; "quero o Papa Figos" e mais nada (que é como as cartas de
 restaurante vêm) devolve tudo e diz de que colheita é. A primeira versão
 tratava as duas igual e cortava a nota nas duas — um catálogo que nunca
 respondia a uma carta.
+
+**E a colheita certa não pode TAPAR o que a irmã sabe.** Achar a linha do
+ano pedido e ficar por aí parece o mais óbvio, e era o que estava — mas a
+linha do ano certo pode ser um espelho quase vazio (o vinho que alguém
+acabou de escrever na sua garrafeira) enquanto a do ano ao lado tem
+dezassete campos: o catálogo respondia "não sei" com a resposta a um metro
+de distância, e a IA era paga na mesma. Foi o que aconteceu ao Grous Moon
+Harvested. Agora o que a linha CERTA sabe manda sempre, e só o que lhe
+FALTA se pede emprestado à irmã — e apenas os campos **estáveis**, nunca a
+nota nem o preço (é a mesma regra do parágrafo de cima, e não pode ter duas
+versões). O `procurar` devolve em `emprestados` quais foram, para se poder
+ver de onde veio cada coisa.
+
+**O parêntesis no produtor não entra na chave.** "Herdade dos Grous (Monte
+do Trevo)" ou "Quinta do Vesúvio (Symington Family Estates)" é uma NOTA de
+quem escreveu — a sociedade que detém, a marca do grupo — não outro
+produtor. A deixá-la entrar, o mesmo vinho ficava em duas linhas, cada uma
+a pagar a sua ida à IA. Tira-se só do PRODUTOR, nunca do NOME: um
+"(Branco)" no nome é a cor, e a cor não sai da chave.
 
 **A chave (o que faz dois vinhos serem o mesmo vinho) vive só no SQL**, e
 cada linha tem DUAS: `chave` (nome + produtor, como uma garrafeira escreve)
