@@ -37,6 +37,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   verdade do schema. `migracao-garrafeiras.sql` é a migração 07 (uma
   garrafeira por pessoa); `migracao-ia-planos.sql` é a 08 (planos de IA por
   utilizador) e, numa base existente, é seguida por `functions.sql`.
+  `catalogo-partilhado.sql` é a 12 e é a única que cria um schema que **não
+  é desta app**: o `catalogo`, partilhado com a WineSelection (ver secção
+  própria). Também é seguida por `functions.sql`.
 - Não mexer à mão: `apple-touch-icon.png` (é gerado — ver "Ícones").
 
 ## Os cinco separadores (o ecrã inicial não é a lista)
@@ -956,6 +959,9 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   (`qualidadeMinima` — menos de dois campos críticos, ou sem Vivino). É isto,
   e não uma quota por utilizador, que segura o custo por procura na
   `vinho-info`.
+- **O catálogo partilhado responde antes de tudo isto** (secção própria mais
+  abaixo): o que já se sabe do vinho não se volta a perguntar, e à IA vai só
+  o que falta.
 - **Cache por vinho** (`garrafeira.catalogo_vinhos_cache`, TTL configurável
   por `VINHO_CACHE_TTL_HOURS`, 30 dias por omissão): a chave inclui o MOTOR,
   o nome, o ano, o produtor, a região e os campos pedidos — o mesmo vinho,
@@ -1032,6 +1038,84 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   (`iaMostrarResultado`), com o que está agora ao lado do que a IA propõe.
   Vêm marcados **só os campos vazios**: substituir o que alguém escreveu à
   mão por uma leitura automática tem de ser um clique consciente.
+
+## O catálogo partilhado com a WineSelection (não pagar duas vezes o mesmo)
+Há uma segunda app de vinhos no mesmo projeto Supabase — a **WineSelection**
+(fotografa a carta de um restaurante e sugere o vinho) — e as duas faziam a
+mesma pergunta ao Gemini sobre os mesmos vinhos, cada uma por sua conta. O
+schema **`catalogo`** é a memória comum: o que já se pesquisou (nas duas
+apps) e o que alguém já confirmou por ter a garrafa em casa. Fonte de
+verdade: `db/catalogo-partilhado.sql` (migração 12, ver `db/README.md`).
+
+**Não é a cache do `vinho-info`.** `garrafeira.catalogo_vinhos_cache` é uma
+cache TÉCNICA de um pedido — mesma pergunta, mesmos campos, mesmo motor,
+mesma resposta — e morre com o TTL. O `catalogo` é sobre o VINHO, atravessa
+as duas apps, e não expira por inteiro: só os campos que envelhecem. As duas
+coexistem e o `produzirFicha` consulta-as por essa ordem.
+
+**A fronteira do que atravessa é a mesma que já existia entre "vinho" e
+"garrafa".** Entra só facto sobre o VINHO: castas, região, tipo, teor,
+estágio, nota do Vivino, preço médio, janela de consumo, notas de prova,
+harmonização. Nunca `notas` (as minhas notas), nunca `imagem_path` (a
+fotografia tirada em casa, que apanha a prateleira à volta), nunca o preço
+de compra nem o lugar na prateleira — esses são da GARRAFA e da PESSOA, e
+não saem daqui. Se acrescentares uma coluna a `vinhos`, a pergunta a fazer
+é essa: **isto é sobre o vinho ou sobre quem o tem?** Só a primeira resposta
+entra em `garrafeira.catalogar_vinho()`.
+
+Isto NÃO abre garrafeira nenhuma. Ninguém passa a ver uma linha de
+`vinhos`, `garrafas` ou `locais` de outra pessoa — a RLS é a mesma e o
+"cada um vê a sua garrafeira" fica intacto. O que se partilha é o que se
+sabe sobre um rótulo, que nunca foi de ninguém.
+
+Como funciona, dos dois lados:
+
+- **a ler** (`produzirFicha` em `vinho-info.ts`): depois da cache falhar,
+  pergunta-se ao catálogo o que já se sabe, e calcula-se o que SOBRA
+  (`emFalta`). Se não sobrar nada, **não há chamada nenhuma** — nem ao
+  Gemini nem à pesquisa externa. Se sobrar, a IA é chamada **só por esses
+  campos**: um pedido mais estreito é mais barato e melhor respondido, que
+  é a mesma razão por que a app já deixa escolher os campos (`iaEscolher`);
+- **a escrever**: o que a IA acabou de descobrir volta ao catálogo, e o
+  trigger `vinhos_catalogo` leva para lá cada vinho que alguém guarda. As
+  castas não vivem na linha do vinho, por isso o trigger não as vê mudar —
+  o gancho que falta está no fim da `definir_castas`, em `functions.sql`;
+- **nada disto pode deitar uma procura abaixo.** É uma poupança, não uma
+  dependência: se o RPC falhar, segue-se para a IA como sempre. Daí os
+  `try/catch` a engolir tudo, e o `EXCEPTION WHEN OTHERS` no trigger.
+
+**Quem ganha quando duas leituras discordam** é a `catalogo.forca()`, e não
+é uma opinião sobre quem é mais inteligente — é sobre o que cada uma teve à
+frente: quem tem a garrafa em casa e a pesquisa Google a sério da
+`verificar-vinhos` valem 3; as pesquisas normais das duas apps valem 2; um
+vinho escrito à pressa numa garrafeira, a que ninguém tocou, vale 1 (o
+`tipo` nasce 'Tinto' por omissão nesta app, e sem essa distinção uma linha
+de rascunho carimbava "Tinto" por cima de uma pesquisa que dizia Branco); e
+a estimativa de memória da WineSelection vale **0** — não entra nunca.
+
+**A colheita é o que separa um facto de uma invenção.** As castas de um Papa
+Figos são as mesmas em 2019 e em 2021; a nota do Vivino e o preço não são.
+Por isso `catalogo.procurar` distingue duas perguntas que parecem uma:
+"quero o de 2019" com só o de 2021 no catálogo devolve os factos estáveis e
+corta a nota; "quero o Papa Figos" e mais nada (que é como as cartas de
+restaurante vêm) devolve tudo e diz de que colheita é. A primeira versão
+tratava as duas igual e cortava a nota nas duas — um catálogo que nunca
+respondia a uma carta.
+
+**A chave (o que faz dois vinhos serem o mesmo vinho) vive só no SQL**, e
+cada linha tem DUAS: `chave` (nome + produtor, como uma garrafeira escreve)
+e `chave_nome` (só o nome, como uma carta escreve). Sem as duas, "Barca
+Velha" numa carta nunca encontrava o "Barca Velha" + "Casa Ferreirinha" de
+uma garrafeira. A trave é que um nome que sozinho não distinga nada
+("Reserva") não ganha `chave_nome` — senão o Reserva de um produtor
+respondia pelo de outro. E não é contenção de tokens (a
+`verificarCoerencia` da WineSelection faz isso, e ali está certo): contenção
+juntava "Quinta do Crasto" com "Quinta do Crasto Reserva", que num aviso é
+aceitável e num catálogo é a nota errada dada como certa.
+
+Na UI, uma ficha que aparece do nada merece dizer de onde veio
+(`iaOrigemHTML`, `.ia-cat`): verde e não dourado, que o dourado é a
+distinção do vinho e isto é uma boa notícia sobre a PROCURA.
 
 ## Importar por imagens (`importar-vinhos`)
 

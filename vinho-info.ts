@@ -156,6 +156,77 @@ async function cacheEscrever(
     });
   } catch (_) { /* não falha a resposta por causa da cache */ }
 }
+/* ── CATÁLOGO PARTILHADO (schema `catalogo`) ──
+   A memória comum das duas apps de vinhos. Antes de pagar uma pesquisa,
+   pergunta-se aqui se alguém já a fez — nesta app ou na WineSelection — ou
+   se alguém já tem esta garrafa em casa com a ficha preenchida.
+
+   Duas coisas que não são detalhe:
+   · a CHAVE (o que faz dois vinhos serem o mesmo vinho) vive só no SQL.
+     Daqui vai o nome, o produtor e o ano em cru; quem decide é
+     `catalogo.procurar`. Repetir esse algoritmo aqui era garantir que um
+     dia divergia do da outra app e o catálogo se partia em dois em
+     silêncio;
+   · nada disto pode deitar uma procura abaixo. O catálogo é uma poupança,
+     não uma dependência: se o RPC falhar, segue-se para a IA como sempre
+     se fez. Daí o try/catch a engolir tudo. */
+const CATALOGO_IDADE_DIAS = Math.max(1, Math.round(CACHE_TTL_HORAS / 24));
+
+type Conhecido = {
+  nome: string; produtor: string; ano: number | null;
+  ficha: Record<string, unknown>; fontes: Fonte[];
+  exato: boolean; mesmoAno: boolean | null; atualizadoEm: string;
+};
+
+async function catalogoRpc(fn: string, corpo: Record<string, unknown>, signal: AbortSignal): Promise<any> {
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+    method: "POST",
+    headers: {
+      apikey: SB_SRV, Authorization: "Bearer " + SB_SRV,
+      "Content-Type": "application/json",
+      "Content-Profile": "catalogo", "Accept-Profile": "catalogo",
+    },
+    body: JSON.stringify(corpo),
+    signal,
+  });
+  if (!r.ok) throw new Error(`catalogo ${fn} ${r.status}`);
+  return await r.json();
+}
+
+async function catalogoProcurar(
+  nome: string, produtor: string, ano: number | null, signal: AbortSignal,
+): Promise<Conhecido | null> {
+  try {
+    const d = await catalogoRpc("procurar", {
+      p_nome: nome, p_produtor: produtor || "", p_ano: ano,
+      p_idade_dias: CATALOGO_IDADE_DIAS,
+    }, signal);
+    if (!d || typeof d !== "object" || !d.ficha) return null;
+    return {
+      nome: String(d.nome || ""), produtor: String(d.produtor || ""),
+      ano: typeof d.ano === "number" ? d.ano : null,
+      ficha: (d.ficha && typeof d.ficha === "object") ? d.ficha : {},
+      fontes: Array.isArray(d.fontes) ? d.fontes.slice(0, 8) : [],
+      exato: d.exato === true,
+      mesmoAno: d.mesmoAno === null || d.mesmoAno === undefined ? null : d.mesmoAno === true,
+      atualizadoEm: String(d.atualizadoEm || ""),
+    };
+  } catch (_) { return null; }
+}
+
+async function catalogoJuntar(
+  nome: string, produtor: string, ano: number | null,
+  ficha: Record<string, unknown>, origem: string, fontes: Fonte[], signal: AbortSignal,
+) {
+  try {
+    if (!Object.keys(ficha).length) return;
+    await catalogoRpc("juntar", {
+      p_nome: nome, p_produtor: produtor || "", p_ano: ano,
+      p_ficha: ficha, p_origem: origem, p_fontes: fontes.slice(0, 8),
+    }, signal);
+  } catch (_) { /* o catálogo nunca falha uma gravação da app */ }
+}
+
 function extrairHost(url: string) {
   try { return new URL(url).hostname; } catch (_) { return ""; }
 }
@@ -469,6 +540,34 @@ function normalizar(raw: any, anoPedido: number | null, campos: string[] | null 
   return Object.keys(out).length ? out : null;
 }
 
+/* O que é que o catálogo consegue responder, dos campos que se pediram.
+   `ano` fica SEMPRE de fora: o catálogo sabe a colheita que alguém pôs lá,
+   e essa não tem de ser a da garrafa que está à minha frente — preencher
+   um ano por adivinhação era estragar a identidade do vinho de quem
+   procura. `produtor` entra, que esse não muda de colheita para colheita. */
+function catalogoResponde(c: Conhecido, pedidos: string[]): Record<string, unknown> {
+  // O vocabulário fechado vale para TUDO o que entra, e o catálogo é
+  // escrito também pela outra app — que tem os seus próprios rótulos
+  // ("Verde" lá é um tipo, aqui é um estilo; "Doce" e "Outro" aqui não
+  // existem). Sem esta passagem, um valor de lá entrava nos filtros desta
+  // app como se fosse nosso e enchia-os de sinónimos da mesma coisa. A
+  // WineSelection já só escreve os quatro que são comuns — isto é a rede,
+  // e uma rede num sítio por onde entram dados de fora paga-se sozinha.
+  const LISTAS: Record<string, string[]> = {
+    tipo: TIPOS, estilo: ESTILOS, mencao: MENCOES, classificacao: CLASSIF,
+  };
+  const out: Record<string, unknown> = {};
+  for (const k of pedidos) {
+    if (k === "ano") continue;
+    if (k === "produtor") { if (c.produtor) out.produtor = c.produtor; continue; }
+    let v = (c.ficha as any)[k];
+    if (LISTAS[k]) v = daLista(v, LISTAS[k]);
+    if (v === null || v === undefined || v === "" || (Array.isArray(v) && !v.length)) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
 /* ── Registo (garrafeira.sync_log) ──
    Do lado do browser vê-se sempre a mesma coisa ("HTTP 502"); a causa está
    nesta linha. Nunca deita a resposta abaixo. */
@@ -656,6 +755,50 @@ async function produzirFicha(
     };
   }
 
+  /* ── O catálogo partilhado, antes de gastar ──
+     Duas perguntas, por esta ordem: o que é que já se sabe deste vinho, e
+     o que é que SOBRA por saber. Se não sobrar nada, não há chamada
+     nenhuma — nem ao Gemini, nem à pesquisa externa. Se sobrar alguma
+     coisa, vai à IA só ESSA: um pedido mais estreito é também um pedido
+     mais barato e melhor respondido (é a mesma razão por que a app já
+     deixa escolher os campos, ver `iaEscolher`). */
+  const pedidos = campos && campos.length ? campos : Object.keys(CAMPOS);
+  const conhecido = await catalogoProcurar(nome, produtor, ano, signal);
+  const doCatalogo = conhecido ? catalogoResponde(conhecido, pedidos) : {};
+  const emFalta = pedidos.filter((k) => !(k in doCatalogo));
+
+  if (Object.keys(doCatalogo).length && !emFalta.length) {
+    await registar("ok", {
+      nome, ano, modo: "catalogo", ms: Date.now() - inicio,
+      campos: Object.keys(doCatalogo).length,
+      catalogo_exato: conhecido?.exato, catalogo_em: conhecido?.atualizadoEm,
+    }, quem);
+    return {
+      ok: true,
+      corpo: {
+        ...doCatalogo,
+        fontes: conhecido?.fontes ?? [],
+        pesquisa: true, plano: modoIA, modelo: "", modo: "catalogo",
+        // A app mostra isto a quem procurou: uma ficha que apareceu do
+        // nada, sem espera nem custo, merece dizer de onde veio.
+        origem: "catalogo",
+        catalogoEm: conhecido?.atualizadoEm ?? "",
+        catalogoAno: conhecido?.ano ?? null,
+        catalogoMesmoAno: conhecido?.mesmoAno ?? null,
+        custoEstimadoEur: 0,
+        geradoEm: new Date().toISOString(),
+      },
+    };
+  }
+
+  /* Daqui para baixo, a IA é chamada só pelo que FALTA — mas só se o
+     catálogo tiver dado alguma coisa. Se não deu nada, o pedido segue tal e
+     qual veio: com `campos: null` (procurar tudo) o prompt NÃO leva a lista
+     de campos, e passar-lhe agora os 22 nomes era mudar-lhe o texto sem
+     necessidade nenhuma — e a lista dos 22 é exatamente o que faz o modelo
+     "andar atrás de tudo e voltar com meia dúzia de coisas mornas". */
+  const campos_ia = Object.keys(doCatalogo).length ? emFalta : campos;
+
   const query = [nome, ano || "", produtor, regiao, "vivino garrafeira nacional vinho portugal"].filter(Boolean).join(" ");
   let pesquisa: PesquisaWeb = { texto: "", fontes: [], status: "grounding:google_search" };
   if (modoIA === "gratis") {
@@ -668,8 +811,8 @@ async function produzirFicha(
   }
 
   const texto0 = modoIA === "premium"
-    ? promptComGrounding(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos)
-    : prompt(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos, pesquisa.texto);
+    ? promptComGrounding(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos_ia)
+    : prompt(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos_ia, pesquisa.texto);
   const tentativas: { modelo: string; modo: string; estado: number | string; usageMetadata?: UsageMetadata }[] = [];
   let usageTotal: UsageMetadata | null = null;
   let fontesGround: Fonte[] = [];
@@ -698,7 +841,7 @@ async function produzirFicha(
   let parsed: any = primeira && primeira.ok ? primeira.parsed : null;
   let erroUltimo = primeira && !primeira.ok ? primeira.erro : "";
 
-  let ficha = parsed ? normalizar(parsed, ano, campos) : null;
+  let ficha = parsed ? normalizar(parsed, ano, campos_ia) : null;
   // Só escala em falha TÉCNICA do barato (erro HTTP, timeout, resposta
   // ilegível) — nunca só porque o conteúdo (já respondido com sucesso) ficou
   // com poucos campos. Um modelo maior não inventa o que a pesquisa não
@@ -711,13 +854,13 @@ async function produzirFicha(
       usadoModelo = MODELO_ESCALADO;
       usadoModo = "escalado";
       parsed = segunda.parsed;
-      ficha = normalizar(parsed, ano, campos);
+      ficha = normalizar(parsed, ano, campos_ia);
     } else if (segunda && !segunda.ok) {
       erroUltimo = segunda.erro;
     }
   }
 
-  if (!ficha) {
+  if (!ficha && !Object.keys(doCatalogo).length) {
     await registar("erro", {
       passo: "vazio", nome, modo: usadoModo, modelo: usadoModelo,
       tentativas, erro: erroUltimo.slice(0, 300), ms: Date.now() - inicio,
@@ -725,6 +868,23 @@ async function produzirFicha(
     }, quem);
     return { ok: false, status: 404, erro: `não encontrei informação fiável sobre "${nome}". Confere o nome do rótulo e tenta outra vez.` };
   }
+
+  /* O que a IA acabou de descobrir vai para o catálogo — é isto que faz a
+     próxima pessoa (nesta app ou na WineSelection) não pagar a mesma
+     pergunta. Só o que veio da IA: o que já era do catálogo voltar para lá
+     não acrescenta nada e só remexia as datas de quem lá pôs primeiro. */
+  if (ficha) {
+    const { aviso: _aviso, ...factos } = ficha as Record<string, unknown>;
+    await catalogoJuntar(
+      nome, produtor, ano, factos, `vinho-info-${modoIA}`,
+      (modoIA === "premium" ? fontesGround : pesquisa.fontes), signal,
+    );
+  }
+
+  /* O catálogo por baixo, a IA por cima: a IA só foi chamada pelo que
+     FALTAVA, por isso não há aqui um a tapar o outro — mas a ordem fica
+     explícita, que é o que se quer ler daqui a um ano. */
+  ficha = { ...doCatalogo, ...(ficha ?? {}) };
 
   await cacheEscrever(
     chave,
@@ -740,6 +900,10 @@ async function produzirFicha(
   await registar("ok", {
     nome, ano, modo: usadoModo, modelo: usadoModelo,
     pesquisa: pesquisa.status, campos: Object.keys(ficha).length,
+    // Quantos campos é que o catálogo poupou nesta procura: é por aqui que
+    // se vê se isto está a valer a pena (Definições › Diagnóstico).
+    catalogo_campos: Object.keys(doCatalogo).length,
+    ia_campos: emFalta.length,
     ms: dur, tentativas, custo_estimado_eur: custoEstimado,
     ...(usageTotal ? { usageMetadata: usageTotal } : {}),
   }, quem);
@@ -747,7 +911,13 @@ async function produzirFicha(
     ok: true,
     corpo: {
       ...ficha,
-      fontes: (modoIA === "premium" ? fontesGround : pesquisa.fontes).slice(0, 8),
+      fontes: [
+        ...(modoIA === "premium" ? fontesGround : pesquisa.fontes),
+        ...(Object.keys(doCatalogo).length ? (conhecido?.fontes ?? []) : []),
+      ].filter((f, i, a) => a.findIndex((x) => x.url === f.url) === i).slice(0, 8),
+      ...(Object.keys(doCatalogo).length
+        ? { origem: "misto", catalogoCampos: Object.keys(doCatalogo), catalogoEm: conhecido?.atualizadoEm ?? "" }
+        : {}),
       pesquisa: true,
       plano: modoIA,
       modelo: usadoModelo,

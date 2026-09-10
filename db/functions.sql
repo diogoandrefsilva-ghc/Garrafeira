@@ -565,6 +565,22 @@ BEGIN
   SELECT p_vinho_id, x FROM unnest(v_ids) AS x
   ON CONFLICT DO NOTHING;
 
+  -- O catálogo partilhado (ver `db/catalogo-partilhado.sql`) é alimentado
+  -- por um trigger em `garrafeira.vinhos` — mas as castas não vivem nessa
+  -- linha, e por isso esse trigger não as vê mudar (num INSERT nem sequer
+  -- existem ainda: é esta função que corre a seguir). Sem este gancho, o
+  -- catálogo ficava com a ficha toda MENOS as castas, e a app ia à IA
+  -- buscar castas que já estavam ali ao lado.
+  --
+  -- Nunca deita a gravação abaixo: alimentar o catálogo é um extra, e num
+  -- schema `catalogo` que ainda não exista isto tem de ser um silêncio, não
+  -- um erro a impedir alguém de guardar as castas de uma garrafa.
+  BEGIN
+    PERFORM garrafeira.catalogar_vinho(p_vinho_id);
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
+
   RETURN cardinality(v_ids);
 END;
 $$;

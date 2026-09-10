@@ -148,6 +148,51 @@ Correr no SQL Editor:
 
 1. `db/migracao-cache-vinho-info.sql`
 
+### Migração 12 — catálogo partilhado com a WineSelection (**por aplicar**)
+
+`db/catalogo-partilhado.sql`. Cria o schema **`catalogo`**, que não é deste
+schema nem do da WineSelection: é dos dois. É a memória comum do que já se
+sabe sobre um vinho — o que a IA já procurou (nas duas apps) e o que alguém
+já confirmou por ter a garrafa em casa. Antes de pagar uma pesquisa,
+pergunta-se ali.
+
+Não é a mesma coisa que a migração 11: aquela é uma cache TÉCNICA de um
+pedido (mesma pergunta, mesmos campos, mesmo motor → mesma resposta) e
+morre com o TTL. Esta é sobre o VINHO, atravessa as duas apps e não expira
+por inteiro — só os campos que envelhecem (nota do Vivino, preço) é que
+têm prazo; as castas de um vinho não mudam.
+
+O que atravessa a fronteira é só FACTO SOBRE O VINHO. Nunca `notas` (as
+minhas notas), nunca `imagem_path` (a fotografia tirada em casa, que apanha
+a prateleira à volta), nunca preços de compra nem locais — esses são da
+GARRAFA e da PESSOA, e continuam onde estavam. É a mesma linha que a app já
+traça entre "vinho" e "garrafa", e é ela que torna isto partilhável sem
+partilhar garrafeira nenhuma.
+
+Correr no SQL Editor, **por esta ordem e de seguida**:
+
+1. `db/catalogo-partilhado.sql`
+2. `db/functions.sql` — a `definir_castas` ganhou o gancho que leva as
+   castas ao catálogo (o trigger dos vinhos não as vê mudar, que elas não
+   vivem na linha do vinho)
+
+E depois, uma vez só, para levar para lá o que já está nas garrafeiras:
+
+```sql
+SELECT count(garrafeira.catalogar_vinho(id)) FROM garrafeira.vinhos;
+```
+
+**Passo manual, e sem ele nada disto funciona:** juntar `catalogo` aos
+*Exposed schemas* no painel (ver mais abaixo). As Edge Functions das duas
+apps falam-lhe por RPC do PostgREST.
+
+Expor o schema não abre nada a ninguém: a tabela tem RLS **sem uma única
+policy** (o que a fecha a toda a gente menos à `service_role`, que passa por
+cima da RLS) e as funções `catalogo.juntar`/`catalogo.procurar` são
+revogadas a `anon` e `authenticated` no fim do ficheiro. Quem escreve do
+lado do browser é o trigger da Garrafeira, e esse é `SECURITY DEFINER` —
+escreve sem que a pessoa tenha (nem deva ter) direito nenhum ali.
+
 ### `vinhos.imagem_url` (já aplicada)
 
 Link para uma foto do rótulo/garrafa — a `vinho-info` (Edge Function) tenta
@@ -221,14 +266,18 @@ Numa base de dados limpa:
    reportar sucesso sem nunca chegarem a lado nenhum. O bypass de RLS
    (`BYPASSRLS`) só ignora *policies* — os GRANTs continuam a ser precisos,
    e só são automáticos no schema `public`.
-2. **`functions.sql`** — `admin_email`, `is_admin`, `is_allowed`,
+2. **`catalogo-partilhado.sql`** — o schema `catalogo`, partilhado com a
+   WineSelection, e o trigger que o alimenta a partir de `garrafeira.vinhos`.
+   Vem antes das funções porque a `definir_castas` (a seguir) chama a
+   `garrafeira.catalogar_vinho` que nasce aqui.
+3. **`functions.sql`** — `admin_email`, `is_admin`, `is_allowed`,
    `is_editor`, `definir_admin`, `admin_pass_temp`, `consumir_garrafa`,
    `repor_garrafa`, `casta_id`, `definir_castas` e os triggers de guarda.
-3. **`policies.sql`** — as RLS policies (dependem das funções acima).
+4. **`policies.sql`** — as RLS policies (dependem das funções acima).
    É aqui que vive o isolamento: `locais`, `vinhos`, `garrafas` e
    `vinho_castas` andam por `pode_ver()`/`pode_mexer()`, não por
    `is_allowed()`/`is_editor()` sozinhos.
-4. **`seed.sql`** — põe o admin na lista de acesso. Sem isto a app abre na
+5. **`seed.sql`** — põe o admin na lista de acesso. Sem isto a app abre na
    mesma (o admin tem acesso por ser admin), mas ele não aparece na lista de
    utilizadores e a passagem da app a outra pessoa fica bloqueada —
    `definir_admin()` exige que o novo dono já esteja na lista.
@@ -239,9 +288,13 @@ Todos são idempotentes: podem ser corridos outra vez sem estragar nada.
 
 Estes não se fazem por SQL:
 
-1. **Expor o schema na API.** Settings › API › *Exposed schemas*: juntar
+1. **Expor os schemas na API.** Settings › API › *Exposed schemas*: juntar
    `garrafeira` à lista (`public`, `goals`, `splitbill`, …). **Sem isto,
    todos os pedidos da app dão 404** e parece que as tabelas não existem.
+   Juntar **também `catalogo`** (migração 12): é por aí que as Edge
+   Functions das duas apps falam com o catálogo partilhado. Sem ele
+   exposto, o catálogo nunca responde — e como não pode deitar uma procura
+   abaixo, o que se nota não é um erro, é a conta da IA a não descer.
 2. **Redirect URLs.** Authentication › URL Configuration › *Redirect URLs*:
    juntar o endereço do GitHub Pages desta app (ex.:
    `https://diogoandrefsilva-ghc.github.io/Garrafeira/`) e, se usares,
