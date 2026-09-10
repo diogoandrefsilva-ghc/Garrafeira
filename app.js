@@ -173,9 +173,20 @@ function isAdmin(){
 // "Posso editar em geral" (o `pode_editar` de allowed_users) — é diferente
 // de poder editar o que está AGORA no ecrã, que é o `podeEditar()`.
 function souEditor(){return isAdmin()||!!EU.pode_editar;}
+// O admin é sempre premium na BD (garrafeira.plano_ia()) — isto NÃO muda
+// isso, só o que o admin VÊ no seu próprio browser. Serve para testar o que
+// os outros planos mostram (botões escondidos, "sem pesquisa web") sem ter
+// de pedir a outra pessoa para experimentar. Guarda-se em localStorage e
+// nunca se aplica a quem não é admin.
+let IA_TESTE=null;
+try{const t=localStorage.getItem('gf_ia_teste');if(['sem_ia','gratis','premium'].includes(t))IA_TESTE=t;}catch(e){}
+function iaTesteMudar(v){
+  IA_TESTE=['sem_ia','gratis','premium'].includes(v)?v:null;
+  try{if(IA_TESTE)localStorage.setItem('gf_ia_teste',IA_TESTE);else localStorage.removeItem('gf_ia_teste');}catch(e){}
+}
 // A UI só explica o plano; a Edge Function volta a confirmá-lo através da
 // base de dados antes de tocar em qualquer chave Gemini.
-function planoIA(){return isAdmin()?'premium':String(EU.ia_plano||'sem_ia');}
+function planoIA(){return isAdmin()?(IA_TESTE||'premium'):String(EU.ia_plano||'sem_ia');}
 function podeUsarIA(){return planoIA()==='gratis'||planoIA()==='premium';}
 // `planoIA()` é o DIREITO da pessoa; o MOTOR de cada procura é outra coisa.
 // Cada um procura com o motor a que tem direito, e quem é premium pode pedir
@@ -4669,7 +4680,12 @@ async function admRenderUtilizadores(){
     const eAdmin=u.email.toLowerCase()===String(ADMIN_EMAIL).toLowerCase();
     return `<div class="ua-row">
       <span class="em">${esc(u.email)}${u.nome?' ('+esc(u.nome)+')':''}</span>
-      ${eAdmin?'<span class="tagme">admin · IA com pesquisa web</span>'
+      ${eAdmin?`<div class="ua-ctrls">
+            <span class="tagme">admin</span>
+            <select class="mini" title="Só para TI testares o que os outros planos veem — não muda o teu acesso real" onchange="iaTesteMudar(this.value)">
+              ${IA_PLANOS.map(p=>`<option value="${p.v}"${(IA_TESTE||'premium')===p.v?' selected':''}>${p.r}</option>`).join('')}
+            </select>
+          </div>`
         :`<div class="ua-ctrls">
             <label class="chk" title="Tem garrafeira própria e pode mexer-lhe"><input type="checkbox"${u.pode_editar?' checked':''}
               onchange="admToggleEditor('${escJs(u.email)}',this.checked)"> Editor</label>

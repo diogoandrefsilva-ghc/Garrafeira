@@ -922,48 +922,64 @@ app a outra pessoa; por isso ficam atrás de `.dono-hide`
 
 ## A procura da IA (`vinho-info`)
 Botão em cada vinho e no formulário de vinho novo. Quem procura é a Edge
-Function `vinho-info.ts` — irmã da `calendario-sporting` do Goals: mesma
-descoberta de modelo, mesma escada de variantes, mesmos fallbacks.
-- **Três planos por utilizador:** `sem_ia`, `gratis`, `premium`, guardados em
-  `allowed_users.ia_plano`. Só o admin os altera em Definições › Utilizadores;
-  o admin é sempre premium. A Edge Function pergunta `garrafeira.plano_ia()`
-  com o JWT de quem chamou — nunca aceita do browser um plano MAIOR do que
-  esse (ver o ponto seguinte). `gratis`
-  usa exclusivamente `GEMINI_FREE_API_KEY`, portanto não pode cair na chave
-  premium. Tenta primeiro 2.5 Flash / Flash-Lite e, se a chave não os servir,
-  o que o **ListModels dessa mesma chave** disser que ela tem: os nomes eram
-  fixos e isso partiu-se no dia em que a chave grátis respondeu 404 aos dois —
-  a procura morria ali, e ainda por cima a dizer "não respondeu a tempo". O
-  que segura o custo é a CHAVE e não a lista, por isso descobrir não abre
-  porta nenhuma à chave paga. Tem cinco tentativas
-  por dia por utilizador, configuráveis pelo secret `GEMINI_FREE_DAILY_LIMIT`.
-  **Hoje o plano `gratis` NÃO FUNCIONA neste projeto** e não é bug da app: a
-  chave que lá está lista os modelos mas depois responde 404 aos 2.5 e **429 a
-  todos os outros**, com ou sem pesquisa — 429 é quota do lado da Google. Está
-  tudo em Definições › Diagnóstico (cada tentativa fica registada com modelo e
-  estado). Enquanto essa chave não tiver quota, quem estiver em `gratis` não
-  consegue procurar; por isso é que o motor passou a ser o do plano e o
-  premium deixou de esperar pela grátis.
-  As análises registam o plano em `analises.plano_ia`; o trigger volta a
-  carimbá-lo pela função SQL, mesmo se alguém falar com o PostgREST à mão.
-- **Cada um procura com o motor do seu PLANO** (`motorDoPlano()`): premium a
-  quem o tem, grátis aos outros. `iaPedir(pedido,vinhoId,motor)` manda o MOTOR
-  no corpo do pedido e a função atende `premium` só a quem a BD disser que o
-  é — o browser pede menos do que tem, nunca mais, e a regra que interessa
-  (ninguém se promove sozinho) fica de pé. O DIREITO continua a ser
-  `plano_ia()`: é ele que a quota conta e é ele que o trigger carimba em
-  `analises.plano_ia`; o motor que produziu cada leitura vem no `resultado`.
-  **Chegou a ser "grátis primeiro, premium a um clique"** para se poder medir
-  se o premium valia a pena, e durou um dia: a chave grátis deste projeto
-  responde 404 ou 429 a TODOS os modelos (ver o ponto anterior), por isso a
-  primeira volta falhava sempre e ninguém chegava à segunda. Se um dia houver
-  uma chave grátis com quota a sério, a inversão é uma linha — `motorDoPlano()`.
+Function `vinho-info.ts`, com DOIS MOTORES desacoplados — não dois níveis do
+mesmo motor, dois caminhos diferentes até ao JSON:
+- **`premium`** ("IA com pesquisa web (Grounding Search)" na UI) — Gemini com
+  **grounding search** (`tools:[{google_search:{}}]`), a pesquisar e escrever
+  a ficha na mesma chamada. Sem isso o modelo inventa notas do Vivino e preços
+  de memória, que é exatamente o que não se quer numa base de dados. Por
+  causa do tool, a API **recusa** `response_mime_type: json` — o JSON vem em
+  texto e é extraído na função (`extrairJson`).
+- **`gratis`** ("IA sem pesquisa web" na UI) — pesquisa **externa** primeiro
+  (Search API, secrets `SEARCH_API_KEY`/`SEARCH_API_URL`), os resultados vão
+  no PROMPT como "base de evidência", e o Gemini só EXTRAI o JSON — nunca
+  pesquisa por si. Nasceu para cortar a dependência da chave grátis do Gemini
+  ter quota própria: essa chave chegou a responder 404/429 a todos os
+  modelos, com ou sem pesquisa, e a procura morria ali para quem não fosse
+  premium (ver o histórico em Definições › Diagnóstico). Com a pesquisa a
+  vir de outro serviço, o Gemini só faz extração — mais barato e sem essa
+  dependência.
+- **Os DIREITOS continuam a ser três** (`sem_ia`/`gratis`/`premium`,
+  `allowed_users.ia_plano`), mas passaram a decidir só que MOTOR cada um pode
+  pedir, não uma quota de Gemini: **nenhum dos dois tem limite diário na
+  `vinho-info`**. Só o admin muda o direito de cada um, em Definições ›
+  Utilizadores; o admin é sempre `premium` na BD (`garrafeira.plano_ia()`).
+  A função pergunta `plano_ia()` com o JWT de quem chamou e nunca aceita do
+  browser um plano MAIOR do que esse: o cliente manda `plano` no corpo,
+  `auth.plano === "premium" ? pedidoModo : "gratis"` — pedir MENOS do que se
+  tem é sempre permitido, nunca mais. É o `importar-vinhos` (fotos) que
+  continua com quota diária (`GEMINI_IMPORT_FREE_DAILY_LIMIT`, 3/dia): aí sim
+  cada pedido é uma chamada cara por imagem, sem cache possível.
+- **Dois modelos por chamada, do barato para o caro, só se precisar**
+  (`MODELO_BARATO`=flash-lite, `MODELO_ESCALADO`=flash): tenta-se sempre o
+  barato primeiro e só se escala se a resposta vier vazia ou pobre
+  (`qualidadeMinima` — menos de dois campos críticos, ou sem Vivino). É isto,
+  e não uma quota por utilizador, que segura o custo por procura na
+  `vinho-info`.
+- **Cache por vinho** (`garrafeira.catalogo_vinhos_cache`, TTL configurável
+  por `VINHO_CACHE_TTL_HOURS`, 30 dias por omissão): a chave inclui o MOTOR,
+  o nome, o ano, o produtor, a região e os campos pedidos — o mesmo vinho,
+  pedido da mesma forma, não paga a chamada ao Gemini (nem, no `gratis`, a
+  pesquisa externa) uma segunda vez dentro da janela.
+- **Cada um procura com o motor do seu DIREITO** (`motorDoPlano()`): premium
+  a quem o tem, "sem pesquisa web" aos outros. `iaPedir(pedido,vinhoId,motor)`
+  manda o MOTOR no corpo do pedido e a função atende `premium` só a quem a BD
+  disser que o é. As análises registam o direito em `analises.plano_ia`; o
+  trigger volta a carimbá-lo pela função SQL, mesmo se alguém falar com o
+  PostgREST à mão.
+- **O admin pode simular os outros direitos, só no SEU browser**
+  (`IA_TESTE`/`iaTesteMudar()`, o seletor na própria linha do admin em
+  Definições › Utilizadores): não muda `allowed_users.ia_plano` nem
+  `plano_ia()` na BD — o admin continua sempre `premium` aí — só o que
+  `planoIA()` devolve no browser que fez a escolha. Serve para testar o que
+  cada direito mostra (botões escondidos em `sem_ia`, "sem pesquisa web" em
+  `gratis`) sem precisar de outra conta; guarda-se em `localStorage`
+  (`gf_ia_teste`) e nunca se aplica a quem não é admin.
 - **Quem é premium pode pedir uma SEGUNDA OPINIÃO ao outro motor**
-  (`iaSegundaOpiniao()`, o botão "Comparar"): a mesma pergunta feita ao motor
-  que não é o do plano, para se ver campo a campo em que é que diferem. É o
-  que restou da ideia de comparar os dois, e serve também de saída quando o
-  motor do plano falha — foi assim que a chave grátis sem quota deixou de
-  trancar a procura a quem paga.
+  (`iaSegundaOpiniao()`, o botão "Tentar com a…"): a mesma pergunta feita ao
+  motor que não é o do direito (ou o do `IA_TESTE`, ver acima), para se ver
+  campo a campo em que é que diferem. Serve também de saída quando o motor do
+  direito falha.
 - **Com as duas leituras, a confirmação passa a ser uma ESCOLHA.** `IA_RES` é
   a primeira (motor `IA_MOTOR`, o do plano) e `IA_RES2` a segunda opinião
   (`IA_MOTOR2`); os rótulos saem daí e NÃO estão fixos no HTML — qual das duas
@@ -984,11 +1000,6 @@ descoberta de modelo, mesma escada de variantes, mesmos fallbacks.
   **A importação por imagens ficou de fora** — as duas leituras devolvem
   conjuntos de vinhos diferentes e compará-las campo a campo obrigava a
   emparelhá-los por semelhança de nome, que erra.
-- **Grounding com pesquisa Google** (`tools:[{google_search:{}}]`). Sem isso
-  o modelo inventa notas do Vivino e preços de memória, que é exatamente o
-  que não se quer numa base de dados. Por causa do tool, a API **recusa**
-  `response_mime_type: json` — o JSON vem em texto e é extraído na função
-  (`extrairJson`).
 - **Segundo plano** (`garrafeira.analises`): a função cria uma linha
   'pendente', responde já com o `id` e continua com `EdgeRuntime.waitUntil`;
   a app faz polling (`iaEsperar`). É preciso porque a pesquisa demora mais
