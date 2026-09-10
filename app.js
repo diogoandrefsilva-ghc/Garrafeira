@@ -3638,6 +3638,33 @@ function iaTxt(c,res){
   if(v==null||v===''||(Array.isArray(v)&&!v.length))return '';
   return c.fmt?c.fmt(v):String(v);
 }
+/* ── De onde é que isto veio ──
+   Uma resposta que chega num instante e sem espera parece uma avaria — ou
+   pior, parece que a app inventou. Não inventou: veio do CATÁLOGO
+   PARTILHADO (schema `catalogo`), a memória comum desta app e da
+   WineSelection. Alguém já procurou este vinho, ou tem-no em casa com a
+   ficha feita, e por isso esta procura não custou nada.
+
+   `origem:'catalogo'` é a ficha inteira de lá; `'misto'` é parte de lá e
+   parte da IA (a IA foi chamada só pelo que faltava — que é também por que
+   é que a resposta veio mais depressa e mais barata). Dizer qual é qual, e
+   quando é que o catálogo aprendeu aquilo, é o mínimo para se poder
+   confiar nisto sem pensar duas vezes. */
+function iaOrigemHTML(res){
+  if(!res||(res.origem!=='catalogo'&&res.origem!=='misto'))return '';
+  const d=res.catalogoEm?new Date(res.catalogoEm):null;
+  const quando=(d&&!isNaN(d))?d.toLocaleDateString('pt-PT',{day:'2-digit',month:'short',year:'numeric'}):'';
+  const tudo=res.origem==='catalogo';
+  const nCampos=Array.isArray(res.catalogoCampos)?res.catalogoCampos.length:0;
+  const oque=tudo
+    ?'Isto já se sabia'
+    :('<b>'+nCampos+'</b> '+(nCampos===1?'campo já se sabia':'campos já se sabiam'));
+  const cauda=tudo
+    ?' — não foi preciso pesquisar nada, e não custou nada.'
+    :' — a pesquisa foi só pelo que faltava.';
+  return `<div class="ia-cat">🗃️ ${oque}${quando?', de uma pesquisa de '+esc(quando):''}${cauda}</div>`;
+}
+
 function iaMostrarResultado(res,vinhoId){
   IA_RES=res||{};IA_VINHO=vinhoId;
   const v=IDXV[vinhoId]||{};
@@ -3706,6 +3733,7 @@ function iaMostrarResultado(res,vinhoId){
       <div class="note" style="margin-top:3px">${esc(v.nome||'')} ${v.ano||''}</div></div>
       <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
 
+    ${iaOrigemHTML(IA_RES)}
     ${IA_ERRO2?`<div class="erro">A segunda opinião não deu: ${esc(IA_ERRO2)}. Fica o que a ${esc(rot1)} trouxe.</div>`:''}
     ${!cmp&&temPremium()&&valeAOutro&&linhas?`<div class="ia-prbar">
       <span>Isto foi a <b>${esc(rot1)}</b>. Queres ver o que a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))} diz ao lado?</span>

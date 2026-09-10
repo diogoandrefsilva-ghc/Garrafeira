@@ -896,6 +896,12 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .ia-igual{font-style:normal;color:var(--vd)}
 .ia-prbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px;padding:9px 11px;border:1px solid #f0e4c8;border-radius:11px;background:var(--oup);font-size:12.5px;color:var(--ou2)}
 .ia-prbar span{flex:1;min-width:130px}
+/* A faixa que diz que a ficha (ou parte dela) veio do CATÁLOGO PARTILHADO
+   e não de uma pesquisa paga agora. Verde e não dourado de propósito: o
+   dourado é a distinção (a menção, a nota do Vivino) e isto não distingue
+   vinho nenhum — é a app a dizer que já sabia, que é uma boa notícia
+   sobre a PROCURA e não sobre o vinho. */
+.ia-cat{margin-top:12px;padding:9px 11px;border:1px solid #cfe3d8;border-radius:11px;background:var(--vdp);font-size:12.5px;color:var(--vd)}
 .ia-fontes{font-size:11px;color:var(--mu);margin-top:12px;line-height:1.75;word-break:break-word}
 .ia-fontes a{color:var(--in)}
 .aviso{background:var(--oup);border:1px solid #eddfba;border-radius:11px;padding:11px 13px;font-size:12px;color:#6f5205;line-height:1.6;margin-top:12px}
