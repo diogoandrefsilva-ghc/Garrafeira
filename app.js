@@ -851,6 +851,15 @@ function esc(s){
 // Para valores que vão dentro de onclick="…('…')": além do HTML, escapa a
 // plica e a barra, senão um vinho chamado "Clefs D'or" parte o atributo.
 function escJs(s){return esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));}
+// A leitura por IA das imagens devolve por vezes o texto do rótulo tal e
+// qual (CAIXA ALTA). Só mexe no que vier TODO em maiúsculas — um nome já
+// bem escrito não se toca — e mantém as ligações ("dos", "da"…) em minúscula.
+const CAPITALIZAR_MIN=new Set(['de','da','do','das','dos','e','a','o','em','no','na','nos','nas']);
+function capitalizarLivre(s){
+  s=String(s==null?'':s).trim();
+  if(!s||s!==s.toUpperCase())return s;
+  return s.toLowerCase().split(' ').map((w,i)=>w&&(i>0&&CAPITALIZAR_MIN.has(w))?w:(w.charAt(0).toUpperCase()+w.slice(1))).join(' ');
+}
 const hoje=()=>new Date().toISOString().slice(0,10);
 function dataPT(d){
   if(!d)return '';
@@ -5200,9 +5209,11 @@ function importarMostrarResultado(resultado){
   const aviso=resultado.aviso?'<div class="aviso">'+esc(resultado.aviso)+'</div>':'';
   const linhas=IMPORT_RESULTADO.map((v,i)=>{
     const detalhes=[v.tipo,v.regiao,v.mencao,v.teor?v.teor+'%':'',(v.castas||[]).join(', ')].filter(Boolean).join(' · ');
-    return "<div class='ia-linha' style='display:block;margin-top:10px'>"+
-      "<label style='display:flex;gap:8px;align-items:center'><input type='checkbox' class='imp-sel' data-i='"+i+"' checked><b>"+esc(v.nome||'Sem nome')+"</b></label>"+
-      "<div class='formgrid' style='margin-top:8px'><div><label>Nome</label><input class='imp-nome' data-i='"+i+"' value='"+esc(v.nome||"")+"'></div><div><label>Produtor</label><input class='imp-produtor' data-i='"+i+"' value='"+esc(v.produtor||"")+"'></div><div><label>Ano</label><input class='imp-ano' data-i='"+i+"' inputmode='numeric' value='"+esc(v.ano||"")+"'></div><div><label>Garrafas</label><input class='imp-qtd' data-i='"+i+"' type='number' min='1' max='60' value='"+esc(v.quantidade||1)+"'></div><div><label>Formato</label><select class='imp-formato' data-i='"+i+"'>"+FORMATOS.map(function(x){return "<option value='"+esc(x)+"'>"+esc(x)+"</option>";}).join('')+"</select></div></div>"+
+    return "<div class='ia-linha' style='display:block'>"+
+      "<div style='display:flex;gap:8px;align-items:center'><input type='checkbox' class='imp-sel' data-i='"+i+"' checked>"+
+      "<div style='flex:1;min-width:0'><label style='margin-top:0'>Nome</label><input class='imp-nome' data-i='"+i+"' value='"+esc(capitalizarLivre(v.nome||""))+"'></div></div>"+
+      "<div><label>Produtor</label><input class='imp-produtor' data-i='"+i+"' value='"+esc(capitalizarLivre(v.produtor||""))+"'></div>"+
+      "<div class='mrow'><div><label>Ano</label><input class='imp-ano' data-i='"+i+"' inputmode='numeric' value='"+esc(v.ano||"")+"'></div><div><label>Garrafas</label><input class='imp-qtd' data-i='"+i+"' type='number' min='1' max='60' value='"+esc(v.quantidade||1)+"'></div><div><label>Formato</label><select class='imp-formato' data-i='"+i+"'>"+FORMATOS.map(function(x){return "<option value='"+esc(x)+"'>"+esc(x)+"</option>";}).join('')+"</select></div></div>"+
       (detalhes?"<div class='note' style='margin-top:6px'>"+esc(detalhes)+"</div>":"")+
       (v.aviso?"<div class='note' style='margin-top:4px'>⚠️ "+esc(v.aviso)+"</div>":"")+"</div>";
   }).join('');
