@@ -148,7 +148,7 @@ Correr no SQL Editor:
 
 1. `db/migracao-cache-vinho-info.sql`
 
-### Migração 12 — catálogo partilhado com a WineSelection (**por aplicar**)
+### Migração 12 — catálogo partilhado com a WineSelection (já aplicada)
 
 `db/catalogo-partilhado.sql`. Cria o schema **`catalogo`**, que não é deste
 schema nem do da WineSelection: é dos dois. É a memória comum do que já se
@@ -169,22 +169,30 @@ GARRAFA e da PESSOA, e continuam onde estavam. É a mesma linha que a app já
 traça entre "vinho" e "garrafa", e é ela que torna isto partilhável sem
 partilhar garrafeira nenhuma.
 
-Correr no SQL Editor, **por esta ordem e de seguida**:
+**Aplicada em 2026-09-10**, em três migrações:
+`catalogo_12a_schema_chaves`, `catalogo_12b_juntar_procurar_trigger` e
+`catalogo_12c_definir_castas_gancho`. A 12c é a `definir_castas` com o
+gancho do catálogo — só essa função e não o `functions.sql` inteiro, porque
+a definição que estava viva na base era idêntica à do repo e re-executar as
+outras ~30 funções numa base com 166 vinhos era superfície a mais para
+zero ganho. Numa base limpa a ordem continua a ser
+`catalogo-partilhado.sql` → `functions.sql`.
 
-1. `db/catalogo-partilhado.sql`
-2. `db/functions.sql` — a `definir_castas` ganhou o gancho que leva as
-   castas ao catálogo (o trigger dos vinhos não as vê mudar, que elas não
-   vivem na linha do vinho)
+O arranque também já correu (`SELECT count(garrafeira.catalogar_vinho(id))
+FROM garrafeira.vinhos`): 166 vinhos deram **161 linhas** no catálogo — as
+5 que faltam são vinhos repetidos que se juntaram na mesma linha, que é o
+que se queria (o "Mouchão" e o "Herdade do Mouchão" são o mesmo vinho, e o
+"Leo d'Honor" estava escrito com duas grafias do produtor).
 
-E depois, uma vez só, para levar para lá o que já está nas garrafeiras:
+**Falta um passo manual, e sem ele o catálogo nunca responde:** juntar
+`catalogo` aos *Exposed schemas* no painel (ver mais abaixo). As Edge
+Functions das duas apps falam-lhe por RPC do PostgREST. Até lá as três
+funções continuam a trabalhar exatamente como antes — o catálogo é uma
+poupança e não uma dependência, e um RPC que falha é engolido — o que se
+nota não é um erro, é a conta da IA a não descer.
 
-```sql
-SELECT count(garrafeira.catalogar_vinho(id)) FROM garrafeira.vinhos;
-```
-
-**Passo manual, e sem ele nada disto funciona:** juntar `catalogo` aos
-*Exposed schemas* no painel (ver mais abaixo). As Edge Functions das duas
-apps falam-lhe por RPC do PostgREST.
+As três Edge Functions já foram publicadas com o código do catálogo:
+`vinho-info` (v18), `sugerir-vinho` (v15) e `verificar-vinhos` (v5).
 
 Expor o schema não abre nada a ninguém: a tabela tem RLS **sem uma única
 policy** (o que a fecha a toda a gente menos à `service_role`, que passa por
