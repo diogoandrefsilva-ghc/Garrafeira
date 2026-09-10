@@ -632,15 +632,6 @@ async function chamarGemini(
   if (!parsed) return { ok: false as const, status: 502, erro: "resposta ilegível do modelo", usage };
   return { ok: true as const, parsed, fontes: comGrounding ? fontesGrounding(body) : [], usage };
 }
-function qualidadeMinima(ficha: Record<string, unknown>) {
-  const criticos = ["tipo", "regiao", "castas", "vivino_nota", "preco_medio"];
-  const presentes = criticos.filter((k) => {
-    const v = (ficha as any)[k];
-    return Array.isArray(v) ? v.length > 0 : v !== undefined && v !== null && v !== "";
-  });
-  const score = presentes.length;
-  return { score, ok: score >= 2 || ("vivino_url" in ficha && "vivino_nota" in ficha) };
-}
 
 async function produzirFicha(
   modoIA: "gratis" | "premium",
@@ -708,9 +699,13 @@ async function produzirFicha(
   let erroUltimo = primeira && !primeira.ok ? primeira.erro : "";
 
   let ficha = parsed ? normalizar(parsed, ano, campos) : null;
-  const q1 = ficha ? qualidadeMinima(ficha) : { ok: false, score: 0 };
-  const precisaEscalar = !ficha || !q1.ok;
-  if (precisaEscalar && MODELO_ESCALADO !== MODELO_BARATO) {
+  // Só escala em falha TÉCNICA do barato (erro HTTP, timeout, resposta
+  // ilegível) — nunca só porque o conteúdo (já respondido com sucesso) ficou
+  // com poucos campos. Um modelo maior não inventa o que a pesquisa não
+  // encontrou; no modo premium (grounding) escalar por "qualidade" pagava a
+  // pesquisa Google a DOBRAR por um ganho que quase nunca existe.
+  const falhouTecnicamente = !primeira || !primeira.ok;
+  if (falhouTecnicamente && MODELO_ESCALADO !== MODELO_BARATO) {
     const segunda = await run(MODELO_ESCALADO, "escalado", 2800, false);
     if (segunda && segunda.ok) {
       usadoModelo = MODELO_ESCALADO;

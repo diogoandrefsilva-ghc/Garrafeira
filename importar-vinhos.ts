@@ -12,8 +12,22 @@ const API="https://generativelanguage.googleapis.com/v1beta";
 // aconteceu: a lista era só nomes fixos e partiu-se assim que a Google
 // reformou o catálogo. Descobre-se o resto com a PRÓPRIA chave do modo sem web (nunca
 // a premium), tal como em vinho-info.ts.
-const MODELOS_BASE=["gemini-flash-latest","gemini-flash-lite-latest"];
+//
+// LITE primeiro: ler um rótulo/prateleira é extração, não é um problema que
+// precise de um modelo maior — e é o mesmo raciocínio já aplicado ao
+// vinho-info.ts. O "flash" grande só entra em DUAS situações: o lite falhar
+// tecnicamente (é o `candidatosPara` a seguir que faz isso, na ordem), ou
+// quem tem IA premium pedir explicitamente outro modelo porque não ficou
+// satisfeito com a leitura — nunca sozinho, por "qualidade" adivinhada aqui.
+const MODELOS_BASE=["gemini-flash-lite-latest","gemini-flash-latest"];
 let _modelos:string[]|null=null;
+// Reordena os candidatos já descobertos SEM os descartar: pedir o modelo
+// "grande" primeiro é só trocar a ordem em que se tenta — se ele também
+// falhar tecnicamente, o lite continua disponível como reserva.
+function candidatosPara(modelos:string[],grande:boolean):string[]{
+ if(!grande)return modelos;
+ return [...modelos.filter(m=>!m.includes("lite")),...modelos.filter(m=>m.includes("lite"))];
+}
 async function candidatos(signal:AbortSignal):Promise<string[]>{
  if(_modelos)return _modelos;
  const vistos=new Set<string>(MODELOS_BASE),lista=[...MODELOS_BASE];
@@ -92,9 +106,9 @@ function prompt(qtd:number){return [
  "Responde APENAS JSON, sem markdown: {\"vinhos\":[{\"nome\":\"texto visível\",\"produtor\":\"\",\"ano\":2020,\"tipo\":\"Tinto | Branco | Rosé | Espumante | Licoroso | Frisante\",\"estilo\":\"Maduro | Verde | Colheita Tardia | Palhete\",\"regiao\":\"\",\"subRegiao\":\"\",\"mencao\":\"Reserva | Grande Reserva | Garrafeira | Colheita Selecionada | Vinhas Velhas | Superior | Grande Escolha\",\"classificacao\":\"DOC | Vinho Regional | Vinho\",\"castas\":[\"\"],\"teor\":13.5,\"estagioMeses\":18,\"estagioTexto\":\"\",\"notasProva\":\"\",\"harmonizacao\":\"\",\"resumo\":\"\",\"beberDe\":2026,\"beberAte\":2030,\"quantidade\":1,\"aviso\":\"dúvida opcional\"}],\"aviso\":\"observação geral opcional\"}"
  ].join("\n");}
 function comLimite(pai:AbortSignal,ms:number){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms),a=()=>c.abort();pai.addEventListener("abort",a,{once:true});return{signal:c.signal,limpar:()=>{clearTimeout(t);pai.removeEventListener("abort",a);}};}
-async function ler(imagens:{mime:string,data:string}[],signal:AbortSignal){
+async function ler(imagens:{mime:string,data:string}[],signal:AbortSignal,grande:boolean){
  if(!GEMINI_KEY)throw new Error("a importação ainda não está configurada: falta GEMINI_FREE_API_KEY");
- const modelos=await candidatos(signal);
+ const modelos=candidatosPara(await candidatos(signal),grande);
  const parts=[{text:prompt(imagens.length)},...imagens.map(i=>({inline_data:{mime_type:i.mime,data:i.data}}))];
  let ultimo="";const tentativas:{modelo:string,estado:number|string,usageMetadata?:UsageMetadata}[]=[];let usageTotal:UsageMetadata|null=null;
  for(let i=0;i<modelos.length;i++){const modelo=modelos[i],lim=comLimite(signal,i?18000:40000);try{
@@ -154,8 +168,13 @@ Deno.serve(async(req)=>{
   const token=req.headers.get("Authorization")??"",auth=await autorizar(token,gid,ctrl.signal);quem=auth.email;
   if(!auth.ok)return json({error:"não autorizado para importar nesta garrafeira"},403);
   if(auth.plano==="gratis"&&!(await quota(token,quem,ctrl.signal)))return json({error:"atingiste o limite diário de "+LIMITE_GRATIS+" importações sem pesquisa web — tenta amanhã ou pede acesso ao modo com pesquisa web"},429);
-  const id=await criar(token,gid,imagens.length,ctrl.signal);await registar("pedido",{id,garrafeira_id:gid,imagens:imagens.length,plano:auth.plano},quem);
-  EdgeRuntime.waitUntil((async()=>{const proc=new AbortController(),t=setTimeout(()=>proc.abort(),105000);try{const resultado=await ler(imagens,proc.signal);await fechar(id,quem,{estado:"concluido",resultado});await registar("ok",{id,vinhos:resultado.vinhos.length,modelo:resultado.modelo,...(resultado.usageMetadata?{usageMetadata:resultado.usageMetadata}:{}),...(resultado.tentativas?{tentativas:resultado.tentativas}:{} )},quem);}catch(e){const erro=texto((e as Error).message||"a importação falhou",400),tentativas=(e as any)?.tentativas;await fechar(id,quem,{estado:"erro",erro});await registar("erro",{id,passo:"gemini",erro,...(tentativas?{tentativas}:{})},quem);}finally{clearTimeout(t);}})());
+  // "grande" é um pedido explícito de quem tem premium, feito depois de já
+  // ter visto o resultado do modelo barato e não ter ficado satisfeito —
+  // nunca um valor que o browser escolha sozinho para quem não tem esse
+  // direito (o mesmo princípio do `plano` em vinho-info.ts).
+  const grande=body?.modelo==="grande"&&auth.plano==="premium";
+  const id=await criar(token,gid,imagens.length,ctrl.signal);await registar("pedido",{id,garrafeira_id:gid,imagens:imagens.length,plano:auth.plano,modelo:grande?"grande":"barato"},quem);
+  EdgeRuntime.waitUntil((async()=>{const proc=new AbortController(),t=setTimeout(()=>proc.abort(),105000);try{const resultado=await ler(imagens,proc.signal,grande);await fechar(id,quem,{estado:"concluido",resultado});await registar("ok",{id,vinhos:resultado.vinhos.length,modelo:resultado.modelo,...(resultado.usageMetadata?{usageMetadata:resultado.usageMetadata}:{}),...(resultado.tentativas?{tentativas:resultado.tentativas}:{} )},quem);}catch(e){const erro=texto((e as Error).message||"a importação falhou",400),tentativas=(e as any)?.tentativas;await fechar(id,quem,{estado:"erro",erro});await registar("erro",{id,passo:"gemini",erro,...(tentativas?{tentativas}:{})},quem);}finally{clearTimeout(t);}})());
   return json({id,estado:"pendente"});
  }catch(e){const erro=texto((e as Error).message||"erro inesperado",300);await registar("erro",{passo:"entrada",erro},quem||null);return json({error:erro},500);}finally{clearTimeout(timer);}
 });

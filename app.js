@@ -5132,10 +5132,15 @@ function pdfPreImprimir(){
 
 // ── IMPORTAR VINHOS POR IMAGENS ─────────────────────────────────────
 let IMPORT_RESULTADO=[];
+// Guarda as imagens já preparadas (encolhidas, em base64) para o "tenta com
+// um modelo de IA diferente": só em memória do browser, nunca gravadas —
+// serve só para não obrigar a escolher as fotos outra vez no mesmo ecrã.
+let IMPORT_IMAGENS=[];
 
 function importarAbrir(){
   if(roGuard())return;
   if(!podeUsarIA()){toast('A importação por IA não está incluída no teu acesso',1);return;}
+  IMPORT_IMAGENS=[];
   document.getElementById('modal-ia-in').innerHTML=
     "<div class='mtop'><div><h3>📷 Importar vinhos por imagens</h3><div class='note' style='margin-top:3px'>Até 3 fotos de rótulos, uma lista ou uma prateleira.</div></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
     "<div class='aviso'>As imagens são encolhidas no teu telemóvel, lidas pela IA e descartadas no fim. <b>Nada entra na garrafeira sem revisão tua.</b> A leitura não pesquisa na internet.</div>"+
@@ -5158,6 +5163,21 @@ async function importarBase64(file){
   if(!data)throw new Error('não consegui preparar essa imagem');
   return {mime:'image/jpeg',data};
 }
+// Pedido à função, partilhado entre o envio normal e o "tenta com outro
+// modelo" — só muda o corpo (`extra`), tudo o resto (erros, 404) é igual.
+async function importarPedir(imagens,extra){
+  const r=await sbFetch(SB_URL+'/functions/v1/importar-vinhos',{
+    method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY},
+    body:JSON.stringify(Object.assign({garrafeiraId:GA_ID,imagens},extra||{}))
+  });
+  let d={};try{d=await r.json();}catch(_){}
+  if(!r.ok){
+    if(r.status===404)throw new Error('A função importar-vinhos ainda não está publicada no Supabase. Ver o README.');
+    throw new Error(d.error||('O servidor respondeu HTTP '+r.status));
+  }
+  if(!d.id)throw new Error('A importação não devolveu identificador');
+  return d.id;
+}
 async function importarEnviar(){
   const input=document.getElementById('imp-ficheiros'),files=Array.from(input.files||[]);
   if(!files.length||files.length>3){toast('Escolhe entre 1 e 3 imagens',1);return;}
@@ -5169,21 +5189,28 @@ async function importarEnviar(){
       estado.textContent='A preparar imagem '+(i+1)+' de '+files.length+'…';
       imagens.push(await importarBase64(files[i]));
     }
+    IMPORT_IMAGENS=imagens;
     estado.textContent='A enviar para leitura…';btn.textContent='A ler…';
-    const r=await sbFetch(SB_URL+'/functions/v1/importar-vinhos',{
-      method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY},
-      body:JSON.stringify({garrafeiraId:GA_ID,imagens})
-    });
-    let d={};try{d=await r.json();}catch(_){}
-    if(!r.ok){
-      if(r.status===404)throw new Error('A função importar-vinhos ainda não está publicada no Supabase. Ver o README.');
-      throw new Error(d.error||('O servidor respondeu HTTP '+r.status));
-    }
-    if(!d.id)throw new Error('A importação não devolveu identificador');
-    importarEspera(d.id);
+    importarEspera(await importarPedir(imagens));
   }catch(e){
     estado.style.color='var(--dg)';estado.textContent='Não deu: '+e.message;
     btn.disabled=false;btn.textContent='Tentar outra vez';
+  }
+}
+// Só para quem tem IA premium, e só depois de já se ter visto o resultado do
+// modelo barato: um pedido explícito de "outro modelo", com as MESMAS
+// imagens já preparadas — não obriga a escolher as fotos outra vez.
+async function importarTentarOutroModelo(){
+  if(!IMPORT_IMAGENS.length)return;
+  document.getElementById('modal-ia-in').innerHTML=
+    "<div class='mtop'><div><h3>📷 A tentar com outro modelo…</h3></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
+    "<div class='note' id='imp-estado'>A reler as mesmas imagens com um modelo de IA diferente. Pode levar até dois minutos.</div>"+
+    "<div class='macoes'><button class='btn ghost' id='imp-btn' disabled>A ler…</button></div>";
+  try{
+    importarEspera(await importarPedir(IMPORT_IMAGENS,{modelo:'grande'}));
+  }catch(e){
+    const estado=document.getElementById('imp-estado');
+    if(estado){estado.style.color='var(--dg)';estado.textContent='Não deu: '+e.message;}
   }
 }
 async function importarEspera(id){
@@ -5207,6 +5234,10 @@ async function importarEspera(id){
 function importarMostrarResultado(resultado){
   IMPORT_RESULTADO=Array.isArray(resultado.vinhos)?resultado.vinhos:[];
   const aviso=resultado.aviso?'<div class="aviso">'+esc(resultado.aviso)+'</div>':'';
+  // Só faz sentido oferecer "outro modelo" quando este resultado veio do
+  // barato (o modelo grande já é a última carta) e há premium para o pagar.
+  const outroModelo=(temPremium()&&IMPORT_IMAGENS.length&&/lite/.test(resultado.modelo||''))
+    ?"<div class='note' style='margin-top:8px'>Não ficaste satisfeito? Tira uma fotografia mais nítida ou <a href='#' onclick='importarTentarOutroModelo();return false'>experimenta um modelo de IA diferente</a>.</div>":"";
   const linhas=IMPORT_RESULTADO.map((v,i)=>{
     const detalhes=[v.tipo,v.regiao,v.mencao,v.teor?v.teor+'%':'',(v.castas||[]).join(', ')].filter(Boolean).join(' · ');
     return "<div class='ia-linha' style='display:block'>"+
@@ -5219,7 +5250,7 @@ function importarMostrarResultado(resultado){
   }).join('');
   document.getElementById('modal-ia-in').innerHTML=
     "<div class='mtop'><div><h3>Rever antes de importar</h3><div class='note' style='margin-top:3px'>"+IMPORT_RESULTADO.length+" vinho(s) proposto(s). Edita nome, produtor, ano ou quantidade antes de adicionar.</div></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
-    aviso+(linhas||"<div class='note' style='margin-top:14px'>Não foi possível identificar nenhum vinho com segurança. Tenta fotos mais nítidas ou uma imagem de cada vez.</div>")+
+    aviso+outroModelo+(linhas||"<div class='note' style='margin-top:14px'>Não foi possível identificar nenhum vinho com segurança. Tenta fotos mais nítidas ou uma imagem de cada vez.</div>")+
     "<div class='macoes'><button class='btn prim' id='imp-guardar' "+(linhas?"onclick='importarGuardar()'":"disabled")+">Adicionar selecionados</button><button class='btn ghost' onclick=\"fecharModal('modal-ia')\">Cancelar</button></div>";
 }
 function importarValor(classe,i){
