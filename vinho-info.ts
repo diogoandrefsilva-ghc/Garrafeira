@@ -35,8 +35,16 @@ const SEARCH_API_URL = Deno.env.get("SEARCH_API_URL") || "https://google.serper.
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_SRV = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GAPI = "https://generativelanguage.googleapis.com/v1beta";
-const MODELO_BARATO = Deno.env.get("GEMINI_CHEAP_MODEL") || "gemini-2.5-flash-lite";
-const MODELO_ESCALADO = Deno.env.get("GEMINI_FALLBACK_MODEL") || Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
+// PONTEIROS ("-latest"), não nomes fixos: apontam sempre para o que a
+// Google tem em produção agora, o mesmo ajuste que já salvou o
+// importar-vinhos.ts deste exato problema. "gemini-2.5-flash"/"-flash-lite"
+// pararam de responder com 404 ("no longer available to new users") — os
+// ponteiros são o que evita repetir este deploy de emergência a cada vez
+// que a Google reforma o catálogo. Continuam os dois mais baratos da
+// família Flash: trocar de família por causa disto seria resolver uma
+// disponibilidade com mais custo, que não é a troca que se quer.
+const MODELO_BARATO = Deno.env.get("GEMINI_CHEAP_MODEL") || "gemini-flash-lite-latest";
+const MODELO_ESCALADO = Deno.env.get("GEMINI_FALLBACK_MODEL") || Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
 const CACHE_TTL_HORAS = Math.max(1, Math.min(24 * 90, Number(Deno.env.get("VINHO_CACHE_TTL_HOURS") ?? 24 * 30) || 24 * 30));
 const CACHE_VERSAO = "v2";
 const SEARCH_RESULTADOS = 5;
