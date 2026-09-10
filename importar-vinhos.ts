@@ -25,8 +25,13 @@ async function candidatos(signal:AbortSignal):Promise<string[]>{
    const d=await r.json();
    (d.models??[]).forEach((m:any)=>{
     const nome=String(m.name).replace(/^models\//,"");
+    // "1.5"/"2.0"/"2.5" excluídos de propósito: a Google já descontinuou o
+    // 2.5-flash E o 2.5-flash-lite para chaves novas ("no longer available
+    // to new users") — descobri-los aqui só voltava a propor um candidato
+    // que sabemos que vai dar 404. Os ponteiros "-latest" (MODELOS_BASE) não
+    // têm número de versão, por isso não são afetados por este filtro.
     if(!vistos.has(nome)&&(m.supportedGenerationMethods??[]).includes("generateContent")
-       &&nome.includes("flash")&&!/(8b|image|tts|live|audio|embed|exp|preview|thinking)/.test(nome)){
+       &&nome.includes("flash")&&!/(8b|image|tts|live|audio|embed|exp|preview|thinking|1\.5|2\.0|2\.5)/.test(nome)){
      vistos.add(nome);lista.push(nome);
     }
    });
@@ -103,13 +108,17 @@ async function ler(imagens:{mime:string,data:string}[],signal:AbortSignal){
  // Uma mensagem acionável em vez do JSON cru do Gemini: 404 é a chave sem
  // acesso ao modelo (nomeia o secret), 429 é quota do lado da Google — as
  // duas causas já apanhadas em vinho-info.ts.
+ // `tentativas` vai pendurado no erro (não só na mensagem) para o Diagnóstico
+ // mostrar sempre o quadro completo dos modelos tentados, mesmo quando a
+ // mensagem final só fala do último.
+ const comTentativas=(e:Error)=>{(e as any).tentativas=tentativas;return e;};
  if(tentativas.length&&tentativas.every(t=>t.estado===404))
-  throw new Error("a chave do modo sem pesquisa web não tem acesso a nenhum destes modelos (404): "+
-    [...new Set(tentativas.map(t=>t.modelo))].join(", ")+". Confere o secret GEMINI_FREE_API_KEY no Supabase.");
+  throw comTentativas(new Error("a chave do modo sem pesquisa web não tem acesso a nenhum destes modelos (404): "+
+    [...new Set(tentativas.map(t=>t.modelo))].join(", ")+". Confere o secret GEMINI_FREE_API_KEY no Supabase."));
  if(tentativas.some(t=>t.estado===429))
-  throw new Error("a chave do modo sem pesquisa web está sem quota no Gemini (429): nenhum dos "+tentativas.length+
-    " modelos aceitou o pedido. É a quota do Google e não a da app — confirma o plano do projeto de onde saiu o GEMINI_FREE_API_KEY.");
- throw new Error(ultimo||"o modelo não conseguiu ler as imagens");
+  throw comTentativas(new Error("a chave do modo sem pesquisa web está sem quota no Gemini (429): nenhum dos "+tentativas.length+
+    " modelos aceitou o pedido. É a quota do Google e não a da app — confirma o plano do projeto de onde saiu o GEMINI_FREE_API_KEY."));
+ throw comTentativas(new Error(ultimo||"o modelo não conseguiu ler as imagens"));
 }
 async function rpc(auth:string,nome:string,body:Record<string,unknown>,signal:AbortSignal){
  const r=await fetch(SB_URL+"/rest/v1/rpc/"+nome,{method:"POST",headers:{apikey:SB_SRV,Authorization:auth,"Content-Type":"application/json","Content-Profile":"garrafeira"},body:JSON.stringify(body),signal});return r.ok?await r.json():null;
@@ -146,7 +155,7 @@ Deno.serve(async(req)=>{
   if(!auth.ok)return json({error:"não autorizado para importar nesta garrafeira"},403);
   if(auth.plano==="gratis"&&!(await quota(token,quem,ctrl.signal)))return json({error:"atingiste o limite diário de "+LIMITE_GRATIS+" importações sem pesquisa web — tenta amanhã ou pede acesso ao modo com pesquisa web"},429);
   const id=await criar(token,gid,imagens.length,ctrl.signal);await registar("pedido",{id,garrafeira_id:gid,imagens:imagens.length,plano:auth.plano},quem);
-  EdgeRuntime.waitUntil((async()=>{const proc=new AbortController(),t=setTimeout(()=>proc.abort(),105000);try{const resultado=await ler(imagens,proc.signal);await fechar(id,quem,{estado:"concluido",resultado});await registar("ok",{id,vinhos:resultado.vinhos.length,modelo:resultado.modelo,...(resultado.usageMetadata?{usageMetadata:resultado.usageMetadata}:{}),...(resultado.tentativas?{tentativas:resultado.tentativas}:{} )},quem);}catch(e){const erro=texto((e as Error).message||"a importação falhou",400);await fechar(id,quem,{estado:"erro",erro});await registar("erro",{id,passo:"gemini",erro},quem);}finally{clearTimeout(t);}})());
+  EdgeRuntime.waitUntil((async()=>{const proc=new AbortController(),t=setTimeout(()=>proc.abort(),105000);try{const resultado=await ler(imagens,proc.signal);await fechar(id,quem,{estado:"concluido",resultado});await registar("ok",{id,vinhos:resultado.vinhos.length,modelo:resultado.modelo,...(resultado.usageMetadata?{usageMetadata:resultado.usageMetadata}:{}),...(resultado.tentativas?{tentativas:resultado.tentativas}:{} )},quem);}catch(e){const erro=texto((e as Error).message||"a importação falhou",400),tentativas=(e as any)?.tentativas;await fechar(id,quem,{estado:"erro",erro});await registar("erro",{id,passo:"gemini",erro,...(tentativas?{tentativas}:{})},quem);}finally{clearTimeout(t);}})());
   return json({id,estado:"pendente"});
  }catch(e){const erro=texto((e as Error).message||"erro inesperado",300);await registar("erro",{passo:"entrada",erro},quem||null);return json({error:erro},500);}finally{clearTimeout(timer);}
 });
