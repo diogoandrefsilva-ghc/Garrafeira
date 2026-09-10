@@ -585,23 +585,39 @@ function fontesGrounding(body: any): Fonte[] {
 async function chamarGemini(
   modelo: string, textoPrompt: string, signal: AbortSignal, maxTokens = 2048, semThinking = true, comGrounding = false,
 ) {
-  const generationConfig: Record<string, unknown> = {
-    temperature: 0,
-    maxOutputTokens: maxTokens,
+  // A pesquisa (grounding) precisa de "pensar" para decidir o quê e quando
+  // pesquisar: pedir thinkingBudget:0 ao mesmo tempo que se liga o tool
+  // google_search passou a ser recusado (400 "Request contains an invalid
+  // argument") pelos modelos que ficaram por trás dos ponteiros "-latest".
+  // Por isso só se tenta desligar o thinking fora do modo com pesquisa.
+  const pedir = (comThinking: boolean) => {
+    const generationConfig: Record<string, unknown> = {
+      temperature: 0,
+      maxOutputTokens: maxTokens,
+    };
+    if (!comGrounding) generationConfig.response_mime_type = "application/json";
+    if (comThinking) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    return fetch(`${GAPI}/models/${modelo}:generateContent?key=${GEMINI_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: textoPrompt }] }],
+        generationConfig,
+        ...(comGrounding ? { tools: [{ google_search: {} }] } : {}),
+      }),
+    });
   };
-  if (!comGrounding) generationConfig.response_mime_type = "application/json";
-  if (semThinking) generationConfig.thinkingConfig = { thinkingBudget: 0 };
-  const r = await fetch(`${GAPI}/models/${modelo}:generateContent?key=${GEMINI_KEY}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal,
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: textoPrompt }] }],
-      generationConfig,
-      ...(comGrounding ? { tools: [{ google_search: {} }] } : {}),
-    }),
-  });
-  const txt = await r.text();
+  const tentarThinking = semThinking && !comGrounding;
+  let r = await pedir(tentarThinking);
+  let txt = await r.text();
+  // Rede de segurança: se MESMO ASSIM vier 400 com o thinking pedido,
+  // repete sem ele antes de desistir — mais barato do que ficar preso a
+  // adivinhar qual é a próxima restrição que a Google vai impor.
+  if (!r.ok && r.status === 400 && tentarThinking) {
+    r = await pedir(false);
+    txt = await r.text();
+  }
   if (!r.ok) {
     let msg = "";
     try { msg = JSON.parse(txt)?.error?.message ?? ""; } catch (_) { /**/ }
