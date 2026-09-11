@@ -1,670 +1,61 @@
 -- =====================================================================
--- Catálogo partilhado de vinhos — schema `catalogo`
+-- Garrafeira — O GANCHO PARA O CATÁLOGO (migração 12)
 --
--- FONTE DE VERDADE deste schema. É partilhado por DUAS apps do mesmo
--- projeto Supabase (Garrafeira e WineSelection) e por isso não vive dentro
--- de nenhum dos dois schemas delas: `garrafeira` e `wineselection` são
--- isolados um do outro de propósito, e pendurar o catálogo num deles era
--- dar a uma das apps a chave da casa da outra.
+-- ⚠ ESTE FICHEIRO JÁ NÃO DEFINE O CATÁLOGO.
 --
--- O QUE ISTO É: a memória do que já se sabe sobre um vinho — o que a IA
--- já procurou (nas duas apps), e o que alguém já confirmou por ter a
--- garrafa em casa. Existe por uma razão só: cada chamada à IA custa
--- dinheiro, e a ficha de um vinho não muda de semana para semana. Se
--- alguém já procurou "Quinta do Crasto Reserva 2019" na WineSelection,
--- a Garrafeira não tem de a procurar outra vez — e vice-versa.
+-- Até setembro de 2026 era aqui que vivia o schema `catalogo` inteiro: a
+-- tabela `vinhos`, a chave, a força, e as três funções que as Edge
+-- Functions chamam. Isso mudou. **A fonte de verdade do catálogo é agora
+-- `db/catalogo.sql` no repo WineCatalog**, e o schema chama-se
+-- `winecatalog`.
 --
--- O QUE ISTO NÃO É: não guarda uma linha do que é de alguém. Aqui entra
--- só o que é FACTO SOBRE O VINHO (a referência: castas, região, nota do
--- Vivino, preço médio de mercado) — nunca o que é da GARRAFA ou da
--- PESSOA: quanto se pagou, onde está arrumada, as notas escritas à mão, a
--- fotografia tirada em casa. É a mesma linha que a Garrafeira já traça
--- entre "vinho" e "garrafa", e é ela que torna este catálogo partilhável
--- sem partilhar garrafeira nenhuma.
+-- PORQUÊ. O catálogo nasceu num schema só dele porque não era de nenhuma
+-- das duas apps que o liam, e pendurá-lo numa delas era dar a uma a chave
+-- da casa da outra. Só que a DEFINIÇÃO dele ficou na mesma dentro deste
+-- repo — ou seja, dentro de uma das consumidoras — e sem ecrã nenhum onde
+-- se visse o que lá está. Passou a haver uma app própria (a WineCatalog),
+-- com o seu admin (`winecatalog.config.admin_email`, que NÃO é o desta
+-- app), e o catálogo mudou-se para lá inteiro.
 --
--- Correr no SQL Editor do Supabase. Depois de `garrafeira/db/schema.sql`
--- (os triggers no fim penduram-se em `garrafeira.vinhos`). Não precisa de
--- nada do lado do `wineselection` — essa app só lhe toca pelas Edge
--- Functions, com a service role.
+-- O nome deste ficheiro fica como estava de propósito: é a migração 12, e
+-- é por esse número que o `db/README.md` lhe chama. Renumerar histórico
+-- custa mais do que um nome um bocado velho.
 --
--- PASSO MANUAL: `catalogo` TEM de ser acrescentado aos "Exposed schemas"
--- no painel (Settings -> API -> Data API), ao lado de `garrafeira` e
--- `wineselection` — as três Edge Functions falam-lhe por RPC do PostgREST.
--- Expor o schema não abre nada: a tabela tem RLS sem policy nenhuma (ou
--- seja, fechada a todos menos à service role) e as duas funções são
--- revogadas a `anon`/`authenticated` no fim deste ficheiro.
+-- O QUE SOBRA AQUI, e continua a ser desta app: o gancho. Um vinho que
+-- está numa garrafeira é a melhor fonte que há — alguém tem a garrafa na
+-- mão — e é esta função que o leva para o catálogo. Pendura-se em
+-- `garrafeira.vinhos`, que é uma tabela desta app, e por isso vive neste
+-- repo. Só o destino da chamada mudou: `winecatalog.juntar`.
+--
+-- Correr DEPOIS de `db/schema.sql` e DEPOIS de o repo WineCatalog ter
+-- corrido o `db/catalogo.sql` dele (senão a `winecatalog.juntar` ainda não
+-- existe). Se vens do mundo antigo, o
+-- `db/migracao-catalogo-para-winecatalog.sql` do repo WineCatalog já
+-- reescreve esta função sozinha — este ficheiro é para a base ficar igual
+-- ao que está escrito, e para quem montar isto de novo.
+--
+-- ⚠ O deploy da `vinho-info.ts` tem de acompanhar: ela fala ao catálogo
+-- por RPC e o `Accept-Profile`/`Content-Profile` dela mudou de "catalogo"
+-- para "winecatalog". Enquanto não for redeployada, ela FALHA CALADA — o
+-- `try/catch` à volta do catálogo engole tudo, por desenho (o catálogo é
+-- uma poupança, não uma dependência). Não se vê erro nenhum; vê-se a conta
+-- da IA a subir.
 -- =====================================================================
-
-CREATE SCHEMA IF NOT EXISTS catalogo;
-
--- A service_role não tem acesso a schemas fora de `public` só por ser
--- service_role — BYPASSRLS é sobre policies, não sobre GRANTs. Sem isto,
--- as três Edge Functions falham com 42501 e sem uma palavra do lado de
--- quem chama. (Mesma nota que já está no `wineselection/db/schema.sql`.)
-GRANT USAGE ON SCHEMA catalogo TO service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA catalogo TO service_role;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA catalogo TO service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA catalogo GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA catalogo GRANT USAGE, SELECT ON SEQUENCES TO service_role;
-
--- ---------------------------------------------------------------------
--- A tabela
---
--- A ficha é um `jsonb` e não vinte colunas de propósito: quem a lê e quem
--- a escreve são Edge Functions que já trabalham em JSON, e a JUNÇÃO (ver
--- `catalogo.juntar`) percorre os campos um a um — com colunas, essa função
--- eram vinte atribuições escritas à mão que alguém se esquecia de
--- acrescentar no dia em que aparecesse um campo novo.
---
--- `origens` é a proveniência CAMPO A CAMPO: {campo: {o:origem, f:força,
--- em:quando}}. É o que permite juntar duas leituras sem uma apagar a
--- outra às cegas — uma pesquisa a sério não deve ser substituída por uma
--- extração mais fraca, e nada deve substituir o que alguém confirmou por
--- ter a garrafa na mão.
--- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS catalogo.vinhos (
-  id            bigint GENERATED BY DEFAULT AS IDENTITY,
-  -- DUAS identidades por linha, e é preciso que sejam duas: ver
-  -- `catalogo.achar()`. `chave` é o nome MAIS o produtor; `chave_nome` é só
-  -- o nome, como vem escrito numa carta de restaurante.
-  chave         text NOT NULL,          -- nome+produtor+ano ("crasto-reserva|2019")
-  chave_base    text NOT NULL,          -- o mesmo sem o ano
-  chave_nome    text,                   -- só o nome+ano; NULL quando o nome
-                                        -- sozinho não distingue nada
-  base_nome     text,                   -- o mesmo sem o ano
-  nome          text NOT NULL DEFAULT '',
-  produtor      text NOT NULL DEFAULT '',
-  ano           integer,
-  ficha         jsonb NOT NULL DEFAULT '{}'::jsonb,   -- os factos do vinho
-  origens       jsonb NOT NULL DEFAULT '{}'::jsonb,   -- proveniência campo a campo
-  fontes        jsonb NOT NULL DEFAULT '[]'::jsonb,   -- [{titulo,url}], no máximo 8
-  vezes         integer NOT NULL DEFAULT 0,           -- quantas vezes foi escrito (diagnóstico)
-  visto_em      timestamptz NOT NULL DEFAULT now(),   -- última vez que serviu uma pergunta
-  criado_em     timestamptz NOT NULL DEFAULT now(),
-  atualizado_em timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT vinhos_pkey PRIMARY KEY (id),
-  CONSTRAINT vinhos_chave_uniq UNIQUE (chave)
-);
-
-CREATE INDEX IF NOT EXISTS vinhos_chave_base_idx ON catalogo.vinhos (chave_base);
-CREATE INDEX IF NOT EXISTS vinhos_chave_nome_idx ON catalogo.vinhos (chave_nome);
-CREATE INDEX IF NOT EXISTS vinhos_base_nome_idx  ON catalogo.vinhos (base_nome);
-CREATE INDEX IF NOT EXISTS vinhos_visto_idx      ON catalogo.vinhos (visto_em DESC);
-
--- RLS ligada e SEM UMA ÚNICA POLICY, de propósito: isto tranca a tabela a
--- toda a gente menos à service_role (que passa por cima da RLS). Não há
--- GRANT nenhum a `anon`/`authenticated` — nem de leitura. Quem alimenta o
--- catálogo do lado do browser é o trigger da Garrafeira, e esse é
--- SECURITY DEFINER: escreve sem que a pessoa tenha de poder escrever aqui.
---
--- Porquê tão fechado, se o que está cá dentro não é de ninguém: a LISTA de
--- vinhos que passaram por aqui diz alguma coisa sobre o que as pessoas têm
--- em casa, mesmo que cada linha à parte não diga. Uma leitura por nome
--- (que é tudo o que as apps precisam) não é a mesma coisa que poder ler a
--- lista toda, e é só a primeira que se abre — pela Edge Function.
-ALTER TABLE catalogo.vinhos ENABLE ROW LEVEL SECURITY;
-
--- ---------------------------------------------------------------------
--- A CHAVE: como é que dois vinhos são o mesmo vinho
---
--- ISTO VIVE AQUI E SÓ AQUI, de propósito. As Edge Functions das duas apps
--- nunca calculam uma chave: mandam nome, produtor e ano, e é o SQL que
--- decide o que é o mesmo vinho (`catalogo.procurar`, `catalogo.juntar`).
--- A primeira versão tinha o algoritmo repetido em TypeScript nos três
--- lados, com um aviso grande a dizer para os manter iguais — e um aviso
--- desses é uma dívida à espera: no dia em que um deles divergisse, o
--- catálogo PARTIA-SE EM DOIS em silêncio (as mesmas garrafas em linhas
--- diferentes, ninguém a acertar com a do outro) e a única coisa que se
--- notava era a conta da IA a não descer. Uma cópia só não pode divergir.
---
--- As regras, e porquê:
---   · sem acentos e em minúsculas — "Rosé" e "rose" são o mesmo vinho;
---   · o ANO sai do nome (fica no seu campo) — a carta escreve "Papa Figos
---     2020" e a garrafeira escreve nome + ano em campos separados;
---   · abreviaturas de carta expandidas (qta. -> quinta);
---   · as palavras VAZIAS ("de", "do", "vinho") saem — não distinguem nada;
---   · as palavras de CASA saem também (quinta, herdade, adega, monte…):
---     é o que faz "Crasto" (lido numa carta) encontrar "Quinta do Crasto"
---     (escrito numa garrafeira). São o ruído dos nomes portugueses;
---   · mas as palavras que QUALIFICAM o vinho ficam (reserva, grande,
---     velhas, garrafeira, superior, colheita): "Quinta do Crasto" e
---     "Quinta do Crasto Reserva" são vinhos diferentes, com preços
---     diferentes, e juntá-los era responder a uma pergunta com o outro;
---   · os tokens são ORDENADOS e sem repetições, e o produtor entra no
---     mesmo saco do nome: "Crasto Reserva" (só nome, vindo da carta) e
---     nome="Reserva" + produtor="Quinta do Crasto" (vindo da garrafeira)
---     têm de cair na mesma chave, e caem.
--- ---------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION catalogo.tokens(p_texto text)
-  RETURNS text[] LANGUAGE sql IMMUTABLE
-AS $$
-  -- Duas voltas, e a ORDEM importa: primeiro expandem-se as abreviaturas,
-  -- só DEPOIS se deitam fora as palavras que não distinguem nada. Ao
-  -- contrário, "Qta. do Vallado" dava tokens {quinta,vallado} (o "qta" não
-  -- está na lista das que saem, e já ia expandido quando ninguém olhava) e
-  -- "Quinta do Vallado" dava {vallado} — a MESMA garrafa com duas chaves,
-  -- que é exatamente a avaria que este catálogo não pode ter.
-  SELECT COALESCE(array_agg(DISTINCT t ORDER BY t), ARRAY[]::text[])
-  FROM (
-    SELECT CASE w
-             WHEN 'qta'  THEN 'quinta' WHEN 'qtas' THEN 'quintas'
-             WHEN 'hrd'  THEN 'herdade'
-             WHEN 'sto'  THEN 'santo'  WHEN 'sta'  THEN 'santa'
-             ELSE w
-           END AS t
-    FROM regexp_split_to_table(
-           regexp_replace(
-             regexp_replace(
-               -- NFD parte "é" em "e" + acento, e o intervalo apaga o acento.
-               lower(regexp_replace(normalize(COALESCE(p_texto, ''), NFD),
-                                    U&'[\0300-\036F]', '', 'g')),
-               '\m(19|20)[0-9]{2}\M', ' ', 'g'    -- a colheita não entra no nome
-             ),
-             '[^a-z0-9]+', ' ', 'g'
-           ), '\s+') AS w
-    WHERE w <> ''
-  ) x
-  WHERE t <> ''
-    -- vazias: não distinguem vinho nenhum
-    AND t NOT IN ('de','do','da','dos','das','e','o','a','os','as','um','uma',
-                  'vinho','vinhos','wine')
-    -- de casa: é o ruído dos nomes portugueses, e é o que impede
-    -- "Crasto" de encontrar "Quinta do Crasto"
-    AND t NOT IN ('quinta','quintas','herdade','casa','adega','monte','vinha',
-                  'vinhas','conde','dom','santo','santa','sociedade','agricola',
-                  'soc','lda');
-$$;
-
--- Nota sobre a COR: "tinto", "branco" e "rose" NÃO saem da chave, ao
--- contrário do que a primeira versão fazia. O Papa Figos branco não é o
--- Papa Figos tinto — castas diferentes, nota diferente, preço diferente —
--- e juntá-los era responder a uma pergunta com a outra. O preço disto é
--- que um vinho gravado na Garrafeira como nome="Papa Figos" + tipo=Branco
--- (a cor numa COLUNA, fora do nome) não encontra o "Papa Figos Branco"
--- lido numa carta: são chaves diferentes. É uma chamada à IA que se perde,
--- e perder uma chamada é sempre melhor do que devolver o vinho errado.
-
--- O PARÊNTESIS DO PRODUTOR NÃO ENTRA NA CHAVE. Quem escreve "Herdade dos
--- Grous (Monte do Trevo)" ou "Quinta do Vesúvio (Symington Family Estates)"
--- está a deixar uma NOTA a si próprio — a sociedade que o detém, a marca
--- do grupo — e não a dizer outro produtor. Deixá-la entrar dava
--- "grous-harvested-moon-trevo" a quem escreveu a nota e
--- "grous-harvested-moon" a quem não escreveu: o MESMO vinho em duas
--- linhas, cada uma a pagar a sua ida à IA. Tira-se só do PRODUTOR, nunca
--- do NOME: um "(Branco)" no nome é a cor, e a cor não sai da chave (ver a
--- nota acima).
-CREATE OR REPLACE FUNCTION catalogo.chave_base(p_nome text, p_produtor text)
-  RETURNS text LANGUAGE sql IMMUTABLE
-AS $$
-  SELECT array_to_string(
-    catalogo.tokens(
-      COALESCE(p_nome,'') || ' ' ||
-      regexp_replace(COALESCE(p_produtor,''), '\s*\([^)]*\)', ' ', 'g')
-    ), '-');
-$$;
-
-CREATE OR REPLACE FUNCTION catalogo.chave(p_nome text, p_produtor text, p_ano integer)
-  RETURNS text LANGUAGE sql IMMUTABLE
-AS $$
-  SELECT catalogo.chave_base(p_nome, p_produtor) || '|' || COALESCE(p_ano::text, '');
-$$;
-
--- ---------------------------------------------------------------------
--- ACHAR: as DUAS identidades de cada vinho, e porque é que são duas
---
--- O mesmo vinho chega aqui escrito de duas maneiras, e nenhuma está
--- errada:
---   · numa GARRAFEIRA está partido em campos — nome "Barca Velha",
---     produtor "Casa Ferreirinha";
---   · numa CARTA de restaurante está escrito de corrida — "Barca Velha",
---     e o produtor não aparece em lado nenhum.
--- Juntar o produtor ao nome para fazer a chave (que é o que é preciso
--- fazer, senão um vinho chamado "Reserva" casava com todos os outros
--- "Reserva" do mundo) dá "barca-ferreirinha-velha" de um lado e
--- "barca-velha" do outro: chaves diferentes, e o catálogo a nunca
--- responder a uma carta — que era metade da razão de ele existir.
---
--- Daí cada linha guardar as duas: `chave` (nome+produtor) e `chave_nome`
--- (só o nome). Uma pergunta calcula também as suas duas, e casa se
--- QUALQUER uma bater com QUALQUER uma das da linha. Não é contenção de
--- tokens (a `verificarCoerencia` da WineSelection faz isso, e ali está
--- certo): contenção juntava "Quinta do Crasto" com "Quinta do Crasto
--- Reserva", que são vinhos diferentes com preços diferentes — e num
--- catálogo isso não é um aviso a mais, é a nota errada dada como certa.
---
--- A trave de segurança: um nome que sozinho não distinga nada NÃO ganha
--- `chave_nome` (fica NULL). "Reserva", "Tinto", "Grande Reserva" — se
--- depois de tirar as palavras de casa só sobram qualificadores, o nome
--- por si não é identidade nenhuma, e deixá-lo casar dava o "Reserva" de
--- um produtor a responder pelo "Reserva" de outro.
--- ---------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION catalogo.base_nome(p_nome text)
-  RETURNS text LANGUAGE sql IMMUTABLE
-AS $$
-  SELECT CASE
-    WHEN EXISTS (
-      SELECT 1 FROM unnest(catalogo.tokens(p_nome)) t
-       WHERE t NOT IN ('reserva','grande','garrafeira','colheita','selecionada',
-                       'seleccionada','velhas','superior','especial','premium',
-                       'tinto','branco','rose','doce','seco','bruto','meio',
-                       'unoaked','barrica','madeira','antiga','velho','novo')
-    )
-    THEN array_to_string(catalogo.tokens(p_nome), '-')
-    ELSE NULL      -- só qualificadores: não é identidade nenhuma
-  END;
-$$;
-
-CREATE OR REPLACE FUNCTION catalogo.chave_nome(p_nome text, p_ano integer)
-  RETURNS text LANGUAGE sql IMMUTABLE
-AS $$
-  SELECT catalogo.base_nome(p_nome) || '|' || COALESCE(p_ano::text, '');
-$$;
-
--- Devolve o id da linha deste vinho, ou NULL. `p_exigir_ano`:
---   true  -> só a colheita pedida (é o que `juntar` precisa: escrever no
---            ano errado era estragar duas linhas de uma vez);
---   false -> qualquer colheita do mesmo vinho, a mais preenchida primeiro
---            (é o que `procurar` precisa quando o ano pedido não existe).
--- `p_excluir` deixa de fora uma linha: é como o `procurar` vai buscar a
--- colheita IRMÃ sem voltar a apanhar a que já tem na mão.
-DROP FUNCTION IF EXISTS catalogo.achar(text, text, integer, boolean);
-CREATE OR REPLACE FUNCTION catalogo.achar(
-  p_nome text, p_produtor text, p_ano integer, p_exigir_ano boolean DEFAULT true,
-  p_excluir bigint DEFAULT NULL
-) RETURNS bigint
-  LANGUAGE sql STABLE
-  SET search_path TO 'catalogo', 'public'
-AS $$
-  SELECT v.id FROM catalogo.vinhos v
-   WHERE (p_excluir IS NULL OR v.id <> p_excluir)
-     AND CASE WHEN p_exigir_ano THEN
-           -- as quatro combinações das duas chaves de cada lado
-           v.chave = catalogo.chave(p_nome, p_produtor, p_ano)
-           OR (catalogo.chave_nome(p_nome, p_ano) IS NOT NULL
-               AND v.chave = catalogo.chave_nome(p_nome, p_ano))
-           OR (v.chave_nome IS NOT NULL
-               AND v.chave_nome IN (catalogo.chave(p_nome, p_produtor, p_ano),
-                                    catalogo.chave_nome(p_nome, p_ano)))
-         ELSE
-           v.chave_base = catalogo.chave_base(p_nome, p_produtor)
-           OR (catalogo.base_nome(p_nome) IS NOT NULL
-               AND v.chave_base = catalogo.base_nome(p_nome))
-           OR (v.base_nome IS NOT NULL
-               AND v.base_nome IN (catalogo.chave_base(p_nome, p_produtor),
-                                   catalogo.base_nome(p_nome)))
-         END
-   ORDER BY (SELECT count(*) FROM jsonb_object_keys(v.ficha)) DESC,
-            v.ano DESC NULLS LAST
-   LIMIT 1;
-$$;
-
--- ---------------------------------------------------------------------
--- Campos VOLÁTEIS: os que envelhecem
---
--- As castas de um vinho não mudam; a nota do Vivino e o preço de mercado
--- mudam. Quem lê o catálogo trata um campo volátil com mais de N dias como
--- se não estivesse lá (e vai à IA buscá-lo); os outros não expiram nunca —
--- pagar outra vez para saber que o Barca Velha é do Douro é dinheiro
--- deitado fora.
---
--- São também os campos que NÃO se aproveitam de outra colheita: ver
--- `catalogo.procurar`.
---
--- Repara no que NÃO está aqui nem em lado nenhum do catálogo: o
--- "barato/justo/caro" da WineSelection. Esse não é volátil — é de OUTRA
--- COISA: é um juízo sobre o preço de UMA CARTA, não sobre o vinho. O mesmo
--- Papa Figos é barato a 22 € e caro a 45 €, e nem o vinho mudou nem
--- envelheceu nada. O que é do vinho, e entra, é o `preco_medio` (o preço
--- de mercado); a comparação com a carta que está à frente refaz-se sempre,
--- em código, na `verificar-vinhos`.
--- ---------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION catalogo.volatil(p_campo text)
-  RETURNS boolean LANGUAGE sql IMMUTABLE
-AS $$
-  SELECT COALESCE(p_campo, '') IN (
-    'vivino_nota', 'vivino_avaliacoes', 'vivino_url',
-    'preco_medio', 'imagem_url'
-  );
-$$;
-
--- ---------------------------------------------------------------------
--- A FORÇA de cada origem: quem é que ganha quando duas leituras discordam
---
--- Não é uma opinião sobre quem é mais inteligente — é sobre o que cada uma
--- teve à frente quando respondeu:
---   3  alguém tem a garrafa em casa e confirmou a ficha campo a campo
---      (a Garrafeira nunca grava uma leitura da IA sem um clique);
---   3  a `verificar-vinhos` — pesquisa Google a sério, pedida à mão para
---      um vinho escolhido, que é o mais caro que aqui se paga;
---   2  as pesquisas normais das duas apps (grounding search, ou pesquisa
---      externa + extração);
---   1  um vinho escrito à mão numa garrafeira que ninguém preencheu — vale
---      para encher um campo vazio, nunca para tapar uma pesquisa;
---   0  tudo o resto — E É AQUI QUE ESTÁ O PONTO: a `pontuacaoAprox` da
---      WineSelection (a estimativa de memória do modelo, sem pesquisa
---      nenhuma) tem de dar 0 e NUNCA pode entrar no catálogo. Toda a
---      WineSelection está construída à volta de não disfarçar uma
---      estimativa de verificação; deixá-la entrar aqui era pior do que
---      isso — era espalhá-la pelas duas apps com ar de facto pesquisado,
---      e depois já ninguém sabia de onde tinha vindo.
--- ---------------------------------------------------------------------
--- A FORÇA É DA ORIGEM **E DO CAMPO**, e a segunda metade não é um
--- pormenor: é o que impede o catálogo de tomar por facto tudo o que
--- alguém escreveu à mão.
---
--- Quem tem a garrafa em casa sabe melhor do que qualquer pesquisa o que
--- está no RÓTULO: as castas, a cor, o teor, a região, a menção. Isso vale
--- 3, e é a razão de a Garrafeira estar lá em cima.
---
--- Mas ninguém sabe a nota do Vivino nem o preço de mercado por ter a
--- garrafa na mão — esses lêem-se num site, e quem os escreve na sua
--- garrafeira está a copiar (ou a lembrar-se, ou a enganar-se). A dar-lhes
--- a mesma força de uma pesquisa a sério, um número escrito à pressa
--- tapava a `verificar-vinhos` para toda a gente e para sempre; e como
--- estes campos entram no catálogo por uma app onde CADA UM ESCREVE O QUE
--- QUISER na sua garrafeira, isto não é uma hipótese remota, é o caminho
--- normal. Por isso um campo volátil vindo de uma garrafeira vale 2: chega
--- para encher um campo vazio e para se manter enquanto ninguém pesquisou,
--- e perde para a pesquisa a sério no dia em que ela existir.
---
--- Repara que a distinção é a MESMA de `catalogo.volatil`, e é a mesma
--- ideia por dois lados: o que envelhece é também o que não se sabe por
--- ter a garrafa à frente.
-DROP FUNCTION IF EXISTS catalogo.forca(text);
-CREATE OR REPLACE FUNCTION catalogo.forca(p_origem text, p_campo text DEFAULT NULL)
-  RETURNS integer LANGUAGE sql IMMUTABLE
-AS $$
-  SELECT CASE
-    WHEN COALESCE(p_origem,'') = 'garrafeira' AND catalogo.volatil(p_campo) THEN 2
-    ELSE CASE COALESCE(p_origem, '')
-      WHEN 'garrafeira'          THEN 3
-      WHEN 'ws-verificacao'      THEN 3
-      WHEN 'vinho-info-premium'  THEN 2
-      WHEN 'vinho-info-gratis'   THEN 2
-      WHEN 'ws-sugestao'         THEN 2
-      WHEN 'garrafeira-bruto'    THEN 1
-      ELSE 0
-    END
-  END;
-$$;
-
--- ---------------------------------------------------------------------
--- JUNTAR: escrever no catálogo sem apagar o que já lá estava
---
--- Campo a campo: entra se o campo estava vazio, ou se quem escreve agora
--- vem de uma origem tão forte ou mais forte do que a que lá pôs o valor.
--- O que vem vazio ('', null, [], {}) nunca entra — "não sei" não é uma
--- resposta que valha a pena guardar, e a apagar uma que valia era o pior
--- que esta função podia fazer.
---
--- SECURITY DEFINER porque quem a chama do lado do browser é o trigger da
--- Garrafeira, em nome de uma pessoa que não tem (nem deve ter) direito de
--- escrita nesta tabela.
--- ---------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION catalogo.juntar(
-  p_nome text, p_produtor text, p_ano integer,
-  p_ficha jsonb, p_origem text, p_fontes jsonb DEFAULT '[]'::jsonb
-) RETURNS bigint
-  LANGUAGE plpgsql SECURITY DEFINER
-  SET search_path TO 'catalogo', 'public'
-AS $$
-DECLARE
-  -- A da ORIGEM, só para a guarda de entrada: a que decide campo a
-  -- campo calcula-se DENTRO do ciclo, que a força é da origem E do campo.
-  v_forca   integer := catalogo.forca(p_origem);
-  v_fcampo  integer;
-  v_chave   text    := catalogo.chave(p_nome, p_produtor, p_ano);
-  v_base    text    := catalogo.chave_base(p_nome, p_produtor);
-  v_cnome   text    := catalogo.chave_nome(p_nome, p_ano);
-  v_bnome   text    := catalogo.base_nome(p_nome);
-  v_id      bigint;
-  v_ficha   jsonb;
-  v_origens jsonb;
-  v_fontes  jsonb;
-  v_mexeu   boolean := false;
-  k         text;
-  v         jsonb;
-  v_ant     integer;
-BEGIN
-  -- Sem força não entra (ver `catalogo.forca`), e sem tokens não há
-  -- identidade nenhuma: um nome que se reduza a "quinta" não é um vinho,
-  -- é uma palavra, e casaria com tudo.
-  IF v_forca <= 0 OR v_base = '' OR p_ficha IS NULL OR jsonb_typeof(p_ficha) <> 'object' THEN
-    RETURN NULL;
-  END IF;
-
-  -- A linha deste vinho pode já existir escrita da OUTRA maneira (com ou
-  -- sem produtor) — ver `catalogo.achar`. Sem isto, cada app criava a sua
-  -- linha do mesmo vinho e nenhuma via a da outra: um catálogo partilhado
-  -- que não partilhava nada.
-  v_id := catalogo.achar(p_nome, COALESCE(p_produtor,''), p_ano, true);
-
-  IF v_id IS NULL THEN
-    INSERT INTO catalogo.vinhos (chave, chave_base, chave_nome, base_nome, nome, produtor, ano)
-    VALUES (v_chave, v_base, v_cnome, v_bnome,
-            COALESCE(p_nome,''), COALESCE(p_produtor,''), p_ano)
-    ON CONFLICT (chave) DO NOTHING;
-    -- Duas escritas ao mesmo tempo: quem perdeu o INSERT vai buscar a
-    -- linha de quem ganhou em vez de desistir.
-    SELECT v.id INTO v_id FROM catalogo.vinhos v WHERE v.chave = v_chave;
-  END IF;
-  IF v_id IS NULL THEN RETURN NULL; END IF;
-
-  SELECT v.ficha, v.origens, v.fontes
-    INTO v_ficha, v_origens, v_fontes
-    FROM catalogo.vinhos v WHERE v.id = v_id FOR UPDATE;
-
-  FOR k, v IN SELECT key, value FROM jsonb_each(p_ficha) LOOP
-    CONTINUE WHEN v IS NULL
-                  OR jsonb_typeof(v) = 'null'
-                  OR v = '""'::jsonb OR v = '[]'::jsonb OR v = '{}'::jsonb;
-    v_fcampo := catalogo.forca(p_origem, k);
-    v_ant    := COALESCE((v_origens -> k ->> 'f')::integer, 0);
-    IF v_fcampo >= v_ant THEN
-      v_ficha   := v_ficha   || jsonb_build_object(k, v);
-      v_origens := v_origens || jsonb_build_object(
-        k, jsonb_build_object('o', p_origem, 'f', v_fcampo, 'em', now())
-      );
-      v_mexeu := true;
-    END IF;
-  END LOOP;
-
-  -- As fontes acumulam-se, sem repetir o mesmo URL, e ficam pelas 8 —
-  -- são para se poder ir ver de onde veio isto, não um arquivo.
-  IF p_fontes IS NOT NULL AND jsonb_typeof(p_fontes) = 'array' THEN
-    SELECT COALESCE(jsonb_agg(f), '[]'::jsonb) INTO v_fontes FROM (
-      SELECT DISTINCT ON (f ->> 'url') f
-        FROM jsonb_array_elements(v_fontes || p_fontes) f
-       WHERE COALESCE(f ->> 'url', '') <> ''
-       ORDER BY (f ->> 'url')
-       LIMIT 8
-    ) x;
-  END IF;
-
-  UPDATE catalogo.vinhos SET
-    ficha    = v_ficha,
-    origens  = v_origens,
-    fontes   = v_fontes,
-    -- O nome mais COMPRIDO fica: entre "Crasto" (lido de uma carta ao
-    -- lume de vela) e "Quinta do Crasto Reserva", quem abrir o catálogo
-    -- para perceber uma linha quer ver o segundo.
-    nome     = CASE WHEN length(COALESCE(p_nome,'')) > length(nome) THEN p_nome ELSE nome END,
-    produtor = CASE WHEN produtor = '' THEN COALESCE(p_produtor,'') ELSE produtor END,
-    ano      = COALESCE(ano, p_ano),
-    -- Uma linha nascida de uma carta não tem produtor, e uma nascida de uma
-    -- garrafeira não tem a chave curta. Cada escrita acrescenta a que
-    -- faltar — é o que faz as duas apps convergirem na mesma linha em vez
-    -- de se encontrarem por acaso.
-    chave_nome = COALESCE(chave_nome, v_cnome),
-    base_nome  = COALESCE(base_nome,  v_bnome),
-    vezes    = vezes + 1,
-    atualizado_em = CASE WHEN v_mexeu THEN now() ELSE atualizado_em END
-  WHERE id = v_id;
-
-  RETURN v_id;
-END;
-$$;
-
--- ---------------------------------------------------------------------
--- PROCURAR: o que é que já se sabe deste vinho
---
--- Devolve um objeto (ou NULL). Primeiro a colheita exata; se não houver,
--- outra colheita do mesmo vinho.
---
--- E é aqui que estão as DUAS perguntas diferentes que parecem uma só:
---
---   · "quero o Papa Figos de 2019" e o catálogo só tem o de 2021 — então
---     os factos estáveis servem (as castas de um Papa Figos são as mesmas
---     nos dois anos) mas a NOTA e o PREÇO não: esses são da colheita, e
---     dar a nota de 2021 a quem perguntou por 2019 era inventar uma;
---
---   · "quero o Papa Figos" e mais nada — que é como as cartas de
---     restaurante vêm, e a WineSelection lê cartas. Aqui não há colheita
---     errada nenhuma: quem pergunta não tem ano, e a nota de uma colheita
---     recente é a melhor resposta que existe (é também a única que a
---     alternativa — a estimativa de memória do modelo — daria, e essa nem
---     sequer olha para nada). Fica tudo, e devolve-se o `ano` para quem
---     mostra poder dizer de que colheita é a nota.
---
--- A primeira versão tratava as duas da mesma maneira e cortava a nota nas
--- duas: o resultado era um catálogo que nunca respondia a uma carta.
---
--- `p_idade_dias` corta os campos voláteis velhos (ver `catalogo.volatil`):
--- vêm de fora como se não estivessem lá, e quem perguntou vai à IA só por
--- esses.
--- ---------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION catalogo.procurar(
-  p_nome text, p_produtor text, p_ano integer, p_idade_dias integer DEFAULT 30
-) RETURNS jsonb
-  LANGUAGE plpgsql SECURITY DEFINER
-  SET search_path TO 'catalogo', 'public'
-AS $$
-DECLARE
-  v_id    bigint;
-  r       catalogo.vinhos%ROWTYPE;
-  r2      catalogo.vinhos%ROWTYPE;   -- a colheita irmã, quando é precisa
-  v_irmao bigint;
-  v_exato boolean := true;
-  v_outra boolean;            -- pediram uma colheita E esta não é essa
-  v_corte timestamptz := now() - make_interval(days => GREATEST(COALESCE(p_idade_dias, 30), 0));
-  v_ficha jsonb;
-  v_orig  jsonb;
-  v_empr  jsonb := '[]'::jsonb;      -- campos vindos de outra colheita
-  k       text;
-BEGIN
-  IF catalogo.chave_base(p_nome, p_produtor) = '' THEN RETURN NULL; END IF;
-
-  v_id := catalogo.achar(p_nome, COALESCE(p_produtor,''), p_ano, true);
-  IF v_id IS NULL THEN
-    -- Sem a colheita pedida, serve outra do mesmo vinho — a mais
-    -- preenchida, e em empate a mais recente. O que ela pode ou não pode
-    -- responder decide-se a seguir, no `v_outra`.
-    v_exato := false;
-    v_id := catalogo.achar(p_nome, COALESCE(p_produtor,''), p_ano, false);
-  END IF;
-  IF v_id IS NULL THEN RETURN NULL; END IF;
-
-  SELECT * INTO r FROM catalogo.vinhos v WHERE v.id = v_id;
-  IF r.id IS NULL THEN RETURN NULL; END IF;
-
-  v_outra := p_ano IS NOT NULL AND r.ano IS DISTINCT FROM p_ano;
-
-  v_ficha := r.ficha;
-  v_orig  := r.origens;
-  FOR k IN SELECT key FROM jsonb_each(r.ficha) LOOP
-    IF catalogo.volatil(k)
-       AND (v_outra
-            OR COALESCE((r.origens -> k ->> 'em')::timestamptz, r.criado_em) < v_corte) THEN
-      v_ficha := v_ficha - k;
-    END IF;
-  END LOOP;
-
-  -- A COLHEITA CERTA NÃO PODE TAPAR O QUE A IRMÃ SABE.
-  --
-  -- Achar a linha do ano pedido e ficar por aí parece o mais óbvio, e é o
-  -- que estava — mas uma linha do ano certo pode ser um espelho vazio (o
-  -- vinho que alguém acabou de escrever na sua garrafeira, sem mais nada)
-  -- enquanto a de 2022 tem dezassete campos. O que se via era o catálogo
-  -- a responder "não sei" com a resposta ao lado, e a IA a ser paga na
-  -- mesma. Foi o que aconteceu ao Grous Moon Harvested.
-  --
-  -- Por isso: o que a linha CERTA sabe manda sempre, e só o que lhe FALTA
-  -- se vai pedir emprestado à irmã — e apenas os campos ESTÁVEIS. As
-  -- castas de um Papa Figos são as mesmas em 2019 e em 2021; a nota do
-  -- Vivino e o preço não são, e esses nunca atravessam colheitas (é a
-  -- mesma regra do `v_outra` aqui em cima, e não pode ter duas versões).
-  IF v_exato THEN
-    v_irmao := catalogo.achar(p_nome, COALESCE(p_produtor,''), p_ano, false, r.id);
-    IF v_irmao IS NOT NULL THEN
-      SELECT * INTO r2 FROM catalogo.vinhos v WHERE v.id = v_irmao;
-      FOR k IN SELECT key FROM jsonb_each(r2.ficha) LOOP
-        IF NOT catalogo.volatil(k) AND NOT (v_ficha ? k) THEN
-          v_ficha := v_ficha || jsonb_build_object(k, r2.ficha -> k);
-          v_orig  := v_orig  || jsonb_build_object(k, COALESCE(r2.origens -> k, '{}'::jsonb));
-          v_empr  := v_empr  || to_jsonb(k);
-        END IF;
-      END LOOP;
-    END IF;
-  END IF;
-
-  UPDATE catalogo.vinhos v SET visto_em = now() WHERE v.id = r.id;
-
-  RETURN jsonb_build_object(
-    'chave',    r.chave,
-    'nome',     r.nome,
-    'produtor', r.produtor,
-    'ano',      r.ano,
-    'ficha',    v_ficha,
-    'origens',  v_orig,
-    'fontes',   r.fontes,
-    'exato',    v_exato,
-    -- os campos estáveis que vieram de outra colheita (só para diagnóstico)
-    'emprestados', v_empr,
-    -- true: é a colheita pedida · false: é OUTRA · null: não se pediu ano
-    'mesmoAno', CASE WHEN p_ano IS NULL THEN NULL ELSE NOT v_outra END,
-    'atualizadoEm', r.atualizado_em
-  );
-END;
-$$;
-
--- Em lote, na MESMA ordem do pedido e com `null` onde não se sabe nada.
--- A WineSelection pergunta por uma carta inteira de uma vez (quarenta
--- vinhos): quarenta idas ao PostgREST por causa disso era trocar uma
--- chamada cara ao Gemini por quarenta baratas, e essa troca faz-se uma vez
--- só. `p_pedidos` é [{nome, produtor, ano}].
-CREATE OR REPLACE FUNCTION catalogo.procurar_lote(
-  p_pedidos jsonb, p_idade_dias integer DEFAULT 30
-) RETURNS jsonb
-  LANGUAGE sql SECURITY DEFINER
-  SET search_path TO 'catalogo', 'public'
-AS $$
-  SELECT COALESCE(jsonb_agg(
-           catalogo.procurar(
-             p ->> 'nome', COALESCE(p ->> 'produtor', ''),
-             CASE WHEN jsonb_typeof(p -> 'ano') = 'number' THEN (p ->> 'ano')::integer END,
-             p_idade_dias
-           ) ORDER BY i
-         ), '[]'::jsonb)
-    FROM jsonb_array_elements(
-           CASE WHEN jsonb_typeof(p_pedidos) = 'array' THEN p_pedidos ELSE '[]'::jsonb END
-         ) WITH ORDINALITY AS t(p, i);
-$$;
 
 -- ---------------------------------------------------------------------
 -- A Garrafeira alimenta o catálogo
 --
--- Um vinho que está numa garrafeira é a melhor fonte que há: alguém tem a
--- garrafa na mão. Mas só entra o que é do VINHO — nunca `notas` (as
--- minhas notas), nunca `imagem_path` (a fotografia tirada em casa, que
--- apanha a prateleira à volta), nunca `criado_por`, nunca o
--- `garrafeira_id`. Se um dia acrescentares uma coluna a
--- `garrafeira.vinhos`, a pergunta a fazer é essa: isto é sobre o VINHO ou
--- sobre QUEM O TEM? Só a primeira resposta entra aqui.
+-- Só entra o que é do VINHO — nunca `notas` (as minhas notas), nunca
+-- `imagem_path` (a fotografia tirada em casa, que apanha a prateleira à
+-- volta), nunca `criado_por`, nunca o `garrafeira_id`. Se um dia
+-- acrescentares uma coluna a `garrafeira.vinhos`, a pergunta a fazer é
+-- essa: isto é sobre o VINHO ou sobre QUEM O TEM? Só a primeira resposta
+-- entra aqui.
 -- ---------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION garrafeira.catalogar_vinho(p_vinho_id bigint)
   RETURNS bigint
   LANGUAGE plpgsql SECURITY DEFINER
-  SET search_path TO 'garrafeira', 'catalogo', 'public'
+  SET search_path TO 'garrafeira', 'winecatalog', 'public'
 AS $$
 DECLARE
   v       garrafeira.vinhos%ROWTYPE;
@@ -716,7 +107,7 @@ BEGIN
     'ai_resumo',         NULLIF(COALESCE(v.ai_resumo, ''), '')
   ));
 
-  RETURN catalogo.juntar(
+  RETURN winecatalog.juntar(
     v.nome, COALESCE(v.produtor, ''), v.ano, v_ficha,
     CASE WHEN v_curado THEN 'garrafeira' ELSE 'garrafeira-bruto' END,
     CASE WHEN jsonb_typeof(v.ai_fontes) = 'array' THEN v.ai_fontes ELSE '[]'::jsonb END
@@ -727,7 +118,7 @@ $$;
 CREATE OR REPLACE FUNCTION garrafeira.vinhos_catalogo()
   RETURNS trigger
   LANGUAGE plpgsql SECURITY DEFINER
-  SET search_path TO 'garrafeira', 'catalogo', 'public'
+  SET search_path TO 'garrafeira', 'winecatalog', 'public'
 AS $$
 BEGIN
   -- Nunca deita a gravação abaixo: alimentar o catálogo é um extra, e um
@@ -757,28 +148,20 @@ CREATE TRIGGER vinhos_catalogo
 -- cima. Por isso: numa base que já existe, corre `functions.sql` a seguir
 -- a este ficheiro (o mesmo passo que a migração 08 já pede).
 
+
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA garrafeira TO authenticated;
 
 -- ---------------------------------------------------------------------
--- Quem pode CHAMAR isto
---
--- O schema `catalogo` fica exposto na API (é assim que as Edge Functions
--- lhe falam), e uma função SECURITY DEFINER nasce com EXECUTE para PUBLIC.
--- As duas coisas juntas davam a qualquer pessoa com login um caminho
--- direto para `juntar` — ou seja, para carimbar o que lhe apetecesse com a
--- força de quem tem a garrafa na mão, e envenenar as duas apps de uma vez.
--- Daí o REVOKE: só a service_role (as Edge Functions) chama estas duas.
---
--- O trigger da Garrafeira continua a escrever, e continua sem precisar de
--- direito nenhum: `garrafeira.catalogar_vinho` é SECURITY DEFINER, por
--- isso quem chama `catalogo.juntar` é o dono da função, não a pessoa.
+-- As castas não vivem na linha do vinho (são uma tabela à parte, ver
+-- CLAUDE.md) e por isso o trigger de cima não as vê mudar — muito menos
+-- num INSERT, em que `definir_castas` só corre a seguir. O gancho que
+-- falta está DENTRO da `garrafeira.definir_castas`, em `functions.sql`,
+-- que é a fonte de verdade dela. Este ficheiro chegou a trazer uma segunda
+-- cópia dessa função, "para quem corre só este ficheiro" — e uma função
+-- escrita em dois sítios é uma que um dia diverge sem ninguém dar por
+-- isso. Por isso: numa base que já existe, corre `functions.sql` a seguir
+-- a este ficheiro.
 -- ---------------------------------------------------------------------
-REVOKE ALL ON FUNCTION catalogo.juntar(text, text, integer, jsonb, text, jsonb)   FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION catalogo.procurar(text, text, integer, integer)            FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION catalogo.procurar_lote(jsonb, integer)                     FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION catalogo.juntar(text, text, integer, jsonb, text, jsonb) TO service_role;
-GRANT EXECUTE ON FUNCTION catalogo.procurar(text, text, integer, integer)          TO service_role;
-GRANT EXECUTE ON FUNCTION catalogo.procurar_lote(jsonb, integer)                   TO service_role;
 
 -- ---------------------------------------------------------------------
 -- Arranque: leva para o catálogo o que já está nas garrafeiras
@@ -788,44 +171,3 @@ GRANT EXECUTE ON FUNCTION catalogo.procurar_lote(jsonb, integer)                
 -- centenas de vinhos é instantâneo.
 -- ---------------------------------------------------------------------
 -- SELECT count(garrafeira.catalogar_vinho(id)) FROM garrafeira.vinhos;
-
--- ---------------------------------------------------------------------
--- REPOSIÇÃO: pôr as linhas que já lá estão de acordo com as regras acima
---
--- As duas correm sempre e não fazem nada quando não há nada a fazer — é
--- de propósito: quem correr este ficheiro numa base já povoada não tem de
--- saber que houve uma mudança, e correr outra vez não estraga.
--- ---------------------------------------------------------------------
-
--- 1) As chaves de quem tem uma NOTA entre parêntesis no produtor. Foram
---    calculadas antes de o `chave_base` a deitar fora; sem isto ficavam
---    com a chave antiga para sempre e continuavam a não encontrar o mesmo
---    vinho escrito sem a nota. (Confirmado em produção: nenhuma delas
---    colide com outra linha — se um dia colidir, o UPDATE falha em vez de
---    fundir duas linhas às escondidas, que é o lado certo para onde
---    errar.)
-UPDATE catalogo.vinhos v SET
-  chave_base = catalogo.chave_base(v.nome, v.produtor),
-  chave      = catalogo.chave(v.nome, v.produtor, v.ano),
-  base_nome  = catalogo.base_nome(v.nome),
-  chave_nome = catalogo.chave_nome(v.nome, v.ano)
- WHERE v.produtor ~ '\(' 
-   AND v.chave_base IS DISTINCT FROM catalogo.chave_base(v.nome, v.produtor);
-
--- 2) A força já GRAVADA nos campos voláteis que vieram de uma garrafeira.
---    A `catalogo.forca` passou a dar-lhes 2, mas o 3 que ficou escrito no
---    `origens` no dia em que entraram continua a valer — e enquanto valer,
---    o catálogo está SELADO: nenhuma pesquisa a sério (que vale 3, ou 2)
---    consegue corrigir um número que alguém escreveu à mão. Era esse o
---    estado real desta base: as notas do Vivino e os preços de mercado
---    todos com origem 'garrafeira' e força 3.
-UPDATE catalogo.vinhos v SET origens = (
-  SELECT jsonb_object_agg(k, CASE
-           WHEN catalogo.volatil(k) AND o ->> 'o' = 'garrafeira'
-             THEN o || jsonb_build_object('f', catalogo.forca('garrafeira', k))
-           ELSE o END)
-    FROM jsonb_each(v.origens) e(k, o))
- WHERE EXISTS (
-   SELECT 1 FROM jsonb_each(v.origens) e(k, o)
-    WHERE catalogo.volatil(k) AND o ->> 'o' = 'garrafeira'
-      AND COALESCE((o ->> 'f')::integer, 0) > catalogo.forca('garrafeira', k));

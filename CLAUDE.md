@@ -37,7 +37,7 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   verdade do schema. `migracao-garrafeiras.sql` é a migração 07 (uma
   garrafeira por pessoa); `migracao-ia-planos.sql` é a 08 (planos de IA por
   utilizador) e, numa base existente, é seguida por `functions.sql`.
-  `catalogo-partilhado.sql` é a 12 e é a única que cria um schema que **não
+  `catalogo-partilhado.sql` é a 12 e era a única que criava um schema que **não
   é desta app**: o `catalogo`, partilhado com a WineSelection (ver secção
   própria). Também é seguida por `functions.sql`.
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
@@ -1061,7 +1061,9 @@ Há uma segunda app de vinhos no mesmo projeto Supabase — a **WineSelection**
 mesma pergunta ao Gemini sobre os mesmos vinhos, cada uma por sua conta. O
 schema **`catalogo`** é a memória comum: o que já se pesquisou (nas duas
 apps) e o que alguém já confirmou por ter a garrafa em casa. Fonte de
-verdade: `db/catalogo-partilhado.sql` (migração 12, ver `db/README.md`).
+verdade: **`db/catalogo.sql` no repo WineCatalog** — o catálogo mudou-se
+para o schema `winecatalog` em setembro de 2026, e deste lado só ficou o
+gancho (`db/catalogo-partilhado.sql`, migração 12, ver `db/README.md`).
 
 **Não é a cache do `vinho-info`.** `garrafeira.catalogo_vinhos_cache` é uma
 cache TÉCNICA de um pedido — mesma pergunta, mesmos campos, mesmo motor,
@@ -1100,7 +1102,7 @@ Como funciona, dos dois lados:
   dependência: se o RPC falhar, segue-se para a IA como sempre. Daí os
   `try/catch` a engolir tudo, e o `EXCEPTION WHEN OTHERS` no trigger.
 
-**Quem ganha quando duas leituras discordam** é a `catalogo.forca()`, e não
+**Quem ganha quando duas leituras discordam** é a `winecatalog.forca()`, e não
 é uma opinião sobre quem é mais inteligente — é sobre o que cada uma teve à
 frente: quem tem a garrafa em casa e a pesquisa Google a sério da
 `verificar-vinhos` valem 3; as pesquisas normais das duas apps valem 2; um
@@ -1120,7 +1122,7 @@ qualquer pesquisa as castas, a cor, o teor, a região, a menção — isso vale
 Vivino nem o preço de mercado por ter a garrafa na mão: esses lêem-se num
 site, e vindos de uma garrafeira valem **2** — chegam para encher um campo
 vazio, perdem para a `verificar-vinhos` no dia em que ela existir. É a
-mesma fronteira do `catalogo.volatil`, vista pelo outro lado: o que
+mesma fronteira do `winecatalog.volatil`, vista pelo outro lado: o que
 envelhece é também o que não se sabe por ter a garrafa à frente.
 
 O estado real desta base, antes disto, era esse: **todos** os 3104 campos
@@ -1134,7 +1136,7 @@ entrou.
 
 **A colheita é o que separa um facto de uma invenção.** As castas de um Papa
 Figos são as mesmas em 2019 e em 2021; a nota do Vivino e o preço não são.
-Por isso `catalogo.procurar` distingue duas perguntas que parecem uma:
+Por isso `winecatalog.procurar` distingue duas perguntas que parecem uma:
 "quero o de 2019" com só o de 2021 no catálogo devolve os factos estáveis e
 corta a nota; "quero o Papa Figos" e mais nada (que é como as cartas de
 restaurante vêm) devolve tudo e diz de que colheita é. A primeira versão

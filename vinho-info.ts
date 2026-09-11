@@ -156,7 +156,7 @@ async function cacheEscrever(
     });
   } catch (_) { /* não falha a resposta por causa da cache */ }
 }
-/* ── CATÁLOGO PARTILHADO (schema `catalogo`) ──
+/* ── CATÁLOGO PARTILHADO (schema `winecatalog`) ──
    A memória comum das duas apps de vinhos. Antes de pagar uma pesquisa,
    pergunta-se aqui se alguém já a fez — nesta app ou na WineSelection — ou
    se alguém já tem esta garrafa em casa com a ficha preenchida.
@@ -164,7 +164,7 @@ async function cacheEscrever(
    Duas coisas que não são detalhe:
    · a CHAVE (o que faz dois vinhos serem o mesmo vinho) vive só no SQL.
      Daqui vai o nome, o produtor e o ano em cru; quem decide é
-     `catalogo.procurar`. Repetir esse algoritmo aqui era garantir que um
+     `winecatalog.procurar`. Repetir esse algoritmo aqui era garantir que um
      dia divergia do da outra app e o catálogo se partia em dois em
      silêncio;
    · nada disto pode deitar uma procura abaixo. O catálogo é uma poupança,
@@ -184,12 +184,12 @@ async function catalogoRpc(fn: string, corpo: Record<string, unknown>, signal: A
     headers: {
       apikey: SB_SRV, Authorization: "Bearer " + SB_SRV,
       "Content-Type": "application/json",
-      "Content-Profile": "catalogo", "Accept-Profile": "catalogo",
+      "Content-Profile": "winecatalog", "Accept-Profile": "winecatalog",
     },
     body: JSON.stringify(corpo),
     signal,
   });
-  if (!r.ok) throw new Error(`catalogo ${fn} ${r.status}`);
+  if (!r.ok) throw new Error(`winecatalog ${fn} ${r.status}`);
   return await r.json();
 }
 
