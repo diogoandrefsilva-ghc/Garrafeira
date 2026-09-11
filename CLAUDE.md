@@ -40,6 +40,11 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `catalogo-partilhado.sql` é a 12 e é a única que cria um schema que **não
   é desta app**: o `catalogo`, partilhado com a WineSelection (ver secção
   própria). Também é seguida por `functions.sql`.
+  `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
+  (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
+  exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
+  sem login). Traz escrito o que NÃO se revoga e porquê; lê-o antes de
+  "arrumar" mais algum aviso do linter.
 - Não mexer à mão: `apple-touch-icon.png` (é gerado — ver "Ícones").
 
 ## Os cinco separadores (o ecrã inicial não é a lista)
@@ -1034,6 +1039,17 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   vinhos no primeiro dia, e um aviso que aparece sempre não se lê. Se a consulta falhar, não se avisa e procura-se na mesma:
   um soluço de rede não pode impedir alguém de procurar. No formulário de
   **vinho novo** não há aviso nenhum — ainda não há vinho para ter história.
+- **A COR diz-se ANTES de se procurar** (`iaCorGuard`). O `tipo` nasce
+  'Tinto' por omissão e a cor faz parte da identidade do vinho no catálogo
+  partilhado — um branco que ninguém corrigiu ia procurar (e gravar) com a
+  chave do tinto. A BD não consegue distinguir um 'Tinto' escolhido de um
+  'Tinto' por defeito, por isso a resposta é PERGUNTAR, uma vez, onde se
+  carrega em Procurar: no seletor de campos (`iaEscolher`) há uma linha
+  **Cor** no topo, já com a do vinho, e mudá-la ali grava-a no vinho; no
+  formulário de **vinho novo** o seletor nasce vazio ("— escolhe a cor —") e
+  o botão de procurar recusa sem ela, tal como já recusava sem o nome.
+  Gravar continua a aceitar o defeito — o que passou a ser obrigatório é
+  procurar, não guardar.
 - **Nada é gravado sem confirmação.** O resultado abre campo a campo
   (`iaMostrarResultado`), com o que está agora ao lado do que a IA propõe.
   Vêm marcados **só os campos vazios**: substituir o que alguém escreveu à

@@ -2846,7 +2846,10 @@ function abrirEditarVinho(id){
       <div id="e-ia-estado"></div>`:'<div class="note">A pesquisa por IA não está incluída no teu acesso. Pede ao admin para te atribuir um modo com IA.</div>'}
 
     <div class="mrow">
-      <div><label>Tipo</label><select id="e-tipo">${opts(TIPOS,o('tipo','Tinto'))}</select></div>
+      <div><label>Tipo</label><select id="e-tipo">${id
+        ? opts(TIPOS,o('tipo','Tinto'))
+        : '<option value="">— escolhe a cor —</option>'+opts(TIPOS,o('tipo',''))
+      }</select></div>
       <div><label>Estilo</label><select id="e-estilo">${opts(ESTILOS,o('estilo'))}</select></div>
     </div>
     <div class="mrow">
@@ -3371,10 +3374,19 @@ function iaEscolher(vinhoId){
       <span>${esc(c.rot)}${tem?'<i>já tem</i>':''}</span>
     </label>`;
   }).join('');
+  const optsCor=['<option value="">— escolhe a cor —</option>'].concat(
+    TIPOS.map(x=>`<option value="${esc(x)}"${v.tipo===x?' selected':''}>${esc(x)}</option>`)
+  ).join('');
   document.getElementById('modal-ia-in').innerHTML=`
     <div class="mtop"><div><h3>🔎 Procurar informação</h3>
       <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
       <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
+
+    <label>Cor</label>
+    <select id="ia-cor-sel">${optsCor}</select>
+    <div class="note" style="margin-bottom:10px">A cor é parte da identidade do vinho no catálogo
+      partilhado — um Papa Figos branco não é o tinto. Confirma-a antes de procurar; se a mudares
+      aqui, fica gravada no vinho.</div>
 
     <div class="aviso">Escolhe o que queres procurar. <b>Quanto menos pedires, melhor a procura</b> —
       o modelo concentra-se nisso em vez de andar atrás de tudo. Já vêm marcados os campos vazios.
@@ -3476,9 +3488,36 @@ function iaConfirmarRepetir(vinhoId,ult){
 // nessa altura o seletor já não está no ecrã para se lhe perguntar outra vez.
 let IA_ESC=null;
 
+// A COR ANTES DA PROCURA
+//
+// O `tipo` nasce 'Tinto' por omissão nesta app, e a cor faz parte da
+// identidade de um vinho no catálogo partilhado: um branco que ninguém
+// corrigiu ia procurar — e gravar — com a chave do tinto. Não há maneira de
+// a BD distinguir um 'Tinto' escolhido de um 'Tinto' por defeito, por isso
+// a resposta é perguntar: uma vez, no sítio onde se carrega em Procurar.
+// Devolve a cor confirmada, ou '' se ainda não há nenhuma.
+async function iaCorGuard(v){
+  const sel=document.getElementById('ia-cor-sel');
+  if(!sel)return v.tipo||'';        // chamado de fora do seletor
+  const cor=sel.value;
+  if(!cor){toast('Escolhe primeiro a cor do vinho',1);sel.focus();return '';}
+  if(cor===v.tipo)return cor;
+  // Optimista no `db` e desfaz se a rede falhar — o padrão de sempre.
+  const antes=v.tipo;
+  v.tipo=cor;
+  try{
+    await sbReq('PATCH',`vinhos?id=eq.${v.id}`,{tipo:cor});
+    renderLista();
+  }catch(e){
+    v.tipo=antes;toast('Não deu para gravar a cor',1);return '';
+  }
+  return cor;
+}
+
 async function iaProcurar(vinhoId){
   if(roGuard())return;
   const v=IDXV[vinhoId];if(!v)return;
+  if(!await iaCorGuard(v))return;
   // Se o seletor está aberto, é dele que vem a lista; se alguém chamar isto
   // de outro sítio, procura-se tudo (que era o comportamento de sempre).
   const escolhidos=iaEscSelecionados();
@@ -3542,6 +3581,11 @@ async function iaProcurarNovo(motor){
   if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
   const nome=document.getElementById('e-nome').value.trim();
   if(!nome){toast('Escreve primeiro o nome do vinho',1);document.getElementById('e-nome').focus();return;}
+  // A COR TEM DE SER DITA ANTES DE SE PROCURAR — ver `iaCorGuard`.
+  const elTipo=document.getElementById('e-tipo');
+  if(elTipo&&!elTipo.value){
+    toast('Escolhe primeiro a cor do vinho',1);elTipo.focus();return;
+  }
   const ano=inteiro(document.getElementById('e-ano').value);
   const btn=document.getElementById('e-btn-ia');
   const est=document.getElementById('e-ia-estado');
