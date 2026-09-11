@@ -150,8 +150,20 @@ Correr no SQL Editor:
 
 ### Migração 12 — catálogo partilhado com a WineSelection (já aplicada)
 
-`db/catalogo-partilhado.sql`. Cria o schema **`catalogo`**, que não é deste
-schema nem do da WineSelection: é dos dois. É a memória comum do que já se
+`db/catalogo-partilhado.sql`. Criou o schema **`catalogo`**, que não era
+deste schema nem do da WineSelection: era dos dois.
+
+> **Setembro de 2026 — o catálogo mudou de casa.** Passou a ser o schema
+> **`winecatalog`**, com a definição em `db/catalogo.sql` no repo
+> **WineCatalog** — uma app própria, com o seu admin
+> (`winecatalog.config.admin_email`, que não é o desta app) e com um ecrã
+> onde se vê o que lá está. O `catalogo-partilhado.sql` deste repo passou a
+> ser **só o gancho da Garrafeira**: a `catalogar_vinho` e o trigger, a
+> chamar `winecatalog.juntar`. A migração está em
+> `db/migracao-catalogo-para-winecatalog.sql` no repo WineCatalog, e leva
+> junto o redeploy da `vinho-info` (o `Accept-Profile` dela mudou).
+> O resto desta secção fica como estava: descreve por que é que o catálogo
+> existe, e isso não mudou. É a memória comum do que já se
 sabe sobre um vinho — o que a IA já procurou (nas duas apps) e o que alguém
 já confirmou por ter a garrafa em casa. Antes de pagar uma pesquisa,
 pergunta-se ali.
@@ -274,10 +286,13 @@ Numa base de dados limpa:
    reportar sucesso sem nunca chegarem a lado nenhum. O bypass de RLS
    (`BYPASSRLS`) só ignora *policies* — os GRANTs continuam a ser precisos,
    e só são automáticos no schema `public`.
-2. **`catalogo-partilhado.sql`** — o schema `catalogo`, partilhado com a
-   WineSelection, e o trigger que o alimenta a partir de `garrafeira.vinhos`.
-   Vem antes das funções porque a `definir_castas` (a seguir) chama a
-   `garrafeira.catalogar_vinho` que nasce aqui.
+2. **`catalogo-partilhado.sql`** — o gancho para o catálogo: a
+   `catalogar_vinho` e o trigger que o alimenta a partir de
+   `garrafeira.vinhos`. Vem antes das funções porque a `definir_castas` (a
+   seguir) chama a `garrafeira.catalogar_vinho` que nasce aqui.
+   O catálogo em si já não é definido aqui — é `db/catalogo.sql` no repo
+   WineCatalog, e tem de ter corrido antes deste (senão a
+   `winecatalog.juntar` ainda não existe).
 3. **`functions.sql`** — `admin_email`, `is_admin`, `is_allowed`,
    `is_editor`, `definir_admin`, `admin_pass_temp`, `consumir_garrafa`,
    `repor_garrafa`, `casta_id`, `definir_castas` e os triggers de guarda.

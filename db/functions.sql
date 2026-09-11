@@ -573,7 +573,7 @@ BEGIN
   -- buscar castas que já estavam ali ao lado.
   --
   -- Nunca deita a gravação abaixo: alimentar o catálogo é um extra, e num
-  -- schema `catalogo` que ainda não exista isto tem de ser um silêncio, não
+  -- schema `winecatalog` que ainda não exista isto tem de ser um silêncio, não
   -- um erro a impedir alguém de guardar as castas de uma garrafa.
   BEGIN
     PERFORM garrafeira.catalogar_vinho(p_vinho_id);
