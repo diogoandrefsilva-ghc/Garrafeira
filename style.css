@@ -1286,3 +1286,74 @@ body.naominha .minha-only{display:none!important}
    demasiado pesado. */
 .est-sobrepostos .msdot.vazia::before,
 .est-fila .msdot.vazia::before{opacity:.82}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CORRECÇÃO DO DESENHO DOS SUPORTES — versão limpa
+   O círculo é a garrafa/lugar. A madeira deve parecer o suporte físico,
+   nunca uma barra que separa níveis.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* O ziguezague é desenhado pelos próprios lugares. Esconder a antiga fita
+   SVG evita que apareça uma barra/onda contínua atrás dos círculos. */
+.mprat-layout.encaixa .est-bg,
+.mprat-layout.encaixa .est-reg,
+.mprat-layout.encaixa .est-reg-s{display:none!important}
+
+/* ZIGUEZAGUE / ENCAIXE: pequeno rebordo completo, imediatamente à volta
+   do círculo. Não é um octógono gigante: é apenas a moldura do berço. */
+.mprat-layout.encaixa .msdot::before{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  left:-12%;right:-12%;top:-12%;bottom:-12%;
+  background:linear-gradient(145deg,#f7eddc 0%,#ead9ba 58%,#d4bc91 100%);
+  clip-path:polygon(24% 0,76% 0,100% 24%,100% 76%,76% 100%,24% 100%,0 76%,0 24%);
+  filter:drop-shadow(0 1px 1px rgba(78,50,20,.12));
+  pointer-events:none;
+}
+
+/* O rebordo deve continuar visível quando o lugar está vazio. */
+.mprat-layout.encaixa .msdot.vazia::before{opacity:.9}
+
+/* FILA: apenas um U baixo sob o círculo. A abertura central fica livre;
+   não há caixa vertical nem barra atravessada pela garrafa. */
+.est-fila:not(.est-sobrepostos) .msdot::before{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  left:-15%;right:-15%;
+  top:52%;bottom:-10%;
+  background:linear-gradient(180deg,#f5ead7 0%,#dfcba7 65%,#c8ae7e 100%);
+  clip-path:polygon(0 0,100% 0,100% 100%,82% 100%,82% 45%,18% 45%,18% 100%,0 100%);
+  border-radius:3px;
+  filter:drop-shadow(0 1px 1px rgba(78,50,20,.13));
+  pointer-events:none;
+}
+
+.est-fila:not(.est-sobrepostos) .msdot.vazia::before{opacity:.82}
+
+/* SOBREPOSTOS: só a fila inferior recebe o pequeno U. A fila superior
+   fica completamente limpa para que se perceba que assenta nas garrafas
+   inferiores. */
+.est-sobrepostos .msdot::before{content:none!important}
+.est-sobrepostos .msdot[style*="grid-row:2"]::before{
+  content:""!important;
+  position:absolute;
+  z-index:-1;
+  left:-15%;right:-15%;
+  top:52%;bottom:-10%;
+  background:linear-gradient(180deg,#f5ead7 0%,#dfcba7 65%,#c8ae7e 100%);
+  clip-path:polygon(0 0,100% 0,100% 100%,82% 100%,82% 45%,18% 45%,18% 100%,0 100%);
+  border-radius:3px;
+  filter:drop-shadow(0 1px 1px rgba(78,50,20,.13));
+  pointer-events:none;
+}
+.est-sobrepostos .msdot[style*="grid-row:1"]::before{content:none!important}
+
+/* Nos sobrepostos a geometria das duas filas é que cria o encaixe; não
+   acrescentar madeira entre elas. */
+.est-sobrepostos{background:none!important;border:0!important;box-shadow:none!important}
+
+/* Menos espaço vertical: o desenho deve ler-se como uma garrafeira e não
+   como uma sucessão de cartões. */
+.mprat-layout.encaixa{margin-bottom:calc(var(--slot) * -.42)!important}
