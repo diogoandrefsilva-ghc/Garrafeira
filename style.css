@@ -1121,3 +1121,53 @@ body.naominha .minha-only{display:none!important}
   .pdfp-t{flex:1 1 100%}
   .pdfp-acc{flex:1 1 100%;justify-content:flex-end}
 }
+
+/* ── O ESPELHO DO CATÁLOGO (ver "O ESPELHO DO CATÁLOGO" no app.js) ── */
+
+/* A marquinha ao lado de um valor da ficha. Discreta — é um aviso, não um
+   erro, e na esmagadora maioria dos vinhos nem aparece. */
+.cat-marca{display:inline-flex;align-items:center;margin-left:6px;padding:1px 7px;
+  font-size:10px;font-weight:700;border-radius:99px;border:1px solid #f2cdcb;
+  background:var(--dgp);color:var(--dg);cursor:pointer;font-family:inherit;
+  vertical-align:middle;line-height:1.6}
+.cat-marca:hover{background:#f9d8d6}
+
+/* A tira de resumo, por baixo dos botões de ação. Fica fora do `ro-hide`
+   de propósito — ver o desacordo com o catálogo não é uma ação de escrita,
+   é informação sobre o vinho, e quem só pode ver também tem direito a ela. */
+.cat-tira{display:flex;align-items:center;gap:9px;margin-top:8px;padding:9px 12px;
+  background:var(--bg);border:1px solid var(--bo);border-radius:11px;font-size:12px;
+  color:var(--mu);cursor:pointer}
+.cat-tira:hover{border-color:var(--bo2)}
+.cat-tira.dif{background:var(--dgp);border-color:#f2cdcb;color:var(--dg)}
+.cat-tira-i{flex-shrink:0;width:20px;height:20px;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;font-weight:700;font-size:12px;
+  background:rgba(0,0,0,.06)}
+.cat-tira.dif .cat-tira-i{background:rgba(179,38,30,.14)}
+.cat-tira span:nth-child(2){flex:1;min-width:0}
+.cat-tira span:nth-child(2) strong{color:var(--tx)}
+.cat-tira.dif span:nth-child(2) strong{color:var(--dg)}
+.cat-tira-v{flex-shrink:0;font-weight:600;text-decoration:underline}
+
+/* O painel — cada campo com os dois valores lado a lado. */
+#modal-catalogo-in .msec{margin-top:18px}
+.cat-cmp{padding:11px 0;border-bottom:1px solid var(--bo)}
+.cat-cmp:last-child{border-bottom:none}
+.cat-cmp.focado{background:var(--vhp);margin:0 -14px;padding:11px 14px;border-radius:10px;border-bottom-color:transparent}
+.cat-cmp-k{font-size:10.5px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.cat-cmp-v{display:flex;gap:8px;flex-wrap:wrap}
+.cat-cmp-v .lado{flex:1 1 150px;min-width:0;background:var(--card);border:1px solid var(--bo);
+  border-radius:10px;padding:8px 10px}
+.cat-cmp-v .lado.deles{background:var(--oup);border-color:#eddfba}
+.cat-cmp-v .lado span{display:block;font-size:9.5px;font-weight:700;color:var(--mu);
+  text-transform:uppercase;letter-spacing:.4px}
+.cat-cmp-v .lado b{display:block;font-size:13.5px;margin-top:2px;word-break:break-word;color:var(--tx)}
+.cat-de{display:block;margin-top:5px;font-style:normal;font-size:10.5px;color:var(--ou2)}
+.cat-de.f3{color:var(--ou2)}
+.cat-de.f2{color:var(--vh)}
+.cat-de.f1,.cat-de.f0{color:var(--mu)}
+.cat-cmp-a{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+
+@media (max-width:520px){
+  .cat-cmp-v{flex-direction:column}
+}

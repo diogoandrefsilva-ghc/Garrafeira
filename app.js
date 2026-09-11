@@ -2251,6 +2251,10 @@ function verVinho(id){
   p.scrollTop=0;              // é uma página nova, começa em cima
   pgMedirEncolhe();           // e com o cabeçalho por inteiro
   pgEntrarHistoria();
+  // Pede-se a comparação DEPOIS de a ficha já estar no ecrã — nunca antes,
+  // que o catálogo é uma poupança e um espelho, nunca uma dependência no
+  // caminho de abrir um vinho. A marca aparece quando a resposta chegar.
+  catComparar(id);
 }
 function refrescarVinhoAberto(){
   if(VINHO_ABERTO!=null&&document.getElementById('modal-vinho').classList.contains('on')){
@@ -2259,6 +2263,229 @@ function refrescarVinhoAberto(){
     // encolher), mas o scroll fica onde estava — daí o acerto a seguir.
     if(v){document.getElementById('modal-vinho-in').innerHTML=vinhoDetalheHTML(v);pgMedirEncolhe();}
   }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   O ESPELHO DO CATÁLOGO
+
+   Esta garrafeira alimenta um catálogo partilhado (ver
+   `db/catalogo-partilhado.sql`) que a WineSelection também lê e escreve. Até
+   aqui a relação era de sentido único: escrevia-se e nunca se ouvia nada de
+   volta. Isso deixava a avaria mais chata de todas sem sítio nenhum onde
+   aparecer — o MESMO vinho com números diferentes nos dois lados, e ninguém
+   a saber qual está certo.
+
+   Agora, ao abrir um vinho, pergunta-se ao catálogo o que é que ele tem de
+   diferente. Os campos que não batem certo ganham uma marca, e cada um tem
+   duas saídas — porque são mesmo duas situações diferentes:
+
+     · "o catálogo está certo"  -> traz-se o valor de lá para cá;
+     · "o errado é o catálogo"  -> avisa-se o admin dele, que corrigir só
+       aqui deixava o erro lá, e portanto deixava-o a toda a gente.
+
+   A COMPARAÇÃO NÃO INVENTA DIFERENÇAS: quem decide se dois valores são
+   diferentes é a `winecatalog.igual`, no SQL — "Tinto" e "tinto" não são,
+   13.5 e 13.50 não são, e as mesmas castas por outra ordem também não. Uma
+   marca a aparecer em metade dos campos no primeiro dia era uma marca que
+   ninguém voltava a olhar.
+
+   NUNCA DEITA A FICHA ABAIXO. O catálogo pode não responder (ou nem
+   existir, numa base montada só com este repo) e isso não é um erro para
+   quem está a abrir um vinho: é não haver nada para comparar. Toda a gente
+   aqui engole o erro de propósito — mesma regra do trigger.
+   ══════════════════════════════════════════════════════════════════ */
+let CAT_CMP={};        // vinho_id -> resposta da comparação
+let CAT_ACARREGAR={};  // vinho_id -> true enquanto vai a caminho
+
+/* Os campos do catálogo pelo nome que têm no ecrã. O que não estiver aqui
+   aparece com a chave crua — um campo novo do outro lado não pode
+   desaparecer só porque ninguém veio cá acrescentá-lo. */
+const CAT_NOMES={
+  tipo:'Tipo',estilo:'Estilo',mencao:'Menção',classificacao:'Classificação',
+  castas:'Castas',regiao:'Região',sub_regiao:'Sub-região',pais:'País',
+  teor:'Álcool',estagio_meses:'Estágio (meses)',estagio_texto:'Estágio',
+  vivino_nota:'Nota Vivino',vivino_avaliacoes:'Avaliações Vivino',
+  vivino_url:'Link do Vivino',preco_medio:'Preço médio',
+  beber_de:'Beber de',beber_ate:'Beber até',notas_prova:'Notas de prova',
+  harmonizacao:'Harmoniza com',ai_resumo:'Resumo',imagem_url:'Imagem'
+};
+function catNome(k){return CAT_NOMES[k]||k;}
+
+/* De onde veio o valor que está no catálogo. A mesma legenda da app do
+   catálogo — e a mesma distinção que lá custou semanas a aparecer: quem
+   tem a garrafa na mão sabe o que está no RÓTULO, mas a nota do Vivino e o
+   preço leu-os em algum lado como toda a gente. */
+function catOrigemTxt(o,f){
+  if(o==='garrafeira'&&Number(f)===2)return 'outra garrafeira (nota/preço copiados)';
+  return ({
+    'garrafeira':'outra garrafeira (garrafa na mão)',
+    'garrafeira-bruto':'outra garrafeira (escrito à pressa)',
+    'catalogo-admin':'corrigido à mão pelo admin do catálogo',
+    'catalogo-pesquisa':'pesquisa Google pedida no catálogo',
+    'ws-verificacao':'verificação com pesquisa Google',
+    'ws-sugestao':'sugestão de uma carta (com pesquisa)',
+    'vinho-info-premium':'procura da Garrafeira (grounding)',
+    'vinho-info-gratis':'procura da Garrafeira (pesquisa + extração)'
+  })[o]||(o||'(sem origem)');
+}
+function catValTxt(v){
+  if(v==null)return '—';
+  if(Array.isArray(v))return v.join(', ');
+  return String(v);
+}
+
+/* Chamado pelo `verVinho`. Não bloqueia a abertura da ficha: ela desenha-se
+   já e a marca aparece quando a resposta chegar. Uma ficha à espera do
+   catálogo para abrir era pôr uma poupança no caminho crítico. */
+async function catComparar(id,forcar){
+  if(!id)return;
+  if(!forcar&&(CAT_CMP[id]||CAT_ACARREGAR[id]))return;
+  CAT_ACARREGAR[id]=true;
+  try{
+    const r=await sbRpc('comparar_catalogo',{p_vinho_id:id});
+    CAT_CMP[id]=r||{encontrado:false};
+  }catch(e){
+    CAT_CMP[id]={encontrado:false,semCatalogo:true};
+  }finally{
+    delete CAT_ACARREGAR[id];
+  }
+  if(VINHO_ABERTO===id)refrescarVinhoAberto();
+}
+
+function catDados(id){return CAT_CMP[id]||null;}
+function catCampos(id){
+  const d=catDados(id);
+  return (d&&d.encontrado&&Array.isArray(d.campos))?d.campos:[];
+}
+function catDiferentes(id){return catCampos(id).filter(c=>c.difere);}
+function catSoCatalogo(id){return catCampos(id).filter(c=>c.soCatalogo);}
+
+/* A marquinha que vai ao lado do valor na ficha. Discreta de propósito: é
+   um aviso, não um erro — e na esmagadora maioria dos vinhos não aparece
+   de todo. */
+function catMarca(id,campos){
+  const ks=Array.isArray(campos)?campos:[campos];
+  const dif=catDiferentes(id).filter(c=>ks.includes(c.campo));
+  if(!dif.length)return '';
+  return `<button class="cat-marca" onclick="catAbrirPainel(${id},'${escJs(dif[0].campo)}')"
+    title="O catálogo partilhado tem outro valor para isto">≠ catálogo</button>`;
+}
+
+/* A tira por baixo dos botões: o resumo, para quem não vai ler a ficha
+   toda. Some quando não há nada a dizer. */
+function catTiraHTML(v){
+  const d=catDados(v.id);
+  if(!d)return '';
+  if(!d.encontrado)return '';
+  const dif=catDiferentes(v.id), so=catSoCatalogo(v.id);
+  if(!dif.length&&!so.length)return '';
+  const partes=[];
+  if(dif.length)partes.push(`<strong>${dif.length}</strong> campo${dif.length>1?'s':''} não bate${dif.length>1?'m':''} certo`);
+  if(so.length)partes.push(`o catálogo sabe mais <strong>${so.length}</strong>`);
+  return `<div class="cat-tira${dif.length?' dif':''}" onclick="catAbrirPainel(${v.id})">
+    <span class="cat-tira-i">${dif.length?'≠':'+'}</span>
+    <span>${partes.join(' · ')}${d.mesmaColheita?'':' <em>(o catálogo tem outra colheita)</em>'}</span>
+    <span class="cat-tira-v">ver</span>
+  </div>`;
+}
+
+/* O painel. Cada campo com os DOIS valores lado a lado e as duas saídas —
+   e a origem do valor do catálogo por baixo, que é o que permite decidir
+   sem ter de acreditar: uma "verificação com pesquisa Google" e um
+   "escrito à pressa" não pedem a mesma reação. */
+function catAbrirPainel(id,focar){
+  const v=IDXV[id];
+  const d=catDados(id);
+  if(!v||!d)return;
+  const dif=catDiferentes(id), so=catSoCatalogo(id);
+  const podeMexer=podeEditar();
+
+  let h=`<div class="mtop"><h3>O que o catálogo diz</h3>
+    <button class="mx" onclick="fecharModal('modal-catalogo')">✕</button></div>
+  <p class="note">O catálogo é a memória partilhada com a WineSelection: o que uma
+    já pesquisou, a outra aproveita. Isto compara a <strong>tua</strong> ficha com a que
+    lá está.${d.mesmaColheita?'':` <strong>Atenção:</strong> a linha do catálogo é da colheita
+    ${d.ano?esc(String(d.ano)):'sem ano'}, não da tua — os factos do vinho servem, a nota e o
+    preço são da colheita dele.`}</p>`;
+
+  if(!dif.length&&!so.length){
+    h+='<p class="note">Está tudo igual. Nada a fazer.</p>';
+  }
+
+  if(dif.length){
+    h+=`<div class="msec">Não batem certo (${dif.length})</div>`;
+    h+=dif.map(c=>catCampoHTML(id,c,podeMexer,focar===c.campo,false)).join('');
+  }
+  if(so.length){
+    h+=`<div class="msec">O catálogo sabe e tu não (${so.length})</div>
+      <p class="note">Isto não é um desacordo — é informação que te falta. Trazê-la não apaga nada.</p>`;
+    h+=so.map(c=>catCampoHTML(id,c,podeMexer,focar===c.campo,true)).join('');
+    if(podeMexer&&so.length>1){
+      // Os nomes dos campos vêm de `CAT_NOMES` — só letras, dígitos e
+      // sublinhado, nunca texto do utilizador — por isso um array literal
+      // aqui não precisa de escape nenhum.
+      const lista="['"+so.map(c=>c.campo).join("','")+"']";
+      h+=`<button class="btn ghost" onclick="catAplicar(${id},${lista})">
+        ⬇ Trazer os ${so.length} de uma vez</button>`;
+    }
+  }
+  h+=`<div class="macoes"><button class="btn ghost" onclick="fecharModal('modal-catalogo')">Fechar</button></div>`;
+  document.getElementById('modal-catalogo-in').innerHTML=h;
+  abrirModal('modal-catalogo');
+  if(focar){
+    const el=document.querySelector('#modal-catalogo-in .cat-cmp.focado');
+    if(el)el.scrollIntoView({block:'center'});
+  }
+}
+
+function catCampoHTML(id,c,podeMexer,focado,soDeles){
+  const f=Number(c.forca||0);
+  return `<div class="cat-cmp${focado?' focado':''}">
+    <div class="cat-cmp-k">${esc(catNome(c.campo))}</div>
+    <div class="cat-cmp-v">
+      ${soDeles?'':`<div class="lado meu"><span>o teu</span><b>${esc(catValTxt(c.meu))}</b></div>`}
+      <div class="lado deles"><span>no catálogo</span><b>${esc(catValTxt(c.catalogo))}</b>
+        <i class="cat-de f${esc(String(f))}">${esc(catOrigemTxt(c.origem,f))}</i></div>
+    </div>
+    <div class="cat-cmp-a">
+      ${podeMexer?`<button class="mini" onclick="catAplicar(${id},['${escJs(c.campo)}'])">⬇ Usar a do catálogo</button>`:''}
+      ${soDeles?'':`<button class="mini o" onclick="catReportar(${id},'${escJs(c.campo)}')">⚠ O errado é o catálogo</button>`}
+    </div>
+  </div>`;
+}
+
+/* Trazer para cá. Substitui SÓ os campos pedidos — nunca "sincroniza
+   tudo": a ficha de um vinho nesta app tem coisas que são de quem a tem (as
+   notas, a foto, o preço pago) e o botão que traz tudo é o botão que um dia
+   as apaga sem ninguém perceber. */
+async function catAplicar(id,campos){
+  if(!Array.isArray(campos)||!campos.length)return;
+  try{
+    const r=await sbRpc('aplicar_do_catalogo',{p_vinho_id:id,p_campos:campos});
+    toast(`${(r&&r.campos)||0} campo(s) trazidos do catálogo ✓`);
+    fecharModal('modal-catalogo');
+    await carregarGarrafeira();
+    await catComparar(id,true);
+    refrescarVinhoAberto();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+
+/* Avisar o admin do catálogo. O valor que segue é o que ESTÁ na ficha
+   (tirado da mesma tradução que alimenta o catálogo), não texto escrito
+   numa caixa: assim o outro lado vê os dois números, não uma descrição
+   deles. A caixa é só para o contexto — onde é que viste o outro valor. */
+async function catReportar(id,campo){
+  const nota=prompt(
+    'Avisar o admin do catálogo de que este campo está errado lá.\n\n'+
+    'O teu valor e o do catálogo seguem automaticamente. Queres acrescentar\n'+
+    'alguma coisa? (ex.: onde é que viste o valor certo)');
+  if(nota===null)return;
+  try{
+    const r=await sbRpc('reportar_ao_catalogo',{p_vinho_id:id,p_campo:campo,p_nota:nota||null});
+    toast(r&&r.noCatalogo?'Avisado ✓ o admin do catálogo vai ver isto'
+                         :'Avisado ✓ (este vinho ainda não está no catálogo)');
+  }catch(e){toast('Erro: '+e.message,1);}
 }
 
 /* ── A PÁGINA DO VINHO (comportamento) ─────────────────────────────
@@ -2414,8 +2641,13 @@ function pgSwipe(){
   p.addEventListener('touchcancel',largar);
   p.addEventListener('scroll',pgCabecalho,{passive:true});
 }
-function linha(rot,val){
-  return val?`<div class="mdl"><b>${esc(rot)}</b><span>${val}</span></div>`:'';
+function linha(rot,val,id,campos){
+  if(!val)return '';
+  // A marca só aparece quando a comparação já respondeu e o campo consta
+  // dos que não batem certo — `catMarca` devolve '' em todos os outros
+  // casos, campos incluídos (id/campos são opcionais de propósito).
+  const marca=(id&&campos)?catMarca(id,campos):'';
+  return `<div class="mdl"><b>${esc(rot)}</b><span>${val}${marca}</span></div>`;
 }
 /* A capa do vinho: a garrafa (ou a foto do rótulo), o nome e a origem
    sobre o bordô, com a nota do Vivino e a maturação já lá em cima. O
@@ -2472,6 +2704,7 @@ function vinhoDetalheHTML(v){
         : '<span class="note">A pesquisa por IA não está incluída no teu acesso.</span>'}
       <button class="btn ghost" onclick="abrirEditarVinho(${v.id})">✏️ Editar</button>
     </div>
+    ${catTiraHTML(v)}
 
     <div class="msec">Onde está</div>
     ${ativas.length
@@ -2495,16 +2728,16 @@ function vinhoDetalheHTML(v){
     <div class="mdet">
       ${linha('Produtor',esc(v.produtor))}
       ${linha('Ano',v.ano||'')}
-      ${linha('Tipo',esc([v.tipo,v.estilo].filter(Boolean).join(' · ')))}
-      ${linha('Região',esc([v.regiao,v.sub_regiao].filter(Boolean).join(' · ')))}
-      ${linha('Classificação',esc(v.classificacao))}
-      ${linha('Castas',(v.castas||[]).length?esc(v.castas.join(', ')):'')}
-      ${linha('Estágio',esc(estagio))}
-      ${linha('Álcool',v.teor?esc(v.teor)+'%':'')}
-      ${linha('Preço médio',v.preco_medio!=null?eur(v.preco_medio):'')}
-      ${linha('Beber entre',idadeInfo)}
-      ${linha('Notas de prova',esc(v.notas_prova))}
-      ${linha('Harmoniza com',esc(v.harmonizacao))}
+      ${linha('Tipo',esc([v.tipo,v.estilo].filter(Boolean).join(' · ')),v.id,['tipo','estilo'])}
+      ${linha('Região',esc([v.regiao,v.sub_regiao].filter(Boolean).join(' · ')),v.id,['regiao','sub_regiao'])}
+      ${linha('Classificação',esc(v.classificacao),v.id,'classificacao')}
+      ${linha('Castas',(v.castas||[]).length?esc(v.castas.join(', ')):'',v.id,'castas')}
+      ${linha('Estágio',esc(estagio),v.id,['estagio_meses','estagio_texto'])}
+      ${linha('Álcool',v.teor?esc(v.teor)+'%':'',v.id,'teor')}
+      ${linha('Preço médio',v.preco_medio!=null?eur(v.preco_medio):'',v.id,'preco_medio')}
+      ${linha('Beber entre',idadeInfo,v.id,['beber_de','beber_ate'])}
+      ${linha('Notas de prova',esc(v.notas_prova),v.id,'notas_prova')}
+      ${linha('Harmoniza com',esc(v.harmonizacao),v.id,'harmonizacao')}
       ${linha('As minhas notas',esc(v.notas))}
     </div>
 
