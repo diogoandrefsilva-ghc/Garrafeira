@@ -3650,6 +3650,11 @@ function iaTxt(c,res){
    é que a resposta veio mais depressa e mais barata). Dizer qual é qual, e
    quando é que o catálogo aprendeu aquilo, é o mínimo para se poder
    confiar nisto sem pensar duas vezes. */
+// O que a procura POUPOU só interessa a quem paga a conta. Para os outros
+// o catálogo tem de ser invisível: eles pediram uma ficha e receberam uma
+// ficha — de onde ela veio, e que não custou nada, é contabilidade da app,
+// não informação sobre o vinho. Fica em `.admin-hide` (body.naoadmin) e
+// não num `if`, para seguir a mesma convenção do resto da app.
 function iaOrigemHTML(res){
   if(!res||(res.origem!=='catalogo'&&res.origem!=='misto'))return '';
   const d=res.catalogoEm?new Date(res.catalogoEm):null;
@@ -3662,7 +3667,7 @@ function iaOrigemHTML(res){
   const cauda=tudo
     ?' — não foi preciso pesquisar nada, e não custou nada.'
     :' — a pesquisa foi só pelo que faltava.';
-  return `<div class="ia-cat">🗃️ ${oque}${quando?', de uma pesquisa de '+esc(quando):''}${cauda}</div>`;
+  return `<div class="ia-cat admin-hide">🗃️ ${oque}${quando?', de uma pesquisa de '+esc(quando):''}${cauda}</div>`;
 }
 
 function iaMostrarResultado(res,vinhoId){
