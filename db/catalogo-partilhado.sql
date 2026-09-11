@@ -149,7 +149,26 @@ CREATE TRIGGER vinhos_catalogo
 -- a este ficheiro (o mesmo passo que a migração 08 já pede).
 
 
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA garrafeira TO authenticated;
+-- ---------------------------------------------------------------------
+-- GRANTs: NOMEADOS, e não em bloco.
+--
+-- O ficheiro original acabava com
+-- `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA garrafeira TO authenticated`.
+-- Ali fazia sentido — criava dezenas de funções e o
+-- `migracao-blindagem.sql` corria a seguir e voltava a fechar o que era
+-- para fechar. Mas agora este ficheiro é pequeno e pode ser corrido
+-- sozinho, e nesse caso o grant em bloco DESFAZIA a blindagem: voltava a
+-- dar ao `authenticated` as sete funções de trigger que a migração 13
+-- revogou de propósito — a `vinhos_catalogo()` aqui em baixo incluída.
+--
+-- Por isso, só as duas desta migração, e com a mesma postura da
+-- blindagem: a `catalogar_vinho` é chamada pela `definir_castas` em nome
+-- de quem está a gravar, por isso precisa do `authenticated`; a
+-- `vinhos_catalogo` é um trigger e não se chama de fora.
+-- ---------------------------------------------------------------------
+REVOKE ALL ON FUNCTION garrafeira.vinhos_catalogo()        FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION garrafeira.catalogar_vinho(bigint)  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION garrafeira.catalogar_vinho(bigint) TO authenticated, service_role;
 
 -- ---------------------------------------------------------------------
 -- As castas não vivem na linha do vinho (são uma tabela à parte, ver
