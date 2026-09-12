@@ -3643,6 +3643,15 @@ function iaEscolher(vinhoId){
       partilhado — um Papa Figos branco não é o tinto. Confirma-a antes de procurar; se a mudares
       aqui, fica gravada no vinho.</div>
 
+    <label class="ia-esc" style="margin-bottom:2px">
+      <input type="checkbox" id="ia-colheita-esp">
+      <span>Tem de ser exatamente a colheita de ${v.ano||'este ano'}</span>
+    </label>
+    <div class="note" style="margin-bottom:10px">Por omissão a pesquisa é sobre o vinho em geral — a
+      nota do Vivino, por exemplo, é uma média entre colheitas e não muda com isto. Liga só se
+      precisares mesmo dos factos desta colheita específica (raramente faz diferença, exceto nalgumas
+      notas de prova).</div>
+
     <div class="aviso">Escolhe o que queres procurar. <b>Quanto menos pedires, melhor a procura</b> —
       o modelo concentra-se nisso em vez de andar atrás de tudo. Já vêm marcados os campos vazios.
       ${temPremium()?'Procura-se com a <b>IA com pesquisa web</b>; no fim podes repetir sem pesquisa web e comparar as duas.':''}</div>
@@ -3698,6 +3707,12 @@ function iaEscContar(){
    Se a consulta falhar, não se avisa e segue-se em frente — um soluço de
    rede não pode ser o que impede alguém de procurar. */
 const IA_AVISO_DIAS=30;
+// Marca de origem para uma pesquisa MANUAL — o utilizador procura onde
+// quiser (Gemini, ChatGPT, Claude…), por isso não se finge saber qual foi;
+// só se regista que foi uma pesquisa a sério, colada à mão. `iaUltimaProcura`
+// reconhece este prefixo tal como reconhece "gemini" — as duas são pesquisas
+// reais, só muda quem apertou o botão de pesquisar.
+const IA_MANUAL_MARCA='pesquisa manual (colado à mão)';
 
 async function iaUltimaProcura(vinhoId){
   const v=IDXV[vinhoId]||{};
@@ -3709,7 +3724,7 @@ async function iaUltimaProcura(vinhoId){
     if(a&&a.criado_em)cands.push({quando:a.criado_em,
       minha:String(a.quem||'').toLowerCase()===String(EU.email||'').toLowerCase()});
   }catch(e){}
-  if(v.ai_atualizado_em&&/^gemini/i.test(String(v.ai_modelo||'')))
+  if(v.ai_atualizado_em&&/^(gemini|pesquisa manual)/i.test(String(v.ai_modelo||'')))
     cands.push({quando:v.ai_atualizado_em,minha:false});
   if(!cands.length)return null;
   cands.sort((x,y)=>new Date(y.quando)-new Date(x.quando));
@@ -3742,6 +3757,10 @@ function iaConfirmarRepetir(vinhoId,ult){
 // Os campos escolhidos no seletor, guardados enquanto se responde ao aviso:
 // nessa altura o seletor já não está no ecrã para se lhe perguntar outra vez.
 let IA_ESC=null;
+// Idem para o interruptor "tem de ser esta colheita" — por omissão a
+// pesquisa é sobre o vinho em geral (ver a regra do Vivino em
+// `vinho-info.ts`); só fica estrita quando a pessoa liga isto de propósito.
+let IA_COLHEITA_ESP=false;
 
 // A COR ANTES DA PROCURA
 //
@@ -3777,6 +3796,7 @@ async function iaProcurar(vinhoId){
   // de outro sítio, procura-se tudo (que era o comportamento de sempre).
   const escolhidos=iaEscSelecionados();
   IA_ESC=escolhidos.length&&escolhidos.length<IA_CAMPOS.length?escolhidos:null;
+  IA_COLHEITA_ESP=!!document.getElementById('ia-colheita-esp')?.checked;
   const btn=document.getElementById('ia-esc-btn');
   if(btn){btn.disabled=true;btn.textContent='A ver…';}
   const ult=await iaUltimaProcura(vinhoId);
@@ -3791,6 +3811,7 @@ async function iaArrancar(vinhoId){
   const v=IDXV[vinhoId];if(!v)return;
   const pedido={nome:v.nome,ano:v.ano,produtor:v.produtor,regiao:v.regiao};
   if(IA_ESC)pedido.campos=IA_ESC;
+  pedido.colheitaEspecifica=IA_COLHEITA_ESP;
   // O pedido fica guardado tal e qual: a segunda volta tem de ser a MESMA
   // pergunta, senão não se está a comparar motores, está-se a comparar duas
   // perguntas diferentes.
@@ -4181,9 +4202,11 @@ function iaPreencherForm(res,substituir){
      · ver o que o CATÁLOGO já sabe (grátis, instantâneo, o painel de
        sempre — `catAbrirPainel`);
      · a PESQUISA AUTOMÁTICA de sempre (paga, `iaEscolher`);
-     · esta: um prompt pronto a colar na app do Gemini, e a resposta colada
-       de volta aqui — comparada como se fosse uma segunda opinião, com o
-       ATUAL e, no fim, também com o CATÁLOGO partilhado, sem gastar nada.
+     · esta: um prompt pronto a colar no assistente de IA que se preferir
+       (Gemini, ChatGPT, Claude — quanto mais capaz, melhor), e a resposta
+       colada de volta aqui — comparada como se fosse uma segunda opinião,
+       com o ATUAL e, no fim, também com o CATÁLOGO partilhado, sem gastar
+       nada.
    Os outros editores não veem esta escolha: vão direto à automática, como
    sempre foi (`iaAbrirProcura`).
 
@@ -4214,7 +4237,7 @@ function iaEscolherCaminho(vinhoId){
       <div><button class="btn ghost full" onclick="fecharModal('modal-ia');iaEscolher(${vinhoId})">🔎 Pesquisa automática</button>
         <div class="note" style="margin-top:5px">Paga — a ${esc(rotuloMotor(motorDoPlano()))}, como sempre.</div></div>
       <div><button class="btn prim full" onclick="iaManualEscolher(${vinhoId})">✍️ Pesquisa manual</button>
-        <div class="note" style="margin-top:5px">Grátis — copias um prompt para a app do Gemini e colas a resposta aqui; no fim compara-se também com o Catálogo.</div></div>
+        <div class="note" style="margin-top:5px">Grátis — copias um prompt para o assistente de IA que preferires e colas a resposta aqui; no fim compara-se também com o Catálogo.</div></div>
     </div>`;
   abrirModal('modal-ia');
 }
@@ -4255,7 +4278,15 @@ function iaManualEscolher(vinhoId){
     <div class="note" style="margin-bottom:10px">A cor é parte da identidade do vinho no catálogo
       partilhado. Confirma-a antes de gerar o prompt; se a mudares aqui, fica gravada no vinho.</div>
 
-    <div class="aviso">Escolhe o que queres perguntar ao Gemini. Já vêm marcados os campos vazios.</div>
+    <label class="ia-esc" style="margin-bottom:2px">
+      <input type="checkbox" id="ia-colheita-esp">
+      <span>Tem de ser exatamente a colheita de ${v.ano||'este ano'}</span>
+    </label>
+    <div class="note" style="margin-bottom:10px">Por omissão o prompt pergunta pelo vinho em geral — a
+      nota do Vivino, por exemplo, é uma média entre colheitas. Liga só se precisares mesmo dos factos
+      desta colheita específica.</div>
+
+    <div class="aviso">Escolhe o que queres perguntar. Já vêm marcados os campos vazios.</div>
 
     <div class="ia-escbar">
       <button class="mini" onclick="iaEscTodos(true)">Marcar tudo</button>
@@ -4292,7 +4323,18 @@ const IA_CAMPOS_JSON={
   ai_resumo:'resumo'
 };
 
-function iaManualPrompt(v,campos){
+/* Espelho das duas versões da regra do Vivino em `vinho-info.ts`
+   (`regraVivino`) — ver o comentário grande lá para o porquê. A ESTRITA
+   exige o ano; a RELAXADA (o novo default) não, porque a página do Vivino
+   é do vinho e não da colheita. */
+function iaManualRegraVivino(colheitaEspecifica){
+  return colheitaEspecifica
+    ? 'A nota do Vivino, o nº de avaliações e o "vivinoUrl" têm de vir da MESMA página do Vivino, e tens de confirmar que é DESTE vinho exato (produtor, ano e região a bater certo) — há homónimos de produtores diferentes. Em dúvida, deixa os três vazios.'
+    : 'A página do Vivino é do VINHO, não de uma colheita específica: o ANO NÃO faz parte da identidade da página, e a nota que lá aparece é uma média entre colheitas. Para confirmares que é a página certa, basta o nome (já desambiguado na regra anterior) e o produtor baterem certo — não deixes a nota, as avaliações nem o link vazios só por causa do ano. A nota é o número entre 1.0 e 5.0 ao lado das estrelas; as avaliações vêm logo a seguir, entre parêntesis — não uses números de outra zona da página. Mesmo sem confirmares a nota, mantém o link se tiveres a certeza da página.';
+}
+const IA_MANUAL_REGRA_CUVEE='Se o produtor tiver mais do que um vinho com este nome (variantes de gama: Reserva, Grande Reserva, Colheita, Terroir, etc.) e não se souber qual, prefere a versão SEM qualificador extra; se essa não existir, escolhe a que tiver mais avaliações no Vivino (a principal da gama, normalmente) e diz no "aviso" que outras versões encontraste e qual escolheste.';
+
+function iaManualPrompt(v,campos,colheitaEspecifica){
   const hoje=new Date().toISOString().slice(0,10);
   const linhas=[`Nome: ${v.nome}`];
   if(v.ano)linhas.push(`Ano (colheita): ${v.ano}`);
@@ -4308,12 +4350,13 @@ Hoje é ${hoje}.
 ${so}
 REGRAS, e são a sério:
 1. NÃO INVENTES. Um campo que não consigas confirmar por pesquisa fica FORA do JSON (ou a null) — uma ficha com metade dos campos certos vale mais do que uma cheia com metade inventada.
-2. A nota do Vivino, o nº de avaliações e o "vivinoUrl" têm de vir da MESMA página do Vivino, e tens de confirmar que é DESTE vinho exato (produtor, ano e região a bater certo) — há homónimos de produtores diferentes. Em dúvida, deixa os três vazios.
-3. Se houver dúvida entre dois vinhos parecidos, escolhe o que bate certo com o ano e a região indicados, e escreve a hesitação em "aviso".
-4. O preço é o de UMA garrafa de 0,75L, em euros, em Portugal.
-5. As castas vão SEPARADAS, uma a uma, com o nome português corrente ("Touriga Nacional", "Alicante Bouschet"). Nunca "blend"/"lote"/"várias castas".
-6. "beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que o vinho está no ponto.
-7. "imagemUrl" é o link DIRETO de uma fotografia (acaba em .jpg/.jpeg/.png/.webp/.avif), nunca o link da página. Sem certeza, deixa vazio.
+2. ${IA_MANUAL_REGRA_CUVEE}
+3. ${iaManualRegraVivino(colheitaEspecifica)}
+4. Se houver dúvida entre dois vinhos parecidos, escolhe o que bate certo com o ano e a região indicados, e escreve a hesitação em "aviso".
+5. O preço é o de UMA garrafa de 0,75L, em euros, em Portugal.
+6. As castas vão SEPARADAS, uma a uma, com o nome português corrente ("Touriga Nacional", "Alicante Bouschet"). Nunca "blend"/"lote"/"várias castas".
+7. "beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que o vinho está no ponto.
+8. "imagemUrl" é o link DIRETO de uma fotografia (acaba em .jpg/.jpeg/.png/.webp/.avif), nunca o link da página. Sem certeza, deixa vazio.
 
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código \`\`\`:
 {
@@ -4353,22 +4396,25 @@ async function iaManualGerarPrompt(vinhoId){
   if(!cor)return;
   const escolhidos=iaEscSelecionados();
   const campos=escolhidos.length&&escolhidos.length<IA_CAMPOS.length?escolhidos:null;
+  const colheitaEspecifica=!!document.getElementById('ia-colheita-esp')?.checked;
   IA_MANUAL_CAMPOS=campos;
-  const txt=iaManualPrompt(v,campos);
+  const txt=iaManualPrompt(v,campos,colheitaEspecifica);
   document.getElementById('modal-ia-in').innerHTML=`
     <div class="mtop"><div><h3>✍️ Pesquisa manual</h3>
       <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
       <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
 
-    <div class="aviso">1. Copia o prompt abaixo. 2. Abre a app ou o site do Gemini e cola-o lá.
-      3. Copia a resposta toda (o JSON) e cola-a na caixa de baixo. 4. Carrega em Comparar.</div>
+    <div class="aviso">1. Copia o prompt abaixo. 2. Cola-o no assistente de IA que preferires
+      (quanto mais capaz o modelo, melhor costuma ser o resultado — Gemini, ChatGPT, Claude, o que
+      tiveres à mão). 3. Copia a resposta toda (o JSON) e cola-a na caixa de baixo. 4. Carrega em
+      Comparar.</div>
 
     <label>Prompt a copiar</label>
     <textarea id="ia-manual-prompt" readonly rows="6" onclick="this.select()">${esc(txt)}</textarea>
     <button class="btn ghost full" style="margin-top:8px" onclick="iaManualCopiar()">📋 Copiar prompt</button>
 
-    <label style="margin-top:16px">Resposta do Gemini (cola aqui)</label>
-    <textarea id="ia-manual-resposta" rows="10" placeholder="Cola aqui o JSON que o Gemini devolveu…"></textarea>
+    <label style="margin-top:16px">Resposta (cola aqui)</label>
+    <textarea id="ia-manual-resposta" rows="10" placeholder="Cola aqui o JSON que o modelo devolveu…"></textarea>
     <div class="note" id="ia-manual-erro" style="margin-top:6px;color:var(--dg)"></div>
 
     <div class="macoes">
@@ -4490,7 +4536,7 @@ async function iaManualColar(vinhoId){
     return;
   }
   if(raw.encontrado===false){
-    if(erroEl)erroEl.textContent='O Gemini disse que não encontrou o vinho'+(raw.aviso?': '+raw.aviso:'.');
+    if(erroEl)erroEl.textContent='O modelo disse que não encontrou o vinho'+(raw.aviso?': '+raw.aviso:'.');
     return;
   }
   const ficha=iaManualNormalizar(raw,v.ano||null,IA_MANUAL_CAMPOS);
@@ -4499,10 +4545,10 @@ async function iaManualColar(vinhoId){
     return;
   }
   if(erroEl)erroEl.textContent='';
-  // "gemini" no início é o que faz `iaUltimaProcura` contar isto como uma
-  // procura a sério ao avisar sobre repetições futuras — mereceu-o: saiu
-  // do mesmo Gemini, só que pela mão de quem procura em vez da API.
-  ficha.modelo='gemini (colado à mão)';
+  // Não se assume qual foi o modelo (o utilizador procura onde quiser) — só
+  // se marca que foi uma pesquisa a sério, colada à mão. `iaUltimaProcura`
+  // reconhece este prefixo para continuar a avisar sobre repetições.
+  ficha.modelo=IA_MANUAL_MARCA;
   ficha.pesquisa=true;
   IA_PEDIDO={nome:v.nome,ano:v.ano,produtor:v.produtor,regiao:v.regiao};
   IA_VINHO=vinhoId;IA_MOTOR='manual';IA_ERRO2='';

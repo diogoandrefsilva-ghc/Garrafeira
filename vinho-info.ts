@@ -101,7 +101,10 @@ function somarUsage(total: UsageMetadata | null, add: UsageMetadata | null): Usa
 function semAcentos(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
-function chaveCache(modo: "gratis" | "premium", nome: string, ano: number | null, produtor: string, regiao: string, campos: string[] | null): string {
+function chaveCache(
+  modo: "gratis" | "premium", nome: string, ano: number | null, produtor: string, regiao: string,
+  campos: string[] | null, colheitaEspecifica: boolean,
+): string {
   const camposTag = campos?.length ? [...campos].sort().join(",") : "*";
   return [
     CACHE_VERSAO,
@@ -111,6 +114,9 @@ function chaveCache(modo: "gratis" | "premium", nome: string, ano: number | null
     semAcentos(produtor.toLowerCase()).replace(/[^a-z0-9]+/g, " ").trim(),
     semAcentos(regiao.toLowerCase()).replace(/[^a-z0-9]+/g, " ").trim(),
     camposTag,
+    // Entra na chave porque muda o TEXTO do prompt (a regra do Vivino) —
+    // duas pesquisas iguais em tudo menos nisto não podem partilhar cache.
+    colheitaEspecifica ? "colheita" : "geral",
   ].join("|");
 }
 function milisIso(ms: number) {
@@ -291,9 +297,53 @@ const CAMPOS: Record<string, string> = {
   harmonizacao: "harmonizacao", ai_resumo: "resumo",
 };
 
+/* ── A REGRA DO VIVINO, e porque tem DUAS versões ──
+   O Vivino é do VINHO, não da colheita: a página não muda de identidade
+   com o ano, e a nota que mostra por omissão é uma média entre colheitas
+   (a colheita é só um filtro dentro da própria página). Exigir "produtor,
+   ano e região a bater certo" para aceitar essa página — o que esta regra
+   fazia até aqui — tinha o modelo a encontrar a página certa e a recusá-la
+   na mesma, só porque a pesquisa pedia um ano que a identidade da página
+   nunca teve. Testado com o Villa Platanus 2022: com a exigência do ano,
+   nota/avaliações/link vinham sempre vazios; sem ela, vieram certos e
+   estáveis em três tentativas seguidas.
+
+   Por isso há DUAS versões, e quem escolhe é `colheitaEspecifica` (vem do
+   ecrã de escolha de campos — `iaEscolher`/`iaManualEscolher` — nunca por
+   omissão): a ESTRITA exige o ano, para quando a pergunta é mesmo sobre
+   ESTA colheita e nenhuma outra; a RELAXADA (o novo default) não exige,
+   e diz ao modelo onde ler cada número para não confundir com outro sítio
+   da página. */
+const regraVivino = (colheitaEspecifica: boolean) => colheitaEspecifica
+  ? `A nota do Vivino, o número de avaliações e o "vivinoUrl" têm de vir da
+   MESMA página do Vivino, que tenhas mesmo visto. Confirma que essa página é
+   DESTE vinho exato (mesmo produtor, ano e região) e não a de um homónimo —
+   há vários vinhos com nomes parecidos, de produtores diferentes, e uma
+   pesquisa por texto pode trazer a página errada. Se tiveres qualquer dúvida
+   de que é o mesmo vinho, deixa "vivinoUrl" e "vivinoNota" vazios em vez de
+   arriscar.`
+  : `A página do Vivino é do VINHO, não de uma colheita específica: o ANO NÃO
+   faz parte da identidade da página, e a nota que lá aparece é uma média
+   entre colheitas. Para confirmares que é a página certa, basta o nome (já
+   desambiguado na regra anterior) e o produtor baterem certo — não deixes a
+   nota, as avaliações nem o link vazios só por causa do ano. A nota é o
+   número entre 1.0 e 5.0 ao lado das estrelas; as avaliações vêm logo a
+   seguir, entre parêntesis — não uses números de outra zona da página.
+   Mesmo sem confirmares a nota, mantém o link se tiveres a certeza da
+   página.`;
+/* Villa Platanus voltou a mostrar isto nos testes: o mesmo produtor tinha
+   "Reserva" e "Terroir Blend" — o modelo tem de saber que "escolher a
+   cuvée errada" é um erro tão real como "não encontrar nada". */
+const regraCuvee = `Se o produtor tiver mais do que um vinho com este nome
+   (variantes de gama: Reserva, Grande Reserva, Colheita, Terroir, etc.) e
+   não se souber qual, prefere a versão SEM qualificador extra; se essa não
+   existir, escolhe a que tiver mais avaliações no Vivino (a principal da
+   gama, normalmente tem mais do que uma edição especial) e diz no "aviso"
+   que outras versões encontraste e qual escolheste.`;
+
 const prompt = (
   nome: string, ano: number | null, produtor: string, regiao: string, hoje: string,
-  campos: string[] | null, textosPesquisa: string,
+  campos: string[] | null, textosPesquisa: string, colheitaEspecifica: boolean,
 ) => `
 És um enólogo a preencher a ficha de um vinho para a garrafeira de uma casa particular.
 
@@ -316,22 +366,17 @@ REGRAS, e são a sério:
 2. NÃO INVENTES. Um campo que não consigas confirmar fica FORA do JSON (ou a
    null). Uma ficha com metade dos campos certos vale mais do que uma cheia
    com metade inventada — quem lê isto vai decidir o que abre ao jantar.
-3. A nota do Vivino, o número de avaliações e o "vivinoUrl" têm de vir da
-   MESMA página do Vivino, que tenhas mesmo visto. Confirma que essa página é
-   DESTE vinho exato (mesmo produtor, ano e região) e não a de um homónimo —
-   há vários vinhos com nomes parecidos, de produtores diferentes, e uma
-   pesquisa por texto pode trazer a página errada. Se tiveres qualquer dúvida
-   de que é o mesmo vinho, deixa "vivinoUrl" e "vivinoNota" vazios em vez de
-   arriscar.
-4. Se houver DÚVIDA entre dois vinhos com nome parecido, escolhe o que bate
+3. ${regraCuvee}
+4. ${regraVivino(colheitaEspecifica)}
+5. Se houver DÚVIDA entre dois vinhos com nome parecido, escolhe o que bate
    certo com o ano e a região dados, e diz a hesitação no campo "aviso".
-5. O preço é o de UMA garrafa de 0,75 L, em EUROS, em Portugal.
-6. As castas vão SEPARADAS, uma a uma, com o nome português corrente
+6. O preço é o de UMA garrafa de 0,75 L, em EUROS, em Portugal.
+7. As castas vão SEPARADAS, uma a uma, com o nome português corrente
    ("Touriga Nacional", "Alicante Bouschet", "Aragonez"). Nunca "blend",
    "lote" nem "várias castas" — isso é contado do lado da app.
-7. "beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que o vinho
+8. "beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que o vinho
    está no ponto. Para um vinho para beber já, "beberAte" é daqui a 2-3 anos.
-8. "imagemUrl" é o link DIRECTO de uma fotografia da garrafa ou do rótulo
+9. "imagemUrl" é o link DIRECTO de uma fotografia da garrafa ou do rótulo
    (termina em .jpg/.jpeg/.png/.webp), de uma página que tenhas mesmo visto —
    site do produtor ou de uma loja. Não é o link da página, é o da imagem. Se
    não tiveres a certeza, deixa vazio: uma imagem errada é pior do que nenhuma,
@@ -370,6 +415,7 @@ Se não conseguires identificar o vinho de todo, responde
 
 const promptComGrounding = (
   nome: string, ano: number | null, produtor: string, regiao: string, hoje: string, campos: string[] | null,
+  colheitaEspecifica: boolean,
 ) => `
 És um enólogo a preencher a ficha de um vinho para a garrafeira de uma casa particular.
 Usa pesquisa web (grounding search) para confirmar os dados.
@@ -385,11 +431,12 @@ Concentra a pesquisa NELES e deixa os outros fora da resposta.
 
 REGRAS:
 1. NÃO INVENTES. Campo sem confirmação fica fora do JSON (ou null).
-2. Vivino: "vivinoNota", "vivinoAvaliacoes" e "vivinoUrl" têm de vir da MESMA página do Vivino e do vinho certo.
-3. "imagemUrl" tem de ser link DIRETO de imagem (.jpg/.jpeg/.png/.webp/.avif), não link de página.
-4. Se houver dúvida de homónimo, prioriza ano + produtor + região e explica no "aviso".
-5. Castas separadas por nome (nunca "blend"/"lote"/"várias castas").
-6. "beberDe"/"beberAte" são anos.
+2. ${regraCuvee}
+3. ${regraVivino(colheitaEspecifica)}
+4. "imagemUrl" tem de ser link DIRETO de imagem (.jpg/.jpeg/.png/.webp/.avif), não link de página.
+5. Se houver dúvida de homónimo, prioriza ano + produtor + região e explica no "aviso".
+6. Castas separadas por nome (nunca "blend"/"lote"/"várias castas").
+7. "beberDe"/"beberAte" são anos.
 
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
 {
@@ -736,13 +783,13 @@ async function produzirFicha(
   modoIA: "gratis" | "premium",
   nome: string, ano: number | null, produtor: string, regiao: string,
   quem: string | null, signal: AbortSignal, budgetMs: number,
-  campos: string[] | null = null,
+  campos: string[] | null = null, colheitaEspecifica: boolean = false,
 ): Promise<Res> {
   if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
   if (modoIA === "gratis" && !SEARCH_API_KEY)
     return { ok: false, status: 503, erro: "a IA sem pesquisa web ainda não está configurada (falta SEARCH_API_KEY)" };
   const inicio = Date.now();
-  const chave = chaveCache(modoIA, nome, ano, produtor, regiao, campos);
+  const chave = chaveCache(modoIA, nome, ano, produtor, regiao, campos, colheitaEspecifica);
   const cache = await cacheLer(chave, signal);
   if (cache?.resultado) {
     await registar("ok", {
@@ -811,8 +858,8 @@ async function produzirFicha(
   }
 
   const texto0 = modoIA === "premium"
-    ? promptComGrounding(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos_ia)
-    : prompt(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos_ia, pesquisa.texto);
+    ? promptComGrounding(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos_ia, colheitaEspecifica)
+    : prompt(nome, ano, produtor, regiao, new Date().toISOString().slice(0, 10), campos_ia, pesquisa.texto, colheitaEspecifica);
   const tentativas: { modelo: string; modo: string; estado: number | string; usageMetadata?: UsageMetadata }[] = [];
   let usageTotal: UsageMetadata | null = null;
   let fontesGround: Fonte[] = [];
@@ -975,6 +1022,10 @@ Deno.serve(async (req) => {
     const camposPedidos = campos && campos.length && campos.length < Object.keys(CAMPOS).length ? campos : null;
     const pedidoModo: "gratis" | "premium" = body?.plano === "premium" ? "premium" : "gratis";
     const modoIA: "gratis" | "premium" = auth.plano === "premium" ? pedidoModo : "gratis";
+    // Por omissão a pesquisa é sobre o vinho em geral (ver a regra do
+    // Vivino em `regraVivino`) — só se torna estrita quando o ecrã de
+    // escolha de campos manda isto explicitamente.
+    const colheitaEspecifica = body?.colheitaEspecifica === true;
 
     /* ── MODO ASSÍNCRONO ──
        Responde já com o `id` e faz o trabalho depois, com muito mais tempo
@@ -990,7 +1041,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-          const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos);
+          const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -1008,7 +1059,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos);
+    const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";
