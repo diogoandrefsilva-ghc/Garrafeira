@@ -4436,11 +4436,20 @@ async function iaManualCopiar(){
   }
 }
 
+/* Aspas tipográficas (“ ” ‘ ’) não são JSON válido, e algumas apps de chat
+   trocam-nas por conta própria ao mostrar texto normal (não costuma
+   acontecer dentro de blocos de código) — apanhado com uma resposta colada
+   com TODAS as aspas assim, que o JSON.parse recusava logo na primeira
+   chave. Trocar aqui por retas não arrisca strings verdadeiras: uma aspa
+   tipográfica dentro de uma frase vira reta na mesma, mas fica dentro da
+   MESMA string — só muda um caracter, nunca a estrutura. */
+function iaManualNormalizarAspas(s){return s.replace(/[“”]/g,'"').replace(/[‘’]/g,"'");}
+
 /* Espelho do `extrairJson` da Edge Function: o Gemini às vezes devolve
    texto à volta do JSON ou blocos ```; isto apanha o primeiro objeto
    equilibrado. */
 function iaManualExtrairJson(txt){
-  const s=String(txt||'').trim();
+  const s=iaManualNormalizarAspas(String(txt||'').trim());
   if(!s)return null;
   try{return JSON.parse(s);}catch(e){}
   const limpo=s.replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();

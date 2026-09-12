@@ -469,10 +469,22 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
 Se não conseguires identificar o vinho de todo, responde
 {"encontrado": false, "aviso": "porquê"}.`;
 
+/* Aspas tipográficas (“ ” ‘ ’) não são JSON válido, e um chat-UI troca-as
+   por conta própria ao mostrar texto normal (não costuma acontecer dentro
+   de blocos de código) — apanhado com uma resposta colada à mão que tinha
+   TODAS as aspas assim e o JSON.parse recusava logo na primeira chave.
+   Trocar aqui por retas resolve os dois casos (automático e colado) de
+   uma vez, sem arriscar strings verdadeiras: uma aspa tipográfica dentro
+   de uma frase vira reta na mesma, mas fica dentro da MESMA string — só
+   muda um caracter, nunca a estrutura. */
+function normalizarAspas(s: string): string {
+  return s.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+}
+
 /* Mesmo pedindo JSON, alguns modelos devolvem texto com blocos ``` e frases
    à volta. Aqui apanha-se o primeiro objeto JSON equilibrado do texto. */
 function extrairJson(txt: string): any | null {
-  const s = String(txt || "").trim();
+  const s = normalizarAspas(String(txt || "").trim());
   if (!s) return null;
   try { return JSON.parse(s); } catch (_) { /* segue */ }
   const limpo = s.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
