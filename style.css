@@ -879,6 +879,7 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .mbox .ia-esc input{width:auto;margin:1px 0 0;flex-shrink:0;accent-color:var(--vh)}
 .mbox .ia-esc span{min-width:0}
 .mbox .ia-esc i{display:block;font-style:normal;font-size:10px;color:var(--mu);margin-top:1px}
+.mbox .ia-esc.disabled{opacity:.5;cursor:default}
 .ia-linha{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--bo)}
 .ia-linha:last-child{border-bottom:none}
 .ia-linha input[type=checkbox]{width:auto;margin-top:3px;flex-shrink:0}

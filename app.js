@@ -3618,6 +3618,34 @@ function iaValorAtual(v,k){
   if(k==='castas')return (v.castas||[]).length?v.castas.join(', '):'';
   return v[k]==null||v[k]===''?'':String(v[k]);
 }
+
+/* PISTAS: o que já se sabe do vinho, para ajudar a IA a não confundir isto
+   com um homónimo (produtor, ano, região, castas) — ao contrário dos
+   campos de baixo, uma pista nunca é pedida de volta, só serve de
+   contexto no prompt (ver `iaArrancar`/`iaManualPrompt`). Vêm marcadas
+   quando o valor já existe; um campo vazio não é pista nenhuma, por isso
+   nem aparece marcável. A cor fica de fora desta lista: já é confirmada à
+   parte (`iaCorGuard`, obrigatória antes de procurar) e vai sempre. */
+const IA_PISTAS_CAMPOS=[
+  {k:'produtor',rot:'Produtor'},{k:'ano',rot:'Ano'},
+  {k:'regiao',rot:'Região'},{k:'castas',rot:'Castas'}
+];
+function iaPistasHTML(v){
+  const linhas=IA_PISTAS_CAMPOS.map(c=>{
+    const val=iaValorAtual(v,c.k);
+    return `<label class="ia-esc${val?'':' disabled'}">
+      <input type="checkbox" class="ia-pista-c" value="${c.k}"${val?' checked':' disabled'}>
+      <span>${esc(c.rot)}${val?': '+esc(val):' — desconhecido'}</span>
+    </label>`;
+  }).join('');
+  return `<label style="margin-bottom:2px">Pistas para identificar o vinho certo</label>
+    <div class="note" style="margin-bottom:8px">Não são pedidas à IA — só ajudam a não confundir
+      este vinho com um homónimo. Desmarca as que achares que possam estar erradas.</div>
+    <div class="ia-escs" style="margin-bottom:10px">${linhas}</div>`;
+}
+function iaPistasSelecionadas(){
+  return [...document.querySelectorAll('.ia-pista-c:checked')].map(e=>e.value);
+}
 function iaEscolher(vinhoId){
   if(roGuard())return;
   if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
@@ -3642,6 +3670,8 @@ function iaEscolher(vinhoId){
     <div class="note" style="margin-bottom:10px">A cor é parte da identidade do vinho no catálogo
       partilhado — um Papa Figos branco não é o tinto. Confirma-a antes de procurar; se a mudares
       aqui, fica gravada no vinho.</div>
+
+    ${iaPistasHTML(v)}
 
     <label class="ia-esc" style="margin-bottom:2px">
       <input type="checkbox" id="ia-colheita-esp">
@@ -3757,6 +3787,8 @@ function iaConfirmarRepetir(vinhoId,ult){
 // Os campos escolhidos no seletor, guardados enquanto se responde ao aviso:
 // nessa altura o seletor já não está no ecrã para se lhe perguntar outra vez.
 let IA_ESC=null;
+// Idem para as pistas (produtor/ano/região/castas) marcadas no seletor.
+let IA_PISTAS=null;
 // Idem para o interruptor "tem de ser esta colheita" — por omissão a
 // pesquisa é sobre o vinho em geral (ver a regra do Vivino em
 // `vinho-info.ts`); só fica estrita quando a pessoa liga isto de propósito.
@@ -3797,6 +3829,7 @@ async function iaProcurar(vinhoId){
   const escolhidos=iaEscSelecionados();
   IA_ESC=escolhidos.length&&escolhidos.length<IA_CAMPOS.length?escolhidos:null;
   IA_COLHEITA_ESP=!!document.getElementById('ia-colheita-esp')?.checked;
+  IA_PISTAS=iaPistasSelecionadas();
   const btn=document.getElementById('ia-esc-btn');
   if(btn){btn.disabled=true;btn.textContent='A ver…';}
   const ult=await iaUltimaProcura(vinhoId);
@@ -3809,7 +3842,15 @@ async function iaProcurar(vinhoId){
 async function iaArrancar(vinhoId){
   if(roGuard())return;
   const v=IDXV[vinhoId];if(!v)return;
-  const pedido={nome:v.nome,ano:v.ano,produtor:v.produtor,regiao:v.regiao};
+  // `tipo` vai sempre (foi confirmado pelo `iaCorGuard` antes de chegar
+  // aqui); as outras pistas só vão se a pessoa as deixou marcadas no
+  // seletor — `IA_PISTAS` nulo (chamado de fora dele) cai no de sempre.
+  const pistas=IA_PISTAS||['ano','produtor','regiao'];
+  const pedido={nome:v.nome,tipo:v.tipo};
+  if(pistas.includes('ano')&&v.ano)pedido.ano=v.ano;
+  if(pistas.includes('produtor')&&v.produtor)pedido.produtor=v.produtor;
+  if(pistas.includes('regiao')&&v.regiao)pedido.regiao=v.regiao;
+  if(pistas.includes('castas')&&v.castas&&v.castas.length)pedido.castas=v.castas;
   if(IA_ESC)pedido.campos=IA_ESC;
   pedido.colheitaEspecifica=IA_COLHEITA_ESP;
   // O pedido fica guardado tal e qual: a segunda volta tem de ser a MESMA
@@ -4278,6 +4319,8 @@ function iaManualEscolher(vinhoId){
     <div class="note" style="margin-bottom:10px">A cor é parte da identidade do vinho no catálogo
       partilhado. Confirma-a antes de gerar o prompt; se a mudares aqui, fica gravada no vinho.</div>
 
+    ${iaPistasHTML(v)}
+
     <label class="ia-esc" style="margin-bottom:2px">
       <input type="checkbox" id="ia-colheita-esp">
       <span>Tem de ser exatamente a colheita de ${v.ano||'este ano'}</span>
@@ -4334,12 +4377,14 @@ function iaManualRegraVivino(colheitaEspecifica){
 }
 const IA_MANUAL_REGRA_CUVEE='Se o produtor tiver mais do que um vinho com este nome (variantes de gama: Reserva, Grande Reserva, Colheita, Terroir, etc.) e não se souber qual, prefere a versão SEM qualificador extra; se essa não existir, escolhe a que tiver mais avaliações no Vivino (a principal da gama, normalmente) e diz no "aviso" que outras versões encontraste e qual escolheste.';
 
-function iaManualPrompt(v,campos,colheitaEspecifica){
+function iaManualPrompt(v,campos,colheitaEspecifica,pistas){
   const hoje=new Date().toISOString().slice(0,10);
   const linhas=[`Nome: ${v.nome}`];
-  if(v.ano)linhas.push(`Ano (colheita): ${v.ano}`);
-  if(v.produtor)linhas.push(`Produtor indicado: ${v.produtor}`);
-  if(v.regiao)linhas.push(`Região indicada: ${v.regiao}`);
+  if(pistas.includes('ano')&&v.ano)linhas.push(`Ano (colheita): ${v.ano}`);
+  if(pistas.includes('produtor')&&v.produtor)linhas.push(`Produtor indicado: ${v.produtor}`);
+  if(pistas.includes('regiao')&&v.regiao)linhas.push(`Região indicada: ${v.regiao}`);
+  if(v.tipo)linhas.push(`Cor: ${v.tipo}`);
+  if(pistas.includes('castas')&&v.castas&&v.castas.length)linhas.push(`Castas conhecidas: ${v.castas.join(', ')}`);
   const so=campos&&campos.length&&campos.length<IA_CAMPOS.length
     ?`\nSÓ INTERESSAM ESTES CAMPOS: ${campos.map(k=>IA_CAMPOS_JSON[k]).join(', ')}.\nConcentra-te neles e deixa os outros fora da resposta.\n`:'';
   return `Usa a tua pesquisa na internet para preencheres a ficha deste vinho, como faria um enólogo para a garrafeira de uma casa particular.
@@ -4397,8 +4442,9 @@ async function iaManualGerarPrompt(vinhoId){
   const escolhidos=iaEscSelecionados();
   const campos=escolhidos.length&&escolhidos.length<IA_CAMPOS.length?escolhidos:null;
   const colheitaEspecifica=!!document.getElementById('ia-colheita-esp')?.checked;
+  const pistas=iaPistasSelecionadas();
   IA_MANUAL_CAMPOS=campos;
-  const txt=iaManualPrompt(v,campos,colheitaEspecifica);
+  const txt=iaManualPrompt(v,campos,colheitaEspecifica,pistas);
   document.getElementById('modal-ia-in').innerHTML=`
     <div class="mtop"><div><h3>✍️ Pesquisa manual</h3>
       <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
