@@ -467,21 +467,21 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    e um pico entre eles. */
 /* A folga fica em BAIXO e não repartida: é para lá que o berço desce, e
    é o que deixa a garrafa assentar dentro dele em vez de flutuar por cima. */
-.est-regua{padding:0 0 calc(var(--slot) * .22);
+.est-regua{padding:0 0 calc(var(--slot) * .29);
   background:none;border:none;box-shadow:none;border-radius:0;overflow:visible}
 /* Nos sobrepostos a caixa tem duas filas: um pouco de folga em cima e as
    duas filas encostadas, que é como uma garrafa assenta na outra. A folga
    de baixo é menor do que na régua — a garrafa assenta EM CIMA da tábua
    lisa, não dentro de um berço, por isso só precisa da espessura dela. */
-.est-regua.est-sobrepostos{padding:calc(var(--slot) * .08) 0 calc(var(--slot) * .22);row-gap:0}
+.est-regua.est-sobrepostos{padding:calc(var(--slot) * .08) 0 calc(var(--slot) * .29);row-gap:0}
 .est-regua.est-lisa{padding-bottom:calc(var(--slot) * .1)}
 /* A TÁBUA LISA do formato sobrepostos: a mesma madeira da régua (as duas
    cores dos traços dela, pela mesma ordem) e a mesma espessura, para o
    móvel se ler como um só. Vive colada ao fundo da caixa, como a régua. */
-.est-bg-l{position:absolute;left:0;right:0;bottom:0;height:calc(var(--slot) * .1);
-  border-radius:calc(var(--slot) * .05);pointer-events:none;
-  background:linear-gradient(180deg,#fffdf7 42%,#cbb894);
-  box-shadow:0 1px 2px rgba(90,60,25,.18)}
+.est-bg-l{position:absolute;left:0;right:0;bottom:0;height:calc(var(--slot) * .17);
+  border-radius:calc(var(--slot) * .03);pointer-events:none;
+  background:linear-gradient(180deg,#f8ecd6,#efdcbb 55%,#e4cba2 84%,#d3b585 84%);
+  border-top:1px solid #cdae7d;box-shadow:0 1px 2px rgba(90,60,25,.18)}
 /* Capacidade ÍMPAR: as duas filas ficam desencontradas meia coluna, e aí a
    de cima assenta nos vãos da de baixo em vez de flutuar por cima dela — é
    como se empilham garrafas a sério, e é o mesmo passo (0,8) do
@@ -504,6 +504,13 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .est-reg-s,.est-reg{fill:none;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round}
 .est-reg-s{stroke:#cbb894;stroke-width:calc(var(--slot) * .2)}
 .est-reg{stroke:#fffdf7;stroke-width:calc(var(--slot) * .2)}
+/* A TÁBUA CHEIA: o corpo em madeira clara, uma aresta escura no fundo a
+   dar-lhe espessura, e um fio na borda de cima a desenhar o recorte do
+   berço. `non-scaling-stroke` porque o viewBox estica-se à caixa. */
+.est-tab{fill:url(#est-mad)}
+.est-tab-esp{fill:#d3b585}
+.est-tab-borda{fill:none;stroke:#cdae7d;stroke-width:1.3px;vector-effect:non-scaling-stroke;
+  stroke-linecap:round;stroke-linejoin:round}
 /* O ENCAIXE a sério: a prateleira que encaixa DESCE para dentro da de
    baixo, e é a sobreposição que o desenha. As duas filas já estavam
    desencontradas meia coluna — a garrafa de cima cai entre a primeira e a
@@ -541,7 +548,7 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    O `<svg>` precisa de largura E altura declaradas: é um elemento de
    substituição, e a dimensão que falta sai da proporção do viewBox, não do
    posicionamento. */
-.est-bg{position:absolute;left:0;right:0;bottom:0;width:100%;height:calc(var(--slot) * .85);
+.est-bg{position:absolute;left:0;right:0;bottom:0;width:100%;height:calc(var(--slot) * .68);
   pointer-events:none;overflow:visible}
 .msdot{position:relative;z-index:1;aspect-ratio:1/1;width:100%;max-width:var(--slot);margin:0 auto;border-radius:999px;
   border:1px solid #c9a1af;background:#f3e8ec;display:flex;align-items:center;justify-content:center;
@@ -1173,72 +1180,78 @@ body.naominha .minha-only{display:none!important}
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   CORRECÇÃO DO DESENHO DOS SUPORTES — versão limpa
-   O círculo é a garrafa/lugar. A madeira deve parecer o suporte físico,
-   nunca uma barra que separa níveis.
+   POLIMENTO VISUAL — MAPA DOS LOCAIS / FORMATOS
+   Apenas pele visual: não altera dados, eventos, lógica ou comportamento.
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* O ziguezague é desenhado pelos próprios lugares. Esconder a antiga fita
-   SVG evita que apareça uma barra/onda contínua atrás dos círculos. */
-.mprat-layout.encaixa .est-bg,
-.mprat-layout.encaixa .est-reg,
-.mprat-layout.encaixa .est-reg-s{display:none!important}
+/* Editor: formato e quantidade ficam lado a lado, compactos. O formato é
+   representado pelo pequeno desenho; não precisamos de texto dentro dele. */
+.ll-fields{grid-template-columns:minmax(0,1.65fr) minmax(72px,.8fr);gap:8px}
+.ll-fmt{min-height:44px;padding:6px 8px 6px 10px;border-radius:11px;background:#fffdfb}
+.ll-fmt .llprev{flex:1;justify-content:center}
+.ll-fmt .llprev-dot{width:9px;height:9px}
+.ll-fmt .ll-caret{width:9px;height:16px;opacity:.45}
 
-/* ZIGUEZAGUE / ENCAIXE: pequeno rebordo completo, imediatamente à volta
-   do círculo. Não é um octógono gigante: é apenas a moldura do berço. */
-.mprat-layout.encaixa .msdot::before{
-  content:"";
-  position:absolute;
-  z-index:-1;
-  left:-12%;right:-12%;top:-12%;bottom:-12%;
-  background:linear-gradient(145deg,#f7eddc 0%,#ead9ba 58%,#d4bc91 100%);
-  clip-path:polygon(24% 0,76% 0,100% 24%,100% 76%,76% 100%,24% 100%,0 76%,0 24%);
-  filter:drop-shadow(0 1px 1px rgba(78,50,20,.12));
-  pointer-events:none;
+/* Folha de escolha: duas opções, só grafismo. O nome fica no aria-label/title
+   para acessibilidade, mas não polui visualmente a escolha. */
+.fmt-lista{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.fmt-opt{min-height:92px;padding:12px 10px;justify-content:center;border-radius:15px}
+.fmt-opt .llprev{width:auto;min-width:100px;justify-content:center;gap:5px 7px}
+.fmt-opt .llprev-dot{width:13px;height:13px}
+.fmt-opt .fmt-tx{display:none}
+.fmt-opt .fmt-ok{position:absolute;width:20px;right:8px;top:8px;font-size:15px}
+.fmt-opt{position:relative}
+.fmt-opt.on{background:linear-gradient(180deg,#fff,#f9edf1);border-width:1.5px}
+
+/* O cartão deixa de parecer uma lista de formulários e passa a sugerir um
+   móvel real: postes laterais muito subtis e madeira contínua. */
+.mprat{padding:0 9px;margin-top:7px}
+.mprat-layout{gap:5px;padding:0 8px;margin-top:calc(var(--slot,34px) * .08);max-width:760px}
+.mp-lbl{max-width:58px;font-size:8px;letter-spacing:.35px}
+.mp-fio{opacity:.18}
+.mp-esp{min-width:3px}
+
+/* Fila: uma régua de madeira fina, com os pontos a assentarem nela. */
+.est-fila{padding:calc(var(--slot) * .10 + 2px) 0 calc(var(--slot) * .18);
+  border:0;border-radius:0;background:none;box-shadow:none;position:relative}
+.est-fila .msdot{background:var(--vh);border-color:var(--vh);color:#fff;box-shadow:0 2px 4px rgba(78,18,40,.22);z-index:2}
+.est-fila .msdot.vazia{background:#fffdfb;border:1.5px dashed #c9a1af;color:var(--vh);box-shadow:none}
+
+/* Sobrepostos: duas linhas compactas, como garrafas realmente empilhadas,
+   com a madeira visível sobretudo nas extremidades. */
+.est-sobrepostos{padding:calc(var(--slot) * .04) 0 calc(var(--slot) * .13);
+  border:0;border-radius:0;background:none;box-shadow:none;position:relative;row-gap:calc(var(--slot) * .015)}
+.est-sobrepostos .msdot{background:var(--vh);border-color:var(--vh);color:#fff;box-shadow:0 2px 4px rgba(78,18,40,.22);z-index:2}
+.est-sobrepostos .msdot.vazia{background:#fffdfb;border:1.5px dashed #c9a1af;color:var(--vh);box-shadow:none}
+
+/* Ziguezague: quando o renderer já fornece a régua ondulada, reforçamos a
+   leitura de "berços" sem tocar na geometria calculada pelo JS. */
+.est-regua .msdot{background:var(--vh);border-color:var(--vh);color:#fff;box-shadow:0 2px 4px rgba(78,18,40,.22)}
+.est-regua .msdot.vazia{background:#fffdfb;border:1.5px dashed #c9a1af;color:var(--vh);box-shadow:none}
+
+/* A grelha de locais passa a ser mais arejada e mais próxima de um desenho
+   técnico/minimalista de uma garrafeira. */
+.ml{border-radius:20px;padding-bottom:6px;box-shadow:0 8px 24px -14px rgba(78,18,40,.30)}
+.ml-bar{padding:5px 7px;background:linear-gradient(180deg,#fffdfb,var(--bg));}
+.ml-nav{width:30px;height:30px;font-size:21px;box-shadow:none;background:#fffdfb}
+.ml-t h3{font-size:16px}
+.ml-sub{font-size:11.5px;margin-top:0}
+.ml-dots{gap:5px;padding:5px 0 0}
+.ml-dot{width:6px;height:6px}
+.ml-dot.on{width:15px}
+.ml-leg{font-size:9px;padding:6px 10px 0;gap:3px 12px}
+.ml-leg i{width:11px;height:11px}
+
+/* Pequena moldura de madeira apenas na zona das prateleiras. Não interfere
+   nos cliques porque é background, não elemento sobreposto. */
+#mapa .mprat{position:relative}
+#mapa .mprat::before{content:"";position:absolute;left:2px;right:2px;top:0;bottom:0;pointer-events:none;border-left:3px solid rgba(185,157,112,.20);border-right:3px solid rgba(185,157,112,.20);border-radius:10px}
+
+@media(max-width:460px){
+  .fmt-opt{min-height:82px}
+  .fmt-opt .llprev{min-width:82px}
+  .fmt-opt .llprev-dot{width:11px;height:11px}
+  .mprat{padding:0 5px}
+  .mprat-layout{padding:0 5px}
+  .mp-lbl{max-width:48px;font-size:7.5px}
 }
-
-/* O rebordo deve continuar visível quando o lugar está vazio. */
-.mprat-layout.encaixa .msdot.vazia::before{opacity:.9}
-
-/* FILA: apenas um U baixo sob o círculo. A abertura central fica livre;
-   não há caixa vertical nem barra atravessada pela garrafa. */
-.est-fila:not(.est-sobrepostos) .msdot::before{
-  content:"";
-  position:absolute;
-  z-index:-1;
-  left:-15%;right:-15%;
-  top:52%;bottom:-10%;
-  background:linear-gradient(180deg,#f5ead7 0%,#dfcba7 65%,#c8ae7e 100%);
-  clip-path:polygon(0 0,100% 0,100% 100%,82% 100%,82% 45%,18% 45%,18% 100%,0 100%);
-  border-radius:3px;
-  filter:drop-shadow(0 1px 1px rgba(78,50,20,.13));
-  pointer-events:none;
-}
-
-.est-fila:not(.est-sobrepostos) .msdot.vazia::before{opacity:.82}
-
-/* SOBREPOSTOS: só a fila inferior recebe o pequeno U. A fila superior
-   fica completamente limpa para que se perceba que assenta nas garrafas
-   inferiores. */
-.est-sobrepostos .msdot::before{content:none!important}
-.est-sobrepostos .msdot[style*="grid-row:2"]::before{
-  content:""!important;
-  position:absolute;
-  z-index:-1;
-  left:-15%;right:-15%;
-  top:52%;bottom:-10%;
-  background:linear-gradient(180deg,#f5ead7 0%,#dfcba7 65%,#c8ae7e 100%);
-  clip-path:polygon(0 0,100% 0,100% 100%,82% 100%,82% 45%,18% 45%,18% 100%,0 100%);
-  border-radius:3px;
-  filter:drop-shadow(0 1px 1px rgba(78,50,20,.13));
-  pointer-events:none;
-}
-.est-sobrepostos .msdot[style*="grid-row:1"]::before{content:none!important}
-
-/* Nos sobrepostos a geometria das duas filas é que cria o encaixe; não
-   acrescentar madeira entre elas. */
-.est-sobrepostos{background:none!important;border:0!important;box-shadow:none!important}
-
-/* Menos espaço vertical: o desenho deve ler-se como uma garrafeira e não
-   como uma sucessão de cartões. */
-.mprat-layout.encaixa{margin-bottom:calc(var(--slot) * -.42)!important}

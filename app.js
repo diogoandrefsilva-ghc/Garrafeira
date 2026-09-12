@@ -1741,7 +1741,7 @@ function ondaBgSVG(info){
      (`fila`) ou duas (`sobrepostos`, que é o dobro da altura). Com o SVG
      esticado à caixa inteira, o mesmo `viewBox` dava alturas diferentes
      conforme o formato e os berços fugiam dos lugares. */
-  const colsw=info.colsw||info.cols,PICO=10,VALE=74;
+  const colsw=info.colsw||info.cols,SEAT=57,ESP=86;
   const larg=100/colsw;                          // uma coluna, em % da caixa
   /* Os berços vão sob a fila de BAIXO e só sob ela: é nela que as garrafas
      assentam na madeira. Nos `sobrepostos`, as de cima assentam nas de
@@ -1779,19 +1779,36 @@ function ondaBgSVG(info){
      calculado a partir dele ficaria a discordar do espaçamento no
      primeiro desenho. */
   const BOCA=1.08/COL_MIN;                       // a boca, em colunas: a garrafa mais 8%
-  const ASSENTO=larg*BOCA*.38,PAREDE=larg*BOCA*.31;
-  const boca=cx=>cx-ASSENTO/2-PAREDE,fim=cx=>cx+ASSENTO/2+PAREDE;
-  let d=`M${f(Math.max(0,boca(cxs[0])-larg*PONTA))} ${PICO}`;
+  /* A tábua é uma FORMA CHEIA e não dois traços sobre um caminho: o que
+     está no móvel é uma prancha de madeira com um berço RECORTADO no
+     cimo, debaixo de cada garrafa — e uma régua de 0,2 de espessura,
+     por muito que ondule, lê-se como um arame. Cheia, o berço é o
+     RECORTE: a garrafa desce para dentro dele e a madeira aparece entre
+     as garrafas, que é o que dá o desenho da garrafeira.
+
+     `m` é a meia-boca, `a` o meio-assento (a zona reta onde a garrafa
+     toca) e `k` a tangente que arredonda a parede. */
+  const m=larg*BOCA/2,a=m*.38,k=m*.28;
+  const ini=Math.max(0,cxs[0]-m-larg*PONTA);
+  const fim=Math.min(100,cxs[cxs.length-1]+m+larg*PONTA);
+  let topo=`M${f(ini)} 0`;
   cxs.forEach(cx=>{
-    const e=boca(cx),dir=fim(cx),ae=cx-ASSENTO/2,ad=cx+ASSENTO/2;
-    d+=` L${f(e)} ${PICO}`;                      // reto até à boca do berço
-    d+=` C${f(e+PAREDE*.5)} ${PICO} ${f(ae-PAREDE*.42)} ${VALE} ${f(ae)} ${VALE}`;
-    d+=` L${f(ad)} ${VALE}`;                     // o assento: onde a garrafa toca
-    d+=` C${f(ad+PAREDE*.42)} ${VALE} ${f(dir-PAREDE*.5)} ${PICO} ${f(dir)} ${PICO}`;
+    topo+=` L${f(cx-m)} 0`;                       // o cimo da madeira entre berços
+    topo+=` C${f(cx-m+k)} 0 ${f(cx-a-k)} ${SEAT} ${f(cx-a)} ${SEAT}`;
+    topo+=` L${f(cx+a)} ${SEAT}`;                 // o assento: onde a garrafa toca
+    topo+=` C${f(cx+a+k)} ${SEAT} ${f(cx+m-k)} 0 ${f(cx+m)} 0`;
   });
-  d+=` L${f(Math.min(100,fim(cxs[cxs.length-1])+larg*PONTA))} ${PICO}`;
+  topo+=` L${f(fim)} 0`;
+  /* O gradiente vive dentro do SVG (um `fill` não aceita gradiente CSS).
+     O id repete-se por prateleira — é o mesmo gradiente, e o desenho é
+     igual qualquer que seja o que o browser resolva. */
   return `<svg class="est-bg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-    <path d="${d}" class="est-reg-s" transform="translate(0 7)"/><path d="${d}" class="est-reg"/>
+    <defs><linearGradient id="est-mad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f8ecd6"/><stop offset=".55" stop-color="#efdcbb"/><stop offset="1" stop-color="#e4cba2"/>
+    </linearGradient></defs>
+    <path class="est-tab" d="${topo} L${f(fim)} 100 L${f(ini)} 100 Z"/>
+    <path class="est-tab-esp" d="M${f(ini)} ${ESP} L${f(fim)} ${ESP} L${f(fim)} 100 L${f(ini)} 100 Z"/>
+    <path class="est-tab-borda" d="${topo}"/>
   </svg>`;
 }
 
