@@ -193,7 +193,12 @@ function podeUsarIA(){return planoIA()==='gratis'||planoIA()==='premium';}
 // uma segunda opinião ao outro para os comparar (ver a secção da IA).
 function temPremium(){return planoIA()==='premium';}
 function motorDoPlano(){return temPremium()?'premium':'gratis';}
-function rotuloMotor(m){return m==='premium'?'IA com pesquisa web (Grounding Search)':'IA sem pesquisa web';}
+function rotuloMotor(m){
+  if(m==='premium')return 'IA com pesquisa web (Grounding Search)';
+  if(m==='manual')return 'pesquisa manual (colada)';
+  if(m==='catalogo')return 'Catálogo partilhado';
+  return 'IA sem pesquisa web';
+}
 // Duas portas, e só duas: a minha garrafeira, ou uma em que o dono deu
 // 'edicao' ao admin. Uma partilha nunca abre esta — é sempre só de ver.
 function podeEditar(){
@@ -2717,7 +2722,7 @@ function vinhoDetalheHTML(v){
 
     <div class="macoes ro-hide">
       ${podeUsarIA()
-        ? `<button class="btn prim" onclick="iaEscolher(${v.id})">🔎 Procurar informação</button>`
+        ? `<button class="btn prim" onclick="iaAbrirProcura(${v.id})">🔎 Procurar informação</button>`
         : '<span class="note">A pesquisa por IA não está incluída no teu acesso.</span>'}
       <button class="btn ghost" onclick="abrirEditarVinho(${v.id})">✏️ Editar</button>
     </div>
@@ -4025,7 +4030,7 @@ function iaMostrarResultado(res,vinhoId){
   // premium bem sucedida era pedir desculpa por um resultado que estava bem.
   // (A saída para o outro motor quando o premium FALHA tecnicamente continua
   // em `iaMostrarErro` — aí sim é um caminho a sério, não uma segunda opinião.)
-  const valeAOutro=IA_MOTOR!=='premium';
+  const valeAOutro=IA_MOTOR==='gratis';
 
   document.getElementById('modal-ia-in').innerHTML=`
     <div class="mtop"><div><h3>${cmp?esc(rot1)+' vs '+esc(rot2):'O que se encontrou'}</h3>
@@ -4168,6 +4173,349 @@ function iaPreencherForm(res,substituir){
     ai_fontes:res.fontes||null,ai_modelo:res.modelo||'',
     ai_atualizado_em:new Date().toISOString()
   };
+}
+
+/* ── PROCURA MANUAL (grátis) — copiar prompt, colar resposta ──
+   Só o ADMIN vê esta escolha (é quem decide gastar ou não): ao carregar em
+   "Procurar informação" ele escolhe entre TRÊS caminhos —
+     · ver o que o CATÁLOGO já sabe (grátis, instantâneo, o painel de
+       sempre — `catAbrirPainel`);
+     · a PESQUISA AUTOMÁTICA de sempre (paga, `iaEscolher`);
+     · esta: um prompt pronto a colar na app do Gemini, e a resposta colada
+       de volta aqui — comparada como se fosse uma segunda opinião, com o
+       ATUAL e, no fim, também com o CATÁLOGO partilhado, sem gastar nada.
+   Os outros editores não veem esta escolha: vão direto à automática, como
+   sempre foi (`iaAbrirProcura`).
+
+   O prompt e o parser são um ESPELHO do que o `vinho-info.ts` já faz
+   (`promptComGrounding`, `extrairJson`, `normalizar`) — mesmo vocabulário
+   fechado (TIPOS/ESTILOS/MENCOES/CLASSIF), mesmos limites. Uma resposta
+   colada à mão merece a MESMA desconfiança que uma que veio da net sozinha
+   — se mudares um lado, muda o outro no mesmo commit. */
+
+function iaAbrirProcura(vinhoId){
+  if(roGuard())return;
+  if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
+  if(!isAdmin())return iaEscolher(vinhoId);
+  iaEscolherCaminho(vinhoId);
+}
+
+function iaEscolherCaminho(vinhoId){
+  const v=IDXV[vinhoId];if(!v)return;
+  document.getElementById('modal-ia-in').innerHTML=`
+    <div class="mtop"><div><h3>🔎 Procurar informação</h3>
+      <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
+      <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
+    <div class="note" style="margin-bottom:12px">Só tu vês esta escolha — os outros editores vão
+      direto à pesquisa automática.</div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div><button class="btn ghost full" onclick="iaCaminhoCatalogo(${vinhoId})">🗃️ Ver o que o Catálogo diz</button>
+        <div class="note" style="margin-top:5px">Grátis e instantâneo — o que a Garrafeira e a WineSelection já sabem deste vinho.</div></div>
+      <div><button class="btn ghost full" onclick="fecharModal('modal-ia');iaEscolher(${vinhoId})">🔎 Pesquisa automática</button>
+        <div class="note" style="margin-top:5px">Paga — a ${esc(rotuloMotor(motorDoPlano()))}, como sempre.</div></div>
+      <div><button class="btn prim full" onclick="iaManualEscolher(${vinhoId})">✍️ Pesquisa manual</button>
+        <div class="note" style="margin-top:5px">Grátis — copias um prompt para a app do Gemini e colas a resposta aqui; no fim compara-se também com o Catálogo.</div></div>
+    </div>`;
+  abrirModal('modal-ia');
+}
+
+async function iaCaminhoCatalogo(vinhoId){
+  fecharModal('modal-ia');
+  await catComparar(vinhoId,true);
+  const d=catDados(vinhoId);
+  if(!d||!d.encontrado){toast('Este vinho ainda não está no catálogo partilhado',1);return;}
+  catAbrirPainel(vinhoId);
+}
+
+// Guardados enquanto se passa do seletor de campos ao prompt, para a
+// comparação final saber a que se pediu (os mesmos `campos` que a Edge
+// Function usaria para cortar a resposta).
+let IA_MANUAL_CAMPOS=null;
+
+function iaManualEscolher(vinhoId){
+  if(roGuard())return;
+  const v=IDXV[vinhoId];if(!v)return;
+  const linhas=IA_CAMPOS.map(c=>{
+    const tem=!!iaValorAtual(v,c.k);
+    return `<label class="ia-esc">
+      <input type="checkbox" class="ia-esc-c" value="${esc(c.k)}"${tem?'':' checked'}>
+      <span>${esc(c.rot)}${tem?'<i>já tem</i>':''}</span>
+    </label>`;
+  }).join('');
+  const optsCor=['<option value="">— escolhe a cor —</option>'].concat(
+    TIPOS.map(x=>`<option value="${esc(x)}"${v.tipo===x?' selected':''}>${esc(x)}</option>`)
+  ).join('');
+  document.getElementById('modal-ia-in').innerHTML=`
+    <div class="mtop"><div><h3>✍️ Pesquisa manual</h3>
+      <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
+      <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
+
+    <label>Cor</label>
+    <select id="ia-cor-sel">${optsCor}</select>
+    <div class="note" style="margin-bottom:10px">A cor é parte da identidade do vinho no catálogo
+      partilhado. Confirma-a antes de gerar o prompt; se a mudares aqui, fica gravada no vinho.</div>
+
+    <div class="aviso">Escolhe o que queres perguntar ao Gemini. Já vêm marcados os campos vazios.</div>
+
+    <div class="ia-escbar">
+      <button class="mini" onclick="iaEscTodos(true)">Marcar tudo</button>
+      <button class="mini" onclick="iaEscTodos(false)">Desmarcar</button>
+      <span class="note" id="ia-esc-n"></span>
+    </div>
+    <div class="ia-escs" onchange="iaManualEscContar()">${linhas}</div>
+
+    <div class="macoes">
+      <button class="btn prim" id="ia-esc-btn" onclick="iaManualGerarPrompt(${vinhoId})">Gerar prompt</button>
+      <button class="btn ghost" onclick="iaEscolherCaminho(${vinhoId})">‹ Voltar</button>
+    </div>`;
+  abrirModal('modal-ia');
+  iaManualEscContar();
+}
+function iaManualEscContar(){
+  const n=iaEscSelecionados().length, tot=IA_CAMPOS.length;
+  const et=document.getElementById('ia-esc-n');
+  if(et)et.textContent=n===tot?'todos os campos':`${n} de ${tot} campos`;
+  const b=document.getElementById('ia-esc-btn');
+  if(b){b.disabled=!n;b.textContent=n?`Gerar prompt (${n===tot?'tudo':n+(n===1?' campo':' campos')})`:'Escolhe pelo menos um';}
+}
+
+// Nome do campo no JSON que se pede ao Gemini — a mesma tabela do `CAMPOS`
+// em vinho-info.ts, é o que liga as chaves da app ao texto do prompt.
+const IA_CAMPOS_JSON={
+  produtor:'produtor',ano:'ano',tipo:'tipo',estilo:'estilo',regiao:'regiao',
+  sub_regiao:'subRegiao',mencao:'mencao',classificacao:'classificacao',
+  castas:'castas',teor:'teor',estagio_meses:'estagioMeses',
+  estagio_texto:'estagioTexto',vivino_nota:'vivinoNota',
+  vivino_avaliacoes:'vivinoAvaliacoes',vivino_url:'vivinoUrl',
+  imagem_url:'imagemUrl',preco_medio:'precoMedio',beber_de:'beberDe',
+  beber_ate:'beberAte',notas_prova:'notasProva',harmonizacao:'harmonizacao',
+  ai_resumo:'resumo'
+};
+
+function iaManualPrompt(v,campos){
+  const hoje=new Date().toISOString().slice(0,10);
+  const linhas=[`Nome: ${v.nome}`];
+  if(v.ano)linhas.push(`Ano (colheita): ${v.ano}`);
+  if(v.produtor)linhas.push(`Produtor indicado: ${v.produtor}`);
+  if(v.regiao)linhas.push(`Região indicada: ${v.regiao}`);
+  const so=campos&&campos.length&&campos.length<IA_CAMPOS.length
+    ?`\nSÓ INTERESSAM ESTES CAMPOS: ${campos.map(k=>IA_CAMPOS_JSON[k]).join(', ')}.\nConcentra-te neles e deixa os outros fora da resposta.\n`:'';
+  return `Usa a tua pesquisa na internet para preencheres a ficha deste vinho, como faria um enólogo para a garrafeira de uma casa particular.
+
+VINHO A IDENTIFICAR:
+  ${linhas.join('\n  ')}
+Hoje é ${hoje}.
+${so}
+REGRAS, e são a sério:
+1. NÃO INVENTES. Um campo que não consigas confirmar por pesquisa fica FORA do JSON (ou a null) — uma ficha com metade dos campos certos vale mais do que uma cheia com metade inventada.
+2. A nota do Vivino, o nº de avaliações e o "vivinoUrl" têm de vir da MESMA página do Vivino, e tens de confirmar que é DESTE vinho exato (produtor, ano e região a bater certo) — há homónimos de produtores diferentes. Em dúvida, deixa os três vazios.
+3. Se houver dúvida entre dois vinhos parecidos, escolhe o que bate certo com o ano e a região indicados, e escreve a hesitação em "aviso".
+4. O preço é o de UMA garrafa de 0,75L, em euros, em Portugal.
+5. As castas vão SEPARADAS, uma a uma, com o nome português corrente ("Touriga Nacional", "Alicante Bouschet"). Nunca "blend"/"lote"/"várias castas".
+6. "beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que o vinho está no ponto.
+7. "imagemUrl" é o link DIRETO de uma fotografia (acaba em .jpg/.jpeg/.png/.webp/.avif), nunca o link da página. Sem certeza, deixa vazio.
+
+Responde SÓ com este JSON, sem texto à volta e sem blocos de código \`\`\`:
+{
+  "encontrado": true,
+  "produtor": "",
+  "ano": ${v.ano||'null'},
+  "tipo": "um de: ${TIPOS.join(' | ')}",
+  "estilo": "vazio, ou um de: ${ESTILOS.filter(Boolean).join(' | ')}",
+  "regiao": "região vitivinícola",
+  "subRegiao": "",
+  "mencao": "vazio, ou um de: ${MENCOES.filter(Boolean).join(' | ')}",
+  "classificacao": "vazio, ou um de: ${CLASSIF.filter(Boolean).join(' | ')}",
+  "castas": ["Touriga Nacional", "Touriga Franca"],
+  "teor": 14.5,
+  "estagioMeses": 18,
+  "estagioTexto": "18 meses em barrica de carvalho francês",
+  "vivinoNota": 4.1,
+  "vivinoAvaliacoes": 1234,
+  "vivinoUrl": "",
+  "imagemUrl": "",
+  "precoMedio": 18.5,
+  "beberDe": 2026,
+  "beberAte": 2034,
+  "notasProva": "duas ou três frases sobre aroma, boca e final",
+  "harmonizacao": "com que pratos",
+  "resumo": "duas ou três frases sobre o vinho e o produtor",
+  "aviso": "vazio, ou o que ficou por confirmar"
+}
+
+Se não conseguires identificar o vinho de todo, responde {"encontrado": false, "aviso": "porquê"}.`;
+}
+
+async function iaManualGerarPrompt(vinhoId){
+  if(roGuard())return;
+  const v=IDXV[vinhoId];if(!v)return;
+  const cor=await iaCorGuard(v);
+  if(!cor)return;
+  const escolhidos=iaEscSelecionados();
+  const campos=escolhidos.length&&escolhidos.length<IA_CAMPOS.length?escolhidos:null;
+  IA_MANUAL_CAMPOS=campos;
+  const txt=iaManualPrompt(v,campos);
+  document.getElementById('modal-ia-in').innerHTML=`
+    <div class="mtop"><div><h3>✍️ Pesquisa manual</h3>
+      <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
+      <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
+
+    <div class="aviso">1. Copia o prompt abaixo. 2. Abre a app ou o site do Gemini e cola-o lá.
+      3. Copia a resposta toda (o JSON) e cola-a na caixa de baixo. 4. Carrega em Comparar.</div>
+
+    <label>Prompt a copiar</label>
+    <textarea id="ia-manual-prompt" readonly rows="6" onclick="this.select()">${esc(txt)}</textarea>
+    <button class="btn ghost full" style="margin-top:8px" onclick="iaManualCopiar()">📋 Copiar prompt</button>
+
+    <label style="margin-top:16px">Resposta do Gemini (cola aqui)</label>
+    <textarea id="ia-manual-resposta" rows="10" placeholder="Cola aqui o JSON que o Gemini devolveu…"></textarea>
+    <div class="note" id="ia-manual-erro" style="margin-top:6px;color:var(--dg)"></div>
+
+    <div class="macoes">
+      <button class="btn prim" onclick="iaManualColar(${vinhoId})">Comparar</button>
+      <button class="btn ghost" onclick="iaManualEscolher(${vinhoId})">‹ Voltar</button>
+    </div>`;
+  abrirModal('modal-ia');
+}
+
+async function iaManualCopiar(){
+  const ta=document.getElementById('ia-manual-prompt');
+  if(!ta)return;
+  try{
+    await navigator.clipboard.writeText(ta.value);
+    toast('Prompt copiado ✓');
+  }catch(e){
+    ta.focus();ta.select();
+    toast('Não deu para copiar sozinho — o texto já está selecionado, usa Ctrl/Cmd+C',1);
+  }
+}
+
+/* Espelho do `extrairJson` da Edge Function: o Gemini às vezes devolve
+   texto à volta do JSON ou blocos ```; isto apanha o primeiro objeto
+   equilibrado. */
+function iaManualExtrairJson(txt){
+  const s=String(txt||'').trim();
+  if(!s)return null;
+  try{return JSON.parse(s);}catch(e){}
+  const limpo=s.replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
+  try{return JSON.parse(limpo);}catch(e){}
+  const ini=limpo.indexOf('{');
+  if(ini<0)return null;
+  let nivel=0,emString=false,escape=false;
+  for(let i=ini;i<limpo.length;i++){
+    const c=limpo[i];
+    if(escape){escape=false;continue;}
+    if(c==='\\'){escape=true;continue;}
+    if(c==='"'){emString=!emString;continue;}
+    if(emString)continue;
+    if(c==='{')nivel++;
+    else if(c==='}'&&--nivel===0){
+      try{return JSON.parse(limpo.slice(ini,i+1));}catch(e){return null;}
+    }
+  }
+  return null;
+}
+
+/* Espelho do `normalizar` da Edge Function: mesmo vocabulário fechado
+   (TIPOS/ESTILOS/MENCOES/CLASSIF) e os mesmos limites. */
+function iaManualTxt(v,max){return String(v==null?'':v).replace(/\s+/g,' ').trim().slice(0,max);}
+function iaManualNum(v,min,max,casas){
+  casas=casas==null?2:casas;
+  const n=typeof v==='number'?v:parseFloat(String(v==null?'':v).replace(',','.'));
+  if(!isFinite(n)||n<min||n>max)return null;
+  return Number(n.toFixed(casas));
+}
+function iaManualAno(v){const n=iaManualNum(v,1900,2100,0);return n===null?null:Math.round(n);}
+function iaManualDaLista(v,lista){
+  const t=iaManualTxt(v,40);
+  const achado=lista.find(x=>x&&x.toLowerCase()===t.toLowerCase());
+  return achado||'';
+}
+function iaManualNormalizar(raw,anoPedido,campos){
+  if(!raw||typeof raw!=='object')return null;
+  if(raw.encontrado===false)return null;
+  const castas=Array.isArray(raw.castas)
+    ?[...new Set(raw.castas.map(c=>iaManualTxt(c,50))
+        .filter(c=>c&&!/^(blend|lote|v[áa]rias|diversas|field blend|castas?)$/i.test(c))
+        .map(c=>c.replace(/\s*\(\d+%?\)\s*$/,'').trim()))].slice(0,12)
+    :[];
+  let beberDe=iaManualAno(raw.beberDe), beberAte=iaManualAno(raw.beberAte);
+  if(beberDe!==null&&beberAte!==null&&beberAte<beberDe)beberAte=null;
+  const out={
+    produtor:iaManualTxt(raw.produtor,90),
+    ano:iaManualAno(raw.ano)??anoPedido,
+    tipo:iaManualDaLista(raw.tipo,TIPOS),
+    estilo:iaManualDaLista(raw.estilo,ESTILOS),
+    regiao:iaManualTxt(raw.regiao,60),
+    sub_regiao:iaManualTxt(raw.subRegiao,60),
+    mencao:iaManualDaLista(raw.mencao,MENCOES),
+    classificacao:iaManualDaLista(raw.classificacao,CLASSIF),
+    castas,
+    teor:iaManualNum(raw.teor,4,25,1),
+    estagio_meses:(()=>{const n=iaManualNum(raw.estagioMeses,0,400,0);return n===null?null:Math.round(n);})(),
+    estagio_texto:iaManualTxt(raw.estagioTexto,160),
+    vivino_nota:iaManualNum(raw.vivinoNota,1,5,2),
+    vivino_avaliacoes:(()=>{const n=iaManualNum(raw.vivinoAvaliacoes,0,10000000,0);return n===null?null:Math.round(n);})(),
+    vivino_url:/^https?:\/\/([a-z0-9-]+\.)*vivino\.com\//i.test(String(raw.vivinoUrl||'').trim())?iaManualTxt(raw.vivinoUrl,300):'',
+    imagem_url:/^https?:\/\/\S+\.(jpe?g|png|webp|avif)(\?\S*)?$/i.test(String(raw.imagemUrl||'').trim())?iaManualTxt(raw.imagemUrl,400):'',
+    preco_medio:iaManualNum(raw.precoMedio,0.5,100000,2),
+    beber_de:beberDe,beber_ate:beberAte,
+    notas_prova:iaManualTxt(raw.notasProva,600),
+    harmonizacao:iaManualTxt(raw.harmonizacao,300),
+    ai_resumo:iaManualTxt(raw.resumo,900),
+    aviso:iaManualTxt(raw.aviso,300)
+  };
+  Object.keys(out).forEach(k=>{
+    const v=out[k];
+    if(v===null||v===''||(Array.isArray(v)&&!v.length))delete out[k];
+  });
+  if(campos&&campos.length)Object.keys(out).forEach(k=>{if(k!=='aviso'&&!campos.includes(k))delete out[k];});
+  return Object.keys(out).length?out:null;
+}
+
+/* Cola-se a resposta, valida-se, e entra-se no MESMO ecrã de comparação da
+   pesquisa automática (`iaMostrarResultado`) — é genérico o suficiente
+   para não saber (nem precisar de saber) que o que está a comparar não
+   veio de uma chamada à Edge Function. No fim compara-se também com o
+   CATÁLOGO partilhado, se ele souber alguma coisa deste vinho: é grátis,
+   é só ler o que já lá está (`catComparar`), e reaproveita o mesmíssimo
+   mecanismo de "duas leituras, escolhe uma" que a segunda opinião já usa. */
+async function iaManualColar(vinhoId){
+  const v=IDXV[vinhoId];if(!v)return;
+  const txt=document.getElementById('ia-manual-resposta').value;
+  const erroEl=document.getElementById('ia-manual-erro');
+  const raw=iaManualExtrairJson(txt);
+  if(!raw){
+    if(erroEl)erroEl.textContent='Não consegui ler isto como JSON. Confirma que colaste a resposta toda, incluindo as chavetas { }.';
+    return;
+  }
+  if(raw.encontrado===false){
+    if(erroEl)erroEl.textContent='O Gemini disse que não encontrou o vinho'+(raw.aviso?': '+raw.aviso:'.');
+    return;
+  }
+  const ficha=iaManualNormalizar(raw,v.ano||null,IA_MANUAL_CAMPOS);
+  if(!ficha){
+    if(erroEl)erroEl.textContent='O JSON leu-se, mas não trouxe nenhum campo válido — confere se respeitou o formato pedido.';
+    return;
+  }
+  if(erroEl)erroEl.textContent='';
+  // "gemini" no início é o que faz `iaUltimaProcura` contar isto como uma
+  // procura a sério ao avisar sobre repetições futuras — mereceu-o: saiu
+  // do mesmo Gemini, só que pela mão de quem procura em vez da API.
+  ficha.modelo='gemini (colado à mão)';
+  ficha.pesquisa=true;
+  IA_PEDIDO={nome:v.nome,ano:v.ano,produtor:v.produtor,regiao:v.regiao};
+  IA_VINHO=vinhoId;IA_MOTOR='manual';IA_ERRO2='';
+  await catComparar(vinhoId,true);
+  const doCatalogo=catCampos(vinhoId);
+  if(doCatalogo.length){
+    IA_RES2={modelo:'catálogo partilhado'};
+    doCatalogo.forEach(c=>{if(c.catalogo!=null&&c.catalogo!=='')IA_RES2[c.campo]=c.catalogo;});
+    IA_MOTOR2='catalogo';
+  }else{
+    IA_RES2=null;IA_MOTOR2='';
+  }
+  iaMostrarResultado(ficha,vinhoId);
 }
 
 /* ── AUTH (SUPABASE) ───────────────────────────────────────────────
