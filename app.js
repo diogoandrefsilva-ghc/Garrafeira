@@ -3619,32 +3619,27 @@ function iaValorAtual(v,k){
   return v[k]==null||v[k]===''?'':String(v[k]);
 }
 
-/* PISTAS: o que já se sabe do vinho, para ajudar a IA a não confundir isto
-   com um homónimo (produtor, ano, região, castas) — ao contrário dos
-   campos de baixo, uma pista nunca é pedida de volta, só serve de
-   contexto no prompt (ver `iaArrancar`/`iaManualPrompt`). Vêm marcadas
-   quando o valor já existe; um campo vazio não é pista nenhuma, por isso
-   nem aparece marcável. A cor fica de fora desta lista: já é confirmada à
-   parte (`iaCorGuard`, obrigatória antes de procurar) e vai sempre. */
-const IA_PISTAS_CAMPOS=[
-  {k:'produtor',rot:'Produtor'},{k:'ano',rot:'Ano'},
-  {k:'regiao',rot:'Região'},{k:'castas',rot:'Castas'}
-];
-function iaPistasHTML(v){
-  const linhas=IA_PISTAS_CAMPOS.map(c=>{
-    const val=iaValorAtual(v,c.k);
-    return `<label class="ia-esc${val?'':' disabled'}">
-      <input type="checkbox" class="ia-pista-c" value="${c.k}"${val?' checked':' disabled'}>
-      <span>${esc(c.rot)}${val?': '+esc(val):' — desconhecido'}</span>
-    </label>`;
-  }).join('');
-  return `<label style="margin-bottom:2px">Pistas para identificar o vinho certo</label>
-    <div class="note" style="margin-bottom:8px">Não são pedidas à IA — só ajudam a não confundir
-      este vinho com um homónimo. Desmarca as que achares que possam estar erradas.</div>
-    <div class="ia-escs" style="margin-bottom:10px">${linhas}</div>`;
+/* CONTEXTO LIVRE: duas caixas de texto em vez de campos fechados — mais
+   flexível para o que ajuda a desambiguar ("grande reserva", "edição
+   limitada", um produtor parecido com outro) do que um conjunto fixo de
+   checkboxes alguma vez cobre. Nenhuma das duas é pedida de volta à IA —
+   servem só de contexto no prompt (ver `iaArrancar`/`iaManualPrompt`). */
+function iaContextoHTML(){
+  return `<label>Notas para ajudar a identificar o vinho (opcional)</label>
+    <textarea id="ia-notas" rows="2" maxlength="300"
+      placeholder="ex.: vinho tinto, grande reserva, da casa Ferreirinha, edição limitada"></textarea>
+    <div class="note" style="margin-bottom:10px">Não é pedido à IA — é só contexto para não
+      confundir este vinho com um homónimo.</div>
+    <label>Sites de confiança (opcional)</label>
+    <textarea id="ia-sites" rows="1" placeholder="ex.: vivino.com, wine-searcher.com"></textarea>
+    <div class="note" style="margin-bottom:10px">Um ou mais, separados por vírgula — a pesquisa dá
+      prioridade a estes.</div>`;
 }
-function iaPistasSelecionadas(){
-  return [...document.querySelectorAll('.ia-pista-c:checked')].map(e=>e.value);
+function iaContextoLer(){
+  const notas=(document.getElementById('ia-notas')?.value||'').trim().slice(0,300);
+  const sites=(document.getElementById('ia-sites')?.value||'')
+    .split(/[,\n]/).map(s=>s.trim().replace(/^https?:\/\//i,'').replace(/\/.*$/,'')).filter(Boolean).slice(0,5);
+  return {notas,sites};
 }
 function iaEscolher(vinhoId){
   if(roGuard())return;
@@ -3671,7 +3666,7 @@ function iaEscolher(vinhoId){
       partilhado — um Papa Figos branco não é o tinto. Confirma-a antes de procurar; se a mudares
       aqui, fica gravada no vinho.</div>
 
-    ${iaPistasHTML(v)}
+    ${iaContextoHTML()}
 
     <label class="ia-esc" style="margin-bottom:2px">
       <input type="checkbox" id="ia-colheita-esp">
@@ -3787,8 +3782,8 @@ function iaConfirmarRepetir(vinhoId,ult){
 // Os campos escolhidos no seletor, guardados enquanto se responde ao aviso:
 // nessa altura o seletor já não está no ecrã para se lhe perguntar outra vez.
 let IA_ESC=null;
-// Idem para as pistas (produtor/ano/região/castas) marcadas no seletor.
-let IA_PISTAS=null;
+// Idem para o contexto livre (notas + sites) escrito no seletor.
+let IA_CONTEXTO=null;
 // Idem para o interruptor "tem de ser esta colheita" — por omissão a
 // pesquisa é sobre o vinho em geral (ver a regra do Vivino em
 // `vinho-info.ts`); só fica estrita quando a pessoa liga isto de propósito.
@@ -3829,7 +3824,7 @@ async function iaProcurar(vinhoId){
   const escolhidos=iaEscSelecionados();
   IA_ESC=escolhidos.length&&escolhidos.length<IA_CAMPOS.length?escolhidos:null;
   IA_COLHEITA_ESP=!!document.getElementById('ia-colheita-esp')?.checked;
-  IA_PISTAS=iaPistasSelecionadas();
+  IA_CONTEXTO=iaContextoLer();
   const btn=document.getElementById('ia-esc-btn');
   if(btn){btn.disabled=true;btn.textContent='A ver…';}
   const ult=await iaUltimaProcura(vinhoId);
@@ -3843,14 +3838,15 @@ async function iaArrancar(vinhoId){
   if(roGuard())return;
   const v=IDXV[vinhoId];if(!v)return;
   // `tipo` vai sempre (foi confirmado pelo `iaCorGuard` antes de chegar
-  // aqui); as outras pistas só vão se a pessoa as deixou marcadas no
-  // seletor — `IA_PISTAS` nulo (chamado de fora dele) cai no de sempre.
-  const pistas=IA_PISTAS||['ano','produtor','regiao'];
+  // aqui). O resto do contexto é livre — `IA_CONTEXTO` nulo (chamado de
+  // fora do seletor) cai em "sem notas, sem sites".
+  const ctx=IA_CONTEXTO||{notas:'',sites:[]};
   const pedido={nome:v.nome,tipo:v.tipo};
-  if(pistas.includes('ano')&&v.ano)pedido.ano=v.ano;
-  if(pistas.includes('produtor')&&v.produtor)pedido.produtor=v.produtor;
-  if(pistas.includes('regiao')&&v.regiao)pedido.regiao=v.regiao;
-  if(pistas.includes('castas')&&v.castas&&v.castas.length)pedido.castas=v.castas;
+  if(v.ano)pedido.ano=v.ano;
+  if(v.produtor)pedido.produtor=v.produtor;
+  if(v.regiao)pedido.regiao=v.regiao;
+  if(ctx.notas)pedido.notas=ctx.notas;
+  if(ctx.sites.length)pedido.sites=ctx.sites;
   if(IA_ESC)pedido.campos=IA_ESC;
   pedido.colheitaEspecifica=IA_COLHEITA_ESP;
   // O pedido fica guardado tal e qual: a segunda volta tem de ser a MESMA
@@ -4319,7 +4315,7 @@ function iaManualEscolher(vinhoId){
     <div class="note" style="margin-bottom:10px">A cor é parte da identidade do vinho no catálogo
       partilhado. Confirma-a antes de gerar o prompt; se a mudares aqui, fica gravada no vinho.</div>
 
-    ${iaPistasHTML(v)}
+    ${iaContextoHTML()}
 
     <label class="ia-esc" style="margin-bottom:2px">
       <input type="checkbox" id="ia-colheita-esp">
@@ -4377,22 +4373,24 @@ function iaManualRegraVivino(colheitaEspecifica){
 }
 const IA_MANUAL_REGRA_CUVEE='Se o produtor tiver mais do que um vinho com este nome (variantes de gama: Reserva, Grande Reserva, Colheita, Terroir, etc.) e não se souber qual, prefere a versão SEM qualificador extra; se essa não existir, escolhe a que tiver mais avaliações no Vivino (a principal da gama, normalmente) e diz no "aviso" que outras versões encontraste e qual escolheste.';
 
-function iaManualPrompt(v,campos,colheitaEspecifica,pistas){
+function iaManualPrompt(v,campos,colheitaEspecifica,notas,sites){
   const hoje=new Date().toISOString().slice(0,10);
   const linhas=[`Nome: ${v.nome}`];
-  if(pistas.includes('ano')&&v.ano)linhas.push(`Ano (colheita): ${v.ano}`);
-  if(pistas.includes('produtor')&&v.produtor)linhas.push(`Produtor indicado: ${v.produtor}`);
-  if(pistas.includes('regiao')&&v.regiao)linhas.push(`Região indicada: ${v.regiao}`);
+  if(v.ano)linhas.push(`Ano (colheita): ${v.ano}`);
+  if(v.produtor)linhas.push(`Produtor indicado: ${v.produtor}`);
+  if(v.regiao)linhas.push(`Região indicada: ${v.regiao}`);
   if(v.tipo)linhas.push(`Cor: ${v.tipo}`);
-  if(pistas.includes('castas')&&v.castas&&v.castas.length)linhas.push(`Castas conhecidas: ${v.castas.join(', ')}`);
+  if(notas)linhas.push(`Notas de quem procura: ${notas}`);
   const so=campos&&campos.length&&campos.length<IA_CAMPOS.length
     ?`\nSÓ INTERESSAM ESTES CAMPOS: ${campos.map(k=>IA_CAMPOS_JSON[k]).join(', ')}.\nConcentra-te neles e deixa os outros fora da resposta.\n`:'';
+  const sitesTxt=sites&&sites.length
+    ?`\nFONTES DE CONFIANÇA: dá prioridade a informação vinda de ${sites.join(', ')}. Só uses outra fonte se estas não tiverem a resposta.\n`:'';
   return `Usa a tua pesquisa na internet para preencheres a ficha deste vinho, como faria um enólogo para a garrafeira de uma casa particular.
 
 VINHO A IDENTIFICAR:
   ${linhas.join('\n  ')}
 Hoje é ${hoje}.
-${so}
+${sitesTxt}${so}
 REGRAS, e são a sério:
 1. NÃO INVENTES. Um campo que não consigas confirmar por pesquisa fica FORA do JSON (ou a null) — uma ficha com metade dos campos certos vale mais do que uma cheia com metade inventada.
 2. ${IA_MANUAL_REGRA_CUVEE}
@@ -4442,9 +4440,9 @@ async function iaManualGerarPrompt(vinhoId){
   const escolhidos=iaEscSelecionados();
   const campos=escolhidos.length&&escolhidos.length<IA_CAMPOS.length?escolhidos:null;
   const colheitaEspecifica=!!document.getElementById('ia-colheita-esp')?.checked;
-  const pistas=iaPistasSelecionadas();
+  const ctx=iaContextoLer();
   IA_MANUAL_CAMPOS=campos;
-  const txt=iaManualPrompt(v,campos,colheitaEspecifica,pistas);
+  const txt=iaManualPrompt(v,campos,colheitaEspecifica,ctx.notas,ctx.sites);
   document.getElementById('modal-ia-in').innerHTML=`
     <div class="mtop"><div><h3>✍️ Pesquisa manual</h3>
       <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>

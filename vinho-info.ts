@@ -103,16 +103,16 @@ function semAcentos(s: string): string {
 }
 function chaveCache(
   modo: "gratis" | "premium", nome: string, ano: number | null, produtor: string, regiao: string,
-  tipo: string, castas: string[],
+  tipo: string, notas: string, sites: string[],
   campos: string[] | null, colheitaEspecifica: boolean,
 ): string {
   const camposTag = campos?.length ? [...campos].sort().join(",") : "*";
-  // `tipo`/`castas` entram na chave pela mesma razão que `campos` e
-  // `colheitaEspecifica` já entravam: são PISTAS que mudam o texto do
-  // prompt (ver `pistas` na app) — duas pesquisas com pistas diferentes não
-  // podem partilhar cache, mesmo que o resto seja igual.
-  const castasTag = castas.length
-    ? [...castas].map((c) => semAcentos(c.toLowerCase())).sort().join(",") : "";
+  // `tipo`/`notas`/`sites` entram na chave pela mesma razão que `campos` e
+  // `colheitaEspecifica` já entravam: mudam o TEXTO do prompt (ou a
+  // pesquisa) — duas procuras com contexto diferente não podem partilhar
+  // cache, mesmo que o resto seja igual.
+  const sitesTag = sites.length
+    ? [...sites].map((s) => s.toLowerCase()).sort().join(",") : "";
   return [
     CACHE_VERSAO,
     modo,
@@ -121,7 +121,8 @@ function chaveCache(
     semAcentos(produtor.toLowerCase()).replace(/[^a-z0-9]+/g, " ").trim(),
     semAcentos(regiao.toLowerCase()).replace(/[^a-z0-9]+/g, " ").trim(),
     semAcentos(tipo.toLowerCase()),
-    castasTag,
+    semAcentos(notas.toLowerCase()).replace(/[^a-z0-9]+/g, " ").trim(),
+    sitesTag,
     camposTag,
     // Entra na chave porque muda o TEXTO do prompt (a regra do Vivino) —
     // duas pesquisas iguais em tudo menos nisto não podem partilhar cache.
@@ -351,14 +352,14 @@ const regraCuvee = `Se o produtor tiver mais do que um vinho com este nome
    que outras versões encontraste e qual escolheste.`;
 
 const prompt = (
-  nome: string, ano: number | null, produtor: string, regiao: string, tipo: string, castas: string[], hoje: string,
+  nome: string, ano: number | null, produtor: string, regiao: string, tipo: string, notas: string, hoje: string,
   campos: string[] | null, textosPesquisa: string, colheitaEspecifica: boolean,
 ) => `
 És um enólogo a preencher a ficha de um vinho para a garrafeira de uma casa particular.
 
 VINHO A IDENTIFICAR:
   Nome: ${nome}
-${ano ? `  Ano (colheita): ${ano}\n` : ""}${produtor ? `  Produtor indicado: ${produtor}\n` : ""}${regiao ? `  Região indicada: ${regiao}\n` : ""}${tipo ? `  Cor: ${tipo}\n` : ""}${castas.length ? `  Castas conhecidas: ${castas.join(", ")}\n` : ""}
+${ano ? `  Ano (colheita): ${ano}\n` : ""}${produtor ? `  Produtor indicado: ${produtor}\n` : ""}${regiao ? `  Região indicada: ${regiao}\n` : ""}${tipo ? `  Cor: ${tipo}\n` : ""}${notas ? `  Notas de quem procura: ${notas}\n` : ""}
 Hoje é ${hoje}.
 ${campos && campos.length ? `
 SÓ INTERESSAM ESTES CAMPOS: ${campos.map((k) => CAMPOS[k]).join(", ")}.
@@ -423,7 +424,7 @@ Se não conseguires identificar o vinho de todo, responde
 {"encontrado": false, "aviso": "porquê"}.`;
 
 const promptComGrounding = (
-  nome: string, ano: number | null, produtor: string, regiao: string, tipo: string, castas: string[],
+  nome: string, ano: number | null, produtor: string, regiao: string, tipo: string, notas: string, sites: string[],
   hoje: string, campos: string[] | null, colheitaEspecifica: boolean,
 ) => `
 És um enólogo a preencher a ficha de um vinho para a garrafeira de uma casa particular.
@@ -431,13 +432,15 @@ Usa pesquisa web (grounding search) para confirmar os dados.
 
 VINHO A IDENTIFICAR:
   Nome: ${nome}
-${ano ? `  Ano (colheita): ${ano}\n` : ""}${produtor ? `  Produtor indicado: ${produtor}\n` : ""}${regiao ? `  Região indicada: ${regiao}\n` : ""}${tipo ? `  Cor: ${tipo}\n` : ""}${castas.length ? `  Castas conhecidas: ${castas.join(", ")}\n` : ""}
+${ano ? `  Ano (colheita): ${ano}\n` : ""}${produtor ? `  Produtor indicado: ${produtor}\n` : ""}${regiao ? `  Região indicada: ${regiao}\n` : ""}${tipo ? `  Cor: ${tipo}\n` : ""}${notas ? `  Notas de quem procura: ${notas}\n` : ""}
 Hoje é ${hoje}.
 ${campos && campos.length ? `
 SÓ INTERESSAM ESTES CAMPOS: ${campos.map((k) => CAMPOS[k]).join(", ")}.
 Concentra a pesquisa NELES e deixa os outros fora da resposta.
 ` : ""}
-
+${sites.length ? `
+FONTES DE CONFIANÇA: dá prioridade a informação vinda de ${sites.join(", ")}. Só uses outra fonte se estas não tiverem a resposta.
+` : ""}
 REGRAS:
 1. NÃO INVENTES. Campo sem confirmação fica fora do JSON (ou null).
 2. ${regraCuvee}
@@ -805,13 +808,13 @@ async function produzirFicha(
   nome: string, ano: number | null, produtor: string, regiao: string,
   quem: string | null, signal: AbortSignal, budgetMs: number,
   campos: string[] | null = null, colheitaEspecifica: boolean = false,
-  tipo: string = "", castas: string[] = [],
+  tipo: string = "", notas: string = "", sites: string[] = [],
 ): Promise<Res> {
   if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
   if (modoIA === "gratis" && !SEARCH_API_KEY)
     return { ok: false, status: 503, erro: "a IA sem pesquisa web ainda não está configurada (falta SEARCH_API_KEY)" };
   const inicio = Date.now();
-  const chave = chaveCache(modoIA, nome, ano, produtor, regiao, tipo, castas, campos, colheitaEspecifica);
+  const chave = chaveCache(modoIA, nome, ano, produtor, regiao, tipo, notas, sites, campos, colheitaEspecifica);
   const cache = await cacheLer(chave, signal);
   if (cache?.resultado) {
     await registar("ok", {
@@ -868,7 +871,13 @@ async function produzirFicha(
      "andar atrás de tudo e voltar com meia dúzia de coisas mornas". */
   const campos_ia = Object.keys(doCatalogo).length ? emFalta : campos;
 
-  const query = [nome, ano || "", produtor, regiao, "vivino garrafeira nacional vinho portugal"].filter(Boolean).join(" ");
+  // Os `sites` de confiança viram operadores `site:` na pesquisa externa —
+  // é a única das duas formas de os aplicar que restringe a sério (o
+  // `google_search` do grounding não tem esse parâmetro na API pública, daí
+  // só entrar como pedido no texto do `promptComGrounding`).
+  const siteQuery = sites.length ? ` (${sites.map((s) => `site:${s}`).join(" OR ")})` : "";
+  const query = [nome, ano || "", produtor, regiao, notas, "vivino garrafeira nacional vinho portugal"]
+    .filter(Boolean).join(" ") + siteQuery;
   let pesquisa: PesquisaWeb = { texto: "", fontes: [], status: "grounding:google_search" };
   if (modoIA === "gratis") {
     try {
@@ -880,8 +889,8 @@ async function produzirFicha(
   }
 
   const texto0 = modoIA === "premium"
-    ? promptComGrounding(nome, ano, produtor, regiao, tipo, castas, new Date().toISOString().slice(0, 10), campos_ia, colheitaEspecifica)
-    : prompt(nome, ano, produtor, regiao, tipo, castas, new Date().toISOString().slice(0, 10), campos_ia, pesquisa.texto, colheitaEspecifica);
+    ? promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, new Date().toISOString().slice(0, 10), campos_ia, colheitaEspecifica)
+    : prompt(nome, ano, produtor, regiao, tipo, notas, new Date().toISOString().slice(0, 10), campos_ia, pesquisa.texto, colheitaEspecifica);
   const tentativas: { modelo: string; modo: string; estado: number | string; usageMetadata?: UsageMetadata }[] = [];
   let usageTotal: UsageMetadata | null = null;
   let fontesGround: Fonte[] = [];
@@ -957,7 +966,7 @@ async function produzirFicha(
 
   await cacheEscrever(
     chave,
-    { nome, ano, produtor, regiao, tipo, castas, campos, query, fonte: pesquisa.status, modo_ia: modoIA },
+    { nome, ano, produtor, regiao, tipo, notas, sites, campos, query, fonte: pesquisa.status, modo_ia: modoIA },
     ficha,
     (modoIA === "premium" ? fontesGround : pesquisa.fontes),
     usadoModelo,
@@ -1033,14 +1042,16 @@ Deno.serve(async (req) => {
     const ano = anoValido(body?.ano);
     const produtor = texto(body?.produtor, 90);
     const regiao = texto(body?.regiao, 60);
-    /* `tipo`/`castas`: PISTAS para identificar o vinho certo — nunca
-       pedidas de volta só por virem aqui, ver a lista `campos` para isso.
-       A app só as manda quando a pessoa as marca no seletor (`iaPistas…`),
-       e só quando já as sabe: um branco homónimo do tinto não se resolve
-       sozinho sem dizer a cor à IA. */
+    // `tipo`: confirmado pelo `iaCorGuard` antes de chegar aqui.
     const tipo = daLista(body?.tipo, TIPOS);
-    const castas: string[] = Array.isArray(body?.castas)
-      ? [...new Set<string>(body.castas.map((c: unknown) => texto(c, 50)).filter(Boolean))].slice(0, 12)
+    /* `notas`/`sites`: contexto LIVRE escrito por quem procura (duas caixas
+       de texto na app, não campos fechados) — ajuda a não confundir este
+       vinho com um homónimo ("grande reserva", "edição limitada", …) e a
+       dar prioridade a fontes em que a pessoa confia. Nunca são pedidos de
+       volta à IA, só entram no prompt/pesquisa como contexto. */
+    const notas = texto(body?.notas, 300);
+    const sites: string[] = Array.isArray(body?.sites)
+      ? [...new Set<string>(body.sites.map((s: unknown) => texto(s, 100).replace(/^https?:\/\//i, "").replace(/\/.*$/, "")).filter(Boolean))].slice(0, 5)
       : [];
     const vinhoId = typeof body?.vinhoId === "number" ? body.vinhoId : null;
     /* `campos`: a app diz o que quer que se procure. Só se aceitam nomes
@@ -1064,7 +1075,7 @@ Deno.serve(async (req) => {
        existir, `criarAnalise` devolve null e cai-se no modo síncrono em vez
        de rebentar. */
     if (body?.assincrono === true) {
-      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, tipo, castas, campos: camposPedidos }, vinhoId, quem!, ctrl.signal);
+      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, tipo, notas, sites, campos: camposPedidos }, vinhoId, quem!, ctrl.signal);
       if (analiseId != null) {
         const dono = quem!;
         // NÃO faz await: o trabalho pesado sobrevive ao pedido original.
@@ -1072,7 +1083,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-          const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, castas);
+          const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -1090,7 +1101,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, castas);
+    const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";
