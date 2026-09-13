@@ -682,6 +682,79 @@ CREATE TRIGGER vinhos_guard_ins
   FOR EACH ROW EXECUTE FUNCTION garrafeira.vinhos_guard_ins();
 
 -- ---------------------------------------------------------------------
+-- A REGIÃO, normalizada — "DOURO" e "Douro" não podem ficar como duas
+-- regiões diferentes (o catálogo partilhado, que recebe isto via
+-- `catalogar_vinho`, herdava a mesma inconsistência sem isto), e
+-- "Península de Setúbal" é a mesma região que "Setúbal", só escrita como
+-- uma carta a escreveria.
+--
+-- Duas regras, e só duas: (1) "Setúbal" ganha a qualquer grafia da
+-- Península; (2) um valor todo em CAPS LOCK ou todo em minúsculas passa a
+-- Title Case, sem tocar em mais nada ("Beira Interior", "Trás-os-Montes"
+-- já estão certos — um `initcap()` ingénuo estragava o hífen e as
+-- preposições). A mesma
+-- função (e a mesma regra) vive em `winecatalog.normalizar_regiao`, no
+-- repo WineCatalog — não é a chave nem a força, e duas cópias pequenas de
+-- uma regra de formatação não têm o risco que duplicar aquelas tinha.
+--
+-- Corre num trigger e não no `app.js` para apanhar TODAS as origens sem
+-- precisar de lembrar cada uma: o formulário de editar, a `vinho-info.ts`
+-- (IA) e a `importar-vinhos.ts` (fotos) escrevem todas na mesma tabela.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION garrafeira.normalizar_regiao(p_regiao text)
+  RETURNS text LANGUAGE plpgsql IMMUTABLE
+  SET search_path TO 'garrafeira', 'public'
+AS $$
+DECLARE
+  v      text := btrim(regexp_replace(COALESCE(p_regiao, ''), '\s+', ' ', 'g'));
+  v_low  text;
+  small  text[] := ARRAY['de','da','do','das','dos','e'];
+  words  text[];
+  out_arr text[] := '{}';
+  i      integer;
+BEGIN
+  IF v = '' THEN RETURN NULL; END IF;
+  v_low := lower(v);
+
+  IF v_low IN ('setúbal', 'setubal', 'península de setúbal',
+               'peninsula de setubal', 'peninsula de setúbal',
+               'península de setubal') THEN
+    RETURN 'Setúbal';
+  END IF;
+
+  IF v <> upper(v) AND v <> lower(v) THEN
+    RETURN v;
+  END IF;
+
+  words := regexp_split_to_array(v_low, ' ');
+  FOR i IN 1..array_length(words, 1) LOOP
+    IF i > 1 AND words[i] = ANY(small) THEN
+      out_arr := out_arr || words[i];
+    ELSE
+      out_arr := out_arr || (upper(substring(words[i] FROM 1 FOR 1)) || substring(words[i] FROM 2));
+    END IF;
+  END LOOP;
+
+  RETURN array_to_string(out_arr, ' ');
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION garrafeira.vinhos_normalizar_regiao()
+  RETURNS trigger LANGUAGE plpgsql
+  SET search_path TO 'garrafeira', 'public'
+AS $$
+BEGIN
+  NEW.regiao := garrafeira.normalizar_regiao(NEW.regiao);
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS vinhos_normalizar_regiao ON garrafeira.vinhos;
+CREATE TRIGGER vinhos_normalizar_regiao
+  BEFORE INSERT OR UPDATE ON garrafeira.vinhos
+  FOR EACH ROW EXECUTE FUNCTION garrafeira.vinhos_normalizar_regiao();
+
+-- ---------------------------------------------------------------------
 -- GRANT de execução
 -- ---------------------------------------------------------------------
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA garrafeira TO authenticated;
