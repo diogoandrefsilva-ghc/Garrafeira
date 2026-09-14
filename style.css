@@ -167,6 +167,10 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
 .segbtns{display:flex;border:1px solid var(--bo);border-radius:99px;overflow:hidden;flex-shrink:0;background:var(--bg)}
 .segbtn{padding:7px 14px;font-size:12px;font-family:inherit;border:none;background:none;color:var(--mu);cursor:pointer;font-weight:600;transition:all .15s}
 .segbtn.on{background:var(--vh);color:#fff}
+/* Os dois botões da vista são ícones: mais estreitos, e uma barra que já
+   tem a contagem e três botões de agrupamento não aguenta mais duas
+   palavras sem partir numa terceira linha no telemóvel. */
+.segbtn.ico{padding:7px 11px;font-size:13px;line-height:1}
 .dgrupo{margin-bottom:22px}
 .dgrupo-tit{font-family:var(--fd);font-weight:600;font-size:16px;letter-spacing:.2px;color:var(--vhd);
   display:flex;align-items:center;gap:9px;padding-bottom:7px;margin-bottom:11px;position:relative}
@@ -233,6 +237,50 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
    volta — a nota de prova inteira lê-se na ficha do vinho. */
 .vcm-t{min-width:0;flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-radius:3px;padding:0 2px}
+
+/* ── CARTÃO DE GRELHA ─────────────────────────────────────────────
+   A outra vista do Detalhe (`vinhoGrelhaHTML`). A garrafa manda: é a
+   largura toda do cartão, com o resto por baixo e centrado. Não é o
+   cartão da lista mais pequeno — é a mesma informação reduzida ao que
+   identifica um rótulo de longe.
+   `auto-fill` com `minmax(150px,1fr)` e não um número fixo de colunas:
+   num telemóvel dá duas, num ecrã largo dá as que couberem, sem um
+   `@media` a decidir por nós. */
+.vgrelha{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;align-items:start}
+.vgcard{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:12px 12px 11px;
+  cursor:pointer;transition:box-shadow .18s,transform .1s,border-color .18s;-webkit-tap-highlight-color:transparent;
+  box-shadow:var(--sh);display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0}
+.vgcard:hover{box-shadow:var(--sh2);border-color:var(--bo2)}
+.vgcard:active{transform:scale(.995)}
+/* A mesma moldura da lista, maior e com a proporção de uma garrafa. A
+   thumb é `width:52px` na lista — aqui passa a ocupar a coluna. */
+/* A garrafa toma a largura do cartão, mas NÃO cresce sem fim: num ecrã
+   largo (1040px de `.wrap`, quatro ou cinco colunas) sem o tecto ficava
+   um poster por vinho, e o que a grelha tem de dar é MUITOS rótulos de uma
+   vez — é essa a diferença para a lista. O `max-width` não chega a apertar
+   num telemóvel, onde as duas colunas já dão ~128px.
+   O `viewBox` da garrafa é 40×74 (mais alta do que larga) e a moldura é
+   3/4: com o `width:100%` da lista, a garrafa saía por baixo e ficava
+   cortada. Aqui é a ALTURA que manda e a largura vem atrás. */
+.vgcard .vc-thumb{width:100%;max-width:136px;margin:0 auto;aspect-ratio:3/4;padding:8px 6px}
+.vgcard .vc-thumb svg{width:auto;height:100%;max-height:none;max-width:100%}
+.vg-nome{font-family:var(--fd);font-weight:600;font-size:14px;line-height:1.3;color:var(--tx);margin-top:10px;
+  overflow-wrap:anywhere}
+.vg-sub{font-size:10.5px;color:var(--mu);margin-top:3px;line-height:1.4;overflow-wrap:anywhere}
+.vg-foot{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:5px 8px;margin-top:8px;width:100%}
+.vg-foot:empty{display:none}
+.vg-foot .vc-l{max-width:100%}
+.vg-mais{font-style:normal;font-size:10px;color:var(--mu)}
+/* A faixa da procura sangra até às bordas do cartão como na lista — as
+   margens negativas são o padding do `.vgcard` ao contrário, e por isso
+   são outras. O que MUDA aqui é a linha: na lista o nome do campo fica à
+   esquerda e o trecho ao lado; numa coluna de 150px isso deixava
+   "HARMONIZA COM" a comer a largura toda e sobrava "… pratos" para o
+   texto, que é precisamente a palavra que a faixa existe para mostrar.
+   Empilhado, o trecho fica com a largura inteira do cartão. */
+.vgcard .vc-match{width:calc(100% + 24px);margin:10px -12px -11px;padding:7px 11px 8px;text-align:left}
+.vgcard .vcm-l{display:block}
+.vgcard .vcm-k{display:block;margin-bottom:1px}
 
 /* Crachás: um só desenho. A cor é excepção, não regra —
    dourado = distinção (menção/nota), o resto vive em tons de papel. */
@@ -324,6 +372,23 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .fpill button{border:none;background:rgba(123,31,61,.12);color:var(--vh);width:17px;height:17px;border-radius:50%;
   font-size:10px;cursor:pointer;font-family:inherit;line-height:1}
 .fpill button:hover{background:var(--vh);color:#fff}
+/* O "+" entre duas pastilhas de casta: só existe em "todas em simultâneo",
+   e é o que separa "Touriga OU Syrah" de "Touriga E Syrah" com o painel
+   fechado. Não é botão — quem troca a regra é o visto lá dentro. */
+.fjunta{align-self:center;font-size:12px;font-weight:700;color:var(--vh);opacity:.6;padding:0 1px}
+/* O visto das castas, ao lado do chip. Só aparece com duas escolhidas —
+   com uma, "qualquer uma" e "todas" dão a mesma lista. Mesmo desenho (e
+   mesmas palavras) do Catálogo da WineCatalog. */
+/* Linha própria, logo por baixo do chip das castas: entalado entre dois
+   chips lia-se como mais um filtro, quando o que é é uma REGRA sobre o de
+   cima. */
+.fmodo{flex:0 0 100%;display:inline-flex;align-items:center;gap:6px;background:none;border:none;padding:3px 2px 1px;
+  font-family:inherit;font-size:11px;font-weight:600;color:var(--mu);cursor:pointer;white-space:nowrap}
+.fmodo.on{color:var(--vh)}
+.fvisto{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--bo2);background:var(--card);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  font-size:10px;font-style:normal;font-weight:700;line-height:1;color:transparent}
+.fmodo.on .fvisto{background:var(--vh);border-color:var(--vh);color:#fff}
 .lnk{background:none;border:none;color:var(--vh);font-size:12px;font-family:inherit;cursor:pointer;text-decoration:underline}
 .fbar select{padding:6px 9px;border:1px solid var(--bo);border-radius:8px;font-size:12px;font-family:inherit;background:var(--bg)}
 

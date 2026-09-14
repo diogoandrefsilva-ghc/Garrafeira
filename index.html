@@ -132,6 +132,14 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
           <button class="segbtn" id="seg-ano" onclick="detAgrupar('ano')">Ano</button>
           <button class="segbtn" id="seg-casta" onclick="detAgrupar('casta')">Casta</button>
         </div>
+        <!-- Lista ou grelha. Ortogonal ao agrupamento acima: o que muda é o
+             cartão, não os grupos. Só ícones — os dois desenhos dizem-se
+             sozinhos e o nome por extenso partia a barra numa terceira
+             linha no telemóvel. -->
+        <div class="segbtns">
+          <button class="segbtn ico on" id="seg-lista" onclick="detVista('lista')" title="Ver em lista">☰</button>
+          <button class="segbtn ico" id="seg-grelha" onclick="detVista('grelha')" title="Ver em grelha">▦</button>
+        </div>
       </div>
     </div>
 

@@ -1206,7 +1206,22 @@ function renderFiltrados(){
    Os valores possíveis de cada filtro saem SEMPRE dos dados que lá estão
    (não de listas fixas): assim uma região nova aparece no filtro sozinha,
    e nunca fica um filtro a apontar para coisa nenhuma. */
-let F={local:'',tipo:'',regiao:'',casta:'',produtor:'',ano:'',mencao:'',castaN:'',preco:'',teor:'',janela:'',vivino:''};
+/* A CASTA é uma LISTA, todos os outros são um valor só — e a diferença não
+   é capricho: um vinho tem UM tipo, UMA região e UM ano, mas leva as castas
+   que quiser. Escolher Touriga Nacional e Syrah tem por isso duas leituras
+   legítimas — qualquer uma das duas (o costume) ou os lotes que levam as
+   duas — e é a única pergunta deste painel onde "e" e "ou" dão listas
+   diferentes. Daí `CASTAS_TODAS` só existir aqui. É a mesma decisão (e o
+   mesmo vocabulário, "todas em simultâneo") do Catálogo da WineCatalog:
+   quem anda nas duas apps não aprende dois nomes para a mesma coisa. */
+let F={local:'',tipo:'',regiao:'',casta:[],produtor:'',ano:'',mencao:'',castaN:'',preco:'',teor:'',janela:'',vivino:''};
+let CASTAS_TODAS=false;
+try{CASTAS_TODAS=localStorage.getItem('gf_castas_todas')==='1';}catch(e){}
+// Um filtro "ligado" é um valor escolhido — mas uma lista VAZIA é um objeto
+// e portanto truthy. Sem isto, `haFiltros()` dava sempre verdadeiro a partir
+// do dia em que a casta passou a lista, e a app abria sempre em modo
+// "a filtrar" com a lista toda lá dentro.
+function filtroLigado(k){const v=F[k];return Array.isArray(v)?v.length>0:!!v;}
 
 // Intervalos da nota do Vivino, do mesmo jeito que FAIXAS_PRECO: a pergunta
 // não é "qual é a nota exata" (isso o cartão já mostra), é "está bem
@@ -1237,17 +1252,46 @@ function faixaTeorIndice(valor){
 function opcoesFiltro(){
   const comStock=db.vinhos.filter(v=>stockDe(v.id)>0);
   const set=(arr)=>[...new Set(arr.filter(x=>x!==''&&x!=null))];
-  const castas=set([].concat(...comStock.map(v=>v.castas||[]))).sort((a,b)=>a.localeCompare(b,'pt'));
   const locais=db.locais.filter(l=>db.garrafas.some(g=>g.local_id===l.id&&naGarrafeira(g)));
+  // A `casta` não vem daqui — é a única com contagens e com becos sem saída
+  // por cortar, e por isso tem lista própria (`opcoesCasta`).
   return {
     local:locais.map(l=>[String(l.id),l.nome]),
     tipo:set(comStock.map(v=>v.tipo)).sort().map(x=>[x,x]),
     regiao:set(comStock.map(v=>v.regiao)).sort((a,b)=>a.localeCompare(b,'pt')).map(x=>[x,x]),
-    casta:castas.map(x=>[x,x]),
     produtor:set(comStock.map(v=>v.produtor)).sort((a,b)=>a.localeCompare(b,'pt')).map(x=>[x,x]),
     ano:set(comStock.map(v=>v.ano)).sort((a,b)=>b-a).map(x=>[String(x),String(x)]),
     mencao:set(comStock.map(v=>v.mencao)).sort((a,b)=>a.localeCompare(b,'pt')).map(x=>[x,x])
   };
+}
+
+/* AS CASTAS QUE AINDA SE PODEM JUNTAR, com quantos vinhos cada uma dá.
+   É a única lista de opções deste painel que CONTA e que CORTA, e as duas
+   coisas nascem do mesmo problema: em "todas em simultâneo", quase toda a
+   escolha seguinte dá zero. Sem a contagem à frente, escolher a segunda
+   casta é adivinhar — e a lista respondia "Nada encontrado" a quem tinha
+   acabado de escolher uma opção que a app lhe ofereceu.
+   A contagem é feita com os OUTROS filtros aplicados e sem o grupo das
+   castas (é o que faz "Syrah 6" continuar a ser verdade depois de se
+   escolher Touriga); em "todas", deixa de ignorar o grupo inteiro e passa
+   a contar POR CIMA das castas já escolhidas — é a mesma regra do
+   `p_castas_todas` da WineCatalog, e pela mesma razão: de outro modo o
+   cartão dizia "Syrah 28" com a lista a mostrar três vinhos.
+   Uma casta que dê zero não aparece: é a resposta certa para um caminho
+   sem saída. As já escolhidas também não — tiram-se nas pastilhas, não
+   aqui. */
+function opcoesCasta(){
+  const termos=termosProcura();
+  const base=db.vinhos.filter(v=>passaFiltros(v,termos,'casta'));
+  const nomes=[...new Set([].concat(...base.map(v=>v.castas||[])))]
+    .filter(c=>!F.casta.includes(c)).sort((a,b)=>a.localeCompare(b,'pt'));
+  return nomes.map(c=>{
+    const n=base.filter(v=>{
+      const cs=v.castas||[];
+      return cs.includes(c)&&(!CASTAS_TODAS||F.casta.every(x=>cs.includes(x)));
+    }).length;
+    return [c,`${c} (${n})`,n];
+  }).filter(o=>o[2]>0);
 }
 /* Cada filtro é um chip DESENHADO por nós com o <select> nativo por cima,
    invisível (opacity:0, inset:0). O desenho passa a ser nosso — texto do
@@ -1290,9 +1334,40 @@ function rotuloFiltro(listas,k){
   const par=(listas[k]||[]).find(p=>p[0]===F[k]);
   return par?par[1]:F[k];
 }
+/* O chip das castas é o mesmo `<select>` nativo por baixo do desenho nosso
+   que todos os outros — o que muda é que escolher JUNTA em vez de
+   substituir. Foi de propósito não inventar um seletor múltiplo: um
+   `<select multiple>` no telemóvel é mau, e um painel de botões só para
+   este filtro dava-lhe um desenho que nenhum dos outros onze tem. O que
+   se escolhe tira-se nas pastilhas, que já existiam e já tinham ✕. */
+function chipCasta(){
+  const [ico,nome]=F_META.casta;
+  const ops=opcoesCasta();
+  const n=F.casta.length;
+  const txt=n?F.casta[0]+(n>1?' +'+(n-1):''):nome;
+  return `<label class="fchip${n?' ativo':''}">
+    <span>${ico} ${esc(txt)}</span><span class="fchev">▾</span>
+    <select onchange="juntarCasta(this.value)">
+      <option value="">${n?'— limpar castas':esc(nome)+' — todas'}</option>
+      ${ops.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join('')}
+    </select>
+  </label>`;
+}
 function renderFiltros(){
   const listas=listasFiltro();
   document.getElementById('f-selects').innerHTML=Object.keys(F_META).map(k=>{
+    if(k==='casta'){
+      /* O visto só aparece com DUAS castas escolhidas: com uma, "qualquer
+         uma" e "todas" dão a mesma lista, e uma pergunta sem duas respostas
+         é ruído. */
+      return chipCasta()+(F.casta.length>1
+        ? `<button class="fmodo${CASTAS_TODAS?' on':''}" onclick="castasModo()"
+             title="${CASTAS_TODAS
+               ?'A mostrar só os vinhos que levam TODAS as castas escolhidas'
+               :'A mostrar os vinhos que levam QUALQUER UMA das castas escolhidas'}">
+             <i class="fvisto">✓</i> todas em simultâneo</button>`
+        : '');
+    }
     const [ico,nome]=F_META[k];
     const pares=listas[k]||[];
     const txt=F[k]?rotuloFiltro(listas,k):nome;
@@ -1305,20 +1380,66 @@ function renderFiltros(){
     </label>`;
   }).join('');
 
-  const ativos=Object.keys(F_META).filter(k=>F[k]);
+  /* As pastilhas são a única coisa que diz o que está ligado com o painel
+     fechado — e "Touriga Nacional · Syrah" mente sobre metade dos
+     resultados quando o visto está em "todas em simultâneo". Daí o "+"
+     entre elas nesse modo (e só nesse): é o mesmo sinal que a WineCatalog
+     escreve na sua barra. Cada casta mantém o ✕ dela, que é o que permite
+     desfazer a escolha uma a uma em vez de tudo ou nada. */
+  const pastilhas=[];
+  Object.keys(F_META).forEach(k=>{
+    if(k==='casta'){
+      F.casta.forEach((c,i)=>{
+        if(i&&CASTAS_TODAS)pastilhas.push('<span class="fjunta">+</span>');
+        pastilhas.push(`<span class="fpill">${F_META.casta[0]} ${esc(c)}
+          <button onclick="tirarCasta('${escJs(c)}')" title="Tirar esta casta">✕</button></span>`);
+      });
+      return;
+    }
+    if(!F[k])return;
+    pastilhas.push(`<span class="fpill">${F_META[k][0]} ${esc(rotuloFiltro(listas,k))}
+      <button onclick="setFiltro('${k}','')" title="Tirar este filtro">✕</button></span>`);
+  });
+  const nAtivos=Object.keys(F_META).reduce((s,k)=>s+(k==='casta'?F.casta.length:(F[k]?1:0)),0);
   const n=document.getElementById('f-n');
-  n.textContent=ativos.length;n.classList.toggle('on',!!ativos.length);
-  document.getElementById('f-activos').innerHTML=ativos.map(k=>
-    `<span class="fpill">${F_META[k][0]} ${esc(rotuloFiltro(listas,k))}
-      <button onclick="setFiltro('${k}','')" title="Tirar este filtro">✕</button></span>`).join('');
+  n.textContent=nAtivos;n.classList.toggle('on',!!nAtivos);
+  document.getElementById('f-activos').innerHTML=pastilhas.join('');
 }
-function setFiltro(k,v){F[k]=v;renderFiltrados();}
+// Aceita um valor solto mesmo num filtro que é lista — é o que mantém de pé
+// quem chame `setFiltro('casta', …)` sem saber da mudança.
+function setFiltro(k,v){
+  if(Array.isArray(F[k]))F[k]=v?[v]:[];
+  else F[k]=v;
+  renderFiltrados();
+}
+function juntarCasta(c){
+  if(!c)F.casta=[];
+  else if(!F.casta.includes(c))F.casta.push(c);
+  renderFiltrados();
+}
+function tirarCasta(c){
+  F.casta=F.casta.filter(x=>x!==c);
+  renderFiltrados();
+}
+/* Trocar de regra com menos de duas castas não muda lista nenhuma, mas o
+   estado grava-se à mesma: quem liga o visto espera que ele lá esteja da
+   próxima vez. */
+function castasModo(){
+  CASTAS_TODAS=!CASTAS_TODAS;
+  try{localStorage.setItem('gf_castas_todas',CASTAS_TODAS?'1':'0');}catch(e){}
+  renderFiltrados();
+}
 // Só o ESTADO, sem desenhar. Quem troca de garrafeira precisa de esquecer
 // os filtros ANTES de os dados novos chegarem, e um `renderFiltrados()` aqui
 // desenhava a garrafeira anterior mais uma vez, já sem filtros — um piscar
 // de olhos com a lista de outra pessoa.
 function esquecerFiltros(){
-  Object.keys(F).forEach(k=>F[k]='');
+  Object.keys(F).forEach(k=>{F[k]=Array.isArray(F[k])?[]:'';});
+  /* Limpar tem de devolver o painel ao estado de partida: um visto que
+     sobrevivesse à limpeza era uma regra escondida a filtrar por baixo na
+     escolha seguinte. */
+  CASTAS_TODAS=false;
+  try{localStorage.setItem('gf_castas_todas','0');}catch(e){}
   const t=document.getElementById('f-texto');
   if(t)t.value='';
 }
@@ -1327,7 +1448,7 @@ function limparFiltros(){
   renderFiltrados();
 }
 function haFiltros(){
-  return Object.values(F).some(Boolean)||!!document.getElementById('f-texto').value.trim();
+  return Object.keys(F).some(filtroLigado)||!!document.getElementById('f-texto').value.trim();
 }
 
 // Um vinho passa no texto se o termo estiver em qualquer coisa que o
@@ -1448,36 +1569,47 @@ function trechoRealcado(txt,termos,max=72){
   out+=esc(txt.slice(pos,fim));
   return (ini>0?'… ':'')+out+(fim<txt.length?' …':'');
 }
-function vinhosFiltrados(){
+/* `ignorar` é o nome de um filtro a saltar — serve às contagens do próprio
+   grupo (ver `opcoesCasta`), que têm de ser feitas com os OUTROS filtros
+   aplicados mas não com o seu. */
+function vinhosFiltrados(ignorar){
   const termos=termosProcura();
-  return db.vinhos.filter(v=>{
-    const gs=garrafasDe(v.id,true);
-    if(!gs.length)return false;                                  // só o que está lá
-    if(F.local&&!gs.some(g=>String(g.local_id)===F.local))return false;
-    if(F.tipo&&v.tipo!==F.tipo)return false;
-    if(F.regiao&&v.regiao!==F.regiao)return false;
-    if(F.casta&&!(v.castas||[]).includes(F.casta))return false;
-    if(F.produtor&&v.produtor!==F.produtor)return false;
-    if(F.ano&&String(v.ano)!==F.ano)return false;
-    if(F.mencao&&v.mencao!==F.mencao)return false;
-    if(F.janela){
-      // 'ponto:meio' → estado 'ponto' E fase 'meio'; 'cedo'/'passou' não
-      // têm fase nenhuma atrás.
-      const [est,fase]=F.janela.split(':');
-      if(janelaBeber(v)!==est)return false;
-      if(fase&&(janelaFase(v)||[])[1]!==fase)return false;
-    }
-    if(F.vivino&&(v.vivino_nota==null||String(faixaVivinoIndice(v.vivino_nota))!==F.vivino))return false;
-    if(F.preco&&(v.preco_medio==null||String(faixaIndice(v.preco_medio))!==F.preco))return false;
-    if(F.teor&&(v.teor==null||String(faixaTeorIndice(v.teor))!==F.teor))return false;
-    if(F.castaN){
-      const n=(v.castas||[]).length;
-      if(F.castaN==='1'&&n!==1)return false;
-      if(F.castaN==='2'&&n<2)return false;
-      if(F.castaN==='0'&&n!==0)return false;
-    }
-    return passaTexto(v,termos);
-  });
+  return db.vinhos.filter(v=>passaFiltros(v,termos,ignorar));
+}
+function passaFiltros(v,termos,ignorar){
+  const gs=garrafasDe(v.id,true);
+  if(!gs.length)return false;                                  // só o que está lá
+  if(F.local&&!gs.some(g=>String(g.local_id)===F.local))return false;
+  if(F.tipo&&v.tipo!==F.tipo)return false;
+  if(F.regiao&&v.regiao!==F.regiao)return false;
+  /* "Qualquer uma" (o costume) contra "todas em simultâneo": é a única
+     pergunta deste painel em que a diferença existe. Ver `CASTAS_TODAS`.
+     Nota que "todas" é LEVAR todas as escolhidas, não ser EXATAMENTE
+     elas — um lote com uma terceira casta continua a levar as duas. */
+  if(F.casta.length&&ignorar!=='casta'){
+    const cs=v.castas||[];
+    if(!(CASTAS_TODAS?F.casta.every(c=>cs.includes(c)):F.casta.some(c=>cs.includes(c))))return false;
+  }
+  if(F.produtor&&v.produtor!==F.produtor)return false;
+  if(F.ano&&String(v.ano)!==F.ano)return false;
+  if(F.mencao&&v.mencao!==F.mencao)return false;
+  if(F.janela){
+    // 'ponto:meio' → estado 'ponto' E fase 'meio'; 'cedo'/'passou' não
+    // têm fase nenhuma atrás.
+    const [est,fase]=F.janela.split(':');
+    if(janelaBeber(v)!==est)return false;
+    if(fase&&(janelaFase(v)||[])[1]!==fase)return false;
+  }
+  if(F.vivino&&(v.vivino_nota==null||String(faixaVivinoIndice(v.vivino_nota))!==F.vivino))return false;
+  if(F.preco&&(v.preco_medio==null||String(faixaIndice(v.preco_medio))!==F.preco))return false;
+  if(F.teor&&(v.teor==null||String(faixaTeorIndice(v.teor))!==F.teor))return false;
+  if(F.castaN){
+    const n=(v.castas||[]).length;
+    if(F.castaN==='1'&&n!==1)return false;
+    if(F.castaN==='2'&&n<2)return false;
+    if(F.castaN==='0'&&n!==0)return false;
+  }
+  return passaTexto(v,termos);
 }
 // Dentro de cada grupo (região, ano ou casta), do melhor Vivino para o
 // pior — é a pergunta natural depois de já se ter escolhido o grupo: "qual
@@ -1555,6 +1687,19 @@ function detAgrupar(modo){
    enquanto se procura por texto, e o que diz é da PROCURA — onde é que a
    palavra estava — não do vinho. Sem procura, o cartão é exatamente o
    mesmo de sempre. */
+// Duas garrafas do mesmo vinho no MESMO sítio não valem duas linhas. Cada
+// sítio leva o pip com a cor do local — é o que restou da barra de cor.
+// Sai daqui para fora do cartão porque a grelha (`vinhoGrelhaHTML`) mostra
+// os mesmos sítios noutro formato, e duas cópias desta conta divergiam no
+// dia em que alguém mexesse numa.
+function sitiosDe(gs){
+  const sitios=[];
+  gs.forEach(g=>{
+    const txt=nomeLocal(g.local_id)+(g.prateleira?' · '+g.prateleira:'');
+    if(!sitios.some(x=>x.txt===txt))sitios.push({txt,cor:(IDXL[g.local_id]||{}).cor||'#7b1f3d'});
+  });
+  return sitios;
+}
 function vinhoCardHTML(v,termos){
   const gs=garrafasDe(v.id,true);
   const cl=castaLabel(v);
@@ -1563,13 +1708,7 @@ function vinhoCardHTML(v,termos){
   const castasTxt=castas.length
     ? castas.slice(0,2).join(' · ')+(castas.length>2?' +'+(castas.length-2):'')
     : '';
-  // Duas garrafas do mesmo vinho no MESMO sítio não valem duas linhas. Cada
-  // sítio leva o pip com a cor do local — é o que restou da barra de cor.
-  const sitios=[];
-  gs.forEach(g=>{
-    const txt=nomeLocal(g.local_id)+(g.prateleira?' · '+g.prateleira:'');
-    if(!sitios.some(x=>x.txt===txt))sitios.push({txt,cor:(IDXL[g.local_id]||{}).cor||'#7b1f3d'});
-  });
+  const sitios=sitiosDe(gs);
   return `<article class="vcard" onclick="verVinho(${v.id})">
     <div class="vc-top">
       ${vinhoThumb(v,gs.length)}
@@ -1595,6 +1734,55 @@ function vinhoCardHTML(v,termos){
     ${trechosMatch(v,termos)}
   </article>`;
 }
+/* A GRELHA: o mesmo vinho, dito pela GARRAFA em vez de pela ficha.
+   Não é o cartão da lista encolhido — é outra pergunta. Na lista lê-se o
+   que um vinho É (castas, menção, preço, maturação); na grelha procura-se
+   um RÓTULO que já se viu, e por isso a garrafa cresce e o resto encolhe
+   até ao que identifica: nome, ano, produtor/região, a nota e onde está.
+   O que NÃO entra na grelha é o rodapé do que é físico por inteiro — a
+   maturação, o preço, os crachás das castas: numa coluna de 150px cada um
+   deles é uma linha a mais e o que se perde é a fotografia, que é a razão
+   de estar aqui. Quem quer isso tem a lista a um toque, e a ficha do vinho
+   a dois.
+   A faixa da procura (`trechosMatch`) entra nos DOIS — e na grelha ainda
+   com mais razão: o cartão mostra menos, logo há mais palavra encontrada
+   fora da vista. É a mesma função e o mesmo texto, nunca uma segunda
+   versão mais curta. */
+function vinhoGrelhaHTML(v,termos){
+  const gs=garrafasDe(v.id,true);
+  const sitios=sitiosDe(gs);
+  const onde=sitios.length?sitios[0]:null;
+  return `<article class="vgcard" onclick="verVinho(${v.id})">
+    ${vinhoThumb(v,gs.length)}
+    <div class="vg-nome">${esc(v.nome)}</div>
+    <div class="vg-sub">${esc([v.ano||'s/a',v.produtor,v.regiao].filter(Boolean).join(' · '))}</div>
+    <div class="vg-foot">
+      ${v.vivino_nota?`<span class="bdg viv">★ ${Number(v.vivino_nota).toFixed(1)}</span>`:''}
+      ${onde?`<span class="vc-l"><span class="vc-pip" style="background:${esc(onde.cor)}"></span><b>${
+        esc(onde.txt)}</b>${sitios.length>1?`<i class="vg-mais">+${sitios.length-1}</i>`:''}</span>`:''}
+    </div>
+    ${trechosMatch(v,termos)}
+  </article>`;
+}
+/* Lista ou grelha. A escolha guarda-se (é uma preferência de quem usa, não
+   um estado do ecrã) e é ORTOGONAL ao agrupamento: os grupos de região,
+   ano ou casta continuam a ser os mesmos, só muda o que está dentro
+   deles. Mesmo nome e mesmo desenho que o Catálogo da WineCatalog. */
+let DET_VISTA='lista';
+try{DET_VISTA=localStorage.getItem('gf_det_vista')==='grelha'?'grelha':'lista';}catch(e){}
+// Só as classes dos botões. É preciso à parte porque esta preferência
+// ATRAVESSA sessões, ao contrário do agrupamento: o HTML nasce com "Lista"
+// ligada e quem tinha deixado a grelha via os dois botões a mentir.
+function detVistaBotoes(){
+  document.getElementById('seg-lista').classList.toggle('on',DET_VISTA==='lista');
+  document.getElementById('seg-grelha').classList.toggle('on',DET_VISTA==='grelha');
+}
+function detVista(modo){
+  DET_VISTA=modo;
+  try{localStorage.setItem('gf_det_vista',modo);}catch(e){}
+  detVistaBotoes();
+  renderDetalhe();
+}
 // A lista completa, organizada por região, ano ou casta — e, quando a
 // procura tem alguma coisa ligada, só os vinhos que passam nela (a mesma
 // organização, com menos vinhos dentro).
@@ -1614,10 +1802,14 @@ function renderDetalhe(){
     return;
   }
   const grupos=agruparVinhos(res,DET_AGRUPAR);
-  box.innerHTML=grupos.map(g=>`<div class="dgrupo">
+  const grelha=DET_VISTA==='grelha';
+  box.innerHTML=grupos.map(g=>{
+    const itens=g.vinhos.map(v=>(grelha?vinhoGrelhaHTML:vinhoCardHTML)(v,termos)).join('');
+    return `<div class="dgrupo">
       <div class="dgrupo-tit">${esc(g.titulo)} <span class="dgrupo-n">${g.vinhos.length}</span></div>
-      ${g.vinhos.map(v=>vinhoCardHTML(v,termos)).join('')}
-    </div>`).join('');
+      ${grelha?`<div class="vgrelha">${itens}</div>`:itens}
+    </div>`;
+  }).join('');
 }
 
 // Dispatcher chamado depois de QUALQUER mutação (guardar, apagar, consumir,
@@ -2943,7 +3135,7 @@ async function apagarFotoPropria(){
 function filtrarPorCasta(nome){
   fecharModal('modal-vinho');
   limparFiltros();
-  F.casta=nome;
+  F.casta=[nome];
   const bts=document.querySelectorAll('.itabs .it');
   if(tabAtiva!=='detalhe')tab('detalhe',bts[1]);
   else renderFiltrados();
@@ -6184,6 +6376,7 @@ if('serviceWorker' in navigator){
 // contrário, havia um instante — entre o HTML aparecer e as permissões
 // chegarem — em que quem só pode VER tinha o botão de apagar à frente.
 document.body.classList.add('readonly','naoadmin','naodono','naominha');
+detVistaBotoes();
 ajustarSticky();
 pgSwipe();
 sbInit();

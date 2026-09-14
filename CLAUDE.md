@@ -132,6 +132,39 @@ feito à mão em JS era mais código e pior no iOS. O que está ligado aparece
 em pastilhas com ✕ próprio (`.factivos`), escondidas quando o painel está
 aberto para não dizer a mesma coisa duas vezes.
 
+**A CASTA é o único filtro que aceita mais do que um valor**, e é o único
+onde isso faz sentido: um vinho tem UM tipo, UMA região e UM ano, mas leva
+as castas que quiser. Escolher no chip JUNTA em vez de substituir (não há
+`<select multiple>` — é mau no telemóvel, e um painel de botões só para
+este filtro dava-lhe um desenho que nenhum dos outros onze tem); tira-se
+nas pastilhas, uma a uma, que é onde o ✕ já vivia. Com duas ou mais
+escolhidas aparece por baixo do chip o visto **"todas em simultâneo"**
+(`CASTAS_TODAS`), porque a pergunta passa a ter duas respostas legítimas:
+qualquer uma delas (o costume) ou os lotes que levam **todas**. É "levar
+todas", não "ser exatamente estas" — um lote com uma terceira casta conta.
+São as mesmas palavras e o mesmo desenho do `p_castas_todas` do Catálogo da
+WineCatalog, de propósito: quem anda nas duas apps não aprende dois nomes
+para a mesma coisa. Com o painel fechado, a regra lê-se nas pastilhas — em
+"todas" vão separadas por **+** (`.fjunta`), no costume ficam lado a lado
+como as outras.
+
+**E é o único filtro cuja lista de opções CONTA e CORTA** (`opcoesCasta`).
+As duas coisas nascem do mesmo problema: em "todas em simultâneo" quase
+toda a escolha seguinte dá zero, e sem o número à frente escolher a segunda
+casta é adivinhar — a lista respondia "Nada encontrado" a quem tinha
+acabado de tocar numa opção que a app lhe ofereceu. A contagem é feita com
+os OUTROS filtros aplicados e sem o grupo das castas (é o que faz "Syrah 6"
+continuar verdade depois de se escolher Touriga); em "todas" deixa de
+ignorar o grupo inteiro e conta POR CIMA das já escolhidas. Uma casta que
+dê zero não aparece: é a resposta certa para um caminho sem saída. A
+mesma regra da `facetas` da WineCatalog, e pela mesma razão.
+
+Duas armadilhas que a casta-lista deixou atrás de si: **uma lista vazia é
+truthy** — daí o `filtroLigado()`, sem o qual `haFiltros()` dava sempre
+verdadeiro e a app abria sempre em modo "a filtrar"; e **`esquecerFiltros()`
+repõe o visto a falso**, porque um visto que sobrevivesse à limpeza era uma
+regra escondida a filtrar por baixo na escolha seguinte.
+
 A **maturação** não filtra por "No ponto" — filtra pelo **terço da janela**:
 *No ponto · a abrir*, *· a meio*, *· a fechar*, mais *Ainda cedo* e *Já
 passou* (`listasFiltro`, valores `ponto:abrir`/`ponto:meio`/`ponto:fechar`).
@@ -423,6 +456,30 @@ casta (`agruparVinhos`, `detAgrupar`) — **sem filtro nenhum** por defeito
 (a lista toda), e com a mesma organização mas só os vinhos que passam na
 procura quando ela tem alguma coisa ligada (`haFiltros()`).
 
+**Dentro dos grupos há duas vistas: lista ou grelha** (`DET_VISTA`,
+`detVista`, os dois botões de ícone na `.dbar`). É **ortogonal** ao
+agrupamento — os grupos de região/ano/casta são os mesmos, só muda o que
+está lá dentro — e a escolha guarda-se (`gf_det_vista`): é uma preferência
+de quem usa, não um estado do ecrã. Daí o `detVistaBotoes()` à parte,
+chamado também no arranque; o HTML nasce com "Lista" ligada e sem isso quem
+tinha deixado a grelha via os dois botões a mentir.
+
+A grelha (`vinhoGrelhaHTML`) **não é o cartão da lista encolhido — é outra
+pergunta**. Na lista lê-se o que um vinho É (castas, menção, preço,
+maturação, onde está); na grelha procura-se um RÓTULO que já se viu, e por
+isso a garrafa cresce e o resto encolhe até ao que identifica: nome, ano,
+produtor/região, a nota e o primeiro sítio. Ficam de fora os crachás e o
+rodapé por inteiro: numa coluna de 150px cada um é uma linha a mais, e o
+que se perde é a fotografia, que é a razão de a grelha existir. A faixa da
+procura entra nas duas — na grelha com mais razão ainda, que o cartão
+mostra menos — e é a MESMA `trechosMatch`, nunca uma segunda versão mais
+curta; só o CSS a empilha (o nome do campo por cima do trecho), porque
+lado a lado "HARMONIZA COM" comia a coluna toda e sobrava "… pratos".
+A garrafa tem `max-width` de propósito: sem tecto, num ecrã largo cada
+vinho virava um poster e a grelha deixava de dar muitos rótulos de uma vez.
+O `sitiosDe()` saiu para fora do cartão da lista para as duas vistas
+contarem os sítios da mesma maneira.
+
 Por **casta** vêm primeiro os monocasta, um grupo por casta ("100% Syrah",
 "100% Touriga Nacional", por ordem alfabética), e só no fim "Várias Castas"
 — é a pergunta "o que é isto, puro?" antes da mistura. Dentro de QUALQUER
@@ -642,6 +699,11 @@ famílias de cor lado a lado no mesmo cartão e nenhuma queria dizer nada.
 3. depois de um filete, o **rodapé do que é físico** — onde está a garrafa e
    se está no ponto de beber.
 Um crachá novo entra numa destas zonas; não há uma quarta.
+
+Isto é do cartão da LISTA. O cartão da **grelha** (`.vgcard`) é outro
+desenho e não lhe deve obediência: ali a garrafa é a largura toda e o que
+sobra é só identidade — ver "os cinco separadores", `vinhoGrelhaHTML`. As
+três zonas continuam a valer onde há espaço para três zonas.
 
 **A faixa da procura é a exceção que confirma isto** (`trechosMatch`,
 `.vc-match`): enquanto há texto na caixa de procura, o cartão ganha em
