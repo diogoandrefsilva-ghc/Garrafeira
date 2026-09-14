@@ -113,57 +113,132 @@ sobe para `#s-locais` (antes do `#mapa`) quando se entra lá; ao voltar a
 Detalhe, desce outra vez. Por ser o mesmo `<input>`, o texto e os filtros
 ligados não se perdem ao trocar de separador.
 
-Colapsada ocupa **uma linha só**: a caixa de texto e, à direita, o botão
-"Filtros" que abre o resto (chips, pastilhas) por baixo — antes eram duas
-linhas sempre visíveis (a barra de procura e, por baixo, a barra do botão).
-`renderFiltrados()` é o despachante desta procura: atualiza os chips/
-pastilhas e volta a desenhar **Detalhe e Locais os dois**, sem tentar
-adivinhar qual dos dois está aberto (o mesmo raciocínio do `renderLista()`,
-ver abaixo). O texto da caixa vem em letra pequena de propósito — é uma
-linha de trabalho, não conteúdo para se ler devagar.
+### O painel tem TRÊS ANDARES, e sobe-se um de cada vez
+Era tudo ou nada: um botão "Filtros" e, atrás dele, doze filtros abertos de
+uma vez. Doze decisões à frente de quem só queria escrever "crasto". Agora
+(`FILTROS_ABERTO`/`FILTROS_NIVEL`, `filtrosMais`) cada degrau é uma pergunta
+maior do que a anterior:
 
-Os filtros são texto livre, local, tipo, região, casta, produtor, nº de
-castas, ano, menção, **preço** e **grau alcoólico** (`FAIXAS_PRECO`/
-`FAIXAS_TEOR`, o mesmo desenho por intervalo do card do Valor), maturação e
-Vivino (`F`/`F_META`/`opcoesFiltro`). Cada um é um chip desenhado por nós
-com o `<select>` **nativo por cima, invisível** (`opacity:0;inset:0`): o
-desenho é nosso, o seletor continua a ser o do telemóvel — um dropdown
-feito à mão em JS era mais código e pior no iOS. O que está ligado aparece
-em pastilhas com ✕ próprio (`.factivos`), escondidas quando o painel está
-aberto para não dizer a mesma coisa duas vezes.
+- **0 — fechado.** Uma linha só (`.fmin`), e o que ela diz é o que está a
+  filtrar ("🔍 Tinto · Touriga Nacional + Syrah"), não a palavra "Filtros":
+  é a única coisa no ecrã a dizê-lo, e um rótulo genérico escondia o que
+  estava a acontecer por baixo.
+- **1 — a procura livre e mais nada.** É o que se usa em nove de cada dez
+  vezes: um pedaço do nome chega.
+- **2 — + cor, região e castas**, em cartões com contagens. As três de
+  sempre, e é aqui que se passeia pela garrafeira.
+- **3 — + os outros nove** (local, produtor, nº de castas, ano, menção,
+  preço, grau, maturação, Vivino), em chips.
 
-**A CASTA é o único filtro que aceita mais do que um valor**, e é o único
-onde isso faz sentido: um vinho tem UM tipo, UMA região e UM ano, mas leva
-as castas que quiser. Escolher no chip JUNTA em vez de substituir (não há
-`<select multiple>` — é mau no telemóvel, e um painel de botões só para
-este filtro dava-lhe um desenho que nenhum dos outros onze tem); tira-se
-nas pastilhas, uma a uma, que é onde o ✕ já vivia. Com duas ou mais
-escolhidas aparece por baixo do chip o visto **"todas em simultâneo"**
-(`CASTAS_TODAS`), porque a pergunta passa a ter duas respostas legítimas:
-qualquer uma delas (o costume) ou os lotes que levam **todas**. É "levar
-todas", não "ser exatamente estas" — um lote com uma terceira casta conta.
-São as mesmas palavras e o mesmo desenho do `p_castas_todas` do Catálogo da
-WineCatalog, de propósito: quem anda nas duas apps não aprende dois nomes
-para a mesma coisa. Com o painel fechado, a regra lê-se nas pastilhas — em
-"todas" vão separadas por **+** (`.fjunta`), no costume ficam lado a lado
+Sobe-se um degrau de cada vez e desce-se de uma vez só (o ▲ ao lado da
+procura fecha tudo, de qualquer andar): a subida é uma pergunta a seguir à
+outra, a descida é "já não quero nada disto". **O ANDAR fica gravado à parte
+do ABERTO/FECHADO** (`gf_filtros_nivel`/`gf_filtros_aberto`) — quem trabalha
+sempre com tudo aberto reabre no 3, quem só procura reabre no 1, e os dois
+têm de poder fechar a barra sem perder o seu degrau. É por isso que o
+arranque impõe a classe ao `#filtros` antes de o `carregar()` responder:
+sem isso a barra abria-se e fechava-se outra vez assim que os dados
+chegavam.
+
+**O `<input>` da procura vive no `index.html` e NUNCA é reescrito por JS.**
+Quem se repinta a cada tecla são os contentores vazios (`#f-grupos`,
+`#f-selects`, `#f-activos`) — reescrever o campo perdia o cursor a meio de
+uma palavra. Pela mesma razão os andares são uma CLASSE no contentor
+(`n0`…`n3`) e não `style.display` espalhado por JS: o que cada andar mostra
+lê-se no `style.css`, num sítio só.
+
+`renderFiltrados()` continua a ser o despachante: atualiza o painel e volta
+a desenhar **Detalhe e Locais os dois**, sem tentar adivinhar qual está
+aberto (o mesmo raciocínio do `renderLista()`).
+
+**AS PASTILHAS DIZEM O QUE NÃO SE VÊ DO ANDAR ONDE SE ESTÁ.** É a regra
+toda: um filtro cujo grupo está aberto já se lê no cartão aceso, e
+repeti-lo por baixo era dizer a mesma coisa duas vezes — foi sempre por
+isso que elas desapareciam com o painel aberto. Com três andares a mesma
+regra passa a ser por FILTRO e não por painel (`nivelDoFiltro`): no andar 1
+as castas escolhidas aparecem em pastilha, no andar 2 deixam de aparecer e
+ficam só as do andar 3.
+
+### Três filtros são LISTAS, nove são um valor só
+Cor, região e castas aceitam mais do que um valor; os outros nove não. Não é
+simetria por simetria: são as três perguntas que se fazem sempre ("um tinto
+do Douro de Touriga?") e são as únicas onde escolher DUAS opções quer dizer
+alguma coisa. "Tinto ou Branco" e "Douro ou Alentejo" são perguntas
+legítimas; "2019 ou 2021" responde-se melhor pela organização por ano, e
+"Reserva ou Grande Reserva" quase nunca se pergunta.
+
+Por isso as três vivem no andar 2 em **cartões com contagem** (`FGRUPOS`,
+`grupoHTML`) e as outras nove no andar 3, em chips de um valor com o
+`<select>` **nativo por cima, invisível** (`opacity:0;inset:0`): o desenho é
+nosso, o seletor continua a ser o do telemóvel — um dropdown feito à mão em
+JS era mais código e pior no iOS.
+
+Os cartões são uma **GRELHA de duas colunas**, não um `flex-wrap`, e é a
+mesma pedra da WineCatalog: com três por linha "Península de Setúbal" e
+"Cabernet Sauvignon" chegam ao ecrã cortadas a meio, e um filtro que não se
+lê não se escolhe; com `flex-grow`, o último cartão de uma linha ímpar
+estica-se sozinho de ponta a ponta. E o texto QUEBRA em vez de cortar —
+com reticências, "Alicante Bousc…" e "Alicante Branco" são o mesmo cartão.
+
+**As CASTAS têm duas regras que os outros dois não podem ter**
+(`castasRegrasHTML`), porque só nelas a mesma escolha tem mais do que uma
+leitura:
+
+- **"todas em simultâneo"** (`CASTAS_TODAS`) — qualquer uma delas (o
+  costume) ou os lotes que levam **todas**. É "levar todas", não "ser
+  exatamente estas": um lote com uma terceira casta conta. Um vinho tem UMA
+  cor e UMA região, "tinto E branco" não existe, e por isso o visto não
+  aparece nos outros dois grupos. Mesmas palavras e mesmo desenho do
+  `p_castas_todas` do Catálogo da WineCatalog, de propósito.
+- **"só monocasta"** — os vinhos feitos SÓ daquela casta. **Não é um estado
+  novo:** é o `castaN='1'` que já existia no chip "Nº de castas" do andar 3,
+  visto de perto. Um estado, dois sítios — e assim é impossível pedir
+  "várias castas" ali e "só monocasta" aqui e ficar com uma lista vazia por
+  contradição. Aqui é que ele faz falta, porque é aqui que se escolhe a
+  casta: "Syrah" + "só monocasta" são "os meus 100% Syrah", que é a pergunta
+  a seguir à casta e não uma pergunta sobre números.
+
+As duas são **mutuamente exclusivas, por aritmética e não por arrumação**:
+um vinho de uma casta só nunca leva duas, por isso ter as duas ligadas era
+pedir uma lista que não pode existir — e a app respondia "Nada encontrado"
+sem dizer porquê. Ligar uma desliga a outra, e com monocasta ligado o outro
+visto nem aparece.
+
+Com o painel fechado (ou no andar 1), a regra do "todas" lê-se nas
+pastilhas: vão separadas por **+** (`.fjunta`); no costume ficam lado a lado
 como as outras.
 
-**E é o único filtro cuja lista de opções CONTA e CORTA** (`opcoesCasta`).
-As duas coisas nascem do mesmo problema: em "todas em simultâneo" quase
-toda a escolha seguinte dá zero, e sem o número à frente escolher a segunda
-casta é adivinhar — a lista respondia "Nada encontrado" a quem tinha
-acabado de tocar numa opção que a app lhe ofereceu. A contagem é feita com
-os OUTROS filtros aplicados e sem o grupo das castas (é o que faz "Syrah 6"
-continuar verdade depois de se escolher Touriga); em "todas" deixa de
-ignorar o grupo inteiro e conta POR CIMA das já escolhidas. Uma casta que
-dê zero não aparece: é a resposta certa para um caminho sem saída. A
-mesma regra da `facetas` da WineCatalog, e pela mesma razão.
+### Os cartões CONTAM e CORTAM (`facetas`)
+Cada cartão diz quantos vinhos dá, e é isso que separa este painel de uma
+lista de caixas: escolher deixa de ser adivinhar. Sem os números, qualquer
+escolha podia dar "Nada encontrado" a quem tinha acabado de tocar numa opção
+que a app lhe ofereceu; com eles, um caminho sem saída nem chega a aparecer.
 
-Duas armadilhas que a casta-lista deixou atrás de si: **uma lista vazia é
+A regra é a da `facetas` da WineCatalog e não é detalhe: **conta-se com os
+OUTROS grupos aplicados mas NÃO com o próprio.** É isso que faz "Branco 7"
+continuar visível depois de se escolher Tinto — senão, escolher uma cor
+apagava todas as outras e não havia como acrescentar uma segunda. Uma opção
+que dê zero não aparece; uma ESCOLHIDA aparece sempre, mesmo a zero, senão
+não havia como a desmarcar.
+
+As castas em "todas em simultâneo" são a exceção dentro da exceção: deixam
+de ignorar o grupo inteiro e contam POR CIMA das outras castas já escolhidas
+(só a PRÓPRIA opção é ignorada). De outro modo o cartão dizia "Syrah 28" com
+a lista a mostrar três vinhos. Com "só monocasta" ligado a base já leva o
+`castaN`, e as contagens passam a ser as dos monovarietais de cada casta —
+que é exatamente a pergunta que o cartão tem de responder.
+
+Duas armadilhas que as listas deixaram atrás de si: **uma lista vazia é
 truthy** — daí o `filtroLigado()`, sem o qual `haFiltros()` dava sempre
 verdadeiro e a app abria sempre em modo "a filtrar"; e **`esquecerFiltros()`
-repõe o visto a falso**, porque um visto que sobrevivesse à limpeza era uma
-regra escondida a filtrar por baixo na escolha seguinte.
+repõe os vistos**, porque um visto que sobrevivesse à limpeza era uma regra
+escondida a filtrar por baixo na escolha seguinte.
+
+O grupo da cor chama-se **"Cor"** e não "Tipo": é assim que a app já lhe
+chama onde interessa (o `iaCorGuard`, antes de qualquer procura), e é a
+pergunta que uma pessoa faz. Que Espumante e Licoroso não sejam cores é
+verdade, e é o mesmo compromisso que o `db/schema.sql` já faz — a coluna
+chama-se `tipo` e a pergunta chama-se cor.
 
 A **maturação** não filtra por "No ponto" — filtra pelo **terço da janela**:
 *No ponto · a abrir*, *· a meio*, *· a fechar*, mais *Ainda cedo* e *Já

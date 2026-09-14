@@ -342,18 +342,81 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .fsearch-x.on{display:flex}
 .fbar{display:flex;align-items:center;gap:9px;margin-top:10px;flex-wrap:wrap}
 .fcount{font-size:11.5px;color:var(--mu);flex:1;min-width:90px;text-align:right}
-.ftoggle{flex-shrink:0;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--bo2);background:var(--bg);color:var(--tx);
-  font-family:inherit;font-size:12px;font-weight:600;padding:10px 13px;border-radius:99px;cursor:pointer;transition:all .15s}
+/* O ▲ ao lado da procura: fecha a barra toda, de qualquer andar. Era o
+   botão "Filtros" que abria tudo de uma vez — agora abrir é subir degraus
+   (`.fmais`) e este só serve para sair. */
+.ftoggle{flex-shrink:0;width:38px;height:40px;display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid var(--bo2);background:var(--bg);color:var(--mu);
+  font-family:inherit;font-size:11px;border-radius:99px;cursor:pointer;transition:all .15s}
 .ftoggle:hover{border-color:var(--vh);color:var(--vh)}
-.ftoggle .fchev{font-size:8px;color:var(--mu);transition:transform .2s}
-.filtros.aberto .ftoggle{background:var(--vh);color:#fff;border-color:var(--vh)}
-.filtros.aberto .ftoggle .fchev{transform:rotate(180deg);color:#fff}
 .fn{background:var(--vh);color:#fff;font-size:10px;font-weight:700;min-width:17px;height:17px;border-radius:99px;
   display:none;align-items:center;justify-content:center;padding:0 5px}
 .fn.on{display:inline-flex}
-.filtros.aberto .fn{background:#fff;color:var(--vh)}
-.fchips{display:none;flex-wrap:wrap;gap:7px;margin-top:11px;padding-top:11px;border-top:1px solid var(--bo)}
-.filtros.aberto .fchips{display:flex;animation:abrir .18s ease both}
+
+/* ── OS TRÊS ANDARES ──────────────────────────────────────────────
+   Uma classe no contentor (`n0`…`n3`) e nada de `style.display` em JS:
+   assim o que cada andar mostra lê-se aqui, num sítio só, em vez de
+   andar espalhado por quatro atribuições no `renderFiltros`. */
+.filtros .fmin,.filtros .fsearch,.filtros .fgrupos,.filtros .fchips,
+.filtros .fbar,.filtros .fmais{display:none}
+.filtros.n0 .fmin{display:flex}
+.filtros.n1 .fsearch,.filtros.n2 .fsearch,.filtros.n3 .fsearch{display:flex}
+.filtros.n2 .fgrupos,.filtros.n3 .fgrupos{display:block;animation:abrir .18s ease both}
+.filtros.n3 .fchips{display:flex;animation:abrir .18s ease both}
+.filtros.n1 .fmais,.filtros.n2 .fmais,.filtros.n3 .fmais{display:block}
+/* A contagem e o "limpar" só aparecem quando há alguma coisa a filtrar.
+   É uma CLASSE e não `style.display` em JS: com a regra de fecho acima a
+   dizer `display:none`, um `style.display=''` não a vencia — e a barra
+   ficava escondida exatamente quando devia aparecer. */
+.filtros.n1 .fbar.on,.filtros.n2 .fbar.on,.filtros.n3 .fbar.on{display:flex}
+
+/* A barra fechada: o que está a filtrar, o número, e o chevron. É a única
+   coisa no ecrã a dizer que há filtros ligados — daí o texto ser o resumo
+   e não a palavra "Filtros". */
+.fmin{width:100%;align-items:center;justify-content:space-between;gap:10px;
+  background:none;border:none;padding:2px;cursor:pointer;text-align:left;font-family:inherit}
+.fmin-tx{font-size:13px;color:var(--mu);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fmin-lado{display:flex;align-items:center;gap:7px;flex-shrink:0}
+.fmin .fchev{font-size:9px;color:var(--mu)}
+
+/* O degrau seguinte. Largura toda e texto por extenso: é uma pergunta
+   ("queres também filtrar por cor, região e castas?"), não um ícone. */
+.fmais{width:100%;margin-top:11px;padding:9px;border:1px dashed var(--bo2);border-radius:99px;
+  background:none;color:var(--vh);font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer}
+.fmais:hover{border-color:var(--vh);background:var(--vhp)}
+
+/* ── ANDAR 2: OS CARTÕES COM CONTAGENS ────────────────────────────
+   DUAS por linha, e uma GRELHA — não um `flex-wrap`. Com três por linha
+   "Península de Setúbal" e "Cabernet Sauvignon" chegam ao ecrã cortadas a
+   meio, e um filtro que não se lê não se escolhe; com `flex-grow`, o
+   último cartão de uma linha ímpar estica-se sozinho de ponta a ponta.
+   `minmax(0,1fr)` e `min-width:0` no cartão porque o mínimo de um item de
+   grelha é `auto`: sem isso é a coluna que cresce. */
+.fgrupos{margin-top:11px;padding-top:11px;border-top:1px solid var(--bo)}
+.fgrupo+.fgrupo{margin-top:14px}
+.fgrupo-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  flex-wrap:wrap;margin-bottom:7px}
+.fgrupo-tit{font-size:10px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.7px}
+.fops{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.fop{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;
+  padding:9px 10px;border-radius:12px;border:1px solid var(--bo);background:var(--bg);color:var(--tx);
+  font-family:inherit;font-size:12px;text-align:left;cursor:pointer;transition:all .15s}
+.fop:hover{border-color:var(--bo2);background:#fff}
+.fop.on{background:var(--vh);border-color:var(--vh);color:#fff}
+/* O texto QUEBRA, não corta: com reticências, "Alicante Bousc…" e
+   "Alicante Branco" são o mesmo cartão. Numa grelha os dois cartões de uma
+   linha têm sempre a mesma altura, por isso duas linhas não desalinham
+   nada. `anywhere` para o caso de uma palavra não caber de todo. */
+.fop-tx{display:flex;align-items:center;gap:6px;font-weight:600;min-width:0;
+  white-space:normal;overflow-wrap:anywhere;line-height:1.25}
+.fconta{font-size:10.5px;font-weight:700;color:var(--mu);flex-shrink:0}
+.fop.on .fconta{color:rgba(255,255,255,.75)}
+.fponto{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
+.fop.on .fponto{box-shadow:0 0 0 1.5px rgba(255,255,255,.5)}
+/* As duas regras das castas, à direita do título do grupo. */
+.fregras{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+
+.fchips{flex-wrap:wrap;gap:7px;margin-top:11px;padding-top:11px;border-top:1px solid var(--bo)}
 .fchip{position:relative;display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border:1px solid var(--bo);
   border-radius:99px;background:var(--bg);font-size:12px;color:var(--mu);cursor:pointer;transition:all .15s;max-width:100%}
 .fchip:hover{border-color:var(--bo2);background:#fff}
@@ -362,10 +425,10 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .fchip.ativo{background:var(--vh);color:#fff;border-color:var(--vh);font-weight:600}
 .fchip select{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:none;
   font-size:16px;font-family:inherit;cursor:pointer;-webkit-appearance:none;appearance:none}
-/* As pastilhas do que está ligado são o resumo para quando o painel está
-   FECHADO; com ele aberto seriam a mesma informação duas vezes. */
+/* As pastilhas dizem o que NÃO se vê do andar onde se está: um filtro cujo
+   grupo está aberto já se lê no cartão aceso. Quem decide isso é o
+   `renderFiltros` (ver a regra lá); aqui só se esconde a fila vazia. */
 .factivos{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-.filtros.aberto .factivos{display:none}
 .factivos:empty{display:none}
 .fpill{display:inline-flex;align-items:center;gap:7px;background:var(--vhp);border:1px solid #f0dbe2;color:var(--vh);
   font-size:11.5px;font-weight:600;padding:4px 6px 4px 11px;border-radius:99px}
@@ -379,10 +442,9 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 /* O visto das castas, ao lado do chip. Só aparece com duas escolhidas —
    com uma, "qualquer uma" e "todas" dão a mesma lista. Mesmo desenho (e
    mesmas palavras) do Catálogo da WineCatalog. */
-/* Linha própria, logo por baixo do chip das castas: entalado entre dois
-   chips lia-se como mais um filtro, quando o que é é uma REGRA sobre o de
-   cima. */
-.fmodo{flex:0 0 100%;display:inline-flex;align-items:center;gap:6px;background:none;border:none;padding:3px 2px 1px;
+/* Os vistos das castas vivem na `.fregras`, ao lado do título do grupo —
+   são REGRAS sobre os cartões de baixo, não mais um filtro. */
+.fmodo{display:inline-flex;align-items:center;gap:6px;background:none;border:none;padding:1px 0;
   font-family:inherit;font-size:11px;font-weight:600;color:var(--mu);cursor:pointer;white-space:nowrap}
 .fmodo.on{color:var(--vh)}
 .fvisto{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--bo2);background:var(--card);

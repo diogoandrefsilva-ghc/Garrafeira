@@ -1191,9 +1191,9 @@ function renderFiltrados(){
   const tx=document.getElementById('f-texto');
   document.getElementById('f-texto-x').classList.toggle('on',!!tx.value);
   if(!haFiltros()){
-    info.style.display='none';fl.style.display='none';fc.textContent='';
+    info.classList.remove('on');fl.style.display='none';fc.textContent='';
   }else{
-    info.style.display='';fl.style.display='';
+    info.classList.add('on');fl.style.display='';
     const res=vinhosFiltrados();
     const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
     fc.textContent=`${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'}`;
@@ -1206,22 +1206,68 @@ function renderFiltrados(){
    Os valores possíveis de cada filtro saem SEMPRE dos dados que lá estão
    (não de listas fixas): assim uma região nova aparece no filtro sozinha,
    e nunca fica um filtro a apontar para coisa nenhuma. */
-/* A CASTA é uma LISTA, todos os outros são um valor só — e a diferença não
-   é capricho: um vinho tem UM tipo, UMA região e UM ano, mas leva as castas
-   que quiser. Escolher Touriga Nacional e Syrah tem por isso duas leituras
-   legítimas — qualquer uma das duas (o costume) ou os lotes que levam as
-   duas — e é a única pergunta deste painel onde "e" e "ou" dão listas
-   diferentes. Daí `CASTAS_TODAS` só existir aqui. É a mesma decisão (e o
-   mesmo vocabulário, "todas em simultâneo") do Catálogo da WineCatalog:
-   quem anda nas duas apps não aprende dois nomes para a mesma coisa. */
-let F={local:'',tipo:'',regiao:'',casta:[],produtor:'',ano:'',mencao:'',castaN:'',preco:'',teor:'',janela:'',vivino:''};
+/* TRÊS deles são LISTAS — cor, região e castas — e os outros nove um valor
+   só. Não é capricho nem simetria por simetria: são as três perguntas que
+   se fazem sempre ("um tinto do Douro de Touriga?") e são as únicas onde
+   escolher DUAS opções quer dizer alguma coisa. "Tinto ou Branco" e "Douro
+   ou Alentejo" são perguntas legítimas; "2019 ou 2021" já se responde
+   melhor pela organização por ano, e "Reserva ou Grande Reserva" quase
+   nunca se pergunta. Por isso as três vivem no ANDAR 2 em cartões com
+   contagem (`FGRUPOS`) e as outras nove no andar 3, em chips de um valor.
+   As CASTAS ainda têm uma coisa a mais: só nelas a mesma escolha tem duas
+   leituras legítimas — qualquer uma delas (o costume) ou os lotes que levam
+   TODAS (`CASTAS_TODAS`). Um vinho tem UMA cor e UMA região; "tinto E
+   branco" não existe, e por isso o visto não aparece nos outros dois.
+   É a mesma decisão, o mesmo desenho e o mesmo vocabulário do Catálogo da
+   WineCatalog: quem anda nas duas apps não aprende dois nomes para a mesma
+   coisa. */
+let F={local:'',tipo:[],regiao:[],casta:[],produtor:'',ano:'',mencao:'',castaN:'',preco:'',teor:'',janela:'',vivino:''};
 let CASTAS_TODAS=false;
 try{CASTAS_TODAS=localStorage.getItem('gf_castas_todas')==='1';}catch(e){}
 // Um filtro "ligado" é um valor escolhido — mas uma lista VAZIA é um objeto
 // e portanto truthy. Sem isto, `haFiltros()` dava sempre verdadeiro a partir
-// do dia em que a casta passou a lista, e a app abria sempre em modo
+// do dia em que estes três passaram a listas, e a app abria sempre em modo
 // "a filtrar" com a lista toda lá dentro.
 function filtroLigado(k){const v=F[k];return Array.isArray(v)?v.length>0:!!v;}
+
+/* ── OS TRÊS ANDARES DO PAINEL ──────────────────────────────────────
+   Doze filtros abertos de uma vez são doze decisões à frente de quem só
+   queria escrever "crasto" — e era o que o botão "Filtros" fazia, tudo ou
+   nada. Agora sobe-se um degrau de cada vez, e cada degrau é uma pergunta
+   maior do que a anterior:
+     0  fechado — uma linha a dizer o que está a filtrar;
+     1  a PROCURA LIVRE e mais nada (é o que se usa em nove de cada dez
+        vezes: um pedaço do nome chega);
+     2  + cor, região e castas — as três de sempre, em cartões com
+        contagens, porque é aqui que se passeia pela garrafeira;
+     3  + os outros nove, em chips (local, produtor, nº de castas, ano,
+        menção, preço, grau, maturação, Vivino).
+   Sobe-se um degrau de cada vez e desce-se de uma vez só, de propósito: a
+   subida é uma pergunta a seguir à outra, a descida é "já não quero nada
+   disto". Fechar é sempre o ▲ ao lado da caixa de procura.
+   O ANDAR fica gravado à parte do ABERTO/FECHADO: quem trabalha sempre com
+   tudo aberto reabre no 3, quem só procura reabre no 1 — e os dois têm de
+   poder fechar a barra sem perder o seu degrau. */
+let FILTROS_ABERTO=false,FILTROS_NIVEL=1;
+try{
+  FILTROS_ABERTO=localStorage.getItem('gf_filtros_aberto')==='1';
+  FILTROS_NIVEL=Math.min(3,Math.max(1,parseInt(localStorage.getItem('gf_filtros_nivel'),10)||1));
+}catch(e){}
+function filtrosGravar(){
+  try{
+    localStorage.setItem('gf_filtros_aberto',FILTROS_ABERTO?'1':'0');
+    localStorage.setItem('gf_filtros_nivel',String(FILTROS_NIVEL));
+  }catch(e){}
+}
+// Em que andar mora cada filtro. É isto que decide o que se desenha, e
+// também que pastilhas aparecem: ver `renderFiltros`.
+function nivelDoFiltro(k){return (k==='tipo'||k==='regiao'||k==='casta')?2:3;}
+function filtrosAbrir(){FILTROS_ABERTO=true;filtrosGravar();renderFiltros();}
+function filtrosFechar(){FILTROS_ABERTO=false;filtrosGravar();renderFiltros();}
+function filtrosMais(){
+  FILTROS_NIVEL=FILTROS_NIVEL>=3?1:FILTROS_NIVEL+1;
+  filtrosGravar();renderFiltros();
+}
 
 // Intervalos da nota do Vivino, do mesmo jeito que FAIXAS_PRECO: a pergunta
 // não é "qual é a nota exata" (isso o cartão já mostra), é "está bem
@@ -1253,45 +1299,78 @@ function opcoesFiltro(){
   const comStock=db.vinhos.filter(v=>stockDe(v.id)>0);
   const set=(arr)=>[...new Set(arr.filter(x=>x!==''&&x!=null))];
   const locais=db.locais.filter(l=>db.garrafas.some(g=>g.local_id===l.id&&naGarrafeira(g)));
-  // A `casta` não vem daqui — é a única com contagens e com becos sem saída
-  // por cortar, e por isso tem lista própria (`opcoesCasta`).
+  // Cor, região e casta não vêm daqui: são as três do ANDAR 2, desenhadas
+  // em cartões com contagens pela `facetas`. Aqui ficam só as nove do
+  // andar 3, que continuam a ser um `<select>` de um valor.
   return {
     local:locais.map(l=>[String(l.id),l.nome]),
-    tipo:set(comStock.map(v=>v.tipo)).sort().map(x=>[x,x]),
-    regiao:set(comStock.map(v=>v.regiao)).sort((a,b)=>a.localeCompare(b,'pt')).map(x=>[x,x]),
     produtor:set(comStock.map(v=>v.produtor)).sort((a,b)=>a.localeCompare(b,'pt')).map(x=>[x,x]),
     ano:set(comStock.map(v=>v.ano)).sort((a,b)=>b-a).map(x=>[String(x),String(x)]),
     mencao:set(comStock.map(v=>v.mencao)).sort((a,b)=>a.localeCompare(b,'pt')).map(x=>[x,x])
   };
 }
 
-/* AS CASTAS QUE AINDA SE PODEM JUNTAR, com quantos vinhos cada uma dá.
-   É a única lista de opções deste painel que CONTA e que CORTA, e as duas
-   coisas nascem do mesmo problema: em "todas em simultâneo", quase toda a
-   escolha seguinte dá zero. Sem a contagem à frente, escolher a segunda
-   casta é adivinhar — e a lista respondia "Nada encontrado" a quem tinha
-   acabado de escolher uma opção que a app lhe ofereceu.
-   A contagem é feita com os OUTROS filtros aplicados e sem o grupo das
-   castas (é o que faz "Syrah 6" continuar a ser verdade depois de se
-   escolher Touriga); em "todas", deixa de ignorar o grupo inteiro e passa
-   a contar POR CIMA das castas já escolhidas — é a mesma regra do
-   `p_castas_todas` da WineCatalog, e pela mesma razão: de outro modo o
-   cartão dizia "Syrah 28" com a lista a mostrar três vinhos.
-   Uma casta que dê zero não aparece: é a resposta certa para um caminho
-   sem saída. As já escolhidas também não — tiram-se nas pastilhas, não
-   aqui. */
-function opcoesCasta(){
+/* AS CONTAGENS DOS TRÊS GRUPOS DO ANDAR 2 (`facetas`).
+   Cada cartão diz quantos vinhos dá — e é isso que separa este painel de
+   uma lista de caixas: escolher deixa de ser adivinhar. Sem os números,
+   qualquer escolha podia dar "Nada encontrado" a quem tinha acabado de
+   tocar numa opção que a app lhe ofereceu; com eles, um caminho sem saída
+   nem chega a aparecer.
+   A regra é a da `facetas` da WineCatalog, e não é detalhe: conta-se com os
+   OUTROS grupos aplicados mas NÃO com o próprio. É isso que faz "Branco 7"
+   continuar visível depois de se escolher Tinto — senão, escolher uma cor
+   apagava todas as outras e não havia como acrescentar uma segunda.
+   Uma opção que dê zero não aparece; uma ESCOLHIDA aparece sempre, mesmo a
+   zero, senão não havia como a desmarcar.
+   As castas em "todas em simultâneo" são a exceção dentro da exceção:
+   deixam de ignorar o grupo inteiro e passam a contar POR CIMA das outras
+   castas já escolhidas (só a PRÓPRIA opção é ignorada). De outro modo o
+   cartão dizia "Syrah 28" com a lista a mostrar três vinhos. */
+function facetas(){
   const termos=termosProcura();
-  const base=db.vinhos.filter(v=>passaFiltros(v,termos,'casta'));
-  const nomes=[...new Set([].concat(...base.map(v=>v.castas||[])))]
-    .filter(c=>!F.casta.includes(c)).sort((a,b)=>a.localeCompare(b,'pt'));
-  return nomes.map(c=>{
-    const n=base.filter(v=>{
+  const conta=(g,valores,ler)=>{
+    const base=db.vinhos.filter(v=>passaFiltros(v,termos,g));
+    const m=new Map();
+    valores.forEach(x=>m.set(x,0));
+    base.forEach(v=>ler(v).forEach(x=>{if(m.has(x))m.set(x,m.get(x)+1);}));
+    return m;
+  };
+  const vals=(ler)=>[...new Set([].concat(...db.vinhos
+    .filter(v=>stockDe(v.id)>0).map(ler)).filter(x=>x!==''&&x!=null))];
+
+  const tipos=vals(v=>[v.tipo]);
+  const regioes=vals(v=>[v.regiao]);
+  const castas=vals(v=>v.castas||[]);
+  const cT=conta('tipo',tipos,v=>[v.tipo]);
+  const cR=conta('regiao',regioes,v=>[v.regiao]);
+
+  /* As castas em "todas": a base é a mesma (sem o grupo), mas cada casta
+     candidata é contada só nos vinhos que TAMBÉM levam as já escolhidas —
+     que é a pergunta a que o cartão tem de responder ("se eu juntar esta,
+     com quantos fico?"). */
+  const baseC=db.vinhos.filter(v=>passaFiltros(v,termos,'casta'));
+  const cC=new Map();
+  castas.forEach(c=>{
+    cC.set(c,baseC.filter(v=>{
       const cs=v.castas||[];
-      return cs.includes(c)&&(!CASTAS_TODAS||F.casta.every(x=>cs.includes(x)));
-    }).length;
-    return [c,`${c} (${n})`,n];
-  }).filter(o=>o[2]>0);
+      if(!cs.includes(c))return false;
+      return !CASTAS_TODAS||F.casta.every(x=>x===c||cs.includes(x));
+    }).length);
+  });
+
+  const monta=(g,m,lista)=>lista
+    .filter(x=>(m.get(x)||0)>0||F[g].includes(x))
+    .sort((a,b)=>String(a).localeCompare(String(b),'pt'))
+    .map(x=>[x,m.get(x)||0]);
+  return {
+    // As cores pela ordem do vocabulário (`TIPOS`), não alfabética: Tinto
+    // antes de Branco é como se fala de vinho, "Branco · Espumante ·
+    // Frisante · Licoroso · Rosé · Tinto" não é.
+    tipo:TIPOS.filter(t=>(cT.get(t)||0)>0||F.tipo.includes(t)).map(t=>[t,cT.get(t)||0])
+      .concat(monta('tipo',cT,tipos.filter(t=>!TIPOS.includes(t)))),
+    regiao:monta('regiao',cR,regioes),
+    casta:monta('casta',cC,castas)
+  };
 }
 /* Cada filtro é um chip DESENHADO por nós com o <select> nativo por cima,
    invisível (opacity:0, inset:0). O desenho passa a ser nosso — texto do
@@ -1303,14 +1382,14 @@ function opcoesCasta(){
    que traz o número dos que estão ligados. O que fica sempre visível são as
    "pastilhas" do que está a filtrar agora, cada uma com o seu ✕ — antes
    só havia "limpar filtros", tudo ou nada. */
-const F_META={local:['📍','Local'],tipo:['🍷','Tipo'],regiao:['🗺️','Região'],casta:['🍇','Casta'],
+/* "Cor" e não "Tipo": é assim que a app já lhe chama onde interessa (o
+   `iaCorGuard`, antes de qualquer procura), e é a pergunta que uma pessoa
+   faz. Que Espumante e Licoroso não sejam cores é verdade e é o mesmo
+   compromisso que o `db/schema.sql` já faz — a coluna chama-se `tipo` e a
+   pergunta chama-se cor. */
+const F_META={local:['📍','Local'],tipo:['🍷','Cor'],regiao:['🗺️','Região'],casta:['🍇','Casta'],
   produtor:['🏭','Produtor'],castaN:['🧬','Nº de castas'],ano:['📅','Ano'],mencao:['🏅','Menção'],
   preco:['💶','Preço'],teor:['🌡️','Grau alcoólico'],janela:['⏱️','Maturação'],vivino:['★','Vivino']};
-let FILTROS_ABERTOS=false;
-function toggleFiltros(){
-  FILTROS_ABERTOS=!FILTROS_ABERTOS;
-  document.getElementById('filtros').classList.toggle('aberto',FILTROS_ABERTOS);
-}
 function limparTexto(){
   const c=document.getElementById('f-texto');
   c.value='';renderFiltrados();c.focus();
@@ -1334,60 +1413,112 @@ function rotuloFiltro(listas,k){
   const par=(listas[k]||[]).find(p=>p[0]===F[k]);
   return par?par[1]:F[k];
 }
-/* O chip das castas é o mesmo `<select>` nativo por baixo do desenho nosso
-   que todos os outros — o que muda é que escolher JUNTA em vez de
-   substituir. Foi de propósito não inventar um seletor múltiplo: um
-   `<select multiple>` no telemóvel é mau, e um painel de botões só para
-   este filtro dava-lhe um desenho que nenhum dos outros onze tem. O que
-   se escolhe tira-se nas pastilhas, que já existiam e já tinham ✕. */
-function chipCasta(){
-  const [ico,nome]=F_META.casta;
-  const ops=opcoesCasta();
-  const n=F.casta.length;
-  const txt=n?F.casta[0]+(n>1?' +'+(n-1):''):nome;
-  return `<label class="fchip${n?' ativo':''}">
-    <span>${ico} ${esc(txt)}</span><span class="fchev">▾</span>
-    <select onchange="juntarCasta(this.value)">
-      <option value="">${n?'— limpar castas':esc(nome)+' — todas'}</option>
-      ${ops.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join('')}
-    </select>
-  </label>`;
+/* ANDAR 2 — um grupo de cartões: a opção e quantos vinhos dá.
+   Os cartões são uma GRELHA de duas colunas e não um `flex-wrap`, pela
+   mesma razão que na WineCatalog: com três por linha "Península de
+   Setúbal" e "Cabernet Sauvignon" chegam ao ecrã cortadas a meio, e um
+   filtro que não se lê não se escolhe. O `flex:1 1 …` de um wrap trazia
+   outro defeito — numa linha ímpar o último cartão esticava-se sozinho de
+   ponta a ponta; numa grelha o que sobra fica na primeira coluna, alinhado
+   com o de cima. E o texto QUEBRA em vez de cortar: com reticências,
+   "Alicante Bousc…" e "Alicante Branco" são o mesmo cartão. */
+function grupoHTML(g,titulo,ops,extra){
+  if(!ops.length)return '';
+  return `<div class="fgrupo">
+    <div class="fgrupo-cab">
+      <div class="fgrupo-tit">${esc(titulo)}</div>
+      ${extra||''}
+    </div>
+    <div class="fops">${ops.map(([v,n])=>{
+      const on=F[g].includes(v);
+      const cor=g==='tipo'?(VIDRO[v]||null):null;
+      return `<button class="fop${on?' on':''}" onclick="grupoToggle('${escJs(g)}','${escJs(v)}')">
+        <span class="fop-tx">${cor?`<i class="fponto" style="background:${esc(cor)}"></i>`:''}${esc(v)}</span>
+        <span class="fconta">${n}</span>
+      </button>`;
+    }).join('')}</div>
+  </div>`;
 }
-function renderFiltros(){
-  const listas=listasFiltro();
-  document.getElementById('f-selects').innerHTML=Object.keys(F_META).map(k=>{
-    if(k==='casta'){
-      /* O visto só aparece com DUAS castas escolhidas: com uma, "qualquer
-         uma" e "todas" dão a mesma lista, e uma pergunta sem duas respostas
-         é ruído. */
-      return chipCasta()+(F.casta.length>1
-        ? `<button class="fmodo${CASTAS_TODAS?' on':''}" onclick="castasModo()"
-             title="${CASTAS_TODAS
-               ?'A mostrar só os vinhos que levam TODAS as castas escolhidas'
-               :'A mostrar os vinhos que levam QUALQUER UMA das castas escolhidas'}">
-             <i class="fvisto">✓</i> todas em simultâneo</button>`
-        : '');
-    }
-    const [ico,nome]=F_META[k];
-    const pares=listas[k]||[];
-    const txt=F[k]?rotuloFiltro(listas,k):nome;
-    return `<label class="fchip${F[k]?' ativo':''}">
-      <span>${ico} ${esc(txt)}</span><span class="fchev">▾</span>
-      <select onchange="setFiltro('${k}',this.value)">
-        <option value="">${esc(nome)} — todos</option>
-        ${pares.map(([v,t])=>`<option value="${esc(v)}"${F[k]===v?' selected':''}>${esc(t)}</option>`).join('')}
-      </select>
-    </label>`;
-  }).join('');
+function grupoToggle(g,v){
+  const i=F[g].indexOf(v);
+  if(i<0)F[g].push(v);else F[g].splice(i,1);
+  renderFiltrados();
+}
 
-  /* As pastilhas são a única coisa que diz o que está ligado com o painel
-     fechado — e "Touriga Nacional · Syrah" mente sobre metade dos
-     resultados quando o visto está em "todas em simultâneo". Daí o "+"
-     entre elas nesse modo (e só nesse): é o mesmo sinal que a WineCatalog
-     escreve na sua barra. Cada casta mantém o ✕ dela, que é o que permite
-     desfazer a escolha uma a uma em vez de tudo ou nada. */
+/* As duas regras das castas, lado a lado por cima dos cartões, e são
+   MUTUAMENTE EXCLUSIVAS — não por arrumação, por aritmética: um vinho
+   monocasta tem UMA casta, por isso nunca leva "todas" as duas escolhidas.
+   Ter as duas ligadas era pedir uma lista que não pode existir, e a app
+   respondia "Nada encontrado" sem dizer porquê. Ligar uma desliga a outra.
+
+   O "só monocasta" NÃO é um estado novo: é o `castaN='1'` que já existia no
+   chip "Nº de castas" (andar 3), visto de perto. Um estado, dois sítios —
+   e assim é impossível pedir "várias castas" no andar 3 e "só monocasta"
+   aqui e ficar com uma lista vazia por contradição. Aqui é que ele faz
+   falta, porque é aqui que se escolhe a casta: "Syrah" e "só monocasta"
+   juntos são "os meus 100% Syrah", que é a pergunta a seguir à casta e não
+   uma pergunta sobre números. */
+function castasRegrasHTML(){
+  const mono=F.castaN==='1';
+  const b=(on,fn,txt,tit)=>`<button class="fmodo${on?' on':''}" onclick="${fn}()" title="${esc(tit)}">
+    <i class="fvisto">✓</i> ${esc(txt)}</button>`;
+  return `<div class="fregras">
+    ${b(mono,'castasMono','só monocasta',
+       mono?'A mostrar só os vinhos feitos de uma casta única'
+           :'A mostrar também os lotes que levam esta casta com outras')}
+    ${(!mono&&F.casta.length>1)
+      ? b(CASTAS_TODAS,'castasModo','todas em simultâneo',
+          CASTAS_TODAS?'A mostrar só os vinhos que levam TODAS as castas escolhidas'
+                      :'A mostrar os vinhos que levam QUALQUER UMA das castas escolhidas')
+      : ''}
+  </div>`;
+}
+
+function renderFiltros(){
+  const el=document.getElementById('filtros');
+  const nivel=FILTROS_ABERTO?FILTROS_NIVEL:0;
+  el.className='filtros n'+nivel;
+
+  const listas=listasFiltro();
+  // Os cartões só se calculam quando se veem: as facetas varrem a
+  // garrafeira uma vez por grupo, e no andar 1 ninguém as ia ler.
+  if(nivel>=2){
+    const f=facetas();
+    document.getElementById('f-grupos').innerHTML=
+      grupoHTML('tipo','Cor',f.tipo)+
+      grupoHTML('regiao','Região',f.regiao)+
+      grupoHTML('casta','Castas',f.casta,castasRegrasHTML());
+  }
+  if(nivel>=3){
+    document.getElementById('f-selects').innerHTML=Object.keys(F_META)
+      .filter(k=>nivelDoFiltro(k)===3).map(k=>{
+        const [ico,nome]=F_META[k];
+        const pares=listas[k]||[];
+        const txt=F[k]?rotuloFiltro(listas,k):nome;
+        return `<label class="fchip${F[k]?' ativo':''}">
+          <span>${ico} ${esc(txt)}</span><span class="fchev">▾</span>
+          <select onchange="setFiltro('${k}',this.value)">
+            <option value="">${esc(nome)} — todos</option>
+            ${pares.map(([v,t])=>`<option value="${esc(v)}"${F[k]===v?' selected':''}>${esc(t)}</option>`).join('')}
+          </select>
+        </label>`;
+      }).join('');
+  }
+
+  /* AS PASTILHAS DIZEM O QUE NÃO SE VÊ DAQUI. É a regra toda, e explica-se
+     sozinha: um filtro cujo grupo está aberto já se lê no cartão aceso, e
+     repeti-lo por baixo era dizer a mesma coisa duas vezes — foi por isso
+     que elas sempre desapareceram com o painel aberto. Com três andares a
+     mesma regra passa a ser por filtro e não por painel: no andar 1 as
+     castas escolhidas aparecem em pastilha (não há cartões à vista), no
+     andar 2 deixam de aparecer e ficam só as do andar 3.
+     E o "+" entre duas castas só existe em "todas em simultâneo": com o
+     painel fechado, "Touriga Nacional · Syrah" mente sobre metade dos
+     resultados. Cada casta mantém o ✕ dela — desfazer uma a uma, não tudo
+     ou nada. */
   const pastilhas=[];
   Object.keys(F_META).forEach(k=>{
+    if(nivelDoFiltro(k)<=nivel)return;
     if(k==='casta'){
       F.casta.forEach((c,i)=>{
         if(i&&CASTAS_TODAS)pastilhas.push('<span class="fjunta">+</span>');
@@ -1396,25 +1527,48 @@ function renderFiltros(){
       });
       return;
     }
+    if(Array.isArray(F[k])){
+      F[k].forEach(v=>pastilhas.push(`<span class="fpill">${F_META[k][0]} ${esc(v)}
+        <button onclick="grupoToggle('${escJs(k)}','${escJs(v)}')" title="Tirar este filtro">✕</button></span>`));
+      return;
+    }
     if(!F[k])return;
     pastilhas.push(`<span class="fpill">${F_META[k][0]} ${esc(rotuloFiltro(listas,k))}
       <button onclick="setFiltro('${k}','')" title="Tirar este filtro">✕</button></span>`);
   });
-  const nAtivos=Object.keys(F_META).reduce((s,k)=>s+(k==='casta'?F.casta.length:(F[k]?1:0)),0);
+  document.getElementById('f-activos').innerHTML=pastilhas.join('');
+
+  // O número é o de VALORES escolhidos e não o de grupos: com o painel
+  // fechado é a única medida do que está a filtrar por baixo, e três
+  // castas não são "1 filtro".
+  const nAtivos=Object.keys(F_META)
+    .reduce((s,k)=>s+(Array.isArray(F[k])?F[k].length:(F[k]?1:0)),0);
   const n=document.getElementById('f-n');
   n.textContent=nAtivos;n.classList.toggle('on',!!nAtivos);
-  document.getElementById('f-activos').innerHTML=pastilhas.join('');
+
+  // A linha fechada diz o que está a filtrar, não "Filtros": é a única
+  // coisa no ecrã a dizê-lo, e "🔍 Procurar e filtrar" com três castas
+  // ligadas por baixo era esconder o que estava a acontecer.
+  const txt=document.getElementById('f-texto');
+  const resumo=[];
+  if(txt&&txt.value.trim())resumo.push('“'+txt.value.trim()+'”');
+  Object.keys(F_META).forEach(k=>{
+    if(k==='casta'&&CASTAS_TODAS&&F.casta.length>1){resumo.push(F.casta.join(' + '));return;}
+    if(Array.isArray(F[k]))F[k].forEach(v=>resumo.push(v));
+    else if(F[k])resumo.push(rotuloFiltro(listas,k));
+  });
+  document.getElementById('f-min-tx').textContent=
+    resumo.length?'🔍 '+resumo.join(' · '):'🔍 Procurar e filtrar';
+
+  const mais=document.getElementById('f-mais');
+  mais.textContent=nivel>=3?'Menos filtros ▲'
+    :nivel===2?'Mais filtros ▾':'Filtrar por cor, região e castas ▾';
 }
 // Aceita um valor solto mesmo num filtro que é lista — é o que mantém de pé
 // quem chame `setFiltro('casta', …)` sem saber da mudança.
 function setFiltro(k,v){
   if(Array.isArray(F[k]))F[k]=v?[v]:[];
   else F[k]=v;
-  renderFiltrados();
-}
-function juntarCasta(c){
-  if(!c)F.casta=[];
-  else if(!F.casta.includes(c))F.casta.push(c);
   renderFiltrados();
 }
 function tirarCasta(c){
@@ -1427,6 +1581,19 @@ function tirarCasta(c){
 function castasModo(){
   CASTAS_TODAS=!CASTAS_TODAS;
   try{localStorage.setItem('gf_castas_todas',CASTAS_TODAS?'1':'0');}catch(e){}
+  renderFiltrados();
+}
+/* "Só monocasta" é o `castaN='1'` visto de dentro do grupo das castas (ver
+   `castasRegrasHTML`). Ligá-lo desliga o "todas em simultâneo", que com
+   monocasta pede uma lista impossível — um vinho de uma casta só nunca
+   leva duas. */
+function castasMono(){
+  const mono=F.castaN==='1';
+  F.castaN=mono?'':'1';
+  if(!mono&&CASTAS_TODAS){
+    CASTAS_TODAS=false;
+    try{localStorage.setItem('gf_castas_todas','0');}catch(e){}
+  }
   renderFiltrados();
 }
 // Só o ESTADO, sem desenhar. Quem troca de garrafeira precisa de esquecer
@@ -1570,7 +1737,7 @@ function trechoRealcado(txt,termos,max=72){
   return (ini>0?'… ':'')+out+(fim<txt.length?' …':'');
 }
 /* `ignorar` é o nome de um filtro a saltar — serve às contagens do próprio
-   grupo (ver `opcoesCasta`), que têm de ser feitas com os OUTROS filtros
+   grupo (ver `facetas`), que têm de ser feitas com os OUTROS filtros
    aplicados mas não com o seu. */
 function vinhosFiltrados(ignorar){
   const termos=termosProcura();
@@ -1580,8 +1747,12 @@ function passaFiltros(v,termos,ignorar){
   const gs=garrafasDe(v.id,true);
   if(!gs.length)return false;                                  // só o que está lá
   if(F.local&&!gs.some(g=>String(g.local_id)===F.local))return false;
-  if(F.tipo&&v.tipo!==F.tipo)return false;
-  if(F.regiao&&v.regiao!==F.regiao)return false;
+  /* Cor e região são listas, mas sem o "e/ou" das castas: um vinho tem UMA
+     cor e UMA região, por isso escolher duas só pode querer dizer "qualquer
+     uma das duas". Ignorar o próprio grupo (`ignorar`) é o que deixa as
+     contagens da `facetas` continuarem a mostrar as outras opções. */
+  if(F.tipo.length&&ignorar!=='tipo'&&!F.tipo.includes(v.tipo))return false;
+  if(F.regiao.length&&ignorar!=='regiao'&&!F.regiao.includes(v.regiao))return false;
   /* "Qualquer uma" (o costume) contra "todas em simultâneo": é a única
      pergunta deste painel em que a diferença existe. Ver `CASTAS_TODAS`.
      Nota que "todas" é LEVAR todas as escolhidas, não ser EXATAMENTE
@@ -6377,6 +6548,10 @@ if('serviceWorker' in navigator){
 // chegarem — em que quem só pode VER tinha o botão de apagar à frente.
 document.body.classList.add('readonly','naoadmin','naodono','naominha');
 detVistaBotoes();
+// O andar guardado tem de chegar ao DOM antes de o `carregar()` responder:
+// o HTML nasce fechado, e quem tinha deixado a barra aberta no andar 3 via-a
+// a fechar-se e a abrir-se outra vez assim que os dados chegavam.
+document.getElementById('filtros').className='filtros n'+(FILTROS_ABERTO?FILTROS_NIVEL:0);
 ajustarSticky();
 pgSwipe();
 sbInit();
