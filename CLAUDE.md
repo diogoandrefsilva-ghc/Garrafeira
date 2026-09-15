@@ -551,6 +551,53 @@ No **seletor de posição** não há onda nem desencontro (`renderPickerPosicoes
 passa uma cópia da prateleira sem eles): ali a prateleira é para se tocar,
 e o que interessa é acertar com o dedo.
 
+**O móvel está encostado a uma PAREDE, e o vão ao lado dela também guarda
+garrafas** (`paredesLocal`, `layout.paredes`). Um local pode ter parede à
+esquerda, à direita e/ou em cima; havendo parede, cada nível pode abrir UM
+lugar de **encosto** entre o fim da prateleira e ela (`encosto_dir`/
+`encosto_esq`, códigos `15D`/`15E`) e o cimo do móvel leva uma fila
+(`layout.topo.capacidade`, códigos `T1…Tn`). Nenhum deles mexe na
+numeração corrida: o encosto cai na coluna de folga que o `colsw` já tinha
+(o `+2`) e a fila de cima é uma prateleira A FINGIR (`prateleiraTopo`), sem
+`base`. Quem os conta à parte é `especiaisLocal`.
+
+São **TRÊS peças a desenhar e não uma**, e a ordem em que se leem é o
+desenho todo: a parede (o fundo), o **nicho** (o vão) e a garrafa lá
+dentro. A primeira versão tinha só a parede e a garrafa, e o que se via era
+uma barra clara na borda do ecrã — lida como uma barra de scroll do iOS,
+que é o que ela era: cinco pixels, cantos redondos e uma textura em
+diagonal — com uns círculos a flutuar ao lado dela. O que faltava era o
+vão, que é o que dá sentido aos outros dois:
+- a **parede** é reboco: sem cantos redondos (é no canto quadrado que ela
+  encontra a do topo), sem textura, e com a SOMBRA lançada para dentro —
+  essa sombra é a única pista que transforma uma tira numa parede;
+- o **nicho** (`.pd-nicho`) é o recesso onde a garrafa encostada está. Tem
+  UMA coluna de largura e vai só **do primeiro ao último encosto** — daí
+  ser medido no `posicionarParedes`, como já eram as paredes. Correndo o
+  móvel todo, numa estante alta com encostos só lá em cima era uma coluna
+  sombreada de alto a baixo sem dizer nada. Existe para resolver o "as
+  garrafas estão a flutuar": a régua acaba logo a seguir ao último berço
+  (de propósito — uma garrafa encostada não está deitada na prateleira),
+  e sem nada por baixo o círculo ficava suspenso no ar;
+- o **lugar de encosto é MENOR** do que um lugar de prateleira, e é a única
+  coisa que o diz sozinho: não é um lugar do móvel, é uma garrafa de pé no
+  vão ao lado dele. Do mesmo tamanho, seis encostos empilhados liam-se como
+  uma sétima coluna da estante. E **vazio cala-se**: a tracejado cheio, seis
+  buracos faziam a coluna mais forte do ecrã a dizer "não tenho nada aqui".
+
+O rótulo da fila de cima **não leva dourado**. Levou, e é o erro clássico
+nesta app: o dourado é a distinção do VINHO (menção, nota do Vivino) e
+gastá-lo a dizer "esta fila fica mais acima" é gastar a única cor que quer
+dizer alguma coisa. O que a separa dos "NÍVEL n" é já não ser um número —
+fica em itálico, sem o espacejamento de versalete.
+
+No editor, os encostos só aparecem depois de a parede desse lado estar
+ligada (sem parede não há vão) e usam a **mesma pele** do "Encaixa na de
+baixo" (`ll-enc`). Um `.chk` genérico não serve: dentro de um modal,
+`.mbox label` ganha-lhe (duas classes contra uma) e punha o rótulo em
+MAIÚSCULAS a 10px, em bloco e sem quebrar linha — saía pela borda do cartão
+fora ("CABE U…") com a caixa nativa azul por baixo.
+
 Com a procura ligada, só se anda pelos locais com garrafas que passam nela
 (a contagem passa a "4 encontradas · de 35") e a estante responde em **três
 pesos**, não em dois (`.ml.procurando`, o bloco "O LUGAR DURANTE A PROCURA"
@@ -1482,6 +1529,15 @@ cria o vinho, as castas e as garrafas.
 - **PWA/cache: o número é dos TRÊS e sobe no mesmo commit** — o
   `CACHE_NAME` do `sw.js`, o `APP_BUILD` do `app.js` e o `data-build` do
   `<body>`. Se mexeres em `app.js`, `style.css` ou `index.html`, sobe-os.
+  **E confere que SOBE, não que muda.** Um `app.js` escrito a partir de uma
+  cópia velha traz o `APP_BUILD` velho atrás, e o `verificarBuild()` passa a
+  discordar PARA SEMPRE: recarrega uma vez, continua a discordar, e a barra
+  vermelha ("a app ficou a meio de uma atualização") fica lá em cima em
+  todas as cargas, com os botões todos a funcionar. Já aconteceu — de 83
+  para 82 — e o sinal é esse: o aviso a aparecer sempre, e não só logo a
+  seguir a um deploy. Nesse caso desconfia do ficheiro inteiro, não só do
+  número: o mesmo commit tinha revertido, calado, o trabalho do commit
+  anterior.
   Os três ficheiros são network-first de propósito: com o JS em
   cache-first, um deploy dava ao browser o `index.html` novo com o `app.js`
   velho — botões novos a chamar funções que ainda não existiam, sem erro
