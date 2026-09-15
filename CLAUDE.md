@@ -552,9 +552,38 @@ passa uma cópia da prateleira sem eles): ali a prateleira é para se tocar,
 e o que interessa é acertar com o dedo.
 
 Com a procura ligada, só se anda pelos locais com garrafas que passam nela
-(a contagem passa a "4 encontradas · de 35") e os lugares ocupados por
-garrafas que NÃO passam ficam **apagados** (`.msdot.fora`) — o que fica a
-cor é a resposta a "onde estão as minhas garrafas de Syrah".
+(a contagem passa a "4 encontradas · de 35") e a estante responde em **três
+pesos**, não em dois (`.ml.procurando`, o bloco "O LUGAR DURANTE A PROCURA"
+no `style.css`):
+- **encontrada** (`.msdot.achada`) — o vidro escurece e ganha um **arco** à
+  volta. É um destaque a sério e não a ausência de apagado: sem ele, a
+  resposta ficava com exatamente o aspeto que tem quando não se procura
+  nada, e era preciso saber de cor como é a estante em repouso para
+  perceber o que tinha sido encontrado. Bordô e não dourado — o dourado é a
+  distinção do VINHO (menção, nota do Vivino) e uma garrafa encontrada não
+  distingue vinho nenhum: é a app a apontar para o que lhe perguntaram, o
+  mesmo que o sombreado da `.vc-match` faz no cartão;
+- **ocupado mas não passa** (`.msdot.fora`) — apagado, como sempre foi;
+- **vazio** — baixa de contraste enquanto se procura. Não é resposta a
+  pergunta nenhuma, e branco sobre madeira era o maior contraste do ecrã:
+  gritava mais alto do que a garrafa encontrada.
+
+O arco é feito só de `box-shadow` (e de uma medida em `--slot`) porque
+`box-shadow` **não ocupa espaço de layout** — um `outline` ou uma `border`
+mais grossa mudavam a altura do lugar e o `ajustarEstantes` passava a
+discordar do que se vê. Pára nos `.09` de `--slot`: o vão entre dois
+lugares vizinhos é `(--colr - 1)`, que no mínimo (1,18) dá `.09` de cada
+lado — mais do que isso e dois arcos lado a lado colavam-se num só.
+
+**E os estados do lugar vivem NO FIM da folha, depois das três peles de
+prateleira** (`.est-fila`/`.est-sobrepostos`/`.est-regua`), nunca ao pé do
+`.msdot`. `.est-fila .msdot` e `.msdot.fora` têm a MESMA especificidade
+(duas classes cada), por isso ganha a que vier por último — e era a pele, a
+repintar o ponto a bordô cheio. O apagado da procura esteve **morto** assim
+nas três peles, sem um erro à vista: procurava-se e a estante não mexia um
+pixel. Um estado novo do lugar entra nesse bloco. Pela mesma razão o arco
+vive numa variável (`--arco`): `.msdot.cheia:hover` tem mais especificidade
+e, sem ela, passar o rato por cima apagava-o.
 
 O **editor do local** (`abrirLocalModal`, `renderLocalLayoutEditor`) é uma
 linha por prateleira: o nome editável no sítio (sem caixa — é um título),
