@@ -1208,7 +1208,7 @@ function renderFiltrados(){
    Os valores possíveis de cada filtro saem SEMPRE dos dados que lá estão
    (não de listas fixas): assim uma região nova aparece no filtro sozinha,
    e nunca fica um filtro a apontar para coisa nenhuma. */
-/* TRÊS deles são LISTAS — cor, região e castas — e os outros nove um valor
+/* TRÊS deles são LISTAS — cor, região e castas — e os outros oito um valor
    só. Não é capricho nem simetria por simetria: são as três perguntas que
    se fazem sempre ("um tinto do Douro de Touriga?") e são as únicas onde
    escolher DUAS opções quer dizer alguma coisa. "Tinto ou Branco" e "Douro
@@ -1218,8 +1218,8 @@ function renderFiltrados(){
    pergunta se o valor guardado é um array, e o `campoToggle` acrescenta ou
    tira num caso e troca no outro — tocar no valor já escolhido limpa-o, que
    é como se desmarca um campo de valor único sem um "qualquer" postiço na
-   lista. Os doze passam pelo MESMO desenho (a fita e os cartões com
-   contagem); os `<select>` nativos que os nove costumavam usar saíram com
+   lista. Os onze passam pelo MESMO desenho (a fita e os cartões com
+   contagem); os `<select>` nativos que os oito costumavam usar saíram com
    os andares, porque um seletor nativo não mostra contagens e a contagem é
    o que faz este painel valer a pena.
    As CASTAS ainda têm uma coisa a mais: só nelas a mesma escolha tem duas
@@ -1229,9 +1229,19 @@ function renderFiltrados(){
    É a mesma decisão, o mesmo desenho e o mesmo vocabulário do Catálogo da
    WineCatalog: quem anda nas duas apps não aprende dois nomes para a mesma
    coisa. */
-let F={local:'',tipo:[],regiao:[],casta:[],produtor:'',ano:'',mencao:'',castaN:'',preco:'',teor:'',janela:'',vivino:''};
+let F={local:'',tipo:[],regiao:[],casta:[],produtor:'',ano:'',mencao:'',preco:'',teor:'',janela:'',vivino:''};
 let CASTAS_TODAS=false;
 try{CASTAS_TODAS=localStorage.getItem('gf_castas_todas')==='1';}catch(e){}
+/* "Só monocasta" foi um VALOR do campo "Nº de castas" e agora é um estado
+   seu — o campo saiu da fita, porque das três respostas que dava
+   (monocasta · várias castas · sem castas registadas) só a primeira se
+   perguntava, e essa pergunta faz-se onde se escolhe a casta.
+   NÃO se grava, ao contrário do `CASTAS_TODAS`, e a diferença não é
+   descuido: o "todas em simultâneo" só morde quando há castas escolhidas,
+   e essas não sobrevivem ao recarregar — já este morde SOZINHO. Gravado,
+   era abrir a app noutro dia com metade da garrafeira escondida e nada no
+   ecrã a dizer porquê. */
+let CASTAS_MONO=false;
 // Um filtro "ligado" é um valor escolhido — mas uma lista VAZIA é um objeto
 // e portanto truthy. Sem isto, `haFiltros()` dava sempre verdadeiro a partir
 // do dia em que estes três passaram a listas, e a app abria sempre em modo
@@ -1239,7 +1249,7 @@ try{CASTAS_TODAS=localStorage.getItem('gf_castas_todas')==='1';}catch(e){}
 function filtroLigado(k){const v=F[k];return Array.isArray(v)?v.length>0:!!v;}
 
 /* ── O PAINEL: a procura SEMPRE, os filtros um campo de cada vez ─────
-   Doze filtros abertos de uma vez são doze decisões à frente de quem só
+   Onze filtros abertos de uma vez são onze decisões à frente de quem só
    queria escrever "crasto". Já se tentou escondê-los todos atrás de um
    botão (tudo ou nada) e já se tentou abri-los por andares — e o andar que
    mostrava cor + região + castas ao mesmo tempo dava meio ecrã de cartões
@@ -1247,11 +1257,11 @@ function filtroLigado(k){const v=F[k];return Array.isArray(v)?v.length>0:!!v;}
    Agora são dois passos e mais nenhum:
      · a PROCURA LIVRE está sempre à vista — é o que se usa em nove de cada
        dez vezes, e um pedaço do nome chega;
-     · o botão "Filtros" abre uma FITA horizontal com os doze campos
+     · o botão "Filtros" abre uma FITA horizontal com os onze campos
        (`.fcampos`). Escolhe-se UM, e só os valores DESSE campo abrem por
        baixo (`FILTRO_CAMPO`).
    O que isto ganha é altura: a fita é uma linha, e o painel de valores é o
-   de um campo só em vez dos doze. O que custa é um toque a mais para trocar
+   de um campo só em vez dos onze. O que custa é um toque a mais para trocar
    de campo — e é um toque que se dá poucas vezes, porque quem filtra por
    região raramente filtra por teor a seguir. */
 let FILTROS_ABERTO=false;
@@ -1270,8 +1280,8 @@ function abrirCampo(k){
   renderFiltros();
 }
 
-/* OS DOZE CAMPOS, num sítio só: chave, ícone, nome e se aceita MAIS DO QUE
-   UM valor. Cor, região e castas aceitam; os outros nove não — são as três
+/* OS ONZE CAMPOS, num sítio só: chave, ícone, nome e se aceita MAIS DO QUE
+   UM valor. Cor, região e castas aceitam; os outros oito não — são as três
    perguntas que se fazem sempre ("um tinto do Douro de Touriga?") e as
    únicas onde escolher duas opções quer dizer alguma coisa. "Tinto ou
    Branco" e "Douro ou Alentejo" são perguntas legítimas; "2019 ou 2021"
@@ -1283,7 +1293,7 @@ const F_CAMPOS=[
   ['tipo','🍷','Cor',1],['regiao','🗺️','Região',1],['casta','🍇','Castas',1],
   ['local','📍','Local',0],['produtor','🏭','Produtor',0],['ano','📅','Ano',0],
   ['mencao','🏅','Menção',0],['preco','💶','Preço',0],['teor','🌡️','Grau',0],
-  ['janela','⏱️','Maturação',0],['vivino','★','Vivino',0],['castaN','🧬','Nº de castas',0]
+  ['janela','⏱️','Maturação',0],['vivino','★','Vivino',0]
 ];
 const F_META={};
 F_CAMPOS.forEach(([k,ico,nome])=>{F_META[k]=[ico,nome];});
@@ -1309,7 +1319,6 @@ function valorDe(v,k){
     case 'mencao':  return v.mencao?[v.mencao]:[];
     case 'ano':     return v.ano?[String(v.ano)]:[];
     case 'local':   return [...new Set(garrafasDe(v.id,true).map(g=>String(g.local_id)))];
-    case 'castaN':  {const n=(v.castas||[]).length;return [n===0?'0':n===1?'1':'2'];}
     case 'preco':   return v.preco_medio==null?[]:[String(faixaIndice(v.preco_medio))];
     case 'teor':    return v.teor==null?[]:[String(faixaTeorIndice(v.teor))];
     case 'vivino':  return v.vivino_nota==null?[]:[String(faixaVivinoIndice(v.vivino_nota))];
@@ -1349,7 +1358,6 @@ function valoresDe(k){
       .filter(l=>db.garrafas.some(g=>g.local_id===l.id&&naGarrafeira(g)))
       .map(l=>[String(l.id),l.nome]);
     case 'ano':return dados().sort((a,b)=>b-a).map(x=>[x,x]);
-    case 'castaN':return [['1','Monocasta'],['2','Várias castas'],['0','Sem castas registadas']];
     // As palavras são as mesmas que a ficha do vinho escreve (`FASES`) —
     // quem filtra por uma tem de a reconhecer quando abre o vinho.
     case 'janela':return [...FASES.map(f=>['ponto:'+f[1],'No ponto · '+f[2]]),
@@ -1381,8 +1389,8 @@ function rotuloFiltro(k,val){
    escolhidas — é a pergunta a que o cartão tem de responder ("se eu juntar
    esta, com quantos fico?"). De outro modo dizia "Syrah 28" com a lista a
    mostrar três vinhos.
-   Só corre para o campo ABERTO: varrer a garrafeira doze vezes para
-   desenhar uma fita de doze nomes era trabalho que ninguém ia ler. */
+   Só corre para o campo ABERTO: varrer a garrafeira onze vezes para
+   desenhar uma fita de onze nomes era trabalho que ninguém ia ler. */
 function opcoesCampo(k){
   const termos=termosProcura();
   const base=db.vinhos.filter(v=>passaFiltros(v,termos,k));
@@ -1416,14 +1424,12 @@ function campoToggle(k,v){
    UMA casta, por isso nunca leva "todas" as duas escolhidas. Ter as duas
    ligadas era pedir uma lista que não pode existir, e a app respondia
    "Nada encontrado" sem dizer porquê. Ligar uma desliga a outra.
-   O "só monocasta" NÃO é um estado novo: é o `castaN='1'` do campo "Nº de
-   castas", visto de perto. Um estado, dois sítios — e assim é impossível
-   pedir "várias castas" num e "só monocasta" no outro e ficar com uma
-   lista vazia por contradição. Aqui é que ele faz falta, porque é aqui que
-   se escolhe a casta: "Syrah" e "só monocasta" juntos são "os meus 100%
-   Syrah", que é a pergunta a seguir à casta e não uma sobre números. */
+   O "só monocasta" já foi um valor do campo "Nº de castas" e passou a
+   viver só aqui: é aqui que faz falta, porque é aqui que se escolhe a
+   casta — "Syrah" e "só monocasta" juntos são "os meus 100% Syrah", que é
+   a pergunta a seguir à casta e não uma sobre números. */
 function castasRegrasHTML(){
-  const mono=F.castaN==='1';
+  const mono=CASTAS_MONO;
   const b=(on,fn,txt,tit)=>`<button class="fmodo${on?' on':''}" onclick="${fn}()" title="${esc(tit)}">
     <i class="fvisto">✓</i> ${esc(txt)}</button>`;
   return `<div class="fregras">
@@ -1478,6 +1484,11 @@ function renderFiltros(){
      O "+" entre duas castas só existe em "todas em simultâneo": sem ele,
      "Touriga Nacional · Syrah" mente sobre metade dos resultados. */
   const pastilhas=[];
+  // O monocasta não é valor de campo nenhum, mas corta a lista como um: com
+  // as castas fechadas, esta pastilha é a única coisa a dizê-lo.
+  if(CASTAS_MONO&&!(FILTROS_ABERTO&&FILTRO_CAMPO==='casta'))
+    pastilhas.push(`<span class="fpill">🍇 Só monocasta
+      <button onclick="castasMono()" title="Tirar este filtro">✕</button></span>`);
   F_CAMPOS.forEach(([k,ico])=>{
     if(FILTROS_ABERTO&&FILTRO_CAMPO===k)return;
     ligados(k).forEach((v,i)=>{
@@ -1491,7 +1502,7 @@ function renderFiltros(){
   // O número no botão é o de VALORES escolhidos e não o de campos: três
   // castas não são "1 filtro", e com o painel fechado é a única medida do
   // que está a cortar a lista por baixo.
-  const nAtivos=F_CAMPOS.reduce((s,[k])=>s+ligados(k).length,0);
+  const nAtivos=F_CAMPOS.reduce((s,[k])=>s+ligados(k).length,0)+(CASTAS_MONO?1:0);
   const n=document.getElementById('f-n');
   n.textContent=nAtivos;n.classList.toggle('on',!!nAtivos);
 }
@@ -1540,14 +1551,11 @@ function castasModo(){
   try{localStorage.setItem('gf_castas_todas',CASTAS_TODAS?'1':'0');}catch(e){}
   renderFiltrados();
 }
-/* "Só monocasta" é o `castaN='1'` visto de dentro do grupo das castas (ver
-   `castasRegrasHTML`). Ligá-lo desliga o "todas em simultâneo", que com
-   monocasta pede uma lista impossível — um vinho de uma casta só nunca
-   leva duas. */
+/* Ligar o "só monocasta" desliga o "todas em simultâneo", que com monocasta
+   pede uma lista impossível — um vinho de uma casta só nunca leva duas. */
 function castasMono(){
-  const mono=F.castaN==='1';
-  F.castaN=mono?'':'1';
-  if(!mono&&CASTAS_TODAS){
+  CASTAS_MONO=!CASTAS_MONO;
+  if(CASTAS_MONO&&CASTAS_TODAS){
     CASTAS_TODAS=false;
     try{localStorage.setItem('gf_castas_todas','0');}catch(e){}
   }
@@ -1562,7 +1570,7 @@ function esquecerFiltros(){
   /* Limpar tem de devolver o painel ao estado de partida: um visto que
      sobrevivesse à limpeza era uma regra escondida a filtrar por baixo na
      escolha seguinte. */
-  CASTAS_TODAS=false;
+  CASTAS_TODAS=false;CASTAS_MONO=false;
   try{localStorage.setItem('gf_castas_todas','0');}catch(e){}
   const t=document.getElementById('f-texto');
   if(t)t.value='';
@@ -1572,7 +1580,11 @@ function limparFiltros(){
   renderFiltrados();
 }
 function haFiltros(){
-  return Object.keys(F).some(filtroLigado)||!!document.getElementById('f-texto').value.trim();
+  // O `CASTAS_MONO` é a única coisa que filtra e não vive no `F` — sem ele
+  // aqui, "só monocasta" sozinho cortava a lista com a app a dizer que não
+  // estava a filtrar nada.
+  return CASTAS_MONO||Object.keys(F).some(filtroLigado)
+    ||!!document.getElementById('f-texto').value.trim();
 }
 
 // Um vinho passa no texto se o termo estiver em qualquer coisa que o
@@ -1716,6 +1728,13 @@ function passaFiltros(v,termos,ignorar){
       if(!sel.every(x=>tem.includes(x)))return false;
     }else if(!sel.some(x=>tem.includes(x)))return false;
   }
+  /* O "só monocasta" fica FORA do ciclo, e por duas razões. Morde sozinho,
+     sem casta nenhuma escolhida ("mostra-me os meus monovarietais"), e o
+     ciclo salta os campos vazios. E não obedece ao `ignorar`: quando se
+     contam as opções do campo das castas, o que o cartão tem de responder
+     é "quantos MONOVARIETAIS de cada casta" — a restrição fica na base,
+     que é o que a mantinha certa quando isto era o campo "Nº de castas". */
+  if(CASTAS_MONO&&(v.castas||[]).length!==1)return false;
   return passaTexto(v,termos);
 }
 // Dentro de cada grupo (região, ano ou casta), do melhor Vivino para o
@@ -6449,7 +6468,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='81';
+const APP_BUILD='82';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

@@ -366,7 +366,7 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 /* ── PESQUISA ─────────────────────────────────────────────────────
    Uma barra de procura e mais nada à vista: os filtros vivem atrás do
    botão "Filtros", que traz o número dos que estão ligados. Assim o ecrã
-   inicial não abre com nove caixas cinzentas. Cada filtro é um chip
+   inicial não abre com oito caixas cinzentas. Cada filtro é um chip
    desenhado com o <select> nativo por cima, invisível — o desenho é
    nosso, o seletor continua a ser o do telemóvel. */
 /* O topo do separador tem três coisas empilhadas — separadores, procura,
@@ -411,16 +411,16 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .fn.on{display:inline-flex}
 
 /* ── O PAINEL: sempre a procura, e os filtros atrás do botão ────────
-   Já teve três andares (procura / cor+região+castas / os outros nove) e o
+   Já teve três andares (procura / cor+região+castas / os outros oito) e o
    andar do meio dava meio ecrã de cartões antes de se chegar à lista.
    Agora é a procura sempre à vista e, atrás do botão, uma FITA de uma
-   linha com os doze campos — só os valores de UM abrem por baixo. */
+   linha com os onze campos — só os valores de UM abrem por baixo. */
 .filtros .fcampos,.filtros .fdom,.filtros .fbar{display:none}
 .filtros.aberto .fcampos{display:flex;animation:abrir .18s ease both}
 .filtros.aberto .fdom:not(:empty){display:block;animation:abrir .18s ease both}
 .filtros .fbar.on{display:flex}
 
-/* A FITA. Rola de lado e não quebra: doze campos em `flex-wrap` eram três
+/* A FITA. Rola de lado e não quebra: onze campos em `flex-wrap` eram três
    linhas de pastilhas, que é o espaço que isto veio poupar. A barra de
    scroll esconde-se (no telemóvel nem aparece, e no desktop roubava 15px
    de altura a uma linha de 32); `overscroll-behavior-x:contain` impede

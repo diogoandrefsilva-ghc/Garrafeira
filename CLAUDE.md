@@ -116,9 +116,9 @@ como arrumar o que sobrou. É também a ordem do Catálogo da WineCatalog. Por s
 ligados não se perdem ao trocar de separador.
 
 ### O painel abre numa FITA de campos, não numa pilha de grupos
-Já foi tudo ou nada (um botão "Filtros" e doze filtros abertos por trás
+Já foi tudo ou nada (um botão "Filtros" e onze filtros abertos por trás
 dele) e já foi por **andares** (a procura, depois cor/região/castas,
-depois os outros nove). O problema dos andares era o mesmo do "tudo": ao
+depois os outros oito). O problema dos andares era o mesmo do "tudo": ao
 subir ao segundo, três grupos com todas as suas opções abertas ao mesmo
 tempo davam um painel mais alto do que o ecrã, e a lista — que é o que se
 está a filtrar — desaparecia por baixo dele.
@@ -127,7 +127,7 @@ Agora são **dois** estados e uma fita:
 - **fechado.** Só a procura livre, que fica **sempre** visível, e o botão
   "Filtros" com o número de filtros ligados ao lado.
 - **aberto** (`FILTROS_ABERTO`, `filtrosToggle`). Por baixo da procura
-  aparece uma **fita horizontal** (`.fcampos`, `#f-campos`) com os doze
+  aparece uma **fita horizontal** (`.fcampos`, `#f-campos`) com os onze
   campos, um por pastilha, que rola de lado. Tocar num campo abre **os
   valores DESSE campo e só desse** por baixo dela (`FILTRO_CAMPO`,
   `abrirCampo`, `#f-dominio`); tocar no mesmo outra vez fecha-os.
@@ -162,8 +162,8 @@ mostram-se todos os filtros ligados EXCETO os do campo que está aberto —
 esses já se leem nos cartões acesos por cima, e repeti-los por baixo era
 dizer a mesma coisa duas vezes.
 
-### Três filtros são LISTAS, nove são um valor só
-Cor, região e castas aceitam mais do que um valor; os outros nove não. Não é
+### Três filtros são LISTAS, oito são um valor só
+Cor, região e castas aceitam mais do que um valor; os outros oito não. Não é
 simetria por simetria: são as três perguntas que se fazem sempre ("um tinto
 do Douro de Touriga?") e são as únicas onde escolher DUAS opções quer dizer
 alguma coisa. "Tinto ou Branco" e "Douro ou Alentejo" são perguntas
@@ -175,8 +175,8 @@ guardado é um array, e `campoToggle` acrescenta/tira num caso e troca no
 outro (tocar no valor já escolhido limpa-o — é como se desmarca um campo
 de valor único sem um "qualquer" postiço na lista).
 
-**Os doze passam pelo MESMO desenho** — a fita, os cartões com contagem —
-e os `<select>` nativos invisíveis por cima de chips, que os nove
+**Os onze passam pelo MESMO desenho** — a fita, os cartões com contagem —
+e os `<select>` nativos invisíveis por cima de chips, que os oito
 costumavam usar, desapareceram com eles. Um seletor nativo não mostra
 contagens, e a contagem é o que faz este painel valer a pena.
 
@@ -202,13 +202,24 @@ leitura:
   `p_castas_todas` do Catálogo da WineCatalog, de propósito. Só aparece com
   duas ou mais castas escolhidas — com uma só, as duas leituras dão a mesma
   lista e o visto era uma decisão falsa.
-- **"só monocasta"** — os vinhos feitos SÓ daquela casta. **Não é um estado
-  novo:** é o `castaN='1'` que já existia no campo "Nº de castas", visto de
-  perto. Um estado, dois sítios — e assim é impossível pedir "várias
-  castas" ali e "só monocasta" aqui e ficar com uma lista vazia por
-  contradição. Aqui é que ele faz falta, porque é aqui que se escolhe a
-  casta: "Syrah" + "só monocasta" são "os meus 100% Syrah", que é a pergunta
-  a seguir à casta e não uma pergunta sobre números.
+- **"só monocasta"** (`CASTAS_MONO`) — os vinhos feitos SÓ daquela casta.
+  Foi um VALOR do campo "Nº de castas", que por isso deixou de existir:
+  das três respostas que esse campo dava (monocasta · várias castas · sem
+  castas registadas) só a primeira se perguntava, e faz-se onde se escolhe
+  a casta — "Syrah" + "só monocasta" são "os meus 100% Syrah", que é a
+  pergunta a seguir à casta e não uma pergunta sobre números. (Quem quiser
+  os vinhos sem castas continua a tê-los no card **A completar** do
+  Resumo, que é onde essa pergunta vive.)
+  **Não vive no `F` e por isso tem três pontas soltas de que é preciso
+  lembrar**, todas já atadas: o `haFiltros()` pergunta-lhe à parte (senão
+  "só monocasta" sozinho cortava a lista com a app a dizer que não estava
+  a filtrar), o `esquecerFiltros()` repõe-no, e há uma pastilha própria
+  para ele — com as castas fechadas, era a única coisa a filtrar sem nada
+  no ecrã a dizê-lo.
+  **E NÃO se grava**, ao contrário do `CASTAS_TODAS`. A diferença não é
+  descuido: o "todas em simultâneo" só morde com castas escolhidas, e
+  essas não sobrevivem ao recarregar; este morde sozinho, e gravado era
+  abrir a app noutro dia com metade da garrafeira escondida.
 
 As duas são **mutuamente exclusivas, por aritmética e não por arrumação**:
 um vinho de uma casta só nunca leva duas, por isso ter as duas ligadas era
@@ -246,16 +257,22 @@ escolher Tinto — senão, escolher uma cor apagava todas as outras e não
 havia como acrescentar uma segunda. Uma opção que dê zero não aparece; uma
 ESCOLHIDA aparece sempre, mesmo a zero, senão não havia como a desmarcar.
 
-Contar só o campo ABERTO (e não os doze de uma vez) é também o que torna
-isto barato: são doze varreduras da lista a cada tecla se for tudo, uma se
+Contar só o campo ABERTO (e não os onze de uma vez) é também o que torna
+isto barato: são onze varreduras da lista a cada tecla se for tudo, uma se
 for só o que está à vista.
 
 As castas em "todas em simultâneo" são a exceção dentro da exceção: deixam
 de ignorar o campo inteiro e contam POR CIMA das outras castas já escolhidas
 (só a PRÓPRIA opção é ignorada). De outro modo o cartão dizia "Syrah 28" com
-a lista a mostrar três vinhos. Com "só monocasta" ligado a base já leva o
-`castaN`, e as contagens passam a ser as dos monovarietais de cada casta —
-que é exatamente a pergunta que o cartão tem de responder.
+a lista a mostrar três vinhos.
+
+O **"só monocasta" não obedece ao `ignorar`** e é de propósito: fica fora do
+ciclo do `passaFiltros`, por isso continua a valer mesmo quando se está a
+contar o próprio campo das castas, e as contagens passam a ser as dos
+MONOVARIETAIS de cada casta — que é exatamente a pergunta que o cartão tem
+de responder nesse modo. Ficar fora do ciclo é também o que o deixa morder
+sem casta nenhuma escolhida ("mostra-me os meus monovarietais"): o ciclo
+salta os campos vazios.
 
 Duas armadilhas que as listas deixaram atrás de si: **uma lista vazia é
 truthy** — daí o `filtroLigado()`, sem o qual `haFiltros()` dava sempre
