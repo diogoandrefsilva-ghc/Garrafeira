@@ -240,6 +240,32 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
 .vc-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .vc-qtd{position:absolute;top:-1px;right:-1px;background:var(--vh);color:#fff;font-size:10px;font-weight:700;
   padding:2px 6px;border-radius:0 9px 0 9px;letter-spacing:.2px}
+
+/* ── Seleção múltipla no Detalhe (Atualização massiva) ──
+   O mesmo cartão de sempre, só que a tocar liga/desliga em vez de abrir o
+   vinho — por isso o "on" precisa de `position:relative` só ENQUANTO dura
+   o modo (`.lote-modo`), sem mexer na regra base do cartão. */
+.vcard.lote-modo,.vgcard.lote-modo{position:relative}
+.lote-chk{position:absolute;top:6px;left:6px;width:24px;height:24px;border-radius:50%;
+  background:var(--card);border:2px solid var(--bo2);color:transparent;font-size:13px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;z-index:2;box-shadow:var(--sh)}
+.lote-on .lote-chk{background:var(--vh);border-color:var(--vh);color:#fff}
+.lote-cheio{opacity:.45}
+/* Barra fixa em baixo enquanto se seleciona — o FAB esconde-se (`fabSincronizar`)
+   para não convidar a abrir outra ação a meio de uma seleção. */
+.lotebar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:91;
+  padding:12px 14px calc(12px + env(safe-area-inset-bottom,0px));
+  background:var(--card);border-top:1px solid var(--bo);box-shadow:0 -8px 20px -10px rgba(0,0,0,.25);
+  align-items:center;gap:10px}
+.lotebar.on{display:flex}
+.lotebar-n{font-size:13px;font-weight:700;color:var(--mu);margin-right:auto}
+/* Os vinhos escolhidos, no modal de campos/prompt — mesmo desenho da
+   WineCatalog (`.lote-chip`), de propósito. */
+.lote-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.lote-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;background:var(--card);
+  border:1px solid var(--bo);border-radius:99px;padding:6px 12px;font-size:12.5px;font-weight:600}
+.lote-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lote-chip em{font-style:normal;color:var(--mu);font-weight:600;flex-shrink:0}
 /* `flow-root`, não `flex`: um item de flex ignora `float` (spec do CSS), e
    é o float do `.vc-anofloat` que deixa o nome subir para o lado do
    ano+nota em vez de esperar por ele — ver o comentário de vinhoCardHTML
@@ -918,10 +944,23 @@ body:not(.readonly) .msdot.vazia:hover{background:#fff;border-color:var(--vh);co
 
 
 /* ── FAB ────────────────────────────────────────────────────────── */
-.fab{position:fixed;right:18px;bottom:calc(20px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:50%;
-  border:none;background:linear-gradient(160deg,var(--vh2),var(--vhd));color:#fff;font-size:28px;line-height:1;cursor:pointer;
-  box-shadow:0 8px 26px -6px rgba(78,18,40,.7);z-index:90;display:flex;align-items:center;justify-content:center;transition:transform .13s}
+.fab-wrap{position:fixed;right:18px;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:90;
+  display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.fab{width:56px;height:56px;border-radius:50%;border:none;
+  background:linear-gradient(160deg,var(--vh2),var(--vhd));color:#fff;font-size:28px;line-height:1;cursor:pointer;
+  box-shadow:0 8px 26px -6px rgba(78,18,40,.7);display:flex;align-items:center;justify-content:center;transition:transform .13s}
 .fab:active{transform:scale(.93)}
+.fab-wrap.open .fab{transform:rotate(45deg)}
+.fab-wrap.open .fab:active{transform:rotate(45deg) scale(.93)}
+/* O menu vem de baixo do "+", como o da WineCatalog — mesmo desenho de
+   propósito, quem anda nas duas apps não aprende dois sítios diferentes
+   para a mesma coisa. */
+.fab-menu{display:flex;flex-direction:column;align-items:flex-end;gap:8px;
+  opacity:0;pointer-events:none;transform:translateY(6px);transition:opacity .15s,transform .15s}
+.fab-wrap.open .fab-menu{opacity:1;pointer-events:auto;transform:none}
+.fab-op{background:var(--card);color:var(--tx);border:1px solid var(--bo);border-radius:99px;
+  padding:10px 16px;font-size:13.5px;font-weight:700;white-space:nowrap;cursor:pointer;
+  box-shadow:0 6px 16px -4px rgba(0,0,0,.3)}
 
 /* ── MODAIS ───────────────────────────────────────────────────────
    No telemóvel são folhas que sobem de baixo (e é a folha que faz
