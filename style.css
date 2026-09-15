@@ -852,6 +852,9 @@ body:not(.readonly) .msdot.vazia:hover{background:#fff;border-color:var(--vh);co
 .mbox label.ll-enc input{width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;border:none;border-radius:0;
   background:none;accent-color:var(--vh);box-shadow:none}
 .ll-enc i{font-style:normal;color:var(--mu)}
+/* A nota do "Vem em caixa de madeira" (modal da garrafa) anda colada ao
+   visto: é a explicação dele, não um parágrafo à parte. */
+.g-caixa-nota{margin-top:4px}
 .ll-odd .segbtn{padding:5px 11px;font-size:11.5px}
 .ll-add{margin-top:12px}
 /* A folha "Formato da prateleira": três opções ilustradas, a escolhida
@@ -1508,15 +1511,19 @@ body.naominha .minha-only{display:none!important}
 .pd-nicho.dir{right:var(--pd-r,0px);box-shadow:inset -5px 0 8px -6px rgba(92,70,42,.55)}
 .pd-nicho.esq{left:var(--pd-l,0px);box-shadow:inset 5px 0 8px -6px rgba(92,70,42,.55)}
 
-/* A fila em cima do móvel assenta no CIMO da caixa — uma tábua lisa, não
-   os berços: o que a segura é o tampo, não a régua. É a mesma madeira do
-   `.est-bg-l` (a tábua dos sobrepostos), de propósito: dois desenhos de
-   madeira no mesmo móvel liam-se como dois móveis. */
-.est-topo{padding:calc(var(--slot) * .10 + 2px) 0 calc(var(--slot) * .2);position:relative}
-.est-topo::after{content:'';position:absolute;left:0;right:0;bottom:0;height:calc(var(--slot) * .17);
-  border-radius:calc(var(--slot) * .03);pointer-events:none;
-  background:linear-gradient(180deg,#f8ecd6,#efdcbb 55%,#e4cba2 84%,#d3b585 84%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.75),inset 0 -2px 0 rgba(120,90,50,.12)}
+/* A fila em cima do móvel não leva madeira NENHUMA por baixo — e é por
+   isso que ela não tem berços nem tábua.
+
+   Teve: uma tábua lisa colada ao fundo da linha, a fazer de tampo. Com o
+   tecto (`.pd-h`) por cima, o fim do móvel passava a ter DUAS barras a
+   dizer a mesma coisa — uma por baixo das garrafas, outra por cima — e o
+   que se lia era um móvel a acabar duas vezes. Acaba uma: o tecto, em
+   cima. Estas garrafas ficam entre o último nível e ele, que é onde elas
+   estão.
+
+   O que sobra é o espaço: um vão maior por baixo, para a fila se ler
+   separada do móvel e não como mais um nível. */
+.est-topo{padding:calc(var(--slot) * .10 + 2px) 0 calc(var(--slot) * .34)}
 /* O rótulo do "Em cima" é um rótulo de nível como os outros e NÃO leva
    dourado. O dourado nesta app é a distinção do VINHO (menção portuguesa,
    nota do Vivino) — dá-lo ao nome de uma prateleira era gastar a única
