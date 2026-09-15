@@ -2353,15 +2353,15 @@ function mapaEstanteHTML(l,gs,d){
     </div>`;
   };
   const temCaixa=db.garrafas.some(g=>g.local_id===l.id&&naGarrafeira(g)&&g.caixa_madeira);
-  /* O NICHO — o vão entre o fim das prateleiras e a parede — só se desenha
-     onde há mesmo lugares de encosto. A folga de uma coluna existe sempre
-     (é o `+2` do `colsw`), mas desenhar um recesso onde não cabe garrafa
-     nenhuma é sombrear uma coluna vazia ao lado do móvel. */
-  const encDir=par.dir&&prats.some(p=>p.encosto_dir);
-  const encEsq=par.esq&&prats.some(p=>p.encosto_esq);
+  /* NÃO HÁ NICHO. Houve — um recesso sombreado de uma coluna, do primeiro
+     ao último encosto — para dar chão às garrafas encostadas, que sem ele
+     ficavam a flutuar ao lado do móvel. O remédio saiu pior: uma mancha
+     cinzenta de vários níveis de altura encostada à borda do ecrã, o
+     elemento mais escuro de um separador que é feito de madeira clara, a
+     tapar meia estante para dizer "aqui ao lado não há prateleira". As
+     garrafas de encosto já se dizem sozinhas — são menores do que um
+     lugar do móvel, e a parede atrás delas diz onde estão. */
   return `<div class="ml-est${par.dir?' pd-dir':''}${par.esq?' pd-esq':''}${par.topo?' pd-topo':''}">
-    ${encDir?'<span class="pd-nicho dir" aria-hidden="true"></span>':''}
-    ${encEsq?'<span class="pd-nicho esq" aria-hidden="true"></span>':''}
     ${par.topo?'<span class="pd-h" aria-hidden="true"></span>':''}
     ${par.dir?'<span class="pd-v dir" aria-hidden="true"></span>':''}
     ${par.esq?'<span class="pd-v esq" aria-hidden="true"></span>':''}
@@ -2386,28 +2386,6 @@ function posicionarParedes(){
   const a=est.getBoundingClientRect(),b=e.getBoundingClientRect();
   est.style.setProperty('--pd-l',Math.max(0,b.left-a.left).toFixed(1)+'px');
   est.style.setProperty('--pd-r',Math.max(0,a.right-b.right).toFixed(1)+'px');
-  /* O NICHO vai só do primeiro ao último encosto, e é por isso que também
-     se mede: a parede corre o móvel todo (é uma parede), mas o recesso
-     desenhado onde não cabe garrafa nenhuma é uma coluna sombreada a
-     acompanhar a estante inteira sem dizer nada — e, numa estante alta com
-     encostos só lá em cima, era o que mais saltava à vista. Ao parar no
-     último, o recesso passa a ser o sítio daquelas garrafas.
-
-     A folga de meio lugar em cada ponta é para o recesso não ficar rente à
-     garrafa: um vão rente lê-se como moldura dela, não como o espaço onde
-     ela está. */
-  const folga=(parseFloat(getComputedStyle(est).getPropertyValue('--slot'))||34)*.5;
-  ['dir','esq'].forEach(lado=>{
-    const n=est.querySelector('.pd-nicho.'+lado);
-    if(!n)return;
-    const ds=est.querySelectorAll('.msdot.encosto-'+lado);
-    if(!ds.length){n.classList.remove('pos');return;}
-    let t=Infinity,b2=-Infinity;
-    ds.forEach(d=>{const r=d.getBoundingClientRect();t=Math.min(t,r.top);b2=Math.max(b2,r.bottom);});
-    n.style.setProperty('--nc-t',Math.max(0,t-a.top-folga).toFixed(1)+'px');
-    n.style.setProperty('--nc-b',Math.max(0,a.bottom-b2-folga).toFixed(1)+'px');
-    n.classList.add('pos');
-  });
 }
 /* As garrafas que estão NESTE local mas sem um lugar válido no desenho.
    Ficam FORA do cartão e FECHADAS (`<details>`): são uma lista que pode
@@ -6750,7 +6728,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='85';
+const APP_BUILD='86';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

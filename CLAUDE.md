@@ -561,37 +561,44 @@ numeração corrida: o encosto cai na coluna de folga que o `colsw` já tinha
 (o `+2`) e a fila de cima é uma prateleira A FINGIR (`prateleiraTopo`), sem
 `base`. Quem os conta à parte é `especiaisLocal`.
 
-São **TRÊS peças a desenhar e não uma**, e a ordem em que se leem é o
-desenho todo: a parede (o fundo), o **nicho** (o vão) e a garrafa lá
-dentro. A primeira versão tinha só a parede e a garrafa, e o que se via era
-uma barra clara na borda do ecrã — lida como uma barra de scroll do iOS,
-que é o que ela era: cinco pixels, cantos redondos e uma textura em
-diagonal — com uns círculos a flutuar ao lado dela. O que faltava era o
-vão, que é o que dá sentido aos outros dois:
+São **DUAS peças a desenhar**: a parede (o fundo) e a garrafa encostada.
+A primeira versão tinha uma barra clara na borda do ecrã — lida como uma
+barra de scroll do iOS, que é o que ela era: cinco pixels, cantos redondos
+e uma textura em diagonal:
 - a **parede** é reboco: sem cantos redondos (é no canto quadrado que ela
   encontra a do topo), sem textura, e com a SOMBRA lançada para dentro —
   essa sombra é a única pista que transforma uma tira numa parede;
-- o **nicho** (`.pd-nicho`) é o recesso onde a garrafa encostada está. Tem
-  UMA coluna de largura e vai só **do primeiro ao último encosto** — daí
-  ser medido no `posicionarParedes`, como já eram as paredes. Correndo o
-  móvel todo, numa estante alta com encostos só lá em cima era uma coluna
-  sombreada de alto a baixo sem dizer nada. Existe para resolver o "as
-  garrafas estão a flutuar": a régua acaba logo a seguir ao último berço
-  (de propósito — uma garrafa encostada não está deitada na prateleira),
-  e sem nada por baixo o círculo ficava suspenso no ar;
 - o **lugar de encosto é MENOR** do que um lugar de prateleira, e é a única
   coisa que o diz sozinho: não é um lugar do móvel, é uma garrafa de pé no
   vão ao lado dele. Do mesmo tamanho, seis encostos empilhados liam-se como
   uma sétima coluna da estante. E **vazio cala-se**: a tracejado cheio, seis
   buracos faziam a coluna mais forte do ecrã a dizer "não tenho nada aqui".
 
+**NÃO VOLTES A PÔR O NICHO.** Houve um (`.pd-nicho`): um recesso sombreado
+de uma coluna, do primeiro ao último encosto, medido no
+`posicionarParedes`. Existia para resolver o "as garrafas estão a
+flutuar" — a régua de cada prateleira acaba logo a seguir ao último berço
+(de propósito: uma garrafa encostada não está deitada na prateleira), e
+sem nada por baixo o círculo ficava suspenso no ar. O remédio saiu pior
+do que a doença: o que se via era uma MANCHA CINZENTA de vários níveis de
+altura encostada à borda do ecrã — o elemento mais escuro de um separador
+feito de madeira clara, a tapar meia estante para dizer "aqui ao lado não
+há prateleira". As garrafas de encosto já se dizem sozinhas: são menores
+do que um lugar do móvel, e a parede atrás delas diz onde estão.
+
 **O móvel acaba UMA vez, e é em cima** (`.est-topo`). A fila de cima teve
 uma tábua de madeira colada por baixo, a fazer de tampo — e com o tecto
 (`.pd-h`) por cima dela ficavam duas barras a dizer a mesma coisa, uma de
 cada lado das garrafas: o fim do móvel desenhado a dobrar. Fica só o
-tecto; estas garrafas ficam entre o último nível e ele, que é onde elas
-estão. O que as separa do móvel é o VÃO — o `padding-bottom` da
-`.est-topo` — e não mais madeira.
+tecto, em cima.
+
+**E não há vão nenhum por baixo: estas garrafas ASSENTAM NAS DO ÚLTIMO
+NÍVEL.** Ficaram a um terço de lugar de distância (o `padding-bottom` da
+`.est-topo`) e o espaço lia-se como uma prateleira que falta — como se
+houvesse ainda uma madeira invisível a segurá-las. A fila de cima encosta
+às garrafas de baixo com o MESMO passo de qualquer outro nível
+(`.mprat-layout.mp-emcima`, `margin-bottom` negativo): é o encosto que diz
+em que é que ela assenta.
 
 **E a fila de cima fica CENTRADA**, como todas as outras. Encostava-se à
 parede que houvesse (era o `alinha` do `prateleiraTopo`, que já não

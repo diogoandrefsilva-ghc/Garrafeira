@@ -1485,31 +1485,6 @@ body.naominha .minha-only{display:none!important}
 .ml-est.pd-dir .pd-h{right:calc(var(--pd-r,0px) - 9px)}
 .ml-est.pd-esq .pd-h{left:calc(var(--pd-l,0px) - 9px)}
 
-/* O NICHO: o vão entre o fim das prateleiras e a parede, desenhado como o
-   recesso que é. Tem exatamente UMA coluna de largura — a folga do `+2`
-   do `colsw`, que é onde o lugar de encosto cai — e corre a altura toda
-   do móvel, porque o vão também corre.
-
-   Existe para resolver o "as garrafas estão a flutuar": a régua de cada
-   prateleira acaba logo a seguir ao último berço (o `PONTA` do
-   `ondaBgSVG`), de propósito — uma garrafa encostada não está deitada na
-   prateleira, está de pé ao lado do móvel. Sem nada por baixo, porém, o
-   círculo ficava suspenso no ar e os seis de uma estante alta liam-se
-   como pontos soltos em vez de uma coluna de garrafas arrumadas no vão.
-   O recesso dá-lhes chão e agrupa-os de uma vez.
-
-   Fundo ligeiramente mais escuro do que o papel e sombra interior do lado
-   da parede: é para dentro que se olha. */
-.pd-nicho{position:absolute;top:var(--nc-t,0px);bottom:var(--nc-b,0px);z-index:0;pointer-events:none;
-  width:calc(var(--slot,34px) * var(--colr,1.24));opacity:0;
-  background:linear-gradient(180deg,rgba(120,96,64,.055),rgba(120,96,64,.085));
-  border-radius:calc(var(--slot,34px) * .08)}
-/* Só aparece DEPOIS de medido (`posicionarParedes`): sem isto via-se, no
-   primeiro fotograma, a coluna sombreada de alto a baixo antes de saltar
-   para o sítio certo. */
-.pd-nicho.pos{opacity:1}
-.pd-nicho.dir{right:var(--pd-r,0px);box-shadow:inset -5px 0 8px -6px rgba(92,70,42,.55)}
-.pd-nicho.esq{left:var(--pd-l,0px);box-shadow:inset 5px 0 8px -6px rgba(92,70,42,.55)}
 
 /* A fila em cima do móvel não leva madeira NENHUMA por baixo — e é por
    isso que ela não tem berços nem tábua.
@@ -1518,12 +1493,15 @@ body.naominha .minha-only{display:none!important}
    tecto (`.pd-h`) por cima, o fim do móvel passava a ter DUAS barras a
    dizer a mesma coisa — uma por baixo das garrafas, outra por cima — e o
    que se lia era um móvel a acabar duas vezes. Acaba uma: o tecto, em
-   cima. Estas garrafas ficam entre o último nível e ele, que é onde elas
-   estão.
+   cima.
 
-   O que sobra é o espaço: um vão maior por baixo, para a fila se ler
-   separada do móvel e não como mais um nível. */
-.est-topo{padding:calc(var(--slot) * .10 + 2px) 0 calc(var(--slot) * .34)}
+   E não há vão: ESTAS GARRAFAS ASSENTAM NAS DO ÚLTIMO NÍVEL. Ficaram a
+   um terço de lugar de distância, e o espaço lia-se como uma prateleira
+   que falta — como se houvesse mais uma madeira invisível a segurá-las.
+   Não há: a fila de cima encosta às garrafas de baixo como no `.encaixa`,
+   e é o encosto que diz em que é que ela assenta. */
+.est-topo{padding:calc(var(--slot) * .10 + 2px) 0 0}
+.mprat-layout.mp-emcima{margin-bottom:calc(var(--slot) * -.38)}
 /* O rótulo do "Em cima" é um rótulo de nível como os outros e NÃO leva
    dourado. O dourado nesta app é a distinção do VINHO (menção portuguesa,
    nota do Vivino) — dá-lo ao nome de uma prateleira era gastar a única
