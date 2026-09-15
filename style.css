@@ -164,28 +164,35 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
    contagem e os comandos ficam a flutuar sobre o papel e o cartão que se vê
    é o da procura, que é o que se usa. Mesmo desenho da `.cat-barra` do
    Catálogo da WineCatalog. */
-.dbar{display:flex;align-items:center;justify-content:space-between;gap:10px 12px;flex-wrap:wrap;
+.dbar{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;
   margin:0 2px 14px}
+/* Quando a linha quebra (telemóvel), um item sozinho com `space-between`
+   encosta à ESQUERDA — e os comandos ficavam a boiar por baixo da
+   contagem, desalinhados de tudo. Com `margin-left:auto` mantêm-se à
+   direita nas duas larguras, que é onde o olho os vai procurar. */
+.dbar-a{margin-left:auto;display:flex;align-items:center;gap:7px;flex-shrink:0}
 /* A contagem à ESQUERDA: é o primeiro número que se lê ao entrar aqui, e
    ficava encostado às setas do agrupamento do lado direito. */
 .dbar .fcount{text-align:left;flex:1 1 auto}
-.dbar-a{display:flex;align-items:center;gap:8px;flex-shrink:0}
 /* Os grupos de botões ganham o fundo de CARTÃO que a barra perdeu: sem
    moldura por baixo, um botão em tom de papel sobre papel deixava de se ler
    como um comando. */
 .segbtns{display:flex;align-items:center;border:1px solid var(--bo);border-radius:99px;
-  overflow:hidden;flex-shrink:0;background:var(--card);box-shadow:var(--sh)}
+  overflow:hidden;flex-shrink:0;background:var(--card)}
 /* A marca do que os três botões a seguir fazem: arrumam a lista. Sem ela
    "Região · Ano · Casta" lê-se como mais um filtro, logo por baixo dos
    filtros a sério. Não é botão — não há ascendente/descendente para
    trocar; a ordem DENTRO de cada grupo é sempre a nota do Vivino. */
-.segico{padding:0 2px 0 11px;font-size:12px;color:var(--mu);line-height:1;user-select:none}
-.segbtn{padding:7px 14px;font-size:12px;font-family:inherit;border:none;background:none;color:var(--mu);cursor:pointer;font-weight:600;transition:all .15s}
+/* O ⇅ vive FORA da pílula, colado a ela. Dentro, ocupava uma célula
+   branca do mesmo tamanho dos botões e lia-se como um quarto botão —
+   apagado, que é o pior dos dois mundos. Fora, é uma etiqueta. */
+.segico{font-size:12px;color:var(--mu);line-height:1;user-select:none;flex-shrink:0;opacity:.75}
+.segbtn{padding:6px 13px;font-size:11.5px;font-family:inherit;border:none;background:none;color:var(--mu);cursor:pointer;font-weight:600;transition:all .15s}
 .segbtn.on{background:var(--vh);color:#fff}
 /* Os dois botões da vista são ícones: mais estreitos, e uma barra que já
    tem a contagem e três botões de agrupamento não aguenta mais duas
    palavras sem partir numa terceira linha no telemóvel. */
-.segbtn.ico{padding:7px 11px;font-size:13px;line-height:1}
+.segbtn.ico{padding:6px 11px;font-size:13px;line-height:1}
 .dgrupo{margin-bottom:22px}
 .dgrupo-tit{font-family:var(--fd);font-weight:600;font-size:16px;letter-spacing:.2px;color:var(--vhd);
   display:flex;align-items:center;gap:9px;padding-bottom:7px;margin-bottom:11px;position:relative}
@@ -341,7 +348,24 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    inicial não abre com nove caixas cinzentas. Cada filtro é um chip
    desenhado com o <select> nativo por cima, invisível — o desenho é
    nosso, o seletor continua a ser o do telemóvel. */
-.filtros{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:11px 12px;margin-bottom:16px;box-shadow:var(--sh)}
+/* O topo do separador tem três coisas empilhadas — separadores, procura,
+   barra da lista — e o que as separa é o FEITIO e o PESO, não a cor:
+   os separadores são uma pílula em tom de papel (`--bg2`), a procura é um
+   cartão branco, a barra não tem moldura nenhuma. Antes eram três lozangos
+   brancos do mesmo tamanho e nenhum mandava.
+   FECHADA, a procura ganha cantos de PÍLULA — é a caixa de procura, e é
+   assim que uma caixa de procura se parece; ABERTA volta aos cantos do
+   cartão, que é o que ela passa a ser.
+   **A SOMBRA fica nas duas.** Tirá-la à fechada foi a primeira tentativa e
+   deu nisto: `--card` (#fffdfb) sobre `--bg` (#f6f1ea) com um bordo `--bo`
+   é diferença a menos — a barra desaparecia no papel e o ecrã abria com a
+   contagem colada aos separadores. É a sombra que a põe à tona. */
+.filtros{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);
+  padding:11px 12px;margin-bottom:14px;box-shadow:var(--sh)}
+/* 24px e não 99px: com filtros ligados as pastilhas abrem por baixo, dentro
+   do mesmo cartão, e uma pílula a sério esticava-se num estádio à volta de
+   duas linhas de conteúdo. 24 chega para ler como campo e aguenta crescer. */
+.filtros.n0{border-radius:24px}
 /* Colapsada é só ESTA linha: a caixa de texto a ocupar o espaço todo e,
    fixo à direita, o botão que abre os outros filtros — antes eram duas
    linhas (a barra de procura e, por baixo, a barra do botão "Filtros"). */

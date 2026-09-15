@@ -542,11 +542,31 @@ WineCatalog: contagem à esquerda, comandos à direita. Em troca, os grupos de
 botões (`.segbtns`) ganham o fundo de CARTÃO que a barra perdeu — um botão em
 tom de papel sobre papel deixava de se ler como um comando.
 
+**O topo do separador tem três pesos, e é isso que o segura**: os
+separadores são uma pílula em tom de papel (`--bg2`), a procura é um cartão
+BRANCO, a barra da lista não tem moldura nenhuma. Antes eram três lozangos
+brancos do mesmo tamanho e do mesmo feitio empilhados, e nenhum mandava —
+foi essa a queixa. Duas medidas fecham-no:
+- **fechada, a procura tem cantos de PÍLULA** (`.filtros.n0`, 24px) e aberta
+  volta aos cantos do cartão: fechada é uma caixa de procura e é assim que
+  uma caixa de procura se parece; aberta é um painel. 24px e não 99px porque
+  com filtros ligados as pastilhas abrem por baixo, dentro do mesmo cartão,
+  e uma pílula a sério esticava-se num estádio à volta de duas linhas;
+- **a SOMBRA fica nas duas.** Tirá-la à fechada foi a primeira tentativa de
+  aliviar o topo e deu nisto: `--card` (#fffdfb) sobre `--bg` (#f6f1ea) com
+  um bordo `--bo` é diferença a menos — a barra desaparecia no papel. É a
+  sombra que a põe à tona, e é por isso que os `.segbtns` da barra, esses,
+  NÃO a levam: são pequenos, têm um botão bordô aceso lá dentro e uma sombra
+  a mais punha-os ao nível do cartão de cima.
+
 A ordem dentro dela é **contagem · agrupamento · vista**, e o agrupamento
-leva um **⇅** à frente (`.segico`). É uma MARCA, não um interruptor: diz que
-os três botões a seguir arrumam a lista, porque sem ele "Região · Ano ·
-Casta" lia-se como mais um filtro, encostado aos filtros que estão mesmo por
-cima. Não há ascendente/descendente para trocar — a ordem DENTRO de cada
+leva um **⇅** à frente (`.segico`), FORA da pílula: dentro, ocupava uma
+célula do tamanho de um botão e lia-se como um quarto botão apagado. É uma
+MARCA, não um interruptor: diz que os três botões a seguir arrumam a lista,
+porque sem ele "Região · Ano · Casta" lia-se como mais um filtro, encostado
+aos filtros que estão mesmo por cima. E `.dbar-a` leva `margin-left:auto`
+porque no telemóvel a linha quebra, e um item sozinho com `space-between`
+encosta à ESQUERDA — os comandos ficavam a boiar por baixo da contagem. Não há ascendente/descendente para trocar — a ordem DENTRO de cada
 grupo é sempre a nota do Vivino (`ordenarPorVivino`), e o que estes três
 botões escolhem é por que critério se AGRUPA (`agruparVinhos`). Se um dia
 houver ordenação a sério, é este ⇅ que passa a interruptor.
