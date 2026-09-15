@@ -4159,6 +4159,38 @@ async function iaPedir(pedido,vinhoId,motor){
   if(!d.id)return d;
   return await iaEsperar(d.id);
 }
+/* Irmã do `iaPedir`, para VÁRIOS vinhos de uma vez — manda `vinhos` em vez
+   de `nome`/`ano`/etc., e a função do lado do servidor (`vinho-info.ts`)
+   trata isso como um pedido de LOTE: catálogo vinho a vinho, e no máximo
+   UMA chamada ao Gemini para todos, nunca uma por vinho. Devolve
+   `{resultados:[{id,encontrado,...}]}`, a mesma forma que a pesquisa manual
+   em lote já produz depois de colar a resposta — dá para tratar as duas
+   pelo mesmo caminho a seguir (`loteMostrarAtual`). */
+async function iaPedirLote(vinhos,campos,motor){
+  motor=motor==='premium'?'premium':'gratis';
+  await iaLog('pedido',{pedido:{vinhos:vinhos.map(v=>v.id),campos},plano:planoIA(),motor,lote:vinhos.length});
+  let r;
+  try{
+    r=await sbFetch(`${SB_URL}/functions/v1/vinho-info`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':SB_KEY},
+      body:JSON.stringify({
+        assincrono:true,plano:motor,campos,
+        vinhos:vinhos.map(v=>({id:v.id,nome:v.nome,ano:v.ano||null,produtor:v.produtor||'',regiao:v.regiao||'',tipo:v.tipo||''})),
+      })
+    });
+  }catch(e){
+    await iaLog('erro',{passo:'fetch-lote',erro:String(e.message)});
+    throw new Error('Não foi possível falar com o servidor. Sem rede?');
+  }
+  let d={};try{d=await r.json();}catch(_){}
+  if(!r.ok){
+    await iaLog('erro',{passo:'http-lote',status:r.status,erro:d.error||''});
+    throw new Error(d.error||('O servidor respondeu HTTP '+r.status));
+  }
+  if(!d.id)return d;
+  return await iaEsperar(d.id);
+}
 async function iaEsperar(id){
   const fim=Date.now()+IA_TIMEOUT_MS;
   while(Date.now()<fim){
@@ -5442,47 +5474,59 @@ async function loteAutoManual(){
     um campo que continua vazio, considera saltá-los ou usar a manual, que não custa nada.</div>`;
 }
 
-// ── 3a. Automática: uma chamada por vinho, sequencial ──
+// ── 3a. Automática: UMA chamada para todos os vinhos ──
+// Já foi "uma pesquisa por vinho, sequencial" — e isso continuava a pagar
+// N pesquisas por um lote de N, o mesmo problema que a manual (um prompt
+// só) resolvia. Agora `iaPedirLote` manda os vinhos todos de uma vez e o
+// `vinho-info.ts` é que faz uma chamada só ao Gemini para o lote inteiro.
+let LOTE_AUTO_VINHOS=[];
 async function loteAutomatica(){
-  const vinhos=[...LOTE_SEL.values()];
+  LOTE_AUTO_VINHOS=[...LOTE_SEL.values()];
   fecharModal('modal-lote');
-  LOTE_FILA=vinhos.map(v=>v.id);
-  LOTE_RESULTADOS=new Map();
-  LOTE_IDX=0;
   IA_LOTE_ATIVO=true;
-  await loteAutomaticaBuscar();
+  await loteAutomaticaExecutar();
 }
-async function loteAutomaticaBuscar(){
-  if(LOTE_IDX>=LOTE_FILA.length){fecharModal('modal-ia');return;}
-  const vinhoId=LOTE_FILA[LOTE_IDX];
-  const v=IDXV[vinhoId];
-  if(!v){loteAvancar();return;}
-  const pedido={nome:v.nome,tipo:v.tipo||'Tinto'};
-  if(v.ano)pedido.ano=v.ano;
-  if(v.produtor)pedido.produtor=v.produtor;
-  if(v.regiao)pedido.regiao=v.regiao;
-  pedido.campos=LOTE_CAMPOS;
-  pedido.colheitaEspecifica=false;
-  IA_PEDIDO=pedido;IA_VINHO=vinhoId;IA_RES2=null;IA_MOTOR2='';IA_ERRO2='';
+async function loteAutomaticaExecutar(){
+  const n=LOTE_AUTO_VINHOS.length;
   IA_MOTOR=motorDoPlano();
-  iaMostrarEspera(`${v.nome} ${v.ano||''} · ${LOTE_IDX+1}/${LOTE_FILA.length}`,IA_MOTOR);
+  iaMostrarEspera(`${n} vinho${n>1?'s':''} de uma vez`,IA_MOTOR);
   try{
-    const res=await iaPedir(pedido,vinhoId,IA_MOTOR);
-    LOTE_RESULTADOS.set(vinhoId,res);
-    loteMostrarAtual();
+    const res=await iaPedirLote(LOTE_AUTO_VINHOS,LOTE_CAMPOS,IA_MOTOR);
+    loteAplicarResultadoAutomatico(res);
   }catch(e){
-    loteMostrarErro(e.message,vinhoId);
+    loteMostrarErroLote(e.message);
   }
 }
-function loteMostrarErro(msg,vinhoId){
-  const v=IDXV[vinhoId]||{};
+// A resposta já vem pronta a comparar (a mesma forma que a manual produz
+// depois de colada) — só falta separar por vinho e entrar no mesmo ecrã.
+function loteAplicarResultadoAutomatico(res){
+  const lista=res&&Array.isArray(res.resultados)?res.resultados:[];
+  const porId=new Map(lista.map(r=>[Number(r&&r.id),r]));
+  LOTE_RESULTADOS=new Map();
+  LOTE_FILA=[];
+  LOTE_AUTO_VINHOS.forEach(v=>{
+    const r=porId.get(v.id);
+    if(!r||r.encontrado===false)return;
+    const ficha={...r};
+    delete ficha.id;delete ficha.encontrado;
+    LOTE_RESULTADOS.set(v.id,ficha);
+    LOTE_FILA.push(v.id);
+  });
+  if(!LOTE_FILA.length){
+    loteMostrarErroLote('A pesquisa não trouxe nada de aproveitável para nenhum destes vinhos.');
+    return;
+  }
+  LOTE_IDX=0;
+  loteMostrarAtual();
+}
+function loteMostrarErroLote(msg){
+  const n=LOTE_AUTO_VINHOS.length;
   document.getElementById('modal-ia-in').innerHTML=`
     <div class="mtop"><h3>Não deu</h3><button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
-    <div class="note" style="margin-top:3px">${esc(v.nome||'')} ${v.ano||''} · ${LOTE_IDX+1}/${LOTE_FILA.length}</div>
+    <div class="note" style="margin-top:3px">${n} vinho${n>1?'s':''}</div>
     <div class="erro">${esc(msg)}</div>
     <div class="macoes">
-      <button class="btn prim" onclick="loteAutomaticaBuscar()">Tentar outra vez</button>
-      <button class="btn ghost" onclick="loteSaltar()">Saltar este vinho</button>
+      <button class="btn prim" onclick="loteAutomaticaExecutar()">Tentar outra vez</button>
       <button class="btn ghost" onclick="fecharModal('modal-ia')">Parar aqui</button>
     </div>`;
   abrirModal('modal-ia');
@@ -5630,9 +5674,11 @@ function loteMostrarAtual(){
 }
 function loteAvancar(){
   LOTE_IDX++;
+  // Automática e manual chegam aqui com os resultados TODOS já em mãos (uma
+  // chamada só, feita antes de entrar neste ecrã) — não há "ir buscar o
+  // próximo", só mostrar o que já se tem.
   if(LOTE_IDX>=LOTE_FILA.length){fecharModal('modal-ia');return;}
-  if(LOTE_RESULTADOS.has(LOTE_FILA[LOTE_IDX]))loteMostrarAtual();
-  else loteAutomaticaBuscar();
+  loteMostrarAtual();
 }
 function loteSaltar(){loteAvancar();}
 // Chamado por `fecharModal('modal-ia')`, seja pelo ✕, Escape, a margem ou o
@@ -5643,7 +5689,7 @@ function loteAoFecharModalIA(){
   if(!IA_LOTE_ATIVO)return;
   const total=LOTE_FILA.length, feitos=LOTE_IDX;
   IA_LOTE_ATIVO=false;
-  LOTE_FILA=[];LOTE_RESULTADOS=null;LOTE_SEL=new Map();
+  LOTE_FILA=[];LOTE_RESULTADOS=null;LOTE_SEL=new Map();LOTE_AUTO_VINHOS=[];
   renderLista();
   toast(feitos>=total?'Atualização massiva concluída ✓':`Atualização massiva parada — ${feitos} de ${total} vistos`);
 }
@@ -7229,7 +7275,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='88';
+const APP_BUILD='89';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
