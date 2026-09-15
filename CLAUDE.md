@@ -1433,11 +1433,25 @@ cria o vinho, as castas e as garrafas.
 ## Regras técnicas (não partir a app)
 - `app.js` carrega como `<script src>` **normal, NÃO module** — há
   `onclick="…"` no HTML e no HTML gerado, as funções têm de ser **globais**.
-- **PWA/cache:** se mexeres em `app.js`, `style.css` ou `index.html`,
-  **sobe o `CACHE_NAME` no `sw.js`**. Os três são network-first de
-  propósito: com o JS em cache-first, um deploy dava ao browser o
-  `index.html` novo com o `app.js` velho — botões novos a chamar funções que
-  ainda não existiam, sem erro visível. Aconteceu no Goals.
+- **PWA/cache: o número é dos TRÊS e sobe no mesmo commit** — o
+  `CACHE_NAME` do `sw.js`, o `APP_BUILD` do `app.js` e o `data-build` do
+  `<body>`. Se mexeres em `app.js`, `style.css` ou `index.html`, sobe-os.
+  Os três ficheiros são network-first de propósito: com o JS em
+  cache-first, um deploy dava ao browser o `index.html` novo com o `app.js`
+  velho — botões novos a chamar funções que ainda não existiam, sem erro
+  visível. Aconteceu no Goals.
+  **Mas o network-first só manda no browser, e isso não chegou.** O CDN do
+  GitHub Pages propaga os ficheiros um de cada vez, e há uma janela de
+  segundos a seguir a um deploy em que a mesma carga apanha o HTML novo com
+  o JS velho — a avaria volta, na mesma forma e igualmente calada
+  ("carrego nos filtros e não acontece nada"). Daí o `verificarBuild()` no
+  arranque do `app.js`: compara o `APP_BUILD` com o `data-build` do
+  `<body>`, recarrega **uma** vez (a janela é de segundos, e uma recarga
+  costuma bastar) e, se ainda discordarem, põe uma barra com um botão que
+  desregista o service worker e recarrega. O `sessionStorage` (`gf_build`)
+  é o que impede o ciclo infinito; a barra leva estilo INLINE de propósito,
+  porque o `style.css` pode ser justamente o ficheiro velho e esta é a
+  mensagem que não pode depender de mais nada para aparecer.
 - **Supabase:** schema `garrafeira`, `Accept-Profile`/`Content-Profile` em
   **todos** os pedidos REST (`sbHeaders`) — é isso que aponta para o schema,
   nunca vai no URL. A chave no topo do `app.js` é a **`anon`** (pública, por

@@ -449,21 +449,18 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .fdom{margin-top:11px}
 .fvazio{font-size:11.5px;color:var(--mu);padding:4px 2px}
 
-/* OS VALORES do campo aberto: DUAS por linha, e uma GRELHA — não um
-   `flex-wrap`. Com três por linha "Península de Setúbal" e "Cabernet
-   Sauvignon" chegam ao ecrã cortadas a meio, e um filtro que não se lê não
-   se escolhe; com `flex-grow`, o último cartão de uma linha ímpar
-   estica-se sozinho de ponta a ponta. `minmax(0,1fr)` e `min-width:0` no
-   cartão porque o mínimo de um item de grelha é `auto`: sem isso é a
-   coluna que cresce. */
-/* Duas colunas no telemóvel, mais num ecrã largo — `auto-fill` com um
-   mínimo de 170px, e não `repeat(2,…)` fixo: com duas colunas fixas, um
-   "Alentejo 3" num ecrã de 900px ficava um cartão de 700px de largura com
-   duas palavras lá dentro. O mínimo é o que mantém as duas colunas no
-   telemóvel (2×150+6 cabe nos ~334px úteis do cartão, 3 não cabem) e é ele que
-   impede um cartão estreito de mais para "Península de Setúbal". O
-   `minmax(0,…)` continua a ser preciso porque o mínimo de um item de
-   grelha é `auto` — ver o `min-width:0` do `.fop`. */
+/* OS VALORES do campo aberto: uma GRELHA, nunca um `flex-wrap` — com
+   `flex-grow`, o último cartão de uma linha ímpar estica-se sozinho de
+   ponta a ponta.
+   As colunas são `auto-fill` com um mínimo de 150px e não duas fixas: duas
+   fixas davam, num ecrã de 900px, um cartão de 700px de largura com
+   "Alentejo 3" lá dentro. 150px é o número que mantém as DUAS colunas no
+   telemóvel (2×150+6 cabe nos ~334px úteis do cartão, 3 não cabem) e que
+   impede um cartão estreito de mais para "Península de Setúbal" — um
+   filtro que não se lê não se escolhe. Abaixo dos ~340px fica uma coluna,
+   que é a degradação certa: um cartão à largura toda continua a ler-se.
+   O `minmax(0,…)` — aqui dentro do `min()` — continua a ser preciso porque
+   o mínimo de um item de grelha é `auto`; ver o `min-width:0` do `.fop`. */
 .fops{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(150px,100%),1fr));gap:6px}
 .fop{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;
   padding:9px 10px;border-radius:12px;border:1px solid var(--bo);background:var(--bg);color:var(--tx);

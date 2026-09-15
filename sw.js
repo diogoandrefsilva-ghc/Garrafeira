@@ -3,7 +3,13 @@
 // REGRA: se mexeres em app.js, style.css ou index.html, SOBE o CACHE_NAME
 // (v1 -> v2). Sem isso, o browser fica com a versão velha e não há aviso
 // nenhum.
-const CACHE_NAME = 'garrafeira-v80';
+//
+// E o número é dos TRÊS: o `CACHE_NAME` daqui, o `APP_BUILD` do app.js e o
+// `data-build` do <body>. Sobem no mesmo commit, e é a discordância entre
+// os dois últimos que o app.js apanha ao arrancar — o network-first abaixo
+// manda no browser, mas não no CDN do GitHub Pages, que propaga um
+// ficheiro de cada vez.
+const CACHE_NAME = 'garrafeira-v81';
 
 self.addEventListener('install', () => self.skipWaiting());
 

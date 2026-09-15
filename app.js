@@ -6432,6 +6432,54 @@ async function renderDiag(){
 }
 
 /* ── INIT ──────────────────────────────────────────────────────────── */
+
+/* O HTML E O JS TÊM DE SER DA MESMA VERSÃO — e quando não são, não pode ser
+   em silêncio. Os três ficheiros são network-first no `sw.js` precisamente
+   para andarem juntos, mas isso só manda no browser: o CDN do GitHub Pages
+   propaga-os um de cada vez, e há uma janela de segundos a seguir a um
+   deploy em que se apanha o `index.html` NOVO com o `app.js` VELHO (ou o
+   contrário, de uma cache de HTTP qualquer pelo caminho). O que se vê então
+   é a pior avaria que esta app tem: botões novos a chamar funções que ainda
+   não existem, sem um erro no ecrã — "carrego nos filtros e não acontece
+   nada". Já aconteceu aqui e já tinha acontecido no Goals.
+   O `data-build` do <body>, o `APP_BUILD` daqui e o `CACHE_NAME` do `sw.js`
+   são O MESMO NÚMERO e sobem os três no mesmo commit. Se discordarem,
+   recarrega-se UMA vez — a janela é de segundos, e uma recarga costuma
+   bastar — e o `sessionStorage` é o que impede o ciclo infinito se a
+   discordância for permanente. À segunda, diz-se o que se passa com um
+   botão a fazer o que falta, que é sempre melhor do que fingir que está
+   tudo bem. */
+const APP_BUILD='81';
+(function verificarBuild(){
+  const doHtml=document.body.getAttribute('data-build');
+  if(doHtml===APP_BUILD)return;
+  let jaTentou=false;
+  try{jaTentou=sessionStorage.getItem('gf_build')===APP_BUILD;}catch(e){}
+  if(!jaTentou){
+    try{sessionStorage.setItem('gf_build',APP_BUILD);}catch(e){}
+    location.reload();
+    return;
+  }
+  // Estilo à mão e não uma classe: o `style.css` pode ser o velho, e esta é
+  // precisamente a mensagem que não pode depender de mais nada para
+  // aparecer.
+  const b=document.createElement('div');
+  b.style.cssText='position:fixed;left:0;right:0;top:0;z-index:99999;padding:12px 14px;'+
+    'background:#7b1f3d;color:#fff;font:14px/1.4 system-ui,sans-serif;text-align:center';
+  b.innerHTML='A app ficou a meio de uma atualização e alguns botões não '+
+    'respondem. <button style="margin-left:8px;padding:6px 12px;border:0;border-radius:99px;'+
+    'background:#fff;color:#7b1f3d;font:inherit;font-weight:700;cursor:pointer">Atualizar</button>';
+  b.querySelector('button').onclick=()=>{
+    try{sessionStorage.removeItem('gf_build');}catch(e){}
+    if('serviceWorker' in navigator&&navigator.serviceWorker.getRegistrations)
+      navigator.serviceWorker.getRegistrations()
+        .then(rs=>Promise.all(rs.map(r=>r.unregister())))
+        .catch(()=>{})
+        .then(()=>location.reload());
+    else location.reload();
+  };
+  document.body.appendChild(b);
+})();
 async function sbInit(){
   try{
     if(await sbTratarHashAuth())return;
