@@ -748,10 +748,9 @@ body:not(.readonly) .msdot.vazia:hover{background:#fff;border-color:var(--vh);co
 .msdot.cheia{background:var(--vh);border-color:var(--vh);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;
   box-shadow:0 2px 4px rgba(78,18,40,.25),inset 0 1px 0 rgba(255,255,255,.18);transition:transform .12s,box-shadow .15s}
 .msdot.cheia:hover{transform:translateY(-1px);box-shadow:0 4px 8px rgba(78,18,40,.3)}
-.msdot.conflito{background:#8f2f4d;border-color:#8f2f4d}
-/* Ocupado, mas por uma garrafa que NÃO passa na procura: apagado, para o
-   que passa ficar a cor. */
-.msdot.fora{background:#e6dee1;border-color:#e6dee1;color:#a8969c;box-shadow:none}
+/* Os ESTADOS do lugar (`.conflito`, `.fora`, `.achada`) NÃO vivem aqui —
+   vivem no FIM da folha, depois das três peles de prateleira, em "O LUGAR
+   DURANTE A PROCURA". Postos aqui, perdiam para elas na cascata. */
 .msdot-id{display:block;max-width:100%;padding:0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msdot-q{position:absolute;right:calc(var(--slot) * -.1);top:calc(var(--slot) * -.1);font-size:calc(var(--slot) * .3);
   font-weight:700;color:#fff;background:#c36c4f;border-radius:99px;padding:0 3px;line-height:1.4}
@@ -1440,35 +1439,92 @@ body.naominha .minha-only{display:none!important}
 /* ── PAREDES, ENCOSTOS E CAIXAS DE MADEIRA ─────────────────────────
    O móvel de casa está encostado a uma parede, e o vão entre o fim das
    prateleiras e ela é onde entram as garrafas que vêm em caixa de
-   madeira. A parede é UM traço contínuo do lado do móvel (não uma tira
-   por nível: as linhas têm margens entre si — o ziguezague até as tem
-   negativas — e o que se lia era uma linha picada). O x sai de medir a
-   estante em `posicionarParedes`: todas as prateleiras têm a mesma
-   largura, por isso a parede fica ao nível das mais compridas e as mais
-   curtas deixam o vão à vista, como no móvel. */
+   madeira. São TRÊS peças e não uma, e a ordem em que se leem é o
+   desenho todo: a parede (o fundo), o NICHO (o vão) e a garrafa lá
+   dentro. A primeira versão tinha só a parede e a garrafa, e o que se
+   via era uma barra clara na borda do ecrã com uns círculos a flutuar ao
+   lado dela — o vão, que é o que dá sentido aos dois, não estava lá.
+
+   A parede é UM traço contínuo do lado do móvel (não uma tira por nível:
+   as linhas têm margens entre si — o ziguezague até as tem negativas — e
+   o que se lia era uma linha picada). O x sai de medir a estante em
+   `posicionarParedes`: todas as prateleiras têm a mesma largura, por isso
+   a parede fica ao nível das mais compridas e as mais curtas deixam o vão
+   à vista, como no móvel. */
 .ml-est{position:relative}
 .ml-est.pd-topo{padding-top:calc(var(--slot,34px) * .3)}
-.pd-v,.pd-h{position:absolute;z-index:0;pointer-events:none;border:1px solid #d4c9ba;border-radius:2px}
-.pd-v{top:0;bottom:0;width:5px;
-  background:repeating-linear-gradient(135deg,rgba(120,105,90,.14) 0 2px,transparent 2px 6px),
-             linear-gradient(90deg,#ded4c6,#eee7dc)}
-.pd-v.dir{right:calc(var(--pd-r,0px) - 7px)}
-.pd-v.esq{left:calc(var(--pd-l,0px) - 7px)}
-.pd-h{top:0;height:5px;left:var(--pd-l,0px);right:var(--pd-r,0px);
-  background:repeating-linear-gradient(135deg,rgba(120,105,90,.14) 0 2px,transparent 2px 6px),
-             linear-gradient(180deg,#ded4c6,#eee7dc)}
+.pd-v,.pd-h{position:absolute;z-index:0;pointer-events:none}
+/* A PAREDE é reboco, não uma barra de interface. Três coisas a separam do
+   que ela era — e era, literalmente, uma barra de scroll do iOS: cinco
+   pixels, cantos arredondados e uma textura em diagonal encostada à borda
+   direita do ecrã.
+
+   1. Sem cantos redondos. Uma parede não tem pontas roliças, e é no canto
+      quadrado que ela encontra a do topo — arredondada, o L abria uma
+      falha onde as duas se juntam.
+   2. Sem a textura em diagonal. Era exatamente o risco de um puxador de
+      scroll; o reboco é liso, com um gradiente muito leve a dar-lhe
+      superfície.
+   3. Com SOMBRA lançada para dentro. É a única pista que transforma uma
+      tira numa parede: o móvel está à frente dela, logo ela ensombra o
+      que lhe fica ao lado. Sem a sombra, qualquer tira vertical clara na
+      borda do ecrã lê-se como um elemento da app e não como a casa. */
+.pd-v{top:0;bottom:0;width:8px;background:linear-gradient(90deg,#e7ddcd,#f2ebe0 60%,#efe7da);
+  border-left:1px solid #d7cbb8;border-right:1px solid #d7cbb8}
+.pd-v.dir{right:calc(var(--pd-r,0px) - 9px);box-shadow:-3px 0 7px -3px rgba(92,70,42,.30)}
+.pd-v.esq{left:calc(var(--pd-l,0px) - 9px);box-shadow:3px 0 7px -3px rgba(92,70,42,.30)}
+.pd-h{top:0;height:8px;left:var(--pd-l,0px);right:var(--pd-r,0px);
+  background:linear-gradient(180deg,#e7ddcd,#f2ebe0 60%,#efe7da);
+  border-top:1px solid #d7cbb8;border-bottom:1px solid #d7cbb8;
+  box-shadow:0 3px 7px -3px rgba(92,70,42,.30)}
 /* Com parede dos dois lados, a de cima vai de uma à outra: é o canto que
    fecha, e é nele que assenta o L de garrafas em caixa. */
-.ml-est.pd-dir .pd-h{right:calc(var(--pd-r,0px) - 7px)}
-.ml-est.pd-esq .pd-h{left:calc(var(--pd-l,0px) - 7px)}
+.ml-est.pd-dir .pd-h{right:calc(var(--pd-r,0px) - 9px)}
+.ml-est.pd-esq .pd-h{left:calc(var(--pd-l,0px) - 9px)}
+
+/* O NICHO: o vão entre o fim das prateleiras e a parede, desenhado como o
+   recesso que é. Tem exatamente UMA coluna de largura — a folga do `+2`
+   do `colsw`, que é onde o lugar de encosto cai — e corre a altura toda
+   do móvel, porque o vão também corre.
+
+   Existe para resolver o "as garrafas estão a flutuar": a régua de cada
+   prateleira acaba logo a seguir ao último berço (o `PONTA` do
+   `ondaBgSVG`), de propósito — uma garrafa encostada não está deitada na
+   prateleira, está de pé ao lado do móvel. Sem nada por baixo, porém, o
+   círculo ficava suspenso no ar e os seis de uma estante alta liam-se
+   como pontos soltos em vez de uma coluna de garrafas arrumadas no vão.
+   O recesso dá-lhes chão e agrupa-os de uma vez.
+
+   Fundo ligeiramente mais escuro do que o papel e sombra interior do lado
+   da parede: é para dentro que se olha. */
+.pd-nicho{position:absolute;top:var(--nc-t,0px);bottom:var(--nc-b,0px);z-index:0;pointer-events:none;
+  width:calc(var(--slot,34px) * var(--colr,1.24));opacity:0;
+  background:linear-gradient(180deg,rgba(120,96,64,.055),rgba(120,96,64,.085));
+  border-radius:calc(var(--slot,34px) * .08)}
+/* Só aparece DEPOIS de medido (`posicionarParedes`): sem isto via-se, no
+   primeiro fotograma, a coluna sombreada de alto a baixo antes de saltar
+   para o sítio certo. */
+.pd-nicho.pos{opacity:1}
+.pd-nicho.dir{right:var(--pd-r,0px);box-shadow:inset -5px 0 8px -6px rgba(92,70,42,.55)}
+.pd-nicho.esq{left:var(--pd-l,0px);box-shadow:inset 5px 0 8px -6px rgba(92,70,42,.55)}
+
 /* A fila em cima do móvel assenta no CIMO da caixa — uma tábua lisa, não
-   os berços: o que a segura é o tampo, não a régua. */
+   os berços: o que a segura é o tampo, não a régua. É a mesma madeira do
+   `.est-bg-l` (a tábua dos sobrepostos), de propósito: dois desenhos de
+   madeira no mesmo móvel liam-se como dois móveis. */
 .est-topo{padding:calc(var(--slot) * .10 + 2px) 0 calc(var(--slot) * .2);position:relative}
 .est-topo::after{content:'';position:absolute;left:0;right:0;bottom:0;height:calc(var(--slot) * .17);
   border-radius:calc(var(--slot) * .03);pointer-events:none;
   background:linear-gradient(180deg,#f8ecd6,#efdcbb 55%,#e4cba2 84%,#d3b585 84%);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.75),inset 0 -2px 0 rgba(120,90,50,.12)}
-.mp-emcima .mp-lbl{color:#8a6508}
+/* O rótulo do "Em cima" é um rótulo de nível como os outros e NÃO leva
+   dourado. O dourado nesta app é a distinção do VINHO (menção portuguesa,
+   nota do Vivino) — dá-lo ao nome de uma prateleira era gastar a única
+   cor que quer dizer alguma coisa a dizer "esta fila fica mais acima".
+   O que a distingue dos "NÍVEL n" é já não ser um número: fica em itálico
+   e sem o espacejamento de versalete, que é o que separa uma nota de uma
+   numeração. */
+.mp-emcima .mp-lbl{font-style:italic;letter-spacing:.2px;text-transform:none;font-size:9.5px}
 /* A MOLDURA DE MADEIRA é da garrafa e não do lugar: um quadrado de
    madeira na MESMA célula da grelha, por trás do círculo (que traz o seu
    z-index). Vale em qualquer nível — não só nos encostos. */
@@ -1484,7 +1540,106 @@ body.naominha .minha-only{display:none!important}
 /* No editor do local: as paredes primeiro, e os encostos por nível só
    aparecem depois de haver parede desse lado. */
 .ll-par{margin:12px 0 2px}
-.ll-par .segbtns{margin-top:7px}
-.ll-encosto{display:flex;flex-direction:column;gap:3px;margin-top:6px}
-.ll-encosto .chk{font-size:12.5px}
-.ll-encosto i{font-style:normal;color:var(--mu);font-size:11.5px}
+/* Os três lados repartem a pílula em partes iguais. Dimensionados ao
+   conteúdo (como na barra da lista, onde a pílula vive numa linha que a
+   encolhe), sobrava aqui um terço de pílula vazio à direita — e uma
+   pílula com um vão vazio lê-se como um quarto botão desligado. */
+.ll-par .segbtns{margin-top:7px;width:100%}
+.ll-par .segbtn{flex:1 1 0;text-align:center;padding:7px 6px}
+.ll-encosto{display:flex;flex-direction:column;margin-top:0}
+/* O encosto usa a pele do `ll-enc` (ver `encostoSel` no app.js) — só lhe
+   aperta a margem, que aqui são irmãos empilhados e não um campo solto.
+   E o rótulo QUEBRA: "Cabe uma garrafa à direita (lugar 15D)" é uma frase,
+   não uma etiqueta, e num telemóvel estreito não cabe numa linha. */
+.mbox label.ll-enc.ll-enc-pd{margin-top:7px;align-items:flex-start;white-space:normal}
+.mbox label.ll-enc.ll-enc-pd input{margin-top:1px}
+.ll-enc-pd span{min-width:0}
+.ll-enc-pd i{font-style:normal;color:var(--mu)}
+/* "Garrafas em cima do móvel": um campo, não uma linha de formulário
+   esticada. O `.mbox input` põe tudo a 100% e o número ficava numa caixa
+   da largura do cartão com um "4" perdido lá dentro. */
+.ll-topo{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:11px;
+  font-size:12.5px;font-weight:600;color:var(--tx)}
+.mbox .ll-topo input{width:76px;flex:0 0 auto;padding:8px 10px;text-align:center;
+  font-family:var(--fd);font-size:15px}
+
+/* ── O LUGAR NO NICHO E EM CIMA DO MÓVEL ─────────────────────────────
+   Aqui e não ao pé do `.msdot` lá em cima, pela mesma razão do bloco a
+   seguir: `.est-fila .msdot` tem duas classes, `.msdot.encosto` também,
+   e quem vier por último no ficheiro é que ganha. Escrito lá em cima,
+   isto não mexia um pixel — a pele da prateleira repintava tudo por
+   cima. Vem ANTES do bloco da procura de propósito: uma garrafa
+   encontrada no nicho tem de ganhar o arco à mesma.
+
+   Um lugar de encosto é MENOR do que um lugar de prateleira, e é a única
+   coisa que o diz sozinho: não é um lugar do móvel, é uma garrafa de pé
+   no vão ao lado dele. Do tamanho dos outros, seis encostos empilhados
+   liam-se como uma sétima coluna da estante — que é precisamente o que
+   não são. */
+.msdot.encosto{max-width:calc(var(--slot) * .82);margin:0 auto;
+  font-size:clamp(7px,calc(var(--slot) * .29),12px)}
+/* E o encosto VAZIO cala-se. Um buraco no vão não é resposta a pergunta
+   nenhuma, e a tracejado cheio seis deles faziam uma coluna picada mais
+   forte do que a estante inteira — era o que mais saltava à vista no
+   ecrã, a dizer "não tenho nada aqui". Continua a ver-se (é onde se toca
+   para lá pôr uma garrafa) e volta a si ao passar o dedo. */
+.msdot.encosto.vazia{border-width:1px;border-color:#d7c2ca;background:rgba(255,255,255,.55);opacity:.55}
+body:not(.readonly) .msdot.encosto.vazia:hover{opacity:1;background:#fff;border-color:var(--vh)}
+/* Cheio, é uma garrafa a sério e mantém o bordô — mas encostada à parede,
+   e é de lá que lhe vem a sombra. */
+.msdot.encosto.cheia{box-shadow:0 2px 4px rgba(78,18,40,.22),0 0 0 1px rgba(255,255,255,.5)}
+/* Em cima do móvel: o mesmo tamanho dos lugares de prateleira (estão
+   deitadas no tampo, não espremidas num vão), só com o número mais
+   pequeno — "T1" tem de caber sem reticências. */
+.msdot.emcima{font-size:clamp(7px,calc(var(--slot) * .32),13px)}
+.msdot.emcima.vazia{opacity:.62}
+body:not(.readonly) .msdot.emcima.vazia:hover{opacity:1}
+
+/* ── O LUGAR DURANTE A PROCURA ───────────────────────────────────────
+   Os estados do lugar vivem AQUI, depois das peles de prateleira, e não
+   lá em cima ao pé do `.msdot`: `.est-fila .msdot` e `.msdot.fora` têm a
+   MESMA especificidade (duas classes cada), por isso ganha a que vier
+   por último no ficheiro — e era a pele. O apagado da procura esteve
+   morto assim nas três peles, sem um erro à vista: procurava-se e a
+   estante não mexia um pixel. Um estado novo do lugar entra NESTE bloco.
+
+   Com a procura ligada há TRÊS pesos e não dois, porque um lugar vazio
+   também não é resposta a pergunta nenhuma: o que passa ganha o arco, o
+   que não passa apaga-se, o vazio cala-se. Antes o vazio era o maior
+   contraste do ecrã (branco sobre madeira) e gritava mais alto do que a
+   garrafa encontrada. */
+.msdot.conflito{background:#8f2f4d;border-color:#8f2f4d}
+/* Ocupado, mas por uma garrafa que NÃO passa na procura. */
+.msdot.fora{background:#e6dee1;border-color:#e6dee1;color:#a8969c;box-shadow:none;z-index:1}
+/* Encontrada: o vidro escurece (o número branco passa a ler-se com mais
+   força, sem mudar de cor nem de corpo) e ganha um ARCO à volta.
+
+   Bordô e não dourado: o dourado é a distinção do VINHO (menção, nota do
+   Vivino) e uma garrafa encontrada não distingue vinho nenhum — é a app a
+   apontar para o que lhe perguntaram, tal como o sombreado bordô da
+   `.vc-match` faz no cartão.
+
+   O arco é só `box-shadow`, que NÃO ocupa espaço de layout: um `outline`
+   ou uma `border` mais grossa mudavam a altura do lugar e o
+   `ajustarEstantes` passava a discordar do que se vê. A medida é em
+   `--slot` (escala com a estante) e pára nos .09: o espaço livre entre
+   dois lugares vizinhos é `(--colr - 1)`, que no mínimo (1,18) dá .09 de
+   cada lado — mais do que isso e os arcos de duas garrafas encontradas
+   lado a lado colavam-se num só. E o `z-index` é alto porque as
+   prateleiras se SOBREPÕEM (o `encaixe`): sem ele o arco ficava cortado
+   por baixo dos lugares do nível de cima. */
+.msdot.achada{--arco:0 0 0 calc(var(--slot) * .055) var(--vhp),0 0 0 calc(var(--slot) * .09) var(--vh2);
+  background:var(--vhd);border-color:var(--vhd);color:#fff;z-index:5;
+  box-shadow:var(--arco),0 2px 6px rgba(78,18,40,.38)}
+/* O `--arco` existe para esta linha: `.msdot.cheia:hover` tem mais
+   especificidade (duas classes e uma pseudo-classe) e, sem ela, passar o
+   rato por cima de uma garrafa encontrada APAGAVA-LHE o arco. Escrever o
+   arco outra vez aqui era ficar com duas versões dele para discordarem
+   uma da outra um dia. */
+.msdot.achada:hover{box-shadow:var(--arco),0 5px 10px rgba(78,18,40,.42)}
+/* O vazio durante a procura: continua a ver-se — a estante é a mesma e os
+   buracos fazem parte dela — mas deixa de competir com a resposta. Volta
+   a si ao passar o dedo/rato, que continua a ser onde se arruma uma
+   garrafa. */
+.ml.procurando .msdot.vazia{opacity:.4}
+body:not(.readonly) .ml.procurando .msdot.vazia:hover{opacity:1}

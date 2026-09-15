@@ -2322,16 +2322,21 @@ function mapaEstanteHTML(l,gs,d){
     const slots=info.slots.map(s=>{
       const k=String(s.lugar),lista=occ[k]||[];
       const pos=` style="${slotGridStyle(s)}"`;
-      const extra=(s.encosto?' encosto':'')+(s.topo?' emcima':'');
+      const extra=(s.encosto?' encosto encosto-'+s.encosto:'')+(s.topo?' emcima':'');
       if(!lista.length)return `<button class="msdot vazia${extra}"${pos}
         onclick="mapaLugarVazio(${l.id},'${escJs(p.nome)}','${escJs(k)}')"
         title="${esc(posicaoTxt(p.nome,k))} — vazio"><span class="msdot-id">${esc(k)}</span></button>`;
       const passam=d.filtrando?lista.filter(g=>d.okG.has(g.id)):lista;
       const g=passam[0]||lista[0],v=IDXV[g.vinho_id]||{nome:'?'};
+      /* A procura tem de se ver no DESENHO e não só na contagem do
+         cabeçalho: `achada` é o que passa (arco à volta), `fora` o que
+         está ocupado por garrafa que não passa (apagado). Ver "O LUGAR
+         DURANTE A PROCURA" no style.css. */
+      const achada=d.filtrando&&passam.length>0;
       // a moldura de madeira é da GARRAFA (`caixa_madeira`): um quadrado
       // de madeira na mesma célula, por trás do círculo
       const cx=g.caixa_madeira?`<span class="mscx" aria-hidden="true"${pos}></span>`:'';
-      return `${cx}<button class="msdot cheia${lista.length>1?' conflito':''}${d.filtrando&&!passam.length?' fora':''}${extra}"${pos}
+      return `${cx}<button class="msdot cheia${lista.length>1?' conflito':''}${achada?' achada':''}${d.filtrando&&!passam.length?' fora':''}${extra}"${pos}
         onclick="mapaPopupToggle(${l.id},'${escJs(p.nome)}','${escJs(k)}',this,event)"
         onmouseenter="mapaPopupHover(${l.id},'${escJs(p.nome)}','${escJs(k)}',this)" onmouseleave="mapaPopupSair()"
         title="${esc(v.nome)} ${v.ano||''} · ${esc(posicaoTxt(p.nome,k))}${g.caixa_madeira?' · em caixa de madeira':''}${lista.length>1?` · ${lista.length} garrafas`:''}">
@@ -2347,7 +2352,15 @@ function mapaEstanteHTML(l,gs,d){
     </div>`;
   };
   const temCaixa=db.garrafas.some(g=>g.local_id===l.id&&naGarrafeira(g)&&g.caixa_madeira);
+  /* O NICHO — o vão entre o fim das prateleiras e a parede — só se desenha
+     onde há mesmo lugares de encosto. A folga de uma coluna existe sempre
+     (é o `+2` do `colsw`), mas desenhar um recesso onde não cabe garrafa
+     nenhuma é sombrear uma coluna vazia ao lado do móvel. */
+  const encDir=par.dir&&prats.some(p=>p.encosto_dir);
+  const encEsq=par.esq&&prats.some(p=>p.encosto_esq);
   return `<div class="ml-est${par.dir?' pd-dir':''}${par.esq?' pd-esq':''}${par.topo?' pd-topo':''}">
+    ${encDir?'<span class="pd-nicho dir" aria-hidden="true"></span>':''}
+    ${encEsq?'<span class="pd-nicho esq" aria-hidden="true"></span>':''}
     ${par.topo?'<span class="pd-h" aria-hidden="true"></span>':''}
     ${par.dir?'<span class="pd-v dir" aria-hidden="true"></span>':''}
     ${par.esq?'<span class="pd-v esq" aria-hidden="true"></span>':''}
@@ -2372,6 +2385,28 @@ function posicionarParedes(){
   const a=est.getBoundingClientRect(),b=e.getBoundingClientRect();
   est.style.setProperty('--pd-l',Math.max(0,b.left-a.left).toFixed(1)+'px');
   est.style.setProperty('--pd-r',Math.max(0,a.right-b.right).toFixed(1)+'px');
+  /* O NICHO vai só do primeiro ao último encosto, e é por isso que também
+     se mede: a parede corre o móvel todo (é uma parede), mas o recesso
+     desenhado onde não cabe garrafa nenhuma é uma coluna sombreada a
+     acompanhar a estante inteira sem dizer nada — e, numa estante alta com
+     encostos só lá em cima, era o que mais saltava à vista. Ao parar no
+     último, o recesso passa a ser o sítio daquelas garrafas.
+
+     A folga de meio lugar em cada ponta é para o recesso não ficar rente à
+     garrafa: um vão rente lê-se como moldura dela, não como o espaço onde
+     ela está. */
+  const folga=(parseFloat(getComputedStyle(est).getPropertyValue('--slot'))||34)*.5;
+  ['dir','esq'].forEach(lado=>{
+    const n=est.querySelector('.pd-nicho.'+lado);
+    if(!n)return;
+    const ds=est.querySelectorAll('.msdot.encosto-'+lado);
+    if(!ds.length){n.classList.remove('pos');return;}
+    let t=Infinity,b2=-Infinity;
+    ds.forEach(d=>{const r=d.getBoundingClientRect();t=Math.min(t,r.top);b2=Math.max(b2,r.bottom);});
+    n.style.setProperty('--nc-t',Math.max(0,t-a.top-folga).toFixed(1)+'px');
+    n.style.setProperty('--nc-b',Math.max(0,a.bottom-b2-folga).toFixed(1)+'px');
+    n.classList.add('pos');
+  });
 }
 /* As garrafas que estão NESTE local mas sem um lugar válido no desenho.
    Ficam FORA do cartão e FECHADAS (`<details>`): são uma lista que pode
@@ -2396,7 +2431,7 @@ function mapaExtrasHTML(l,gs,d){
 function mapaLocalHTML(x,d){
   const l=x.l,pseudo=l.id<0,vis=d.visiveis,varios=vis.length>1;
   const i=vis.findIndex(y=>y.l.id===l.id);
-  return `<div class="ml" style="--lc:${esc(l.cor||'#7b1f3d')}">
+  return `<div class="ml${d.filtrando?' procurando':''}" style="--lc:${esc(l.cor||'#7b1f3d')}">
     <div class="ml-bar">
       <button class="ml-nav" onclick="mapaLocalIr(-1)" aria-label="Local anterior"${varios?'':' disabled'}>‹</button>
       <div class="ml-t">
@@ -5517,8 +5552,14 @@ function renderLocalLayoutEditor(){
     const lados=PAREDES_LADOS.filter(([id])=>id!=='topo'&&LOC_PAREDES[id]);
     if(!lados.length)return '';
     const num=numeroDoNivel(p.nome,i);
+    /* A MESMA pele do "Encaixa na de baixo" (`ll-enc`) e não um `.chk`
+       genérico: dentro de um modal, `.mbox label` ganha a um `.chk` (duas
+       classes contra uma) e punha isto em MAIÚSCULAS a 10px, em bloco e
+       sem quebrar linha — o rótulo saía pela borda do cartão fora ("CABE
+       U…") com a caixa nativa azul por baixo. Duas linhas irmãs no mesmo
+       cartão têm de se ler como irmãs. */
     return `<div class="ll-encosto">${lados.map(([id,nm])=>`
-      <label class="chk"><input type="checkbox"${(id==='dir'?p.encosto_dir:p.encosto_esq)?' checked':''}
+      <label class="ll-enc ll-enc-pd"><input type="checkbox"${(id==='dir'?p.encosto_dir:p.encosto_esq)?' checked':''}
         onchange="locSetEncosto(${i},'${id}',this.checked)"><span>Cabe uma garrafa à ${nm.toLowerCase()} <i>(lugar ${num}${id==='dir'?'D':'E'})</i></span></label>`).join('')}</div>`;
   };
   const uma=LOC_LAYOUT_EDIT.length<=1;
@@ -5532,7 +5573,7 @@ function renderLocalLayoutEditor(){
       <div class="note">Se o móvel está encostado a uma parede, dá para aproveitar o vão entre o fim das prateleiras e ela.</div>
       <div class="segbtns">${PAREDES_LADOS.map(([id,nm])=>
         `<button type="button" class="segbtn${LOC_PAREDES[id]?' on':''}" onclick="locSetParede('${id}',${LOC_PAREDES[id]?'false':'true'})">${nm}${LOC_PAREDES[id]?' ✓':''}</button>`).join('')}</div>
-      ${LOC_PAREDES.topo?`<div class="ll-odd"><span>Garrafas em cima do último nível</span>
+      ${LOC_PAREDES.topo?`<div class="ll-topo"><span>Garrafas em cima do móvel</span>
         <input type="number" inputmode="numeric" min="0" max="60" value="${esc(LOC_TOPO)}" oninput="locSetTopoCap(this.value)" aria-label="Quantas garrafas cabem em cima"></div>
         <div class="note">Ficam numeradas T1, T2… e encostadas à parede, sem mexer na numeração dos níveis.</div>`:''}
     </div>`;
@@ -6702,7 +6743,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='82';
+const APP_BUILD='84';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
