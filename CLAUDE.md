@@ -585,6 +585,21 @@ vão, que é o que dá sentido aos outros dois:
   uma sétima coluna da estante. E **vazio cala-se**: a tracejado cheio, seis
   buracos faziam a coluna mais forte do ecrã a dizer "não tenho nada aqui".
 
+**O móvel acaba UMA vez, e é em cima** (`.est-topo`). A fila de cima teve
+uma tábua de madeira colada por baixo, a fazer de tampo — e com o tecto
+(`.pd-h`) por cima dela ficavam duas barras a dizer a mesma coisa, uma de
+cada lado das garrafas: o fim do móvel desenhado a dobrar. Fica só o
+tecto; estas garrafas ficam entre o último nível e ele, que é onde elas
+estão. O que as separa do móvel é o VÃO — o `padding-bottom` da
+`.est-topo` — e não mais madeira.
+
+**E a fila de cima fica CENTRADA**, como todas as outras. Encostava-se à
+parede que houvesse (era o `alinha` do `prateleiraTopo`, que já não
+existe), e o que se lia não era uma fila em cima do móvel: era uma
+prateleira torta, com todos os níveis centrados e esta a fugir para um
+lado. Quem diz que estas garrafas estão em cima é o sítio onde a fila
+está — acima de tudo, debaixo do tecto — não o canto a que encosta.
+
 O rótulo da fila de cima **não leva dourado**. Levou, e é o erro clássico
 nesta app: o dourado é a distinção do VINHO (menção, nota do Vivino) e
 gastá-lo a dizer "esta fila fica mais acima" é gastar a única cor que quer
@@ -597,6 +612,11 @@ baixo" (`ll-enc`). Um `.chk` genérico não serve: dentro de um modal,
 `.mbox label` ganha-lhe (duas classes contra uma) e punha o rótulo em
 MAIÚSCULAS a 10px, em bloco e sem quebrar linha — saía pela borda do cartão
 fora ("CABE U…") com a caixa nativa azul por baixo.
+
+**Isto vale para QUALQUER visto dentro de um modal**, e foi o que apanhou o
+"Vem em caixa de madeira" do modal da garrafa: nasceu `.chk` e saía
+exatamente assim ("VEM …" cortado, a caixa nativa azul por baixo). É o
+mesmo visto do editor do local, tem de se ver igual — `ll-enc`, sempre.
 
 Com a procura ligada, só se anda pelos locais com garrafas que passam nela
 (a contagem passa a "4 encontradas · de 35") e a estante responde em **três

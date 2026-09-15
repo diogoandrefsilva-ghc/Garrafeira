@@ -615,11 +615,14 @@ function prateleiraLayoutInfo(p,opt){
     if(p.encosto_dir)encosto.push({lugar:p.cod_dir,col:2*colsw-1,row:fundo,span:2,encosto:'dir'});
     if(p.encosto_esq)encosto.push({lugar:p.cod_esq,col:1,row:fundo,span:2,encosto:'esq'});
   }
-  // A fila em cima do móvel: encostada à parede que houver, e numerada
-  // T1…Tn (ver `chaveLugarLayout`).
+  /* A fila em cima do móvel: CENTRADA como qualquer outra prateleira, e
+     numerada T1…Tn (ver `chaveLugarLayout`). Já se encostou à parede que
+     houvesse — e o que se lia não era uma fila em cima do móvel, era uma
+     prateleira torta: todos os níveis centrados e este a fugir para um
+     lado. Quem diz que estas garrafas estão em cima é o sítio onde a fila
+     está (acima de tudo, sob o tecto), não o canto a que encosta. */
   if(!preview&&p&&p.topo){
-    const offT=p.alinha==='dir'?2*(colsw-capacidade):(p.alinha==='esq'?0:off);
-    slots=Array.from({length:capacidade},(_,i)=>({lugar:'T'+(i+1),col:offT+2*i+1,row:1,span:2,topo:true}));
+    slots=Array.from({length:capacidade},(_,i)=>({lugar:'T'+(i+1),col:off+2*i+1,row:1,span:2,topo:true}));
     return {formato:'fila',mais_em,capacidade,base:0,slots,cols,colsw,rows:1,gridCols:2*colsw,span:2,topo:true};
   }
   if(formato==='sobrepostos'){
@@ -804,16 +807,14 @@ function topoLocal(l){
 }
 /* A fila de cima do móvel é uma prateleira A FINGIR: não está no array
    (não tem `base`, não numera nada) e existe só para se desenhar e para
-   as garrafas lhe poderem apontar. `alinha` encosta-a à parede que
-   houver — é assim que o L ao contrário se fecha no canto. */
+   as garrafas lhe poderem apontar. Leva o `colsw` do móvel, que é o que a
+   deixa centrada na mesma caixa dos níveis todos. */
 function prateleiraTopo(l){
   const cap=topoLocal(l);
   if(!cap)return null;
-  const par=paredesLocal(l);
   const prats=layoutLocal(l);
   return {nome:'Em cima',origem:'Em cima',capacidade:cap,formato:'fila',mais_em:'cima',
     encaixe:false,ondulada:false,topo:true,
-    alinha:par.dir?'dir':(par.esq?'esq':'centro'),
     colsw:(prats[0]&&prats[0].colsw)||cap+2};
 }
 // Todos os lugares que NÃO são da numeração corrida, para as contagens.
@@ -3967,8 +3968,14 @@ function abrirGarrafa(gid,vinhoId){
     </div>
     <label>Comprada em</label>
     <input type="date" id="g-comprado" value="${esc(g&&g.comprado_em?g.comprado_em:'')}">
-    ${TEM_CAIXA_MADEIRA?`<label class="chk"><input type="checkbox" id="g-caixa"${g&&g.caixa_madeira?' checked':''}>Vem em caixa de madeira</label>
-    <div class="note">O lugar desta garrafa desenha-se em madeira em vez do círculo — em qualquer nível, e é a ela que pertence, não ao local.</div>`:''}
+    ${/* A MESMA pele do "Encaixa na de baixo"/"Cabe uma garrafa à direita"
+         do editor do local (`ll-enc`) e não um `.chk` genérico: dentro de
+         um modal, `.mbox label` ganha a um `.chk` (duas classes contra uma)
+         e punha o rótulo em MAIÚSCULAS a 10px, em bloco e sem quebrar
+         linha — saía pela borda do cartão fora ("VEM …") com a caixa
+         nativa azul por baixo. É o mesmo visto, tem de se ver igual. */
+      TEM_CAIXA_MADEIRA?`<label class="ll-enc"><input type="checkbox" id="g-caixa"${g&&g.caixa_madeira?' checked':''}><span>Vem em caixa de madeira</span></label>
+    <div class="note g-caixa-nota">O lugar desta garrafa desenha-se em madeira em vez do círculo — em qualquer nível, e é a ela que pertence, não ao local.</div>`:''}
     <div class="macoes">
       <button class="btn prim" id="g-btn" onclick="guardarGarrafa(${gid||0},${vid})">Guardar</button>
       ${gid?`<button class="btn danger" onclick="apagarGarrafa(${gid})">🗑 Apagar</button>`:''}
@@ -6743,7 +6750,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='84';
+const APP_BUILD='85';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
