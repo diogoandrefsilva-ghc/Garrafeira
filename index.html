@@ -124,26 +124,11 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 
   <!-- ═══ DETALHE (lista completa, organizada, com a procura) ═══ -->
   <section class="sec" id="s-detalhe">
-    <div class="dbar">
-      <span class="fcount" id="det-count"></span>
-      <div class="dbar-a">
-        <div class="segbtns">
-          <button class="segbtn on" id="seg-regiao" onclick="detAgrupar('regiao')">Região</button>
-          <button class="segbtn" id="seg-ano" onclick="detAgrupar('ano')">Ano</button>
-          <button class="segbtn" id="seg-casta" onclick="detAgrupar('casta')">Casta</button>
-        </div>
-        <!-- Lista ou grelha. Ortogonal ao agrupamento acima: o que muda é o
-             cartão, não os grupos. Só ícones — os dois desenhos dizem-se
-             sozinhos e o nome por extenso partia a barra numa terceira
-             linha no telemóvel. -->
-        <div class="segbtns">
-          <button class="segbtn ico on" id="seg-lista" onclick="detVista('lista')" title="Ver em lista">☰</button>
-          <button class="segbtn ico" id="seg-grelha" onclick="detVista('grelha')" title="Ver em grelha">▦</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- A mesma procura vive aqui e em Locais (posicionarFiltros move este
+    <!-- A PROCURA VEM PRIMEIRO. Era a barra da lista que abria o separador
+         e a procura vinha por baixo; é ao contrário que se trabalha —
+         escreve-se o que se procura e só depois se decide como arrumar o
+         que sobrou. É também a ordem do Catálogo da WineCatalog.
+         A mesma procura vive aqui e em Locais (posicionarFiltros move este
          nó de sítio ao trocar de separador).
          TRÊS ANDARES, e a ordem é a das perguntas que se fazem: fechada é
          uma linha só; o primeiro andar abre a PROCURA LIVRE e mais nada; o
@@ -174,6 +159,35 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       </div>
       <button class="fmais" id="f-mais" onclick="filtrosMais()"></button>
       <div class="factivos" id="f-activos"></div>
+    </div>
+
+    <!-- A barra da lista, e NÃO um cartão: a procura já é o cartão que está
+         por cima, e dois cartões encostados um ao outro liam-se como dois
+         painéis quando isto é só a legenda da lista que vem a seguir.
+         Mesmo desenho do Catálogo da WineCatalog: a contagem à esquerda, os
+         comandos à direita.
+         O ⇅ diz que os três botões a seguir arrumam a lista — sem ele
+         "Região · Ano · Casta" lê-se como mais um filtro, encostado aos
+         filtros que estão mesmo por cima. É uma MARCA, não um interruptor:
+         não há ascendente/descendente para trocar (ver `agruparVinhos`). -->
+    <div class="dbar" id="det-barra">
+      <span class="fcount" id="det-count"></span>
+      <div class="dbar-a">
+        <div class="segbtns">
+          <span class="segico" aria-hidden="true">⇅</span>
+          <button class="segbtn on" id="seg-regiao" onclick="detAgrupar('regiao')">Região</button>
+          <button class="segbtn" id="seg-ano" onclick="detAgrupar('ano')">Ano</button>
+          <button class="segbtn" id="seg-casta" onclick="detAgrupar('casta')">Casta</button>
+        </div>
+        <!-- Lista ou grelha. Ortogonal ao agrupamento ao lado: o que muda é
+             o cartão, não os grupos. Só ícones — os dois desenhos dizem-se
+             sozinhos e o nome por extenso partia a barra numa terceira
+             linha no telemóvel. -->
+        <div class="segbtns">
+          <button class="segbtn ico on" id="seg-lista" onclick="detVista('lista')" title="Ver em lista">☰</button>
+          <button class="segbtn ico" id="seg-grelha" onclick="detVista('grelha')" title="Ver em grelha">▦</button>
+        </div>
+      </div>
     </div>
 
     <div id="detalhe-grupos"></div>

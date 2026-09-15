@@ -158,13 +158,28 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
 .rdet-lista .vcard{box-shadow:none}
 
 /* ── DETALHE (organizado por região/ano) ────────────────────────── */
-.dbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
-  background:var(--card);border:1px solid var(--bo);border-radius:99px;padding:9px 9px 9px 16px;margin-bottom:16px;box-shadow:var(--sh)}
+/* A barra da lista NÃO é um cartão. Era — e com a procura a passar para
+   cima dela ficavam dois cartões encostados, que se liam como dois painéis
+   quando isto é só a legenda da lista que vem a seguir. Sem moldura, a
+   contagem e os comandos ficam a flutuar sobre o papel e o cartão que se vê
+   é o da procura, que é o que se usa. Mesmo desenho da `.cat-barra` do
+   Catálogo da WineCatalog. */
+.dbar{display:flex;align-items:center;justify-content:space-between;gap:10px 12px;flex-wrap:wrap;
+  margin:0 2px 14px}
 /* A contagem à ESQUERDA: é o primeiro número que se lê ao entrar aqui, e
    ficava encostado às setas do agrupamento do lado direito. */
 .dbar .fcount{text-align:left;flex:1 1 auto}
 .dbar-a{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.segbtns{display:flex;border:1px solid var(--bo);border-radius:99px;overflow:hidden;flex-shrink:0;background:var(--bg)}
+/* Os grupos de botões ganham o fundo de CARTÃO que a barra perdeu: sem
+   moldura por baixo, um botão em tom de papel sobre papel deixava de se ler
+   como um comando. */
+.segbtns{display:flex;align-items:center;border:1px solid var(--bo);border-radius:99px;
+  overflow:hidden;flex-shrink:0;background:var(--card);box-shadow:var(--sh)}
+/* A marca do que os três botões a seguir fazem: arrumam a lista. Sem ela
+   "Região · Ano · Casta" lê-se como mais um filtro, logo por baixo dos
+   filtros a sério. Não é botão — não há ascendente/descendente para
+   trocar; a ordem DENTRO de cada grupo é sempre a nota do Vivino. */
+.segico{padding:0 2px 0 11px;font-size:12px;color:var(--mu);line-height:1;user-select:none}
 .segbtn{padding:7px 14px;font-size:12px;font-family:inherit;border:none;background:none;color:var(--mu);cursor:pointer;font-weight:600;transition:all .15s}
 .segbtn.on{background:var(--vh);color:#fff}
 /* Os dois botões da vista são ícones: mais estreitos, e uma barra que já

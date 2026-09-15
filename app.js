@@ -959,7 +959,9 @@ function posicionarFiltros(nome){
   const f=document.getElementById('filtros');
   if(!f)return;
   if(nome==='detalhe'){
-    const box=document.getElementById('detalhe-grupos');
+    // ANTES da barra da lista, não antes dos grupos: escreve-se o que se
+    // procura e só depois se decide como arrumar o que sobrou.
+    const box=document.getElementById('det-barra');
     if(box&&f.nextSibling!==box)box.parentNode.insertBefore(f,box);
   }else if(nome==='locais'){
     const box=document.getElementById('mapa');

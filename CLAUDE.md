@@ -108,9 +108,11 @@ os filtros vivem agora.
 + chips + pastilhas) — não duas cópias com ids repetidos, que não davam em
 HTML válido nem em `getElementById` a funcionar nos dois. `posicionarFiltros`
 muda-o de sítio dentro do `tab()`: fica dentro de `#s-detalhe` por defeito no
-HTML (depois da organização/ordenação — texto que se lê antes de agrupar) e
-sobe para `#s-locais` (antes do `#mapa`) quando se entra lá; ao voltar a
-Detalhe, desce outra vez. Por ser o mesmo `<input>`, o texto e os filtros
+HTML — **em PRIMEIRO, antes da barra da lista** (`#det-barra`) — e sobe para
+`#s-locais` (antes do `#mapa`) quando se entra lá; ao voltar a Detalhe, desce
+outra vez. A ordem já foi a inversa (a barra por cima, a procura por baixo) e
+está trocada de propósito: escreve-se o que se procura e só DEPOIS se decide
+como arrumar o que sobrou. É também a ordem do Catálogo da WineCatalog. Por ser o mesmo `<input>`, o texto e os filtros
 ligados não se perdem ao trocar de separador.
 
 ### O painel tem TRÊS ANDARES, e sobe-se um de cada vez
@@ -530,6 +532,24 @@ linguagem visual". `renderDetalhe` passa os termos (`termosProcura()`) ao
 casta (`agruparVinhos`, `detAgrupar`) — **sem filtro nenhum** por defeito
 (a lista toda), e com a mesma organização mas só os vinhos que passam na
 procura quando ela tem alguma coisa ligada (`haFiltros()`).
+
+**A barra da lista (`.dbar`) NÃO é um cartão** — era, e com a procura a
+passar para cima dela ficavam dois cartões encostados que se liam como dois
+painéis, quando isto é só a legenda da lista que vem a seguir. Sem moldura,
+o cartão que se vê é o da procura, que é o que se usa; a contagem e os
+comandos flutuam sobre o papel. Mesmo desenho da `.cat-barra` do Catálogo da
+WineCatalog: contagem à esquerda, comandos à direita. Em troca, os grupos de
+botões (`.segbtns`) ganham o fundo de CARTÃO que a barra perdeu — um botão em
+tom de papel sobre papel deixava de se ler como um comando.
+
+A ordem dentro dela é **contagem · agrupamento · vista**, e o agrupamento
+leva um **⇅** à frente (`.segico`). É uma MARCA, não um interruptor: diz que
+os três botões a seguir arrumam a lista, porque sem ele "Região · Ano ·
+Casta" lia-se como mais um filtro, encostado aos filtros que estão mesmo por
+cima. Não há ascendente/descendente para trocar — a ordem DENTRO de cada
+grupo é sempre a nota do Vivino (`ordenarPorVivino`), e o que estes três
+botões escolhem é por que critério se AGRUPA (`agruparVinhos`). Se um dia
+houver ordenação a sério, é este ⇅ que passa a interruptor.
 
 **Dentro dos grupos há duas vistas: lista ou grelha** (`DET_VISTA`,
 `detVista`, os dois botões de ícone na `.dbar`). É **ortogonal** ao
