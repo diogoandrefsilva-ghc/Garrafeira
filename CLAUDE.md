@@ -115,51 +115,52 @@ está trocada de propósito: escreve-se o que se procura e só DEPOIS se decide
 como arrumar o que sobrou. É também a ordem do Catálogo da WineCatalog. Por ser o mesmo `<input>`, o texto e os filtros
 ligados não se perdem ao trocar de separador.
 
-### O painel tem TRÊS ANDARES, e sobe-se um de cada vez
-Era tudo ou nada: um botão "Filtros" e, atrás dele, doze filtros abertos de
-uma vez. Doze decisões à frente de quem só queria escrever "crasto". Agora
-(`FILTROS_ABERTO`/`FILTROS_NIVEL`, `filtrosMais`) cada degrau é uma pergunta
-maior do que a anterior:
+### O painel abre numa FITA de campos, não numa pilha de grupos
+Já foi tudo ou nada (um botão "Filtros" e doze filtros abertos por trás
+dele) e já foi por **andares** (a procura, depois cor/região/castas,
+depois os outros nove). O problema dos andares era o mesmo do "tudo": ao
+subir ao segundo, três grupos com todas as suas opções abertas ao mesmo
+tempo davam um painel mais alto do que o ecrã, e a lista — que é o que se
+está a filtrar — desaparecia por baixo dele.
 
-- **0 — fechado.** Uma linha só (`.fmin`), e o que ela diz é o que está a
-  filtrar ("🔍 Tinto · Touriga Nacional + Syrah"), não a palavra "Filtros":
-  é a única coisa no ecrã a dizê-lo, e um rótulo genérico escondia o que
-  estava a acontecer por baixo.
-- **1 — a procura livre e mais nada.** É o que se usa em nove de cada dez
-  vezes: um pedaço do nome chega.
-- **2 — + cor, região e castas**, em cartões com contagens. As três de
-  sempre, e é aqui que se passeia pela garrafeira.
-- **3 — + os outros nove** (local, produtor, nº de castas, ano, menção,
-  preço, grau, maturação, Vivino), em chips.
+Agora são **dois** estados e uma fita:
+- **fechado.** Só a procura livre, que fica **sempre** visível, e o botão
+  "Filtros" com o número de filtros ligados ao lado.
+- **aberto** (`FILTROS_ABERTO`, `filtrosToggle`). Por baixo da procura
+  aparece uma **fita horizontal** (`.fcampos`, `#f-campos`) com os doze
+  campos, um por pastilha, que rola de lado. Tocar num campo abre **os
+  valores DESSE campo e só desse** por baixo dela (`FILTRO_CAMPO`,
+  `abrirCampo`, `#f-dominio`); tocar no mesmo outra vez fecha-os.
 
-Sobe-se um degrau de cada vez e desce-se de uma vez só (o ▲ ao lado da
-procura fecha tudo, de qualquer andar): a subida é uma pergunta a seguir à
-outra, a descida é "já não quero nada disto". **O ANDAR fica gravado à parte
-do ABERTO/FECHADO** (`gf_filtros_nivel`/`gf_filtros_aberto`) — quem trabalha
-sempre com tudo aberto reabre no 3, quem só procura reabre no 1, e os dois
-têm de poder fechar a barra sem perder o seu degrau. É por isso que o
-arranque impõe a classe ao `#filtros` antes de o `carregar()` responder:
-sem isso a barra abria-se e fechava-se outra vez assim que os dados
-chegavam.
+É isso que mantém o painel baixo: o que ocupa altura é um campo de cada
+vez, não três. E a fita diz quais os campos que estão a filtrar sem se
+abrir nenhum — a pastilha acende (`.fcampo.ativo`) e leva a contagem de
+valores escolhidos (`.fcn`).
+
+**Um campo aberto é `.fcampo.aberto` (bordô cheio), um campo COM FILTROS é
+`.fcampo.ativo` (contorno bordô).** São coisas diferentes e têm de se ver
+como diferentes: um campo pode estar aberto sem nada escolhido (acabei de
+lhe tocar) e pode estar a filtrar sem estar aberto (é o caso normal).
+
+**O ESTADO fica gravado** (`gf_filtros_aberto`), o CAMPO ABERTO não: o
+primeiro é como a pessoa gosta de trabalhar, o segundo é onde ela ia a
+meio de uma pergunta. Por isso o arranque impõe a classe ao `#filtros`
+antes de o `carregar()` responder — sem isso a barra abria-se e fechava-se
+outra vez assim que os dados chegavam.
 
 **O `<input>` da procura vive no `index.html` e NUNCA é reescrito por JS.**
-Quem se repinta a cada tecla são os contentores vazios (`#f-grupos`,
-`#f-selects`, `#f-activos`) — reescrever o campo perdia o cursor a meio de
-uma palavra. Pela mesma razão os andares são uma CLASSE no contentor
-(`n0`…`n3`) e não `style.display` espalhado por JS: o que cada andar mostra
-lê-se no `style.css`, num sítio só.
+Quem se repinta a cada tecla são os contentores vazios (`#f-campos`,
+`#f-dominio`, `#f-activos`) — reescrever o campo perdia o cursor a meio de
+uma palavra.
 
 `renderFiltrados()` continua a ser o despachante: atualiza o painel e volta
 a desenhar **Detalhe e Locais os dois**, sem tentar adivinhar qual está
 aberto (o mesmo raciocínio do `renderLista()`).
 
-**AS PASTILHAS DIZEM O QUE NÃO SE VÊ DO ANDAR ONDE SE ESTÁ.** É a regra
-toda: um filtro cujo grupo está aberto já se lê no cartão aceso, e
-repeti-lo por baixo era dizer a mesma coisa duas vezes — foi sempre por
-isso que elas desapareciam com o painel aberto. Com três andares a mesma
-regra passa a ser por FILTRO e não por painel (`nivelDoFiltro`): no andar 1
-as castas escolhidas aparecem em pastilha, no andar 2 deixam de aparecer e
-ficam só as do andar 3.
+**AS PASTILHAS DIZEM O QUE NÃO SE VÊ.** É a regra de sempre, agora fácil:
+mostram-se todos os filtros ligados EXCETO os do campo que está aberto —
+esses já se leem nos cartões acesos por cima, e repeti-los por baixo era
+dizer a mesma coisa duas vezes.
 
 ### Três filtros são LISTAS, nove são um valor só
 Cor, região e castas aceitam mais do que um valor; os outros nove não. Não é
@@ -169,20 +170,27 @@ alguma coisa. "Tinto ou Branco" e "Douro ou Alentejo" são perguntas
 legítimas; "2019 ou 2021" responde-se melhor pela organização por ano, e
 "Reserva ou Grande Reserva" quase nunca se pergunta.
 
-Por isso as três vivem no andar 2 em **cartões com contagem** (`FGRUPOS`,
-`grupoHTML`) e as outras nove no andar 3, em chips de um valor com o
-`<select>` **nativo por cima, invisível** (`opacity:0;inset:0`): o desenho é
-nosso, o seletor continua a ser o do telemóvel — um dropdown feito à mão em
-JS era mais código e pior no iOS.
+Quem sabe a diferença é o próprio `F`: `ehLista(k)` pergunta se o valor
+guardado é um array, e `campoToggle` acrescenta/tira num caso e troca no
+outro (tocar no valor já escolhido limpa-o — é como se desmarca um campo
+de valor único sem um "qualquer" postiço na lista).
 
-Os cartões são uma **GRELHA de duas colunas**, não um `flex-wrap`, e é a
-mesma pedra da WineCatalog: com três por linha "Península de Setúbal" e
-"Cabernet Sauvignon" chegam ao ecrã cortadas a meio, e um filtro que não se
-lê não se escolhe; com `flex-grow`, o último cartão de uma linha ímpar
+**Os doze passam pelo MESMO desenho** — a fita, os cartões com contagem —
+e os `<select>` nativos invisíveis por cima de chips, que os nove
+costumavam usar, desapareceram com eles. Um seletor nativo não mostra
+contagens, e a contagem é o que faz este painel valer a pena.
+
+Os cartões são uma **GRELHA**, não um `flex-wrap`, e é a mesma pedra da
+WineCatalog: com `flex-grow`, o último cartão de uma linha ímpar
 estica-se sozinho de ponta a ponta. E o texto QUEBRA em vez de cortar —
 com reticências, "Alicante Bousc…" e "Alicante Branco" são o mesmo cartão.
+As colunas são `auto-fill`/`minmax(150px,1fr)` e não duas fixas: duas
+colunas fixas num ecrã largo davam um cartão de 700px com "Alentejo 3" lá
+dentro. O mínimo de 150px é o que garante as DUAS colunas no telemóvel
+(2×150+6 cabe nos ~334px úteis do cartão, 3 não cabem) e o que impede um
+cartão estreito de mais para "Península de Setúbal".
 
-**As CASTAS têm duas regras que os outros dois não podem ter**
+**As CASTAS têm duas regras que os outros não podem ter**
 (`castasRegrasHTML`), porque só nelas a mesma escolha tem mais do que uma
 leitura:
 
@@ -190,12 +198,14 @@ leitura:
   costume) ou os lotes que levam **todas**. É "levar todas", não "ser
   exatamente estas": um lote com uma terceira casta conta. Um vinho tem UMA
   cor e UMA região, "tinto E branco" não existe, e por isso o visto não
-  aparece nos outros dois grupos. Mesmas palavras e mesmo desenho do
-  `p_castas_todas` do Catálogo da WineCatalog, de propósito.
+  aparece nos outros grupos. Mesmas palavras e mesmo desenho do
+  `p_castas_todas` do Catálogo da WineCatalog, de propósito. Só aparece com
+  duas ou mais castas escolhidas — com uma só, as duas leituras dão a mesma
+  lista e o visto era uma decisão falsa.
 - **"só monocasta"** — os vinhos feitos SÓ daquela casta. **Não é um estado
-  novo:** é o `castaN='1'` que já existia no chip "Nº de castas" do andar 3,
-  visto de perto. Um estado, dois sítios — e assim é impossível pedir
-  "várias castas" ali e "só monocasta" aqui e ficar com uma lista vazia por
+  novo:** é o `castaN='1'` que já existia no campo "Nº de castas", visto de
+  perto. Um estado, dois sítios — e assim é impossível pedir "várias
+  castas" ali e "só monocasta" aqui e ficar com uma lista vazia por
   contradição. Aqui é que ele faz falta, porque é aqui que se escolhe a
   casta: "Syrah" + "só monocasta" são "os meus 100% Syrah", que é a pergunta
   a seguir à casta e não uma pergunta sobre números.
@@ -206,25 +216,42 @@ pedir uma lista que não pode existir — e a app respondia "Nada encontrado"
 sem dizer porquê. Ligar uma desliga a outra, e com monocasta ligado o outro
 visto nem aparece.
 
-Com o painel fechado (ou no andar 1), a regra do "todas" lê-se nas
-pastilhas: vão separadas por **+** (`.fjunta`); no costume ficam lado a lado
-como as outras.
+Com o campo das castas fechado, a regra do "todas" lê-se nas pastilhas: vão
+separadas por **+** (`.fjunta`); no costume ficam lado a lado como as outras.
 
-### Os cartões CONTAM e CORTAM (`facetas`)
+### Um campo é UMA definição, usada nos dois sentidos (`valorDe`)
+`valorDe(v,k)` diz que valor (ou valores) um vinho tem para o campo `k`, e
+é a **única** definição disso na app: `passaFiltros` usa-a para decidir se
+um vinho passa, `opcoesCampo` usa-a para contar quantos vinhos dá cada
+opção. Antes eram dois pedaços de código a responder à mesma pergunta —
+um `switch` a filtrar e outro a contar — e duas cópias destas divergem no
+dia em que alguém acrescentar um campo a uma só: o cartão a dizer "Syrah
+28" com a lista a mostrar três vinhos, sem erro nenhum à vista.
+
+Os VALORES possíveis de cada campo saem de `valoresDe(k)` — dos dados
+(cor, região, castas, produtor, ano, local, menção) ou de uma lista fixa
+(preço, grau, Vivino, maturação, nº de castas) — e `rotuloFiltro(k,val)`
+vai lá buscar o nome por extenso para a pastilha.
+
+### Os cartões CONTAM e CORTAM (`opcoesCampo`)
 Cada cartão diz quantos vinhos dá, e é isso que separa este painel de uma
 lista de caixas: escolher deixa de ser adivinhar. Sem os números, qualquer
 escolha podia dar "Nada encontrado" a quem tinha acabado de tocar numa opção
 que a app lhe ofereceu; com eles, um caminho sem saída nem chega a aparecer.
 
 A regra é a da `facetas` da WineCatalog e não é detalhe: **conta-se com os
-OUTROS grupos aplicados mas NÃO com o próprio.** É isso que faz "Branco 7"
-continuar visível depois de se escolher Tinto — senão, escolher uma cor
-apagava todas as outras e não havia como acrescentar uma segunda. Uma opção
-que dê zero não aparece; uma ESCOLHIDA aparece sempre, mesmo a zero, senão
-não havia como a desmarcar.
+OUTROS campos aplicados mas NÃO com o próprio** — é o `ignorar` do
+`passaFiltros`. É isso que faz "Branco 7" continuar visível depois de se
+escolher Tinto — senão, escolher uma cor apagava todas as outras e não
+havia como acrescentar uma segunda. Uma opção que dê zero não aparece; uma
+ESCOLHIDA aparece sempre, mesmo a zero, senão não havia como a desmarcar.
+
+Contar só o campo ABERTO (e não os doze de uma vez) é também o que torna
+isto barato: são doze varreduras da lista a cada tecla se for tudo, uma se
+for só o que está à vista.
 
 As castas em "todas em simultâneo" são a exceção dentro da exceção: deixam
-de ignorar o grupo inteiro e contam POR CIMA das outras castas já escolhidas
+de ignorar o campo inteiro e contam POR CIMA das outras castas já escolhidas
 (só a PRÓPRIA opção é ignorada). De outro modo o cartão dizia "Syrah 28" com
 a lista a mostrar três vinhos. Com "só monocasta" ligado a base já leva o
 `castaN`, e as contagens passam a ser as dos monovarietais de cada casta —
@@ -236,6 +263,7 @@ verdadeiro e a app abria sempre em modo "a filtrar"; e **`esquecerFiltros()`
 repõe os vistos**, porque um visto que sobrevivesse à limpeza era uma regra
 escondida a filtrar por baixo na escolha seguinte.
 
+
 O grupo da cor chama-se **"Cor"** e não "Tipo": é assim que a app já lhe
 chama onde interessa (o `iaCorGuard`, antes de qualquer procura), e é a
 pergunta que uma pessoa faz. Que Espumante e Licoroso não sejam cores é
@@ -244,7 +272,7 @@ chama-se `tipo` e a pergunta chama-se cor.
 
 A **maturação** não filtra por "No ponto" — filtra pelo **terço da janela**:
 *No ponto · a abrir*, *· a meio*, *· a fechar*, mais *Ainda cedo* e *Já
-passou* (`listasFiltro`, valores `ponto:abrir`/`ponto:meio`/`ponto:fechar`).
+passou* (`valoresDe`, valores `ponto:abrir`/`ponto:meio`/`ponto:fechar`).
 "No ponto" sozinho está em quase todos os vinhos e devolvia a lista quase
 inteira; a pergunta que sobra é em que parte da janela se está, e *a fechar*
 é a lista do que se deve beber primeiro. As palavras são as mesmas que a
@@ -547,11 +575,11 @@ separadores são uma pílula em tom de papel (`--bg2`), a procura é um cartão
 BRANCO, a barra da lista não tem moldura nenhuma. Antes eram três lozangos
 brancos do mesmo tamanho e do mesmo feitio empilhados, e nenhum mandava —
 foi essa a queixa. Duas medidas fecham-no:
-- **fechada, a procura tem cantos de PÍLULA** (`.filtros.n0`, 24px) e aberta
-  volta aos cantos do cartão: fechada é uma caixa de procura e é assim que
-  uma caixa de procura se parece; aberta é um painel. 24px e não 99px porque
-  com filtros ligados as pastilhas abrem por baixo, dentro do mesmo cartão,
-  e uma pílula a sério esticava-se num estádio à volta de duas linhas;
+- **a caixa de texto é que tem cantos de PÍLULA** (`.fsearch-box`), dentro
+  do cartão: é assim que uma caixa de procura se parece, e é o que a separa
+  do painel que abre por baixo dela. Foram os CANTOS DO CARTÃO inteiro a
+  mudar de raio conforme estava aberto ou fechado — deixou de fazer falta
+  quando a procura passou a ser uma caixa própria lá dentro, sempre igual;
 - **a SOMBRA fica nas duas.** Tirá-la à fechada foi a primeira tentativa de
   aliviar o topo e deu nisto: `--card` (#fffdfb) sobre `--bg` (#f6f1ea) com
   um bordo `--bo` é diferença a menos — a barra desaparecia no papel. É a
@@ -565,8 +593,18 @@ célula do tamanho de um botão e lia-se como um quarto botão apagado. É uma
 MARCA, não um interruptor: diz que os três botões a seguir arrumam a lista,
 porque sem ele "Região · Ano · Casta" lia-se como mais um filtro, encostado
 aos filtros que estão mesmo por cima. E `.dbar-a` leva `margin-left:auto`
-porque no telemóvel a linha quebra, e um item sozinho com `space-between`
-encosta à ESQUERDA — os comandos ficavam a boiar por baixo da contagem. Não há ascendente/descendente para trocar — a ordem DENTRO de cada
+por causa do `flex-shrink:0`: sem ele, e com `space-between` sozinho, um
+item que encolhe deixava os comandos a boiar.
+
+**A barra é `flex-wrap:nowrap`, e a contagem das GARRAFAS esconde-se abaixo
+dos 560px** (`.det-gar`). Tinha duas alturas: uma com "8 vinhos · 11
+garrafas" e outra com "170 vinhos · 210 garrafas", que quebrava a linha e
+empurrava a ordenação e a vista para baixo — a barra mudava de feitio
+consoante o que o filtro tinha deixado passar. `min-width:0` na contagem
+não o evita: quem decide quebrar a linha num `flex-wrap` é a largura de
+CONTEÚDO de cada item, não o mínimo declarado. O número que fica no
+telemóvel é o dos VINHOS, que é o que a lista mostra; as garrafas
+continuam à vista no painel da procura logo acima. Não há ascendente/descendente para trocar — a ordem DENTRO de cada
 grupo é sempre a nota do Vivino (`ordenarPorVivino`), e o que estes três
 botões escolhem é por que critério se AGRUPA (`agruparVinhos`). Se um dia
 houver ordenação a sério, é este ⇅ que passa a interruptor.
@@ -583,9 +621,12 @@ A grelha (`vinhoGrelhaHTML`) **não é o cartão da lista encolhido — é outra
 pergunta**. Na lista lê-se o que um vinho É (castas, menção, preço,
 maturação, onde está); na grelha procura-se um RÓTULO que já se viu, e por
 isso a garrafa cresce e o resto encolhe até ao que identifica: nome, ano,
-produtor/região, a nota e o primeiro sítio. Ficam de fora os crachás e o
-rodapé por inteiro: numa coluna de 150px cada um é uma linha a mais, e o
-que se perde é a fotografia, que é a razão de a grelha existir. A faixa da
+produtor/região e a NOTA do Vivino, numa linha só dela. Ficam de fora os
+crachás: numa coluna de 150px cada um é uma linha a mais, e o que se perde
+é a fotografia, que é a razão de a grelha existir. **O "onde está" saiu
+daqui** — ele e a nota disputavam a mesma linha, e a nota (que é o que faz
+escolher entre dois rótulos) ficava a competir com um "Sala +1" que já se
+lê na lista e na ficha do vinho. A faixa da
 procura entra nas duas — na grelha com mais razão ainda, que o cartão
 mostra menos — e é a MESMA `trechosMatch`, nunca uma segunda versão mais
 curta; só o CSS a empilha (o nome do campo por cima do trecho), porque

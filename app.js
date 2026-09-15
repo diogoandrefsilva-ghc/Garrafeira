@@ -1214,12 +1214,18 @@ function renderFiltrados(){
    escolher DUAS opções quer dizer alguma coisa. "Tinto ou Branco" e "Douro
    ou Alentejo" são perguntas legítimas; "2019 ou 2021" já se responde
    melhor pela organização por ano, e "Reserva ou Grande Reserva" quase
-   nunca se pergunta. Por isso as três vivem no ANDAR 2 em cartões com
-   contagem (`FGRUPOS`) e as outras nove no andar 3, em chips de um valor.
+   nunca se pergunta. Quem sabe a diferença é o próprio `F`: `ehLista(k)`
+   pergunta se o valor guardado é um array, e o `campoToggle` acrescenta ou
+   tira num caso e troca no outro — tocar no valor já escolhido limpa-o, que
+   é como se desmarca um campo de valor único sem um "qualquer" postiço na
+   lista. Os doze passam pelo MESMO desenho (a fita e os cartões com
+   contagem); os `<select>` nativos que os nove costumavam usar saíram com
+   os andares, porque um seletor nativo não mostra contagens e a contagem é
+   o que faz este painel valer a pena.
    As CASTAS ainda têm uma coisa a mais: só nelas a mesma escolha tem duas
    leituras legítimas — qualquer uma delas (o costume) ou os lotes que levam
    TODAS (`CASTAS_TODAS`). Um vinho tem UMA cor e UMA região; "tinto E
-   branco" não existe, e por isso o visto não aparece nos outros dois.
+   branco" não existe, e por isso o visto não aparece nos outros campos.
    É a mesma decisão, o mesmo desenho e o mesmo vocabulário do Catálogo da
    WineCatalog: quem anda nas duas apps não aprende dois nomes para a mesma
    coisa. */
@@ -1232,43 +1238,269 @@ try{CASTAS_TODAS=localStorage.getItem('gf_castas_todas')==='1';}catch(e){}
 // "a filtrar" com a lista toda lá dentro.
 function filtroLigado(k){const v=F[k];return Array.isArray(v)?v.length>0:!!v;}
 
-/* ── OS TRÊS ANDARES DO PAINEL ──────────────────────────────────────
+/* ── O PAINEL: a procura SEMPRE, os filtros um campo de cada vez ─────
    Doze filtros abertos de uma vez são doze decisões à frente de quem só
-   queria escrever "crasto" — e era o que o botão "Filtros" fazia, tudo ou
-   nada. Agora sobe-se um degrau de cada vez, e cada degrau é uma pergunta
-   maior do que a anterior:
-     0  fechado — uma linha a dizer o que está a filtrar;
-     1  a PROCURA LIVRE e mais nada (é o que se usa em nove de cada dez
-        vezes: um pedaço do nome chega);
-     2  + cor, região e castas — as três de sempre, em cartões com
-        contagens, porque é aqui que se passeia pela garrafeira;
-     3  + os outros nove, em chips (local, produtor, nº de castas, ano,
-        menção, preço, grau, maturação, Vivino).
-   Sobe-se um degrau de cada vez e desce-se de uma vez só, de propósito: a
-   subida é uma pergunta a seguir à outra, a descida é "já não quero nada
-   disto". Fechar é sempre o ▲ ao lado da caixa de procura.
-   O ANDAR fica gravado à parte do ABERTO/FECHADO: quem trabalha sempre com
-   tudo aberto reabre no 3, quem só procura reabre no 1 — e os dois têm de
-   poder fechar a barra sem perder o seu degrau. */
-let FILTROS_ABERTO=false,FILTROS_NIVEL=1;
-try{
-  FILTROS_ABERTO=localStorage.getItem('gf_filtros_aberto')==='1';
-  FILTROS_NIVEL=Math.min(3,Math.max(1,parseInt(localStorage.getItem('gf_filtros_nivel'),10)||1));
-}catch(e){}
-function filtrosGravar(){
-  try{
-    localStorage.setItem('gf_filtros_aberto',FILTROS_ABERTO?'1':'0');
-    localStorage.setItem('gf_filtros_nivel',String(FILTROS_NIVEL));
-  }catch(e){}
+   queria escrever "crasto". Já se tentou escondê-los todos atrás de um
+   botão (tudo ou nada) e já se tentou abri-los por andares — e o andar que
+   mostrava cor + região + castas ao mesmo tempo dava meio ecrã de cartões
+   antes de se chegar à lista.
+   Agora são dois passos e mais nenhum:
+     · a PROCURA LIVRE está sempre à vista — é o que se usa em nove de cada
+       dez vezes, e um pedaço do nome chega;
+     · o botão "Filtros" abre uma FITA horizontal com os doze campos
+       (`.fcampos`). Escolhe-se UM, e só os valores DESSE campo abrem por
+       baixo (`FILTRO_CAMPO`).
+   O que isto ganha é altura: a fita é uma linha, e o painel de valores é o
+   de um campo só em vez dos doze. O que custa é um toque a mais para trocar
+   de campo — e é um toque que se dá poucas vezes, porque quem filtra por
+   região raramente filtra por teor a seguir. */
+let FILTROS_ABERTO=false;
+let FILTRO_CAMPO=null;   // que campo tem os valores abertos, ou nenhum
+try{FILTROS_ABERTO=localStorage.getItem('gf_filtros_aberto')==='1';}catch(e){}
+function filtrosToggle(){
+  FILTROS_ABERTO=!FILTROS_ABERTO;
+  if(!FILTROS_ABERTO)FILTRO_CAMPO=null;
+  try{localStorage.setItem('gf_filtros_aberto',FILTROS_ABERTO?'1':'0');}catch(e){}
+  renderFiltros();
 }
-// Em que andar mora cada filtro. É isto que decide o que se desenha, e
-// também que pastilhas aparecem: ver `renderFiltros`.
-function nivelDoFiltro(k){return (k==='tipo'||k==='regiao'||k==='casta')?2:3;}
-function filtrosAbrir(){FILTROS_ABERTO=true;filtrosGravar();renderFiltros();}
-function filtrosFechar(){FILTROS_ABERTO=false;filtrosGravar();renderFiltros();}
-function filtrosMais(){
-  FILTROS_NIVEL=FILTROS_NIVEL>=3?1:FILTROS_NIVEL+1;
-  filtrosGravar();renderFiltros();
+// Tocar no campo que já está aberto fecha-o: a fita volta a ser uma linha
+// só, que é o estado em que se anda quando não se está a escolher nada.
+function abrirCampo(k){
+  FILTRO_CAMPO=(FILTRO_CAMPO===k)?null:k;
+  renderFiltros();
+}
+
+/* OS DOZE CAMPOS, num sítio só: chave, ícone, nome e se aceita MAIS DO QUE
+   UM valor. Cor, região e castas aceitam; os outros nove não — são as três
+   perguntas que se fazem sempre ("um tinto do Douro de Touriga?") e as
+   únicas onde escolher duas opções quer dizer alguma coisa. "Tinto ou
+   Branco" e "Douro ou Alentejo" são perguntas legítimas; "2019 ou 2021"
+   responde-se melhor pela organização por ano, e "Reserva ou Grande
+   Reserva" quase nunca se pergunta.
+   A ORDEM é a da fita, e não é alfabética: as três de sempre primeiro,
+   porque são as que se abrem. */
+const F_CAMPOS=[
+  ['tipo','🍷','Cor',1],['regiao','🗺️','Região',1],['casta','🍇','Castas',1],
+  ['local','📍','Local',0],['produtor','🏭','Produtor',0],['ano','📅','Ano',0],
+  ['mencao','🏅','Menção',0],['preco','💶','Preço',0],['teor','🌡️','Grau',0],
+  ['janela','⏱️','Maturação',0],['vivino','★','Vivino',0],['castaN','🧬','Nº de castas',0]
+];
+const F_META={};
+F_CAMPOS.forEach(([k,ico,nome])=>{F_META[k]=[ico,nome];});
+function ehLista(k){return Array.isArray(F[k]);}
+// O que está escolhido num campo, sempre como lista — poupa o `if` entre
+// os que são lista e os que não são em cada sítio que lhes toca.
+function ligados(k){const v=F[k];return Array.isArray(v)?v:(v?[v]:[]);}
+
+/* QUE VALOR(ES) ESTE VINHO TEM NESTE CAMPO — e é a ÚNICA definição disto
+   na app. Filtrar e contar são a mesma pergunta feita duas vezes ("este
+   vinho é Tinto?"), e enquanto foram dois blocos de código a resposta podia
+   divergir: bastava alguém corrigir o filtro e esquecer a contagem para o
+   cartão dizer "Tinto 8" com sete vinhos na lista.
+   Um vinho sem valor devolve lista VAZIA, e isso é o que o exclui de
+   qualquer filtro nesse campo — um vinho sem preço médio não está em faixa
+   de preço nenhuma, não está na primeira. */
+function valorDe(v,k){
+  switch(k){
+    case 'tipo':    return v.tipo?[v.tipo]:[];
+    case 'regiao':  return v.regiao?[v.regiao]:[];
+    case 'casta':   return v.castas||[];
+    case 'produtor':return v.produtor?[v.produtor]:[];
+    case 'mencao':  return v.mencao?[v.mencao]:[];
+    case 'ano':     return v.ano?[String(v.ano)]:[];
+    case 'local':   return [...new Set(garrafasDe(v.id,true).map(g=>String(g.local_id)))];
+    case 'castaN':  {const n=(v.castas||[]).length;return [n===0?'0':n===1?'1':'2'];}
+    case 'preco':   return v.preco_medio==null?[]:[String(faixaIndice(v.preco_medio))];
+    case 'teor':    return v.teor==null?[]:[String(faixaTeorIndice(v.teor))];
+    case 'vivino':  return v.vivino_nota==null?[]:[String(faixaVivinoIndice(v.vivino_nota))];
+    /* A maturação não filtra por "No ponto" — filtra pelo TERÇO da janela.
+       "No ponto" sozinho está em quase todos os vinhos e devolvia a lista
+       quase inteira; a pergunta que sobra é em que parte da janela se está.
+       Um vinho no ponto mas sem as duas pontas não tem terço, e por isso
+       não entra em nenhum. */
+    case 'janela':  {
+      const e=janelaBeber(v);
+      if(e!=='ponto')return e?[e]:[];
+      const f=(janelaFase(v)||[])[1];
+      return f?['ponto:'+f]:[];
+    }
+  }
+  return [];
+}
+
+/* OS VALORES POSSÍVEIS DE UM CAMPO, por ordem e com o rótulo que se lê.
+   Os que saem dos DADOS (cor, região, casta, produtor, ano, local, menção)
+   saem sempre do que lá está — assim uma região nova aparece sozinha e
+   nunca fica um filtro a apontar para coisa nenhuma. Os que são FAIXAS
+   (preço, grau, Vivino) e os fechados (maturação, nº de castas) têm lista
+   própria, que é o que os torna perguntas em vez de valores. */
+function valoresDe(k){
+  const comStock=db.vinhos.filter(v=>stockDe(v.id)>0);
+  const dados=()=>[...new Set([].concat(...comStock.map(v=>valorDe(v,k))))];
+  const pt=(a,b)=>String(a).localeCompare(String(b),'pt');
+  switch(k){
+    // As cores pela ordem do vocabulário (`TIPOS`), não alfabética: Tinto
+    // antes de Branco é como se fala de vinho; "Branco · Espumante ·
+    // Frisante · Licoroso · Rosé · Tinto" não é.
+    case 'tipo':{const t=dados();
+      return TIPOS.filter(x=>t.includes(x)).concat(t.filter(x=>!TIPOS.includes(x)).sort(pt))
+        .map(x=>[x,x]);}
+    case 'local':return db.locais
+      .filter(l=>db.garrafas.some(g=>g.local_id===l.id&&naGarrafeira(g)))
+      .map(l=>[String(l.id),l.nome]);
+    case 'ano':return dados().sort((a,b)=>b-a).map(x=>[x,x]);
+    case 'castaN':return [['1','Monocasta'],['2','Várias castas'],['0','Sem castas registadas']];
+    // As palavras são as mesmas que a ficha do vinho escreve (`FASES`) —
+    // quem filtra por uma tem de a reconhecer quando abre o vinho.
+    case 'janela':return [...FASES.map(f=>['ponto:'+f[1],'No ponto · '+f[2]]),
+      ['cedo','Ainda cedo'],['passou','Já passou']];
+    case 'vivino':return FAIXAS_VIVINO.map((f,i)=>[String(i),f.nome]);
+    case 'preco':return FAIXAS_PRECO.map((f,i)=>[String(i),f.nome]);
+    case 'teor':return FAIXAS_TEOR.map((f,i)=>[String(i),f.nome]);
+    default:return dados().sort(pt).map(x=>[x,x]);
+  }
+}
+function rotuloFiltro(k,val){
+  const p=valoresDe(k).find(x=>x[0]===val);
+  return p?p[1]:val;
+}
+
+/* AS CONTAGENS DO CAMPO ABERTO. Cada valor diz quantos vinhos dá, e é isso
+   que separa este painel de uma lista de caixas: escolher deixa de ser
+   adivinhar. Sem os números, qualquer escolha podia dar "Nada encontrado" a
+   quem tinha acabado de tocar numa opção que a app lhe ofereceu; com eles,
+   um caminho sem saída nem chega a aparecer.
+   A regra é a da `facetas` da WineCatalog: conta-se com os OUTROS campos
+   aplicados mas NÃO com o próprio. É isso que faz "Branco 7" continuar
+   visível depois de se escolher Tinto — senão, escolher uma cor apagava
+   todas as outras e não havia como acrescentar uma segunda.
+   Um valor que dê zero não aparece; um ESCOLHIDO aparece sempre, mesmo a
+   zero, senão não havia como o desmarcar.
+   As castas em "todas em simultâneo" são a exceção dentro da exceção:
+   cada casta candidata só conta nos vinhos que TAMBÉM levam as outras já
+   escolhidas — é a pergunta a que o cartão tem de responder ("se eu juntar
+   esta, com quantos fico?"). De outro modo dizia "Syrah 28" com a lista a
+   mostrar três vinhos.
+   Só corre para o campo ABERTO: varrer a garrafeira doze vezes para
+   desenhar uma fita de doze nomes era trabalho que ninguém ia ler. */
+function opcoesCampo(k){
+  const termos=termosProcura();
+  const base=db.vinhos.filter(v=>passaFiltros(v,termos,k));
+  const m=new Map();
+  base.forEach(v=>{
+    const cs=v.castas||[];
+    valorDe(v,k).forEach(x=>{
+      if(k==='casta'&&CASTAS_TODAS&&!F.casta.every(c=>c===x||cs.includes(c)))return;
+      m.set(x,(m.get(x)||0)+1);
+    });
+  });
+  const on=ligados(k);
+  return valoresDe(k).map(([v,r])=>[v,r,m.get(v)||0])
+    .filter(o=>o[2]>0||on.includes(o[0]));
+}
+
+function campoToggle(k,v){
+  if(ehLista(k)){
+    const i=F[k].indexOf(v);
+    if(i<0)F[k].push(v);else F[k].splice(i,1);
+  }else{
+    // Num campo de um valor só, tocar no que já está escolhido LIMPA-O —
+    // é a única saída que ele tem sem se ir às pastilhas.
+    F[k]=(F[k]===v)?'':v;
+  }
+  renderFiltrados();
+}
+
+/* As duas regras das castas, por cima dos valores, e são MUTUAMENTE
+   EXCLUSIVAS — não por arrumação, por aritmética: um vinho monocasta tem
+   UMA casta, por isso nunca leva "todas" as duas escolhidas. Ter as duas
+   ligadas era pedir uma lista que não pode existir, e a app respondia
+   "Nada encontrado" sem dizer porquê. Ligar uma desliga a outra.
+   O "só monocasta" NÃO é um estado novo: é o `castaN='1'` do campo "Nº de
+   castas", visto de perto. Um estado, dois sítios — e assim é impossível
+   pedir "várias castas" num e "só monocasta" no outro e ficar com uma
+   lista vazia por contradição. Aqui é que ele faz falta, porque é aqui que
+   se escolhe a casta: "Syrah" e "só monocasta" juntos são "os meus 100%
+   Syrah", que é a pergunta a seguir à casta e não uma sobre números. */
+function castasRegrasHTML(){
+  const mono=F.castaN==='1';
+  const b=(on,fn,txt,tit)=>`<button class="fmodo${on?' on':''}" onclick="${fn}()" title="${esc(tit)}">
+    <i class="fvisto">✓</i> ${esc(txt)}</button>`;
+  return `<div class="fregras">
+    ${b(mono,'castasMono','só monocasta',
+       mono?'A mostrar só os vinhos feitos de uma casta única'
+           :'A mostrar também os lotes que levam esta casta com outras')}
+    ${(!mono&&F.casta.length>1)
+      ? b(CASTAS_TODAS,'castasModo','todas em simultâneo',
+          CASTAS_TODAS?'A mostrar só os vinhos que levam TODAS as castas escolhidas'
+                      :'A mostrar os vinhos que levam QUALQUER UMA das castas escolhidas')
+      : ''}
+  </div>`;
+}
+
+function renderFiltros(){
+  document.getElementById('filtros').classList.toggle('aberto',FILTROS_ABERTO);
+
+  /* A FITA. Cada campo diz-se pelo nome, e leva o número dos valores que
+     tem ligados — é o que permite ver, sem abrir nenhum, onde é que está o
+     filtro que está a cortar a lista. */
+  document.getElementById('f-campos').innerHTML=F_CAMPOS.map(([k,ico,nome])=>{
+    const n=ligados(k).length;
+    return `<button class="fcampo${n?' ativo':''}${FILTRO_CAMPO===k?' aberto':''}"
+      onclick="abrirCampo('${escJs(k)}')">${ico} ${esc(nome)}${
+      n?`<i class="fcn">${n}</i>`:''}</button>`;
+  }).join('');
+
+  /* OS VALORES do campo aberto. Grelha de duas colunas e não um
+     `flex-wrap`, pela mesma pedra da WineCatalog: com três por linha
+     "Península de Setúbal" e "Cabernet Sauvignon" chegam ao ecrã cortadas
+     a meio, e um filtro que não se lê não se escolhe; com `flex-grow`, o
+     último cartão de uma linha ímpar estica-se sozinho de ponta a ponta. */
+  const dom=document.getElementById('f-dominio');
+  if(FILTROS_ABERTO&&FILTRO_CAMPO){
+    const k=FILTRO_CAMPO,ops=opcoesCampo(k);
+    dom.innerHTML=(k==='casta'?castasRegrasHTML():'')+(ops.length
+      ? `<div class="fops">${ops.map(([v,r,n])=>{
+          const on=ligados(k).includes(v);
+          const cor=k==='tipo'?(VIDRO[v]||null):null;
+          return `<button class="fop${on?' on':''}" onclick="campoToggle('${escJs(k)}','${escJs(v)}')">
+            <span class="fop-tx">${cor?`<i class="fponto" style="background:${esc(cor)}"></i>`:''}${esc(r)}</span>
+            <span class="fconta">${n}</span>
+          </button>`;
+        }).join('')}</div>`
+      : `<p class="fvazio">Nada a escolher aqui com os filtros que estão ligados.</p>`);
+  }else dom.innerHTML='';
+
+  /* AS PASTILHAS DIZEM O QUE NÃO SE VÊ DAQUI. É a regra toda: o campo que
+     está aberto já se lê nos cartões acesos, e repeti-lo por baixo era
+     dizer a mesma coisa duas vezes. Todos os outros aparecem, com o ✕ de
+     cada um — desfazer uma escolha de cada vez, não tudo ou nada.
+     O "+" entre duas castas só existe em "todas em simultâneo": sem ele,
+     "Touriga Nacional · Syrah" mente sobre metade dos resultados. */
+  const pastilhas=[];
+  F_CAMPOS.forEach(([k,ico])=>{
+    if(FILTROS_ABERTO&&FILTRO_CAMPO===k)return;
+    ligados(k).forEach((v,i)=>{
+      if(i&&k==='casta'&&CASTAS_TODAS)pastilhas.push('<span class="fjunta">+</span>');
+      pastilhas.push(`<span class="fpill">${ico} ${esc(rotuloFiltro(k,v))}
+        <button onclick="campoToggle('${escJs(k)}','${escJs(v)}')" title="Tirar este filtro">✕</button></span>`);
+    });
+  });
+  document.getElementById('f-activos').innerHTML=pastilhas.join('');
+
+  // O número no botão é o de VALORES escolhidos e não o de campos: três
+  // castas não são "1 filtro", e com o painel fechado é a única medida do
+  // que está a cortar a lista por baixo.
+  const nAtivos=F_CAMPOS.reduce((s,[k])=>s+ligados(k).length,0);
+  const n=document.getElementById('f-n');
+  n.textContent=nAtivos;n.classList.toggle('on',!!nAtivos);
+}
+// Aceita um valor solto em qualquer campo, seja lista ou não — é o que
+// mantém de pé quem lhe chame sem saber de qual é qual.
+function setFiltro(k,v){
+  if(ehLista(k))F[k]=v?[v]:[];
+  else F[k]=v;
+  renderFiltrados();
 }
 
 // Intervalos da nota do Vivino, do mesmo jeito que FAIXAS_PRECO: a pergunta
@@ -1296,286 +1528,9 @@ const FAIXAS_TEOR=[
 function faixaTeorIndice(valor){
   return FAIXAS_TEOR.findIndex(f=>valor<=f.max);
 }
-
-function opcoesFiltro(){
-  const comStock=db.vinhos.filter(v=>stockDe(v.id)>0);
-  const set=(arr)=>[...new Set(arr.filter(x=>x!==''&&x!=null))];
-  const locais=db.locais.filter(l=>db.garrafas.some(g=>g.local_id===l.id&&naGarrafeira(g)));
-  // Cor, região e casta não vêm daqui: são as três do ANDAR 2, desenhadas
-  // em cartões com contagens pela `facetas`. Aqui ficam só as nove do
-  // andar 3, que continuam a ser um `<select>` de um valor.
-  return {
-    local:locais.map(l=>[String(l.id),l.nome]),
-    produtor:set(comStock.map(v=>v.produtor)).sort((a,b)=>a.localeCompare(b,'pt')).map(x=>[x,x]),
-    ano:set(comStock.map(v=>v.ano)).sort((a,b)=>b-a).map(x=>[String(x),String(x)]),
-    mencao:set(comStock.map(v=>v.mencao)).sort((a,b)=>a.localeCompare(b,'pt')).map(x=>[x,x])
-  };
-}
-
-/* AS CONTAGENS DOS TRÊS GRUPOS DO ANDAR 2 (`facetas`).
-   Cada cartão diz quantos vinhos dá — e é isso que separa este painel de
-   uma lista de caixas: escolher deixa de ser adivinhar. Sem os números,
-   qualquer escolha podia dar "Nada encontrado" a quem tinha acabado de
-   tocar numa opção que a app lhe ofereceu; com eles, um caminho sem saída
-   nem chega a aparecer.
-   A regra é a da `facetas` da WineCatalog, e não é detalhe: conta-se com os
-   OUTROS grupos aplicados mas NÃO com o próprio. É isso que faz "Branco 7"
-   continuar visível depois de se escolher Tinto — senão, escolher uma cor
-   apagava todas as outras e não havia como acrescentar uma segunda.
-   Uma opção que dê zero não aparece; uma ESCOLHIDA aparece sempre, mesmo a
-   zero, senão não havia como a desmarcar.
-   As castas em "todas em simultâneo" são a exceção dentro da exceção:
-   deixam de ignorar o grupo inteiro e passam a contar POR CIMA das outras
-   castas já escolhidas (só a PRÓPRIA opção é ignorada). De outro modo o
-   cartão dizia "Syrah 28" com a lista a mostrar três vinhos. */
-function facetas(){
-  const termos=termosProcura();
-  const conta=(g,valores,ler)=>{
-    const base=db.vinhos.filter(v=>passaFiltros(v,termos,g));
-    const m=new Map();
-    valores.forEach(x=>m.set(x,0));
-    base.forEach(v=>ler(v).forEach(x=>{if(m.has(x))m.set(x,m.get(x)+1);}));
-    return m;
-  };
-  const vals=(ler)=>[...new Set([].concat(...db.vinhos
-    .filter(v=>stockDe(v.id)>0).map(ler)).filter(x=>x!==''&&x!=null))];
-
-  const tipos=vals(v=>[v.tipo]);
-  const regioes=vals(v=>[v.regiao]);
-  const castas=vals(v=>v.castas||[]);
-  const cT=conta('tipo',tipos,v=>[v.tipo]);
-  const cR=conta('regiao',regioes,v=>[v.regiao]);
-
-  /* As castas em "todas": a base é a mesma (sem o grupo), mas cada casta
-     candidata é contada só nos vinhos que TAMBÉM levam as já escolhidas —
-     que é a pergunta a que o cartão tem de responder ("se eu juntar esta,
-     com quantos fico?"). */
-  const baseC=db.vinhos.filter(v=>passaFiltros(v,termos,'casta'));
-  const cC=new Map();
-  castas.forEach(c=>{
-    cC.set(c,baseC.filter(v=>{
-      const cs=v.castas||[];
-      if(!cs.includes(c))return false;
-      return !CASTAS_TODAS||F.casta.every(x=>x===c||cs.includes(x));
-    }).length);
-  });
-
-  const monta=(g,m,lista)=>lista
-    .filter(x=>(m.get(x)||0)>0||F[g].includes(x))
-    .sort((a,b)=>String(a).localeCompare(String(b),'pt'))
-    .map(x=>[x,m.get(x)||0]);
-  return {
-    // As cores pela ordem do vocabulário (`TIPOS`), não alfabética: Tinto
-    // antes de Branco é como se fala de vinho, "Branco · Espumante ·
-    // Frisante · Licoroso · Rosé · Tinto" não é.
-    tipo:TIPOS.filter(t=>(cT.get(t)||0)>0||F.tipo.includes(t)).map(t=>[t,cT.get(t)||0])
-      .concat(monta('tipo',cT,tipos.filter(t=>!TIPOS.includes(t)))),
-    regiao:monta('regiao',cR,regioes),
-    casta:monta('casta',cC,castas)
-  };
-}
-/* Cada filtro é um chip DESENHADO por nós com o <select> nativo por cima,
-   invisível (opacity:0, inset:0). O desenho passa a ser nosso — texto do
-   valor escolhido, estado ligado/desligado, tudo pill — e quem abre a lista
-   continua a ser o seletor do telemóvel, que é o que uma pessoa sabe usar.
-   Um dropdown feito à mão em JS era mais código e pior no iOS.
-
-   E deixam de estar todos à vista: escondem-se atrás do botão "Filtros",
-   que traz o número dos que estão ligados. O que fica sempre visível são as
-   "pastilhas" do que está a filtrar agora, cada uma com o seu ✕ — antes
-   só havia "limpar filtros", tudo ou nada. */
-/* "Cor" e não "Tipo": é assim que a app já lhe chama onde interessa (o
-   `iaCorGuard`, antes de qualquer procura), e é a pergunta que uma pessoa
-   faz. Que Espumante e Licoroso não sejam cores é verdade e é o mesmo
-   compromisso que o `db/schema.sql` já faz — a coluna chama-se `tipo` e a
-   pergunta chama-se cor. */
-const F_META={local:['📍','Local'],tipo:['🍷','Cor'],regiao:['🗺️','Região'],casta:['🍇','Casta'],
-  produtor:['🏭','Produtor'],castaN:['🧬','Nº de castas'],ano:['📅','Ano'],mencao:['🏅','Menção'],
-  preco:['💶','Preço'],teor:['🌡️','Grau alcoólico'],janela:['⏱️','Maturação'],vivino:['★','Vivino']};
 function limparTexto(){
   const c=document.getElementById('f-texto');
   c.value='';renderFiltrados();c.focus();
-}
-function listasFiltro(){
-  const o=opcoesFiltro();
-  o.castaN=[['1','Monocasta'],['2','Várias castas'],['0','Sem castas registadas']];
-  // "No ponto" sozinho não era um filtro — está em quase todos os vinhos e
-  // devolvia a lista quase inteira. O que se pergunta a seguir é em que
-  // parte da janela: por isso o ponto abre nos três terços (as mesmas
-  // palavras que a ficha do vinho escreve), e o valor leva a fase atrás
-  // ('ponto:fechar'). "A fechar" é a lista do que se deve beber primeiro.
-  o.janela=[...FASES.map(f=>['ponto:'+f[1],'No ponto · '+f[2]]),
-    ['cedo','Ainda cedo'],['passou','Já passou']];
-  o.vivino=FAIXAS_VIVINO.map((f,i)=>[String(i),f.nome]);
-  o.preco=FAIXAS_PRECO.map((f,i)=>[String(i),f.nome]);
-  o.teor=FAIXAS_TEOR.map((f,i)=>[String(i),f.nome]);
-  return o;
-}
-function rotuloFiltro(listas,k){
-  const par=(listas[k]||[]).find(p=>p[0]===F[k]);
-  return par?par[1]:F[k];
-}
-/* ANDAR 2 — um grupo de cartões: a opção e quantos vinhos dá.
-   Os cartões são uma GRELHA de duas colunas e não um `flex-wrap`, pela
-   mesma razão que na WineCatalog: com três por linha "Península de
-   Setúbal" e "Cabernet Sauvignon" chegam ao ecrã cortadas a meio, e um
-   filtro que não se lê não se escolhe. O `flex:1 1 …` de um wrap trazia
-   outro defeito — numa linha ímpar o último cartão esticava-se sozinho de
-   ponta a ponta; numa grelha o que sobra fica na primeira coluna, alinhado
-   com o de cima. E o texto QUEBRA em vez de cortar: com reticências,
-   "Alicante Bousc…" e "Alicante Branco" são o mesmo cartão. */
-function grupoHTML(g,titulo,ops,extra){
-  if(!ops.length)return '';
-  return `<div class="fgrupo">
-    <div class="fgrupo-cab">
-      <div class="fgrupo-tit">${esc(titulo)}</div>
-      ${extra||''}
-    </div>
-    <div class="fops">${ops.map(([v,n])=>{
-      const on=F[g].includes(v);
-      const cor=g==='tipo'?(VIDRO[v]||null):null;
-      return `<button class="fop${on?' on':''}" onclick="grupoToggle('${escJs(g)}','${escJs(v)}')">
-        <span class="fop-tx">${cor?`<i class="fponto" style="background:${esc(cor)}"></i>`:''}${esc(v)}</span>
-        <span class="fconta">${n}</span>
-      </button>`;
-    }).join('')}</div>
-  </div>`;
-}
-function grupoToggle(g,v){
-  const i=F[g].indexOf(v);
-  if(i<0)F[g].push(v);else F[g].splice(i,1);
-  renderFiltrados();
-}
-
-/* As duas regras das castas, lado a lado por cima dos cartões, e são
-   MUTUAMENTE EXCLUSIVAS — não por arrumação, por aritmética: um vinho
-   monocasta tem UMA casta, por isso nunca leva "todas" as duas escolhidas.
-   Ter as duas ligadas era pedir uma lista que não pode existir, e a app
-   respondia "Nada encontrado" sem dizer porquê. Ligar uma desliga a outra.
-
-   O "só monocasta" NÃO é um estado novo: é o `castaN='1'` que já existia no
-   chip "Nº de castas" (andar 3), visto de perto. Um estado, dois sítios —
-   e assim é impossível pedir "várias castas" no andar 3 e "só monocasta"
-   aqui e ficar com uma lista vazia por contradição. Aqui é que ele faz
-   falta, porque é aqui que se escolhe a casta: "Syrah" e "só monocasta"
-   juntos são "os meus 100% Syrah", que é a pergunta a seguir à casta e não
-   uma pergunta sobre números. */
-function castasRegrasHTML(){
-  const mono=F.castaN==='1';
-  const b=(on,fn,txt,tit)=>`<button class="fmodo${on?' on':''}" onclick="${fn}()" title="${esc(tit)}">
-    <i class="fvisto">✓</i> ${esc(txt)}</button>`;
-  return `<div class="fregras">
-    ${b(mono,'castasMono','só monocasta',
-       mono?'A mostrar só os vinhos feitos de uma casta única'
-           :'A mostrar também os lotes que levam esta casta com outras')}
-    ${(!mono&&F.casta.length>1)
-      ? b(CASTAS_TODAS,'castasModo','todas em simultâneo',
-          CASTAS_TODAS?'A mostrar só os vinhos que levam TODAS as castas escolhidas'
-                      :'A mostrar os vinhos que levam QUALQUER UMA das castas escolhidas')
-      : ''}
-  </div>`;
-}
-
-function renderFiltros(){
-  const el=document.getElementById('filtros');
-  const nivel=FILTROS_ABERTO?FILTROS_NIVEL:0;
-  el.className='filtros n'+nivel;
-
-  const listas=listasFiltro();
-  // Os cartões só se calculam quando se veem: as facetas varrem a
-  // garrafeira uma vez por grupo, e no andar 1 ninguém as ia ler.
-  if(nivel>=2){
-    const f=facetas();
-    document.getElementById('f-grupos').innerHTML=
-      grupoHTML('tipo','Cor',f.tipo)+
-      grupoHTML('regiao','Região',f.regiao)+
-      grupoHTML('casta','Castas',f.casta,castasRegrasHTML());
-  }
-  if(nivel>=3){
-    document.getElementById('f-selects').innerHTML=Object.keys(F_META)
-      .filter(k=>nivelDoFiltro(k)===3).map(k=>{
-        const [ico,nome]=F_META[k];
-        const pares=listas[k]||[];
-        const txt=F[k]?rotuloFiltro(listas,k):nome;
-        return `<label class="fchip${F[k]?' ativo':''}">
-          <span>${ico} ${esc(txt)}</span><span class="fchev">▾</span>
-          <select onchange="setFiltro('${k}',this.value)">
-            <option value="">${esc(nome)} — todos</option>
-            ${pares.map(([v,t])=>`<option value="${esc(v)}"${F[k]===v?' selected':''}>${esc(t)}</option>`).join('')}
-          </select>
-        </label>`;
-      }).join('');
-  }
-
-  /* AS PASTILHAS DIZEM O QUE NÃO SE VÊ DAQUI. É a regra toda, e explica-se
-     sozinha: um filtro cujo grupo está aberto já se lê no cartão aceso, e
-     repeti-lo por baixo era dizer a mesma coisa duas vezes — foi por isso
-     que elas sempre desapareceram com o painel aberto. Com três andares a
-     mesma regra passa a ser por filtro e não por painel: no andar 1 as
-     castas escolhidas aparecem em pastilha (não há cartões à vista), no
-     andar 2 deixam de aparecer e ficam só as do andar 3.
-     E o "+" entre duas castas só existe em "todas em simultâneo": com o
-     painel fechado, "Touriga Nacional · Syrah" mente sobre metade dos
-     resultados. Cada casta mantém o ✕ dela — desfazer uma a uma, não tudo
-     ou nada. */
-  const pastilhas=[];
-  Object.keys(F_META).forEach(k=>{
-    if(nivelDoFiltro(k)<=nivel)return;
-    if(k==='casta'){
-      F.casta.forEach((c,i)=>{
-        if(i&&CASTAS_TODAS)pastilhas.push('<span class="fjunta">+</span>');
-        pastilhas.push(`<span class="fpill">${F_META.casta[0]} ${esc(c)}
-          <button onclick="tirarCasta('${escJs(c)}')" title="Tirar esta casta">✕</button></span>`);
-      });
-      return;
-    }
-    if(Array.isArray(F[k])){
-      F[k].forEach(v=>pastilhas.push(`<span class="fpill">${F_META[k][0]} ${esc(v)}
-        <button onclick="grupoToggle('${escJs(k)}','${escJs(v)}')" title="Tirar este filtro">✕</button></span>`));
-      return;
-    }
-    if(!F[k])return;
-    pastilhas.push(`<span class="fpill">${F_META[k][0]} ${esc(rotuloFiltro(listas,k))}
-      <button onclick="setFiltro('${k}','')" title="Tirar este filtro">✕</button></span>`);
-  });
-  document.getElementById('f-activos').innerHTML=pastilhas.join('');
-
-  // O número é o de VALORES escolhidos e não o de grupos: com o painel
-  // fechado é a única medida do que está a filtrar por baixo, e três
-  // castas não são "1 filtro".
-  const nAtivos=Object.keys(F_META)
-    .reduce((s,k)=>s+(Array.isArray(F[k])?F[k].length:(F[k]?1:0)),0);
-  const n=document.getElementById('f-n');
-  n.textContent=nAtivos;n.classList.toggle('on',!!nAtivos);
-
-  // A linha fechada diz o que está a filtrar, não "Filtros": é a única
-  // coisa no ecrã a dizê-lo, e "🔍 Procurar e filtrar" com três castas
-  // ligadas por baixo era esconder o que estava a acontecer.
-  const txt=document.getElementById('f-texto');
-  const resumo=[];
-  if(txt&&txt.value.trim())resumo.push('“'+txt.value.trim()+'”');
-  Object.keys(F_META).forEach(k=>{
-    if(k==='casta'&&CASTAS_TODAS&&F.casta.length>1){resumo.push(F.casta.join(' + '));return;}
-    if(Array.isArray(F[k]))F[k].forEach(v=>resumo.push(v));
-    else if(F[k])resumo.push(rotuloFiltro(listas,k));
-  });
-  document.getElementById('f-min-tx').textContent=
-    resumo.length?'🔍 '+resumo.join(' · '):'🔍 Procurar e filtrar';
-
-  const mais=document.getElementById('f-mais');
-  mais.textContent=nivel>=3?'Menos filtros ▲'
-    :nivel===2?'Mais filtros ▾':'Filtrar por cor, região e castas ▾';
-}
-// Aceita um valor solto mesmo num filtro que é lista — é o que mantém de pé
-// quem chame `setFiltro('casta', …)` sem saber da mudança.
-function setFiltro(k,v){
-  if(Array.isArray(F[k]))F[k]=v?[v]:[];
-  else F[k]=v;
-  renderFiltrados();
-}
-function tirarCasta(c){
-  F.casta=F.casta.filter(x=>x!==c);
-  renderFiltrados();
 }
 /* Trocar de regra com menos de duas castas não muda lista nenhuma, mas o
    estado grava-se à mesma: quem liga o visto espera que ele lá esteja da
@@ -1746,41 +1701,20 @@ function vinhosFiltrados(ignorar){
   return db.vinhos.filter(v=>passaFiltros(v,termos,ignorar));
 }
 function passaFiltros(v,termos,ignorar){
-  const gs=garrafasDe(v.id,true);
-  if(!gs.length)return false;                                  // só o que está lá
-  if(F.local&&!gs.some(g=>String(g.local_id)===F.local))return false;
-  /* Cor e região são listas, mas sem o "e/ou" das castas: um vinho tem UMA
-     cor e UMA região, por isso escolher duas só pode querer dizer "qualquer
-     uma das duas". Ignorar o próprio grupo (`ignorar`) é o que deixa as
-     contagens da `facetas` continuarem a mostrar as outras opções. */
-  if(F.tipo.length&&ignorar!=='tipo'&&!F.tipo.includes(v.tipo))return false;
-  if(F.regiao.length&&ignorar!=='regiao'&&!F.regiao.includes(v.regiao))return false;
-  /* "Qualquer uma" (o costume) contra "todas em simultâneo": é a única
-     pergunta deste painel em que a diferença existe. Ver `CASTAS_TODAS`.
-     Nota que "todas" é LEVAR todas as escolhidas, não ser EXATAMENTE
-     elas — um lote com uma terceira casta continua a levar as duas. */
-  if(F.casta.length&&ignorar!=='casta'){
-    const cs=v.castas||[];
-    if(!(CASTAS_TODAS?F.casta.every(c=>cs.includes(c)):F.casta.some(c=>cs.includes(c))))return false;
-  }
-  if(F.produtor&&v.produtor!==F.produtor)return false;
-  if(F.ano&&String(v.ano)!==F.ano)return false;
-  if(F.mencao&&v.mencao!==F.mencao)return false;
-  if(F.janela){
-    // 'ponto:meio' → estado 'ponto' E fase 'meio'; 'cedo'/'passou' não
-    // têm fase nenhuma atrás.
-    const [est,fase]=F.janela.split(':');
-    if(janelaBeber(v)!==est)return false;
-    if(fase&&(janelaFase(v)||[])[1]!==fase)return false;
-  }
-  if(F.vivino&&(v.vivino_nota==null||String(faixaVivinoIndice(v.vivino_nota))!==F.vivino))return false;
-  if(F.preco&&(v.preco_medio==null||String(faixaIndice(v.preco_medio))!==F.preco))return false;
-  if(F.teor&&(v.teor==null||String(faixaTeorIndice(v.teor))!==F.teor))return false;
-  if(F.castaN){
-    const n=(v.castas||[]).length;
-    if(F.castaN==='1'&&n!==1)return false;
-    if(F.castaN==='2'&&n<2)return false;
-    if(F.castaN==='0'&&n!==0)return false;
+  if(!garrafasDe(v.id,true).length)return false;   // só o que está lá
+  for(const [k] of F_CAMPOS){
+    if(k===ignorar)continue;
+    const sel=ligados(k);
+    if(!sel.length)continue;
+    const tem=valorDe(v,k);
+    /* As castas em "todas em simultâneo" são a única leitura em E; todos os
+       outros campos são em OU. Um vinho tem UMA cor e UMA região, e "tinto
+       E branco" não existe — por isso o visto só aparece nas castas.
+       "Levar todas" e não "ser exatamente estas": um lote com uma terceira
+       casta conta. */
+    if(k==='casta'&&CASTAS_TODAS){
+      if(!sel.every(x=>tem.includes(x)))return false;
+    }else if(!sel.some(x=>tem.includes(x)))return false;
   }
   return passaTexto(v,termos);
 }
@@ -1911,28 +1845,35 @@ function vinhoCardHTML(v,termos){
    Não é o cartão da lista encolhido — é outra pergunta. Na lista lê-se o
    que um vinho É (castas, menção, preço, maturação); na grelha procura-se
    um RÓTULO que já se viu, e por isso a garrafa cresce e o resto encolhe
-   até ao que identifica: nome, ano, produtor/região, a nota e onde está.
-   O que NÃO entra na grelha é o rodapé do que é físico por inteiro — a
-   maturação, o preço, os crachás das castas: numa coluna de 150px cada um
-   deles é uma linha a mais e o que se perde é a fotografia, que é a razão
-   de estar aqui. Quem quer isso tem a lista a um toque, e a ficha do vinho
-   a dois.
+   até ao que identifica: nome, ano, produtor/região e a NOTA.
+   O que NÃO entra na grelha é o rodapé do que é físico por inteiro — onde
+   está, a maturação, o preço, os crachás das castas: numa coluna de 150px
+   cada um deles é uma linha a mais e o que se perde é a fotografia, que é
+   a razão de estar aqui. Quem quer isso tem a lista a um toque, e a ficha
+   do vinho a dois.
+   O SÍTIO saiu já depois de entrar, e por medida: partilhava a linha com a
+   nota, e "Cave · Nível 7 · lugar 12" num cartão de 150px comia-a toda. A
+   nota ficou sozinha na linha dela — é o número por que se escolhe um
+   vinho de relance, e é o único que ali cabe inteiro.
    A faixa da procura (`trechosMatch`) entra nos DOIS — e na grelha ainda
    com mais razão: o cartão mostra menos, logo há mais palavra encontrada
    fora da vista. É a mesma função e o mesmo texto, nunca uma segunda
    versão mais curta. */
+/* O cartão da grelha NÃO é o da lista encolhido — é outra pergunta: na
+   lista lê-se o que um vinho É, na grelha procura-se um RÓTULO que já se
+   viu. Por isso a garrafa cresce e o resto encolhe até ao que identifica.
+   O rodapé ficou só com a NOTA, numa linha só dela: o "onde está" saiu
+   daqui porque numa coluna de 150px ele e a nota disputavam a mesma linha
+   e a nota — que é o que faz escolher entre dois rótulos — ficava a
+   competir com um "Sala +1" que se lê na lista e na ficha do vinho. */
 function vinhoGrelhaHTML(v,termos){
   const gs=garrafasDe(v.id,true);
-  const sitios=sitiosDe(gs);
-  const onde=sitios.length?sitios[0]:null;
   return `<article class="vgcard" onclick="verVinho(${v.id})">
     ${vinhoThumb(v,gs.length)}
     <div class="vg-nome">${esc(v.nome)}</div>
     <div class="vg-sub">${esc([v.ano||'s/a',v.produtor,v.regiao].filter(Boolean).join(' · '))}</div>
     <div class="vg-foot">
       ${v.vivino_nota?`<span class="bdg viv">★ ${Number(v.vivino_nota).toFixed(1)}</span>`:''}
-      ${onde?`<span class="vc-l"><span class="vc-pip" style="background:${esc(onde.cor)}"></span><b>${
-        esc(onde.txt)}</b>${sitios.length>1?`<i class="vg-mais">+${sitios.length-1}</i>`:''}</span>`:''}
     </div>
     ${trechosMatch(v,termos)}
   </article>`;
@@ -1966,8 +1907,14 @@ function renderDetalhe(){
   const res=filtrando?vinhosFiltrados():db.vinhos.filter(v=>stockDe(v.id)>0);
   const termos=termosProcura();
   const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
-  document.getElementById('det-count').textContent=
-    `${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'}`;
+  /* As GARRAFAS vão num `<span>` próprio porque no telemóvel desaparecem
+     (ver `.det-gar` no style.css): a barra tem de caber numa linha, e
+     "170 vinhos · 210 garrafas" não cabia ao lado dos comandos. O número
+     que fica é o dos VINHOS, que é o que a lista mostra; as garrafas
+     continuam à vista no painel da procura logo acima. */
+  document.getElementById('det-count').innerHTML=
+    `${res.length} vinho${res.length===1?'':'s'}`+
+    `<span class="det-gar"> · ${nGar} garrafa${nGar===1?'':'s'}</span>`;
   if(!res.length){
     box.innerHTML=filtrando
       ?'<div class="vazio"><b>Nada encontrado</b>Nenhum vinho corresponde a esta procura.</div>'
@@ -6553,7 +6500,7 @@ detVistaBotoes();
 // O andar guardado tem de chegar ao DOM antes de o `carregar()` responder:
 // o HTML nasce fechado, e quem tinha deixado a barra aberta no andar 3 via-a
 // a fechar-se e a abrir-se outra vez assim que os dados chegavam.
-document.getElementById('filtros').className='filtros n'+(FILTROS_ABERTO?FILTROS_NIVEL:0);
+document.getElementById('filtros').classList.toggle('aberto',FILTROS_ABERTO);
 ajustarSticky();
 pgSwipe();
 sbInit();

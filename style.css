@@ -164,7 +164,13 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
    contagem e os comandos ficam a flutuar sobre o papel e o cartão que se vê
    é o da procura, que é o que se usa. Mesmo desenho da `.cat-barra` do
    Catálogo da WineCatalog. */
-.dbar{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;
+/* NOWRAP, e é o ponto todo. Com `flex-wrap`, a decisão de quebrar a linha
+   é tomada pela largura de CONTEÚDO de cada item — o `min-width:0` da
+   contagem não a evitava — e por isso a barra tinha duas alturas: uma com
+   "8 vinhos" e outra com "170 vinhos · 210 garrafas", que empurrava a
+   ordenação e a vista para baixo. Sem quebra, a barra tem sempre a mesma
+   altura: o que cede é o TEXTO, que é o que se pode encolher. */
+.dbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:nowrap;
   margin:0 2px 14px}
 /* Quando a linha quebra (telemóvel), um item sozinho com `space-between`
    encosta à ESQUERDA — e os comandos ficavam a boiar por baixo da
@@ -173,7 +179,22 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
 .dbar-a{margin-left:auto;display:flex;align-items:center;gap:7px;flex-shrink:0}
 /* A contagem à ESQUERDA: é o primeiro número que se lê ao entrar aqui, e
    ficava encostado às setas do agrupamento do lado direito. */
-.dbar .fcount{text-align:left;flex:1 1 auto}
+/* A contagem CEDE, os comandos não se mexem. `min-width:0` + reticências
+   faz com que a contribuição dela para a largura mínima da linha seja ZERO
+   — e é isso que a impede de empurrar os comandos para a linha de baixo
+   quando os números crescem. "100 vinhos · 210 garrafas" quebrava a barra
+   em duas linhas e "8 vinhos · 9 garrafas" não: a barra mudava de altura
+   conforme o filtro, que é o pior dos dois mundos. Agora a barra tem
+   sempre a mesma altura e o que encolhe é o texto — pelo FIM, que é onde
+   está o menos importante; o número vem à frente e nunca se perde. */
+.dbar .fcount{text-align:left;flex:1 1 auto;min-width:0;font-size:10.5px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* No telemóvel só o número dos VINHOS — é o que a lista a seguir mostra, e
+   é o que faz a barra caber ao lado dos comandos sem reticências. As
+   garrafas não se perdem: estão no painel da procura, aqui mesmo por cima.
+   (Reticências ficam como rede: com um número absurdo, corta-se pelo fim,
+   que é onde está o menos importante — o número vem à frente.) */
+@media(max-width:560px){.det-gar{display:none}}
 /* Os grupos de botões ganham o fundo de CARTÃO que a barra perdeu: sem
    moldura por baixo, um botão em tom de papel sobre papel deixava de se ler
    como um comando. */
@@ -187,12 +208,12 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
    branca do mesmo tamanho dos botões e lia-se como um quarto botão —
    apagado, que é o pior dos dois mundos. Fora, é uma etiqueta. */
 .segico{font-size:12px;color:var(--mu);line-height:1;user-select:none;flex-shrink:0;opacity:.75}
-.segbtn{padding:6px 13px;font-size:11.5px;font-family:inherit;border:none;background:none;color:var(--mu);cursor:pointer;font-weight:600;transition:all .15s}
+.segbtn{padding:6px 11px;font-size:11.5px;font-family:inherit;border:none;background:none;color:var(--mu);cursor:pointer;font-weight:600;transition:all .15s}
 .segbtn.on{background:var(--vh);color:#fff}
 /* Os dois botões da vista são ícones: mais estreitos, e uma barra que já
    tem a contagem e três botões de agrupamento não aguenta mais duas
    palavras sem partir numa terceira linha no telemóvel. */
-.segbtn.ico{padding:6px 11px;font-size:13px;line-height:1}
+.segbtn.ico{padding:6px 10px;font-size:13px;line-height:1}
 .dgrupo{margin-bottom:22px}
 .dgrupo-tit{font-family:var(--fd);font-weight:600;font-size:16px;letter-spacing:.2px;color:var(--vhd);
   display:flex;align-items:center;gap:9px;padding-bottom:7px;margin-bottom:11px;position:relative}
@@ -353,22 +374,14 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    os separadores são uma pílula em tom de papel (`--bg2`), a procura é um
    cartão branco, a barra não tem moldura nenhuma. Antes eram três lozangos
    brancos do mesmo tamanho e nenhum mandava.
-   FECHADA, a procura ganha cantos de PÍLULA — é a caixa de procura, e é
-   assim que uma caixa de procura se parece; ABERTA volta aos cantos do
-   cartão, que é o que ela passa a ser.
-   **A SOMBRA fica nas duas.** Tirá-la à fechada foi a primeira tentativa e
-   deu nisto: `--card` (#fffdfb) sobre `--bg` (#f6f1ea) com um bordo `--bo`
-   é diferença a menos — a barra desaparecia no papel e o ecrã abria com a
+   **A SOMBRA fica.** Tirá-la foi uma tentativa de aliviar o topo e deu
+   nisto: `--card` (#fffdfb) sobre `--bg` (#f6f1ea) com um bordo `--bo` é
+   diferença a menos — a barra desaparecia no papel e o ecrã abria com a
    contagem colada aos separadores. É a sombra que a põe à tona. */
 .filtros{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);
   padding:11px 12px;margin-bottom:14px;box-shadow:var(--sh)}
-/* 24px e não 99px: com filtros ligados as pastilhas abrem por baixo, dentro
-   do mesmo cartão, e uma pílula a sério esticava-se num estádio à volta de
-   duas linhas de conteúdo. 24 chega para ler como campo e aguenta crescer. */
-.filtros.n0{border-radius:24px}
-/* Colapsada é só ESTA linha: a caixa de texto a ocupar o espaço todo e,
-   fixo à direita, o botão que abre os outros filtros — antes eram duas
-   linhas (a barra de procura e, por baixo, a barra do botão "Filtros"). */
+/* Fechada é só ESTA linha: a caixa de texto a ocupar o espaço todo e, fixo
+   à direita, o botão que abre a fita dos campos. */
 .fsearch{display:flex;align-items:center;gap:8px}
 .fsearch-box{position:relative;flex:1;min-width:0;display:flex;align-items:center}
 .fsearch-i{position:absolute;left:13px;font-size:14px;opacity:.55;pointer-events:none;line-height:1}
@@ -381,62 +394,77 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .fsearch-x.on{display:flex}
 .fbar{display:flex;align-items:center;gap:9px;margin-top:10px;flex-wrap:wrap}
 .fcount{font-size:11.5px;color:var(--mu);flex:1;min-width:90px;text-align:right}
-/* O ▲ ao lado da procura: fecha a barra toda, de qualquer andar. Era o
-   botão "Filtros" que abria tudo de uma vez — agora abrir é subir degraus
-   (`.fmais`) e este só serve para sair. */
-.ftoggle{flex-shrink:0;width:38px;height:40px;display:inline-flex;align-items:center;justify-content:center;
-  border:1px solid var(--bo2);background:var(--bg);color:var(--mu);
-  font-family:inherit;font-size:11px;border-radius:99px;cursor:pointer;transition:all .15s}
+/* O botão que abre a fita dos campos, à direita da procura. Traz o número
+   dos VALORES ligados — é a única medida, com o painel fechado, do que
+   está a cortar a lista por baixo. */
+.ftoggle{flex-shrink:0;display:inline-flex;align-items:center;gap:7px;
+  border:1px solid var(--bo2);background:var(--bg);color:var(--tx);
+  font-family:inherit;font-size:12px;font-weight:600;padding:10px 13px;
+  border-radius:99px;cursor:pointer;transition:all .15s}
 .ftoggle:hover{border-color:var(--vh);color:var(--vh)}
+.ftoggle .fchev{font-size:8px;color:var(--mu);transition:transform .2s}
+.filtros.aberto .ftoggle{background:var(--vh);color:#fff;border-color:var(--vh)}
+.filtros.aberto .ftoggle .fchev{transform:rotate(180deg);color:#fff}
+.filtros.aberto .fn{background:#fff;color:var(--vh)}
 .fn{background:var(--vh);color:#fff;font-size:10px;font-weight:700;min-width:17px;height:17px;border-radius:99px;
   display:none;align-items:center;justify-content:center;padding:0 5px}
 .fn.on{display:inline-flex}
 
-/* ── OS TRÊS ANDARES ──────────────────────────────────────────────
-   Uma classe no contentor (`n0`…`n3`) e nada de `style.display` em JS:
-   assim o que cada andar mostra lê-se aqui, num sítio só, em vez de
-   andar espalhado por quatro atribuições no `renderFiltros`. */
-.filtros .fmin,.filtros .fsearch,.filtros .fgrupos,.filtros .fchips,
-.filtros .fbar,.filtros .fmais{display:none}
-.filtros.n0 .fmin{display:flex}
-.filtros.n1 .fsearch,.filtros.n2 .fsearch,.filtros.n3 .fsearch{display:flex}
-.filtros.n2 .fgrupos,.filtros.n3 .fgrupos{display:block;animation:abrir .18s ease both}
-.filtros.n3 .fchips{display:flex;animation:abrir .18s ease both}
-.filtros.n1 .fmais,.filtros.n2 .fmais,.filtros.n3 .fmais{display:block}
-/* A contagem e o "limpar" só aparecem quando há alguma coisa a filtrar.
-   É uma CLASSE e não `style.display` em JS: com a regra de fecho acima a
-   dizer `display:none`, um `style.display=''` não a vencia — e a barra
-   ficava escondida exatamente quando devia aparecer. */
-.filtros.n1 .fbar.on,.filtros.n2 .fbar.on,.filtros.n3 .fbar.on{display:flex}
+/* ── O PAINEL: sempre a procura, e os filtros atrás do botão ────────
+   Já teve três andares (procura / cor+região+castas / os outros nove) e o
+   andar do meio dava meio ecrã de cartões antes de se chegar à lista.
+   Agora é a procura sempre à vista e, atrás do botão, uma FITA de uma
+   linha com os doze campos — só os valores de UM abrem por baixo. */
+.filtros .fcampos,.filtros .fdom,.filtros .fbar{display:none}
+.filtros.aberto .fcampos{display:flex;animation:abrir .18s ease both}
+.filtros.aberto .fdom:not(:empty){display:block;animation:abrir .18s ease both}
+.filtros .fbar.on{display:flex}
 
-/* A barra fechada: o que está a filtrar, o número, e o chevron. É a única
-   coisa no ecrã a dizer que há filtros ligados — daí o texto ser o resumo
-   e não a palavra "Filtros". */
-.fmin{width:100%;align-items:center;justify-content:space-between;gap:10px;
-  background:none;border:none;padding:2px;cursor:pointer;text-align:left;font-family:inherit}
-.fmin-tx{font-size:13px;color:var(--mu);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fmin-lado{display:flex;align-items:center;gap:7px;flex-shrink:0}
-.fmin .fchev{font-size:9px;color:var(--mu)}
+/* A FITA. Rola de lado e não quebra: doze campos em `flex-wrap` eram três
+   linhas de pastilhas, que é o espaço que isto veio poupar. A barra de
+   scroll esconde-se (no telemóvel nem aparece, e no desktop roubava 15px
+   de altura a uma linha de 32); `overscroll-behavior-x:contain` impede
+   que chegar ao fim da fita puxe a página — ou, no iOS, o gesto de voltar
+   atrás. */
+.fcampos{gap:6px;overflow-x:auto;overscroll-behavior-x:contain;
+  margin-top:11px;padding:11px 0 2px;border-top:1px solid var(--bo);
+  scrollbar-width:none;-ms-overflow-style:none}
+.fcampos::-webkit-scrollbar{display:none}
+.fcampo{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;
+  padding:7px 12px;border:1px solid var(--bo);border-radius:99px;background:var(--bg);
+  font-family:inherit;font-size:12px;font-weight:600;color:var(--mu);cursor:pointer;
+  white-space:nowrap;transition:all .15s}
+.fcampo:hover{border-color:var(--bo2);background:#fff}
+/* Dois estados e não um: LIGADO (tem valores escolhidos) e ABERTO (é o que
+   está a mostrar os valores). São coisas diferentes — pode estar ligado sem
+   estar aberto, que é o caso normal — e por isso um é o contorno e o outro
+   o preenchimento. */
+.fcampo.ativo{border-color:var(--vh);color:var(--vh);background:var(--vhp)}
+.fcampo.aberto{background:var(--vh);border-color:var(--vh);color:#fff}
+.fcn{font-style:normal;font-size:10px;font-weight:700;min-width:16px;height:16px;
+  border-radius:99px;display:inline-flex;align-items:center;justify-content:center;
+  padding:0 4px;background:var(--vh);color:#fff}
+.fcampo.aberto .fcn{background:rgba(255,255,255,.28)}
 
-/* O degrau seguinte. Largura toda e texto por extenso: é uma pergunta
-   ("queres também filtrar por cor, região e castas?"), não um ícone. */
-.fmais{width:100%;margin-top:11px;padding:9px;border:1px dashed var(--bo2);border-radius:99px;
-  background:none;color:var(--vh);font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer}
-.fmais:hover{border-color:var(--vh);background:var(--vhp)}
+.fdom{margin-top:11px}
+.fvazio{font-size:11.5px;color:var(--mu);padding:4px 2px}
 
-/* ── ANDAR 2: OS CARTÕES COM CONTAGENS ────────────────────────────
-   DUAS por linha, e uma GRELHA — não um `flex-wrap`. Com três por linha
-   "Península de Setúbal" e "Cabernet Sauvignon" chegam ao ecrã cortadas a
-   meio, e um filtro que não se lê não se escolhe; com `flex-grow`, o
-   último cartão de uma linha ímpar estica-se sozinho de ponta a ponta.
-   `minmax(0,1fr)` e `min-width:0` no cartão porque o mínimo de um item de
-   grelha é `auto`: sem isso é a coluna que cresce. */
-.fgrupos{margin-top:11px;padding-top:11px;border-top:1px solid var(--bo)}
-.fgrupo+.fgrupo{margin-top:14px}
-.fgrupo-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;
-  flex-wrap:wrap;margin-bottom:7px}
-.fgrupo-tit{font-size:10px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.7px}
-.fops{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+/* OS VALORES do campo aberto: DUAS por linha, e uma GRELHA — não um
+   `flex-wrap`. Com três por linha "Península de Setúbal" e "Cabernet
+   Sauvignon" chegam ao ecrã cortadas a meio, e um filtro que não se lê não
+   se escolhe; com `flex-grow`, o último cartão de uma linha ímpar
+   estica-se sozinho de ponta a ponta. `minmax(0,1fr)` e `min-width:0` no
+   cartão porque o mínimo de um item de grelha é `auto`: sem isso é a
+   coluna que cresce. */
+/* Duas colunas no telemóvel, mais num ecrã largo — `auto-fill` com um
+   mínimo de 170px, e não `repeat(2,…)` fixo: com duas colunas fixas, um
+   "Alentejo 3" num ecrã de 900px ficava um cartão de 700px de largura com
+   duas palavras lá dentro. O mínimo é o que mantém as duas colunas no
+   telemóvel (2×150+6 cabe nos ~334px úteis do cartão, 3 não cabem) e é ele que
+   impede um cartão estreito de mais para "Península de Setúbal". O
+   `minmax(0,…)` continua a ser preciso porque o mínimo de um item de
+   grelha é `auto` — ver o `min-width:0` do `.fop`. */
+.fops{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(150px,100%),1fr));gap:6px}
 .fop{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;
   padding:9px 10px;border-radius:12px;border:1px solid var(--bo);background:var(--bg);color:var(--tx);
   font-family:inherit;font-size:12px;text-align:left;cursor:pointer;transition:all .15s}
@@ -452,21 +480,11 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .fop.on .fconta{color:rgba(255,255,255,.75)}
 .fponto{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
 .fop.on .fponto{box-shadow:0 0 0 1.5px rgba(255,255,255,.5)}
-/* As duas regras das castas, à direita do título do grupo. */
-.fregras{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-
-.fchips{flex-wrap:wrap;gap:7px;margin-top:11px;padding-top:11px;border-top:1px solid var(--bo)}
-.fchip{position:relative;display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border:1px solid var(--bo);
-  border-radius:99px;background:var(--bg);font-size:12px;color:var(--mu);cursor:pointer;transition:all .15s;max-width:100%}
-.fchip:hover{border-color:var(--bo2);background:#fff}
-.fchip>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fchip .fchev{font-size:8px;opacity:.6}
-.fchip.ativo{background:var(--vh);color:#fff;border-color:var(--vh);font-weight:600}
-.fchip select{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:none;
-  font-size:16px;font-family:inherit;cursor:pointer;-webkit-appearance:none;appearance:none}
-/* As pastilhas dizem o que NÃO se vê do andar onde se está: um filtro cujo
-   grupo está aberto já se lê no cartão aceso. Quem decide isso é o
-   `renderFiltros` (ver a regra lá); aqui só se esconde a fila vazia. */
+/* As duas regras das castas, por cima dos valores. */
+.fregras{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:9px}
+/* As pastilhas dizem o que NÃO se vê daqui: o campo aberto já se lê nos
+   cartões acesos. Quem decide isso é o `renderFiltros` (ver a regra lá);
+   aqui só se esconde a fila vazia. */
 .factivos{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .factivos:empty{display:none}
 .fpill{display:inline-flex;align-items:center;gap:7px;background:var(--vhp);border:1px solid #f0dbe2;color:var(--vh);
