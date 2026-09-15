@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="87">
+<body data-build="88">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone.svg" alt="">
@@ -282,7 +282,19 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
   </section>
 </div>
 
-<button class="fab ro-hide" onclick="abrirNovoVinho()" title="Adicionar vinho">+</button>
+<div class="lotebar" id="lotebar">
+  <button class="btn ghost" onclick="loteSelCancelar()">Cancelar</button>
+  <span class="lotebar-n" id="lotebar-n">0/10 selecionados</span>
+  <button class="btn prim" id="lotebar-seguinte" onclick="loteSelSeguinte()" disabled>Seguinte ›</button>
+</div>
+
+<div class="fab-wrap ro-hide" id="fab-wrap">
+  <div class="fab-menu" id="fab-menu">
+    <button class="fab-op" onclick="fabAcao('lote')">🔎 Atualização massiva</button>
+    <button class="fab-op" onclick="fabAcao('novo')">🍷 Novo vinho</button>
+  </div>
+  <button class="fab" onclick="fabToggle()" aria-label="Novo vinho ou atualização massiva">+</button>
+</div>
 
 <!-- ═══ MODAIS ═══ -->
 <!-- O detalhe do vinho é o mesmo `.modal` de sempre, mas com pele de
@@ -295,6 +307,7 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 <div class="modal" id="modal-garrafa"><div class="mbox" id="modal-garrafa-in"></div></div>
 <div class="modal" id="modal-substituir"><div class="mbox" id="modal-substituir-in"></div></div>
 <div class="modal" id="modal-ia"><div class="mbox" id="modal-ia-in"></div></div>
+<div class="modal" id="modal-lote"><div class="mbox" id="modal-lote-in"></div></div>
 <div class="modal" id="modal-foto"><div class="mbox" id="modal-foto-in"></div></div>
 <div class="modal" id="modal-local"><div class="mbox" id="modal-local-in"></div></div>
 <div class="modal" id="modal-lugar"><div class="mbox" id="modal-lugar-in"></div></div>

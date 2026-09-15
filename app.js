@@ -1037,7 +1037,7 @@ function toast(msg,erro){
   t.textContent=msg;t.classList.toggle('err',!!erro);t.classList.add('on');
   clearTimeout(_toastT);_toastT=setTimeout(()=>t.classList.remove('on'),erro?4200:2600);
 }
-function abrirModal(id){document.getElementById(id).classList.add('on');}
+function abrirModal(id){document.getElementById(id).classList.add('on');fabFechar();}
 function fecharModal(id){
   const el=document.getElementById(id);
   if(!el)return;
@@ -1046,6 +1046,10 @@ function fecharModal(id){
   // faz o "voltar" do telemóvel fechá-la em vez de sair da app). Sair por
   // aqui tem de o gastar, senão ficava um voltar que não fazia nada.
   if(id==='modal-vinho')pgSairHistoria();
+  // Todos os caminhos de saída do modal da IA (✕, Escape, a margem, o fim
+  // natural do lote) passam por aqui — é o único sítio onde arrumar o
+  // estado de um lote a meio, sem repetir a limpeza em cada botão.
+  if(id==='modal-ia')loteAoFecharModalIA();
 }
 // Fechar tocando no fundo (mas não ao arrastar de dentro para fora).
 // A página do vinho não entra: aí o "fundo" são as margens da folha, e
@@ -1957,7 +1961,7 @@ function sitiosDe(gs){
   });
   return sitios;
 }
-function vinhoCardHTML(v,termos){
+function vinhoCardHTML(v,termos,loteSel){
   const gs=garrafasDe(v.id,true);
   const cl=castaLabel(v);
   const jan=janelaBeber(v);
@@ -1966,9 +1970,12 @@ function vinhoCardHTML(v,termos){
     ? castas.slice(0,2).join(' · ')+(castas.length>2?' +'+(castas.length-2):'')
     : '';
   const sitios=sitiosDe(gs);
-  return `<article class="vcard" onclick="verVinho(${v.id})">
+  const on=loteSel&&loteSelTem(v.id);
+  const cheio=loteSel&&!on&&loteSelCheio();
+  const clique=loteSel?`loteSelToggle(${v.id})`:`verVinho(${v.id})`;
+  return `<article class="vcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}" onclick="${clique}">
     <div class="vc-top">
-      ${vinhoThumb(v,gs.length)}
+      ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
       <div class="vc-main">
         <div class="vc-anofloat">
           <div class="vc-ano">${v.ano||'s/a'}</div>
@@ -2016,10 +2023,13 @@ function vinhoCardHTML(v,termos){
    daqui porque numa coluna de 150px ele e a nota disputavam a mesma linha
    e a nota — que é o que faz escolher entre dois rótulos — ficava a
    competir com um "Sala +1" que se lê na lista e na ficha do vinho. */
-function vinhoGrelhaHTML(v,termos){
+function vinhoGrelhaHTML(v,termos,loteSel){
   const gs=garrafasDe(v.id,true);
-  return `<article class="vgcard" onclick="verVinho(${v.id})">
-    ${vinhoThumb(v,gs.length)}
+  const on=loteSel&&loteSelTem(v.id);
+  const cheio=loteSel&&!on&&loteSelCheio();
+  const clique=loteSel?`loteSelToggle(${v.id})`:`verVinho(${v.id})`;
+  return `<article class="vgcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}" onclick="${clique}">
+    ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
     <div class="vg-nome">${esc(v.nome)}</div>
     <div class="vg-sub">${esc([v.ano||'s/a',v.produtor,v.regiao].filter(Boolean).join(' · '))}</div>
     <div class="vg-foot">
@@ -2074,7 +2084,7 @@ function renderDetalhe(){
   const grupos=agruparVinhos(res,DET_AGRUPAR);
   const grelha=DET_VISTA==='grelha';
   box.innerHTML=grupos.map(g=>{
-    const itens=g.vinhos.map(v=>(grelha?vinhoGrelhaHTML:vinhoCardHTML)(v,termos)).join('');
+    const itens=g.vinhos.map(v=>(grelha?vinhoGrelhaHTML:vinhoCardHTML)(v,termos,LOTE_SEL_MODO)).join('');
     return `<div class="dgrupo">
       <div class="dgrupo-tit">${esc(g.titulo)} <span class="dgrupo-n">${g.vinhos.length}</span></div>
       ${grelha?`<div class="vgrelha">${itens}</div>`:itens}
@@ -3576,6 +3586,27 @@ function limparPosicaoLayout(prefix){
   renderPickerPosicoes(prefix,pickerGid(prefix));
 }
 
+/* ── FAB — "Novo vinho" e "Atualização massiva" ──
+   Mesmo desenho da WineCatalog: um "+" flutuante que abre duas ações, em
+   vez de um botão só. O FAB do Garrafeira já vive a z-index 90, ABAIXO
+   dos modais (200) — ao contrário da WineCatalog não há aqui o bug do FAB
+   a roubar o toque ao modal, e por isso não precisa da mesma trava; ainda
+   assim `abrirModal` fecha o menu do FAB, para não ficar um menu aberto
+   por trás de um modal que se abriu por cima. */
+function fabToggle(){
+  const w=document.getElementById('fab-wrap');
+  if(w)w.classList.toggle('open');
+}
+function fabFechar(){
+  const w=document.getElementById('fab-wrap');
+  if(w)w.classList.remove('open');
+}
+function fabAcao(tipo){
+  fabFechar();
+  if(tipo==='novo')abrirNovoVinho();
+  if(tipo==='lote')loteAbrir();
+}
+
 function abrirNovoVinho(){
   if(roGuard())return;
   abrirEditarVinho(0);
@@ -4701,9 +4732,11 @@ function iaMostrarResultado(res,vinhoId){
   // em `iaMostrarErro` — aí sim é um caminho a sério, não uma segunda opinião.)
   const valeAOutro=IA_MOTOR==='gratis';
 
+  const loteProg=IA_LOTE_ATIVO?` · ${LOTE_IDX+1}/${LOTE_FILA.length}`:'';
+  const loteSaltarBtn=IA_LOTE_ATIVO?'<button class="btn ghost" onclick="loteSaltar()">Saltar »</button>':'';
   document.getElementById('modal-ia-in').innerHTML=`
     <div class="mtop"><div><h3>${cmp?esc(rot1)+' vs '+esc(rot2):'O que se encontrou'}</h3>
-      <div class="note" style="margin-top:3px">${esc(v.nome||'')} ${v.ano||''}</div></div>
+      <div class="note" style="margin-top:3px">${esc(v.nome||'')} ${v.ano||''}${loteProg}</div></div>
       <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
 
     ${iaOrigemHTML(IA_RES)}
@@ -4723,11 +4756,13 @@ function iaMostrarResultado(res,vinhoId){
       <div class="macoes">
         <button class="btn prim" id="ia-btn" onclick="iaAplicar()">Guardar o que ${cmp?'escolhi':'está marcado'}</button>
         ${cmp?'':'<button class="btn ghost" onclick="iaTodos(true)">Marcar tudo</button>'}
-        <button class="btn ghost" onclick="fecharModal('modal-ia')">Cancelar</button>
+        ${loteSaltarBtn}
+        <button class="btn ghost" onclick="fecharModal('modal-ia')">${IA_LOTE_ATIVO?'Parar aqui':'Cancelar'}</button>
       </div>`
     :`<div class="note" style="margin-top:14px">A procura não trouxe nada de novo — o que está na ficha já bate certo com o que se encontrou.</div>
-      <div class="macoes">${!cmp&&temPremium()&&valeAOutro?`<button class="btn ghost" onclick="iaSegundaOpiniao()">✨ Tentar com a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))}</button>`:''}
-        <button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button></div>`}
+      <div class="macoes">${!cmp&&temPremium()&&valeAOutro&&!IA_LOTE_ATIVO?`<button class="btn ghost" onclick="iaSegundaOpiniao()">✨ Tentar com a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))}</button>`:''}
+        ${loteSaltarBtn}
+        <button class="btn ghost" onclick="fecharModal('modal-ia')">${IA_LOTE_ATIVO?'Parar aqui':'Fechar'}</button></div>`}
 
     ${fontesDe(IA_RES,rot1)}${cmp?fontesDe(IA_RES2,rot2):''}
     <div class="ia-fontes"><i>${semNet
@@ -4798,8 +4833,16 @@ async function iaAplicar(){
       v.castas=castasNovas.slice().sort((a,b)=>a.localeCompare(b,'pt'));
       await recarregarCastas();
     }
-    fecharModal('modal-ia');renderLista();refrescarVinhoAberto();
-    toast('Ficha atualizada ✓');
+    // A meio de um lote, guardar não fecha — avança para o vinho seguinte
+    // (ou fecha sozinho, se este era o último). `loteAoFecharModalIA` é que
+    // arruma o estado no fim; fora de um lote, o caminho é o de sempre.
+    if(IA_LOTE_ATIVO){
+      renderLista();
+      loteAvancar();
+    }else{
+      fecharModal('modal-ia');renderLista();refrescarVinhoAberto();
+      toast('Ficha atualizada ✓');
+    }
   }catch(e){
     toast('Não foi possível guardar: '+e.message,1);
     if(btn){btn.disabled=false;btn.textContent='Guardar o que '+(IA_RES2?'escolhi':'está marcado');}
@@ -5226,6 +5269,383 @@ async function iaManualColar(vinhoId){
     IA_RES2=null;IA_MOTOR2='';
   }
   iaMostrarResultado(ficha,vinhoId);
+}
+
+/* ── ATUALIZAÇÃO MASSIVA (lote) ──────────────────────────────────────
+   Nasceu de uma pergunta simples: em vez de abrir vinho a vinho para
+   pedir "só a nota do Vivino", porque não escolher vários de uma vez e
+   pedir uma vez só? Cada pesquisa com pesquisa web é um pedido pago à
+   parte dos tokens (é o que a análise dos logs mostrou), por isso o que
+   poupa dinheiro a sério aqui não é o modelo escolhido — é PEDIR MENOS
+   VEZES. A automática em lote ainda faz uma chamada por vinho (não há
+   como pedir vários vinhos ao `vinho-info` numa chamada só); quem quer
+   poupar a sério usa a manual, que é UM prompt só para todos.
+
+   Não é um caminho de escrita novo nenhum: os passos 2 (campos) e 4
+   (comparar) reaproveitam tal e qual `IA_CAMPOS`, `iaManualNormalizar`,
+   `iaMostrarResultado` e `iaAplicar` — só o passo 1 (escolher vinhos, na
+   própria lista de Detalhe) e o 3 (gerar o pedido, um por um ou todos de
+   uma vez) são código novo. Duas cópias da comparação campo a campo
+   divergiam no dia em que alguém mexesse só numa. */
+const LOTE_MAX_VINHOS=10, LOTE_MAX_CAMPOS=5;
+let LOTE_SEL_MODO=false;
+let LOTE_SEL=new Map();         // id -> {id,nome,ano,produtor,tipo,regiao}
+let LOTE_CAMPOS=[];             // até LOTE_MAX_CAMPOS chaves de IA_CAMPOS
+let LOTE_FILA=[], LOTE_IDX=0, LOTE_RESULTADOS=null;
+let IA_LOTE_ATIVO=false;        // `iaMostrarResultado`/`iaAplicar` leem isto para saber que estão a meio de um lote
+
+function fabSincronizar(){
+  const w=document.getElementById('fab-wrap');
+  if(w)w.style.display=LOTE_SEL_MODO?'none':'';
+  // No mapa dos locais o `ajustarEstantes` reserva espaço para o FAB — se
+  // ele aparece/desaparece sem um redesenho a seguir, a última prateleira
+  // ficava a discordar do que se vê (por baixo ou por cima do "+").
+  if(tabAtiva==='locais')ajustarEstantes();
+}
+
+// ── Passo 1: escolher até LOTE_MAX_VINHOS na lista de Detalhe ──
+function loteAbrir(){
+  if(roGuard())return;
+  if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
+  const btn=document.querySelector('.itabs .it[onclick^="tab(\'detalhe\'"]');
+  tab('detalhe',btn);
+  LOTE_SEL_MODO=true;
+  LOTE_SEL=new Map();
+  fabSincronizar();
+  document.getElementById('lotebar').classList.add('on');
+  loteSelBarra();
+  renderDetalhe();
+}
+function loteSelCancelar(){
+  LOTE_SEL_MODO=false;
+  LOTE_SEL=new Map();
+  fabSincronizar();
+  document.getElementById('lotebar').classList.remove('on');
+  renderDetalhe();
+}
+function loteSelTem(id){return LOTE_SEL.has(id);}
+function loteSelCheio(){return LOTE_SEL.size>=LOTE_MAX_VINHOS;}
+function loteSelToggle(id){
+  if(LOTE_SEL.has(id)){
+    LOTE_SEL.delete(id);
+  }else{
+    if(loteSelCheio()){toast('Já tens '+LOTE_MAX_VINHOS+' vinhos — tira um para escolheres outro',1);return;}
+    const v=IDXV[id];if(!v)return;
+    LOTE_SEL.set(id,{id:v.id,nome:v.nome,ano:v.ano,produtor:v.produtor,tipo:v.tipo,regiao:v.regiao});
+  }
+  loteSelBarra();
+  renderDetalhe();
+}
+function loteSelBarra(){
+  const n=LOTE_SEL.size;
+  const et=document.getElementById('lotebar-n');
+  if(et)et.textContent=n+'/'+LOTE_MAX_VINHOS+' selecionados';
+  const btn=document.getElementById('lotebar-seguinte');
+  if(btn)btn.disabled=!n;
+}
+function loteSelSeguinte(){
+  if(!LOTE_SEL.size)return;
+  LOTE_SEL_MODO=false;
+  fabSincronizar();
+  document.getElementById('lotebar').classList.remove('on');
+  renderDetalhe();
+  loteCampos();
+}
+function loteVoltarSelecao(){
+  fecharModal('modal-lote');
+  LOTE_SEL_MODO=true;
+  fabSincronizar();
+  document.getElementById('lotebar').classList.add('on');
+  loteSelBarra();
+  renderDetalhe();
+}
+function loteChipsHTML(){
+  return `<div class="lote-chips">${[...LOTE_SEL.values()].map(v=>
+    `<span class="lote-chip"><span>${esc(v.nome||'(sem nome)')}</span>${
+      v.ano?`<em>${esc(String(v.ano))}</em>`:''}</span>`).join('')}</div>`;
+}
+
+// ── Passo 2: escolher até LOTE_MAX_CAMPOS campos, para todos os vinhos escolhidos ──
+function loteCampos(){
+  LOTE_CAMPOS=[];
+  const vinhos=[...LOTE_SEL.values()];
+  const n=vinhos.length;
+  const linhas=IA_CAMPOS.map(c=>{
+    const vazios=vinhos.filter(vs=>!iaValorAtual(IDXV[vs.id]||{},c.k)).length;
+    return `<label class="ia-esc">
+      <input type="checkbox" class="lote-esc-c" value="${esc(c.k)}" onchange="loteToggleCampo('${escJs(c.k)}')">
+      <span>${esc(c.rot)}${vazios?` <i>vazio em ${vazios} de ${n}</i>`:' <i>já têm todos</i>'}</span>
+    </label>`;
+  }).join('');
+  document.getElementById('modal-lote-in').innerHTML=`
+    <div class="mtop"><h3>🔎 Atualização massiva</h3><button class="mx" onclick="fecharModal('modal-lote')">✕</button></div>
+    <div class="note" style="margin-top:3px">${n} vinho${n>1?'s':''} escolhido${n>1?'s':''}</div>
+    ${loteChipsHTML()}
+    <div class="aviso" style="margin-top:10px">Escolhe até <b>${LOTE_MAX_CAMPOS} campos</b> — poucos, e a pesquisa
+      (automática ou manual) sai mais precisa. O número ao lado de cada um diz a quantos destes vinhos falta.</div>
+    <div class="ia-escbar"><span class="note" id="lote-esc-n">0 de ${LOTE_MAX_CAMPOS} campos</span></div>
+    <div class="ia-escs">${linhas}</div>
+    <div class="macoes">
+      <button class="btn prim" id="lote-campos-btn" onclick="loteAutoManual()" disabled>Seguinte ›</button>
+      <button class="btn ghost" onclick="loteVoltarSelecao()">‹ Voltar aos vinhos</button>
+    </div>`;
+  abrirModal('modal-lote');
+}
+function loteToggleCampo(k){
+  const cx=document.querySelector('.lote-esc-c[value="'+CSS.escape(k)+'"]');
+  const i=LOTE_CAMPOS.indexOf(k);
+  if(i>=0){
+    LOTE_CAMPOS.splice(i,1);
+  }else{
+    if(LOTE_CAMPOS.length>=LOTE_MAX_CAMPOS){
+      toast('Já tens '+LOTE_MAX_CAMPOS+' campos — tira um para escolheres outro',1);
+      if(cx)cx.checked=false;
+      return;
+    }
+    LOTE_CAMPOS.push(k);
+  }
+  const et=document.getElementById('lote-esc-n');
+  if(et)et.textContent=LOTE_CAMPOS.length+' de '+LOTE_MAX_CAMPOS+' campos';
+  const btn=document.getElementById('lote-campos-btn');
+  if(btn)btn.disabled=!LOTE_CAMPOS.length;
+}
+
+// ── Passo 3: automática (uma chamada por vinho) ou manual (um prompt só) ──
+async function loteAutoManual(){
+  if(!LOTE_CAMPOS.length)return;
+  const vinhos=[...LOTE_SEL.values()];
+  document.getElementById('modal-lote-in').innerHTML=`
+    <div class="mtop"><h3>🔎 Atualização massiva</h3><button class="mx" onclick="fecharModal('modal-lote')">✕</button></div>
+    <div class="note" style="margin-top:3px">${vinhos.length} vinho${vinhos.length>1?'s':''} · ${LOTE_CAMPOS.length} campo${LOTE_CAMPOS.length>1?'s':''}</div>
+    <div id="lote-aviso-rep"></div>
+    <div style="display:flex;flex-direction:column;gap:14px;margin-top:14px">
+      <div><button class="btn ghost full" onclick="loteAutomatica()">🔎 Pesquisa automática</button>
+        <div class="note" style="margin-top:5px">Paga — a ${esc(rotuloMotor(motorDoPlano()))}, uma pesquisa por
+          vinho (${vinhos.length} pesquisas no total).</div></div>
+      <div><button class="btn prim full" onclick="loteManual()">✍️ Pesquisa manual</button>
+        <div class="note" style="margin-top:5px">Grátis — um prompt só, para os ${vinhos.length} vinhos de uma vez;
+          copias para o assistente de IA que preferires e colas a resposta aqui.</div></div>
+    </div>
+    <div class="macoes"><button class="btn ghost" onclick="loteCampos()">‹ Voltar</button></div>`;
+  abrirModal('modal-lote');
+  // Informativo, não bloqueia: diz quais destes vinhos já foram pesquisados
+  // há menos de 30 dias, para quem preferir saltá-los ou ir pela manual em
+  // vez de pagar outra pesquisa a um campo que provavelmente continua vazio.
+  const recentes=[];
+  for(const v of vinhos){
+    try{if(await iaUltimaProcura(v.id))recentes.push(v.nome);}catch(e){}
+  }
+  const el=document.getElementById('lote-aviso-rep');
+  if(el&&recentes.length)el.innerHTML=`<div class="aviso" style="margin-top:10px">
+    <b>${recentes.length} d${recentes.length>1?'estes vinhos já foram':'este vinho já foi'} pesquisado${recentes.length>1?'s':''}
+    há menos de 30 dias:</b> ${esc(recentes.join(', '))}. A automática pesquisa-os à mesma — se for só para confirmar
+    um campo que continua vazio, considera saltá-los ou usar a manual, que não custa nada.</div>`;
+}
+
+// ── 3a. Automática: uma chamada por vinho, sequencial ──
+async function loteAutomatica(){
+  const vinhos=[...LOTE_SEL.values()];
+  fecharModal('modal-lote');
+  LOTE_FILA=vinhos.map(v=>v.id);
+  LOTE_RESULTADOS=new Map();
+  LOTE_IDX=0;
+  IA_LOTE_ATIVO=true;
+  await loteAutomaticaBuscar();
+}
+async function loteAutomaticaBuscar(){
+  if(LOTE_IDX>=LOTE_FILA.length){fecharModal('modal-ia');return;}
+  const vinhoId=LOTE_FILA[LOTE_IDX];
+  const v=IDXV[vinhoId];
+  if(!v){loteAvancar();return;}
+  const pedido={nome:v.nome,tipo:v.tipo||'Tinto'};
+  if(v.ano)pedido.ano=v.ano;
+  if(v.produtor)pedido.produtor=v.produtor;
+  if(v.regiao)pedido.regiao=v.regiao;
+  pedido.campos=LOTE_CAMPOS;
+  pedido.colheitaEspecifica=false;
+  IA_PEDIDO=pedido;IA_VINHO=vinhoId;IA_RES2=null;IA_MOTOR2='';IA_ERRO2='';
+  IA_MOTOR=motorDoPlano();
+  iaMostrarEspera(`${v.nome} ${v.ano||''} · ${LOTE_IDX+1}/${LOTE_FILA.length}`,IA_MOTOR);
+  try{
+    const res=await iaPedir(pedido,vinhoId,IA_MOTOR);
+    LOTE_RESULTADOS.set(vinhoId,res);
+    loteMostrarAtual();
+  }catch(e){
+    loteMostrarErro(e.message,vinhoId);
+  }
+}
+function loteMostrarErro(msg,vinhoId){
+  const v=IDXV[vinhoId]||{};
+  document.getElementById('modal-ia-in').innerHTML=`
+    <div class="mtop"><h3>Não deu</h3><button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
+    <div class="note" style="margin-top:3px">${esc(v.nome||'')} ${v.ano||''} · ${LOTE_IDX+1}/${LOTE_FILA.length}</div>
+    <div class="erro">${esc(msg)}</div>
+    <div class="macoes">
+      <button class="btn prim" onclick="loteAutomaticaBuscar()">Tentar outra vez</button>
+      <button class="btn ghost" onclick="loteSaltar()">Saltar este vinho</button>
+      <button class="btn ghost" onclick="fecharModal('modal-ia')">Parar aqui</button>
+    </div>`;
+  abrirModal('modal-ia');
+}
+
+// ── 3b. Manual: um prompt só, para todos os vinhos escolhidos ──
+// Espelho do `iaManualPrompt`/`IA_MANUAL_REGRA_CUVEE`/`iaManualRegraVivino`
+// de um vinho só, só que com um "id" por vinho para se saber, na resposta
+// colada, a que vinho pertence cada objeto — sem depender da ordem.
+function loteManualCampoExemplo(k){
+  const EX={
+    tipo:`"um de: ${TIPOS.join(' | ')}"`,
+    estilo:`"vazio, ou um de: ${ESTILOS.filter(Boolean).join(' | ')}"`,
+    regiao:'"região vitivinícola"', sub_regiao:'""',
+    mencao:`"vazio, ou um de: ${MENCOES.filter(Boolean).join(' | ')}"`,
+    classificacao:`"vazio, ou um de: ${CLASSIF.filter(Boolean).join(' | ')}"`,
+    castas:'["Touriga Nacional", "Touriga Franca"]',
+    teor:'14.5', estagio_meses:'18', estagio_texto:'"18 meses em barrica de carvalho francês"',
+    vivino_nota:'4.1', vivino_avaliacoes:'1234', vivino_url:'""', imagem_url:'""',
+    preco_medio:'18.5', beber_de:'2026', beber_ate:'2034',
+    notas_prova:'"duas ou três frases sobre aroma, boca e final"',
+    harmonizacao:'"com que pratos"', ai_resumo:'"duas ou três frases sobre o vinho e o produtor"',
+  };
+  return k in EX?EX[k]:'null';
+}
+function loteManualRegras(campos){
+  const r=['NÃO INVENTES. Um campo que não confirmes por pesquisa fica FORA do objeto desse vinho (ou null) — '+
+      'uma ficha com metade dos campos certos vale mais do que uma cheia com metade inventada.',
+    IA_MANUAL_REGRA_CUVEE];
+  if(campos.some(k=>k.startsWith('vivino_')))r.push(iaManualRegraVivino(false));
+  if(campos.includes('castas'))r.push('Castas separadas por nome (nunca "blend"/"lote"/"várias castas").');
+  if(campos.includes('imagem_url'))r.push('"imagemUrl" é o link DIRETO de uma fotografia (acaba em '+
+    '.jpg/.jpeg/.png/.webp/.avif), nunca o link da página.');
+  if(campos.includes('preco_medio'))r.push('"precoMedio" é o preço de UMA garrafa de 0,75L, em euros, em Portugal.');
+  if(campos.includes('beber_de')||campos.includes('beber_ate'))r.push('"beberDe"/"beberAte" são anos.');
+  r.push('O "id" de cada resultado tem de ser EXATAMENTE o "id" da lista de entrada — é assim que sei a que '+
+    'vinho corresponde cada objeto, nunca pela posição na lista.');
+  r.push('Se não conseguires identificar um vinho de todo, o objeto dele fica só '+
+    '{"id": <id>, "encontrado": false, "aviso": "porquê"} — sem inventar os outros campos.');
+  return r;
+}
+function loteManualPrompt(vinhos,campos){
+  const hoje=new Date().toISOString().slice(0,10);
+  const nomesCampos=campos.map(k=>IA_CAMPOS_JSON[k]||k);
+  const linhas=vinhos.map(v=>
+    `- id: ${v.id} | nome: ${v.nome} | produtor: ${v.produtor||'(desconhecido)'}`+
+    (v.ano?` | ano: ${v.ano}`:'')+(v.tipo?` | cor: ${v.tipo}`:'')).join('\n');
+  const camposObj=campos.map(k=>`      "${IA_CAMPOS_JSON[k]||k}": ${loteManualCampoExemplo(k)}`).join(',\n');
+  const regras=loteManualRegras(campos).map((r,i)=>`${i+1}. ${r}`).join('\n');
+  return `Usa a tua pesquisa na internet para preencheres, PARA CADA VINHO da lista abaixo, só os campos pedidos — como faria um enólogo a atualizar uma garrafeira de referência.
+
+Hoje é ${hoje}.
+CAMPOS A PEDIR (só estes, para todos os vinhos): ${nomesCampos.join(', ')}.
+
+VINHOS A IDENTIFICAR:
+${linhas}
+
+REGRAS, e são a sério:
+${regras}
+
+Responde SÓ com este JSON, sem texto à volta e sem blocos de código \`\`\`, com exatamente ${vinhos.length} objeto${vinhos.length>1?'s':''} em "resultados" (um por vinho, pela mesma ordem):
+{
+  "resultados": [
+    {
+      "id": ${vinhos[0].id},
+      "encontrado": true,
+${camposObj},
+      "aviso": "vazio, ou o que ficou por confirmar"
+    }
+  ]
+}`;
+}
+function loteManual(){
+  const vinhos=[...LOTE_SEL.values()];
+  const txt=loteManualPrompt(vinhos,LOTE_CAMPOS);
+  document.getElementById('modal-lote-in').innerHTML=`
+    <div class="mtop"><h3>✍️ Pesquisa manual em lote</h3><button class="mx" onclick="fecharModal('modal-lote')">✕</button></div>
+    <div class="aviso">1. Copia o prompt. 2. Cola-o num assistente de IA com pesquisa na internet ligada (Gemini,
+      ChatGPT, Claude…). 3. Copia a resposta toda (o JSON) e cola-a na caixa de baixo. 4. Carrega em Comparar — entra-se
+      vinho a vinho, tal como numa pesquisa normal.</div>
+    <label>Prompt a copiar</label>
+    <textarea id="lote-manual-prompt" readonly rows="8" onclick="this.select()">${esc(txt)}</textarea>
+    <button class="btn ghost full" style="margin-top:8px" onclick="loteManualCopiar()">📋 Copiar prompt</button>
+    <label style="margin-top:16px">Resposta (cola aqui)</label>
+    <textarea id="lote-manual-resposta" rows="12" placeholder="Cola aqui o JSON que o modelo devolveu…"></textarea>
+    <div class="note" id="lote-manual-erro" style="margin-top:6px;color:var(--dg)"></div>
+    <div class="macoes">
+      <button class="btn prim" onclick="loteManualColar()">Comparar</button>
+      <button class="btn ghost" onclick="loteAutoManual()">‹ Voltar</button>
+    </div>`;
+  abrirModal('modal-lote');
+}
+async function loteManualCopiar(){
+  const ta=document.getElementById('lote-manual-prompt');
+  if(!ta)return;
+  try{
+    await navigator.clipboard.writeText(ta.value);
+    toast('Prompt copiado ✓');
+  }catch(e){
+    ta.focus();ta.select();
+    toast('Não deu para copiar sozinho — o texto já está selecionado, usa Ctrl/Cmd+C',1);
+  }
+}
+function loteManualColar(){
+  const erroEl=document.getElementById('lote-manual-erro');
+  const txt=document.getElementById('lote-manual-resposta').value;
+  const raw=iaManualExtrairJson(txt);
+  const lista=raw&&Array.isArray(raw.resultados)?raw.resultados:null;
+  if(!lista){
+    if(erroEl)erroEl.textContent='Não consegui ler a resposta colada como JSON — confirma que colaste o texto '+
+      'todo, incluindo as chavetas { } e "resultados".';
+    return;
+  }
+  if(erroEl)erroEl.textContent='';
+  const vinhos=[...LOTE_SEL.values()];
+  const porId=new Map(lista.map(r=>[Number(r&&r.id),r]));
+  LOTE_RESULTADOS=new Map();
+  LOTE_FILA=[];
+  vinhos.forEach(v=>{
+    const r=porId.get(v.id);
+    if(!r||r.encontrado===false)return;
+    const ficha=iaManualNormalizar(r,v.ano||null,LOTE_CAMPOS);
+    if(!ficha)return;
+    ficha.modelo=IA_MANUAL_MARCA;
+    ficha.pesquisa=true;
+    LOTE_RESULTADOS.set(v.id,ficha);
+    LOTE_FILA.push(v.id);
+  });
+  if(!LOTE_FILA.length){
+    if(erroEl)erroEl.textContent='A resposta leu-se, mas não trouxe nenhum campo aproveitável para nenhum destes vinhos.';
+    return;
+  }
+  LOTE_IDX=0;
+  IA_LOTE_ATIVO=true;
+  fecharModal('modal-lote');
+  loteMostrarAtual();
+}
+
+// ── Passo 4: comparar, vinho a vinho — reaproveita `iaMostrarResultado`/`iaAplicar` tal como estão ──
+function loteMostrarAtual(){
+  const vinhoId=LOTE_FILA[LOTE_IDX];
+  const res=LOTE_RESULTADOS.get(vinhoId);
+  IA_RES2=null;IA_MOTOR2='';IA_ERRO2='';
+  iaMostrarResultado(res,vinhoId);
+}
+function loteAvancar(){
+  LOTE_IDX++;
+  if(LOTE_IDX>=LOTE_FILA.length){fecharModal('modal-ia');return;}
+  if(LOTE_RESULTADOS.has(LOTE_FILA[LOTE_IDX]))loteMostrarAtual();
+  else loteAutomaticaBuscar();
+}
+function loteSaltar(){loteAvancar();}
+// Chamado por `fecharModal('modal-ia')`, seja pelo ✕, Escape, a margem ou o
+// fim natural do lote — é o único sítio por onde TODOS esses caminhos
+// passam, por isso é aqui que se arruma o estado, sem repetir a limpeza em
+// cada botão.
+function loteAoFecharModalIA(){
+  if(!IA_LOTE_ATIVO)return;
+  const total=LOTE_FILA.length, feitos=LOTE_IDX;
+  IA_LOTE_ATIVO=false;
+  LOTE_FILA=[];LOTE_RESULTADOS=null;LOTE_SEL=new Map();
+  renderLista();
+  toast(feitos>=total?'Atualização massiva concluída ✓':`Atualização massiva parada — ${feitos} de ${total} vistos`);
 }
 
 /* ── AUTH (SUPABASE) ───────────────────────────────────────────────
@@ -6809,7 +7229,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='87';
+const APP_BUILD='88';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
