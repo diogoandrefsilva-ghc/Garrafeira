@@ -3605,7 +3605,14 @@ function abrirEditarVinho(id){
     <input type="text" id="e-nome" value="${esc(o('nome'))}" placeholder="Quinta do Vallado Touriga Nacional">
     <div class="mrow">
       <div><label>Ano</label><input type="number" id="e-ano" inputmode="numeric" value="${esc(o('ano'))}" placeholder="2021"></div>
-      <div><label>Produtor</label><input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado"></div>
+      <div>${id
+        ?`<label>Produtor</label><input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado">`
+        // Num vinho novo quase ninguém sabe o produtor de cabeça — é a
+        // pesquisa que o traz. A cor, essa, tem de vir de quem procura (ver
+        // `iaCorGuard`), por isso troca de lugar com o produtor: fica onde
+        // se pede o que só a PESSOA sabe, antes de carregar em Procurar.
+        :'<label>Cor</label><select id="e-tipo"><option value="">— escolhe a cor —</option>'+opts(TIPOS,o('tipo',''))+'</select>'
+      }</div>
     </div>
 
     ${id?`<div class="mrow">
@@ -3614,15 +3621,17 @@ function abrirEditarVinho(id){
     </div>
     <div class="note">Aplica-se a todas as garrafas deste vinho ainda na garrafeira.</div>`:''}
 
-    ${id?'':podeUsarIA()?`<div class="aviso">Escreve o nome (e o ano, se souberes) e carrega em <b>Procurar informação</b>: a pesquisa preenche o resto — castas, região, tipo, nota do Vivino, preço médio e quando beber. Confirmas antes de gravar.</div>
+    ${id?'':podeUsarIA()?`<div class="aviso">Escreve o nome (e o ano, se souberes) e escolhe a cor, e carrega em <b>Procurar informação</b>: a pesquisa preenche o resto — produtor, castas, região, nota do Vivino, preço médio e quando beber. Confirmas antes de gravar.</div>
+      ${iaContextoHTML('e-ia')}
       <button class="btn prim full" id="e-btn-ia" onclick="iaProcurarNovo()">🔎 Procurar informação</button>
+      ${isAdmin()?`<button class="btn ghost full" style="margin-top:8px" onclick="iaManualNovoAbrir()">✍️ Pesquisa manual</button>`:''}
       <div id="e-ia-estado"></div>`:'<div class="note">A pesquisa por IA não está incluída no teu acesso. Pede ao admin para te atribuir um modo com IA.</div>'}
 
     <div class="mrow">
-      <div><label>Tipo</label><select id="e-tipo">${id
-        ? opts(TIPOS,o('tipo','Tinto'))
-        : '<option value="">— escolhe a cor —</option>'+opts(TIPOS,o('tipo',''))
-      }</select></div>
+      <div>${id
+        ?`<label>Tipo</label><select id="e-tipo">${opts(TIPOS,o('tipo','Tinto'))}</select>`
+        :`<label>Produtor</label><input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado">`
+      }</div>
       <div><label>Estilo</label><select id="e-estilo">${opts(ESTILOS,o('estilo'))}</select></div>
     </div>
     <div class="mrow">
@@ -4154,20 +4163,27 @@ function iaValorAtual(v,k){
    limitada", um produtor parecido com outro) do que um conjunto fixo de
    checkboxes alguma vez cobre. Nenhuma das duas é pedida de volta à IA —
    servem só de contexto no prompt (ver `iaArrancar`/`iaManualPrompt`). */
-function iaContextoHTML(){
+// `pref` deixa o mesmo par de caixas viver em dois formulários ao mesmo
+// tempo no DOM (o modal-ia dos vinhos já gravados e o modal-edit do vinho
+// novo) sem ids repetidos — dois elementos com o mesmo id é HTML inválido
+// e `getElementById` ficava a ler o primeiro que encontrasse, do sítio
+// errado.
+function iaContextoHTML(pref){
+  pref=pref||'ia';
   return `<label>Notas para ajudar a identificar o vinho (opcional)</label>
-    <textarea id="ia-notas" rows="2" maxlength="300"
+    <textarea id="${pref}-notas" rows="2" maxlength="300"
       placeholder="ex.: vinho tinto, grande reserva, da casa Ferreirinha, edição limitada"></textarea>
     <div class="note" style="margin-bottom:10px">Não é pedido à IA — é só contexto para não
       confundir este vinho com um homónimo.</div>
     <label>Sites de confiança (opcional)</label>
-    <textarea id="ia-sites" rows="1" placeholder="ex.: vivino.com, wine-searcher.com"></textarea>
+    <textarea id="${pref}-sites" rows="1" placeholder="ex.: vivino.com, wine-searcher.com"></textarea>
     <div class="note" style="margin-bottom:10px">Um ou mais, separados por vírgula — a pesquisa dá
       prioridade a estes.</div>`;
 }
-function iaContextoLer(){
-  const notas=(document.getElementById('ia-notas')?.value||'').trim().slice(0,300);
-  const sites=(document.getElementById('ia-sites')?.value||'')
+function iaContextoLer(pref){
+  pref=pref||'ia';
+  const notas=(document.getElementById(`${pref}-notas`)?.value||'').trim().slice(0,300);
+  const sites=(document.getElementById(`${pref}-sites`)?.value||'')
     .split(/[,\n]/).map(s=>s.trim().replace(/^https?:\/\//i,'').replace(/\/.*$/,'')).filter(Boolean).slice(0,5);
   return {notas,sites};
 }
@@ -4443,8 +4459,12 @@ async function iaProcurarNovo(motor){
   est.innerHTML=`<div class="note" style="margin-top:8px">A ${esc(rotuloMotor(m))} está a procurar na net. Pode levar até dois minutos — podes ir fazendo o resto.</div>`;
   const botaoOutro=!motor&&temPremium()
     ? `<button class="mini${outro==='premium'?' o':''}" style="margin-top:8px" onclick="iaProcurarNovo('${outro}')">✨ Tentar com a ${esc(rotuloMotor(outro))}</button>`:'';
+  const ctx=iaContextoLer('e-ia');
+  const pedido={nome,ano,tipo:elTipo?elTipo.value:'',produtor:document.getElementById('e-produtor').value.trim()};
+  if(ctx.notas)pedido.notas=ctx.notas;
+  if(ctx.sites.length)pedido.sites=ctx.sites;
   try{
-    const res=await iaPedir({nome,ano,produtor:document.getElementById('e-produtor').value.trim()},null,m);
+    const res=await iaPedir(pedido,null,m);
     iaPreencherForm(res,!!motor);
     est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">✓ Preenchido pela ${esc(rotuloMotor(m))}${res.fontes&&res.fontes.length?' ('+res.fontes.length+' fontes)':''}. Confere antes de gravar.</div>`+botaoOutro;
   }catch(e){
@@ -4453,6 +4473,67 @@ async function iaProcurarNovo(motor){
     est.innerHTML=`<div class="erro">${esc(e.message)}</div>`+botaoOutro;
   }
   btn.disabled=false;btn.textContent='🔎 Procurar informação';
+}
+
+/* ── PESQUISA MANUAL NO VINHO NOVO (só admin) ──
+   Espelho pequeno do caminho manual dos vinhos já gravados
+   (`iaManualEscolher`/`iaManualGerarPrompt`/`iaManualColar`), mas sem ecrã
+   de comparação: aqui não há um `vinho_id` nem um "atual" contra que
+   comparar, o formulário É a confirmação — por isso o resultado colado
+   entra pelo MESMO `iaPreencherForm` que a pesquisa automática já usa, só
+   preenchendo o que está vazio. Reaproveita `iaManualPrompt`,
+   `iaManualExtrairJson` e `iaManualNormalizar` tal como estão: o prompt e o
+   parser têm de continuar a ser o mesmo espelho do `vinho-info.ts`, para um
+   vinho novo ou para um já gravado. */
+function iaManualNovoAbrir(){
+  if(!isAdmin())return;
+  const nome=document.getElementById('e-nome').value.trim();
+  if(!nome){toast('Escreve primeiro o nome do vinho',1);document.getElementById('e-nome').focus();return;}
+  const elTipo=document.getElementById('e-tipo');
+  if(elTipo&&!elTipo.value){toast('Escolhe primeiro a cor do vinho',1);elTipo.focus();return;}
+  const v={
+    nome,ano:inteiro(document.getElementById('e-ano').value),
+    produtor:document.getElementById('e-produtor').value.trim(),
+    regiao:'',tipo:elTipo?elTipo.value:''
+  };
+  const ctx=iaContextoLer('e-ia');
+  const txt=iaManualPrompt(v,null,false,ctx.notas,ctx.sites);
+  const est=document.getElementById('e-ia-estado');
+  est.innerHTML=`
+    <div class="aviso" style="margin-top:10px">1. Copia o prompt. 2. Cola-o no assistente de IA que
+      preferires (Gemini, ChatGPT, Claude…). 3. Copia a resposta toda (o JSON) e cola-a na caixa de
+      baixo. 4. Carrega em Preencher.</div>
+    <label>Prompt a copiar</label>
+    <textarea id="e-ia-manual-prompt" readonly rows="6" onclick="this.select()">${esc(txt)}</textarea>
+    <button class="btn ghost full" style="margin-top:8px" onclick="iaManualNovoCopiar()">📋 Copiar prompt</button>
+    <label style="margin-top:12px">Resposta (cola aqui)</label>
+    <textarea id="e-ia-manual-resposta" rows="8" placeholder="Cola aqui o JSON que o modelo devolveu…"></textarea>
+    <div class="note" id="e-ia-manual-erro" style="margin-top:6px;color:var(--dg)"></div>
+    <button class="btn prim full" style="margin-top:8px" onclick="iaManualNovoPreencher()">Preencher o formulário</button>`;
+}
+async function iaManualNovoCopiar(){
+  const ta=document.getElementById('e-ia-manual-prompt');
+  if(!ta)return;
+  try{
+    await navigator.clipboard.writeText(ta.value);
+    toast('Prompt copiado ✓');
+  }catch(e){
+    ta.focus();ta.select();
+    toast('Não deu para copiar sozinho — o texto já está selecionado, usa Ctrl/Cmd+C',1);
+  }
+}
+function iaManualNovoPreencher(){
+  const txt=document.getElementById('e-ia-manual-resposta').value;
+  const erroEl=document.getElementById('e-ia-manual-erro');
+  const raw=iaManualExtrairJson(txt);
+  if(!raw){erroEl.textContent='Não consegui ler isto como JSON. Confirma que colaste a resposta toda, incluindo as chavetas { }.';return;}
+  if(raw.encontrado===false){erroEl.textContent='O modelo disse que não encontrou o vinho'+(raw.aviso?': '+raw.aviso:'.');return;}
+  const ano=inteiro(document.getElementById('e-ano').value);
+  const ficha=iaManualNormalizar(raw,ano||null,null);
+  if(!ficha){erroEl.textContent='O JSON leu-se, mas não trouxe nenhum campo válido — confere se respeitou o formato pedido.';return;}
+  erroEl.textContent='';
+  iaPreencherForm(ficha,false);
+  toast('Formulário preenchido ✓ — confere antes de gravar.');
 }
 
 /* Campos que a IA pode trazer, na ordem em que fazem sentido a ler.
@@ -6728,7 +6809,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='86';
+const APP_BUILD='87';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
