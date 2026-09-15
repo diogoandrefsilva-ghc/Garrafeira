@@ -2188,7 +2188,12 @@ function mapaEstanteHTML(l,gs,d){
         title="${esc(posicaoTxt(p.nome,lugar))} — vazio"><span class="msdot-id">${lugar}</span></button>`;
       const passam=d.filtrando?lista.filter(g=>d.okG.has(g.id)):lista;
       const g=passam[0]||lista[0],v=IDXV[g.vinho_id]||{nome:'?'};
-      return `<button class="msdot cheia${lista.length>1?' conflito':''}${d.filtrando&&!passam.length?' fora':''}"${pos}
+      /* A procura tem de se ver no DESENHO e não só na contagem do
+         cabeçalho: `achada` é o que passa (arco à volta), `fora` o que
+         está ocupado por garrafa que não passa (apagado). Ver "O LUGAR
+         DURANTE A PROCURA" no style.css. */
+      const achada=d.filtrando&&passam.length>0;
+      return `<button class="msdot cheia${lista.length>1?' conflito':''}${achada?' achada':''}${d.filtrando&&!passam.length?' fora':''}"${pos}
         onclick="mapaPopupToggle(${l.id},'${escJs(p.nome)}',${lugar},this,event)"
         onmouseenter="mapaPopupHover(${l.id},'${escJs(p.nome)}',${lugar},this)" onmouseleave="mapaPopupSair()"
         title="${esc(v.nome)} ${v.ano||''} · ${esc(posicaoTxt(p.nome,lugar))}${lista.length>1?` · ${lista.length} garrafas`:''}">
@@ -2228,7 +2233,7 @@ function mapaExtrasHTML(l,gs,d){
 function mapaLocalHTML(x,d){
   const l=x.l,pseudo=l.id<0,vis=d.visiveis,varios=vis.length>1;
   const i=vis.findIndex(y=>y.l.id===l.id);
-  return `<div class="ml" style="--lc:${esc(l.cor||'#7b1f3d')}">
+  return `<div class="ml${d.filtrando?' procurando':''}" style="--lc:${esc(l.cor||'#7b1f3d')}">
     <div class="ml-bar">
       <button class="ml-nav" onclick="mapaLocalIr(-1)" aria-label="Local anterior"${varios?'':' disabled'}>‹</button>
       <div class="ml-t">
@@ -6468,7 +6473,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='82';
+const APP_BUILD='83';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
