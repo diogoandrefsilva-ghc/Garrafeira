@@ -748,9 +748,10 @@ body:not(.readonly) .msdot.vazia:hover{background:#fff;border-color:var(--vh);co
 .msdot.cheia{background:var(--vh);border-color:var(--vh);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;
   box-shadow:0 2px 4px rgba(78,18,40,.25),inset 0 1px 0 rgba(255,255,255,.18);transition:transform .12s,box-shadow .15s}
 .msdot.cheia:hover{transform:translateY(-1px);box-shadow:0 4px 8px rgba(78,18,40,.3)}
-/* Os ESTADOS do lugar (`.conflito`, `.fora`, `.achada`) NÃO vivem aqui —
-   vivem lá em baixo, a seguir às três peles de prateleira, em "O LUGAR
-   DURANTE A PROCURA". Postos aqui, perdiam para elas na cascata. */
+.msdot.conflito{background:#8f2f4d;border-color:#8f2f4d}
+/* Ocupado, mas por uma garrafa que NÃO passa na procura: apagado, para o
+   que passa ficar a cor. */
+.msdot.fora{background:#e6dee1;border-color:#e6dee1;color:#a8969c;box-shadow:none}
 .msdot-id{display:block;max-width:100%;padding:0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msdot-q{position:absolute;right:calc(var(--slot) * -.1);top:calc(var(--slot) * -.1);font-size:calc(var(--slot) * .3);
   font-weight:700;color:#fff;background:#c36c4f;border-radius:99px;padding:0 3px;line-height:1.4}
@@ -1409,55 +1410,6 @@ body.naominha .minha-only{display:none!important}
 .est-regua .msdot{background:var(--vh);border-color:var(--vh);color:#fff;box-shadow:0 2px 4px rgba(78,18,40,.22)}
 .est-regua .msdot.vazia{background:#fffdfb;border:1.5px dashed #c9a1af;color:var(--vh);box-shadow:none}
 
-/* ── O LUGAR DURANTE A PROCURA ───────────────────────────────────────
-   Os estados do lugar vivem AQUI, depois das peles de prateleira, e não
-   lá em cima ao pé do `.msdot`: `.est-fila .msdot` e `.msdot.fora` têm a
-   MESMA especificidade (duas classes cada), por isso ganha a que vier
-   por último no ficheiro — e era a pele. O apagado da procura esteve
-   morto assim nas três peles, sem um erro à vista: procurava-se e a
-   estante não mexia um pixel. Um estado novo do lugar entra NESTE bloco.
-
-   Com a procura ligada há TRÊS pesos e não dois, porque um lugar vazio
-   também não é resposta a pergunta nenhuma: o que passa ganha o arco, o
-   que não passa apaga-se, o vazio cala-se. Antes o vazio era o maior
-   contraste do ecrã (branco sobre madeira) e gritava mais alto do que a
-   garrafa encontrada. */
-.msdot.conflito{background:#8f2f4d;border-color:#8f2f4d}
-/* Ocupado, mas por uma garrafa que NÃO passa na procura. */
-.msdot.fora{background:#e6dee1;border-color:#e6dee1;color:#a8969c;box-shadow:none;z-index:1}
-/* Encontrada: o vidro escurece (o número branco passa a ler-se com mais
-   força, sem mudar de cor nem de corpo) e ganha um ARCO à volta.
-
-   Bordô e não dourado: o dourado é a distinção do VINHO (menção, nota do
-   Vivino) e uma garrafa encontrada não distingue vinho nenhum — é a app a
-   apontar para o que lhe perguntaram, tal como o sombreado bordô da
-   `.vc-match` faz no cartão.
-
-   O arco é só `box-shadow`, que NÃO ocupa espaço de layout: um `outline`
-   ou uma `border` mais grossa mudavam a altura do lugar e o
-   `ajustarEstantes` passava a discordar do que se vê. A medida é em
-   `--slot` (escala com a estante) e pára nos .09: o espaço livre entre
-   dois lugares vizinhos é `(--colr - 1)`, que no mínimo (1,18) dá .09 de
-   cada lado — mais do que isso e os arcos de duas garrafas encontradas
-   lado a lado colavam-se num só. E o `z-index` é alto porque as
-   prateleiras se SOBREPÕEM (o `encaixe`): sem ele o arco ficava cortado
-   por baixo dos lugares do nível de cima. */
-.msdot.achada{--arco:0 0 0 calc(var(--slot) * .055) var(--vhp),0 0 0 calc(var(--slot) * .09) var(--vh2);
-  background:var(--vhd);border-color:var(--vhd);color:#fff;z-index:5;
-  box-shadow:var(--arco),0 2px 6px rgba(78,18,40,.38)}
-/* O `--arco` existe para esta linha: `.msdot.cheia:hover` tem mais
-   especificidade (duas classes e uma pseudo-classe) e, sem ela, passar o
-   rato por cima de uma garrafa encontrada APAGAVA-LHE o arco. Escrever o
-   arco outra vez aqui era ficar com duas versões dele para discordarem
-   uma da outra um dia. */
-.msdot.achada:hover{box-shadow:var(--arco),0 5px 10px rgba(78,18,40,.42)}
-/* O vazio durante a procura: continua a ver-se — a estante é a mesma e os
-   buracos fazem parte dela — mas deixa de competir com a resposta. Volta
-   a si ao passar o dedo/rato, que continua a ser onde se arruma uma
-   garrafa. */
-.ml.procurando .msdot.vazia{opacity:.4}
-body:not(.readonly) .ml.procurando .msdot.vazia:hover{opacity:1}
-
 /* A grelha de locais passa a ser mais arejada e mais próxima de um desenho
    técnico/minimalista de uma garrafeira. */
 .ml{border-radius:20px;padding-bottom:6px;box-shadow:0 8px 24px -14px rgba(78,18,40,.30)}
@@ -1484,3 +1436,55 @@ body:not(.readonly) .ml.procurando .msdot.vazia:hover{opacity:1}
   .mprat-layout{padding:0 5px}
   .mp-lbl{max-width:48px;font-size:7.5px}
 }
+
+/* ── PAREDES, ENCOSTOS E CAIXAS DE MADEIRA ─────────────────────────
+   O móvel de casa está encostado a uma parede, e o vão entre o fim das
+   prateleiras e ela é onde entram as garrafas que vêm em caixa de
+   madeira. A parede é UM traço contínuo do lado do móvel (não uma tira
+   por nível: as linhas têm margens entre si — o ziguezague até as tem
+   negativas — e o que se lia era uma linha picada). O x sai de medir a
+   estante em `posicionarParedes`: todas as prateleiras têm a mesma
+   largura, por isso a parede fica ao nível das mais compridas e as mais
+   curtas deixam o vão à vista, como no móvel. */
+.ml-est{position:relative}
+.ml-est.pd-topo{padding-top:calc(var(--slot,34px) * .3)}
+.pd-v,.pd-h{position:absolute;z-index:0;pointer-events:none;border:1px solid #d4c9ba;border-radius:2px}
+.pd-v{top:0;bottom:0;width:5px;
+  background:repeating-linear-gradient(135deg,rgba(120,105,90,.14) 0 2px,transparent 2px 6px),
+             linear-gradient(90deg,#ded4c6,#eee7dc)}
+.pd-v.dir{right:calc(var(--pd-r,0px) - 7px)}
+.pd-v.esq{left:calc(var(--pd-l,0px) - 7px)}
+.pd-h{top:0;height:5px;left:var(--pd-l,0px);right:var(--pd-r,0px);
+  background:repeating-linear-gradient(135deg,rgba(120,105,90,.14) 0 2px,transparent 2px 6px),
+             linear-gradient(180deg,#ded4c6,#eee7dc)}
+/* Com parede dos dois lados, a de cima vai de uma à outra: é o canto que
+   fecha, e é nele que assenta o L de garrafas em caixa. */
+.ml-est.pd-dir .pd-h{right:calc(var(--pd-r,0px) - 7px)}
+.ml-est.pd-esq .pd-h{left:calc(var(--pd-l,0px) - 7px)}
+/* A fila em cima do móvel assenta no CIMO da caixa — uma tábua lisa, não
+   os berços: o que a segura é o tampo, não a régua. */
+.est-topo{padding:calc(var(--slot) * .10 + 2px) 0 calc(var(--slot) * .2);position:relative}
+.est-topo::after{content:'';position:absolute;left:0;right:0;bottom:0;height:calc(var(--slot) * .17);
+  border-radius:calc(var(--slot) * .03);pointer-events:none;
+  background:linear-gradient(180deg,#f8ecd6,#efdcbb 55%,#e4cba2 84%,#d3b585 84%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.75),inset 0 -2px 0 rgba(120,90,50,.12)}
+.mp-emcima .mp-lbl{color:#8a6508}
+/* A MOLDURA DE MADEIRA é da garrafa e não do lugar: um quadrado de
+   madeira na MESMA célula da grelha, por trás do círculo (que traz o seu
+   z-index). Vale em qualquer nível — não só nos encostos. */
+.mscx{position:relative;z-index:0;aspect-ratio:1/1;width:100%;max-width:calc(var(--slot) * 1.14);margin:0 auto;
+  border-radius:calc(var(--slot) * .1);pointer-events:none;
+  background:repeating-linear-gradient(90deg,rgba(150,115,60,.07) 0 1px,transparent 1px 9px),
+             linear-gradient(180deg,#f8ecd6,#efdcbb 55%,#e4cba2);
+  border:1px solid #cdae7d;box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 1px 3px rgba(90,60,25,.22)}
+.ml-leg .cx{width:15px;height:13px;border-radius:2px;border:1px solid #cdae7d;
+  background:linear-gradient(180deg,#f8ecd6,#e4cba2)}
+.ml-leg .pd{width:6px;height:13px;border-radius:2px;border:1px solid #d4c9ba;
+  background:linear-gradient(90deg,#ded4c6,#eee7dc)}
+/* No editor do local: as paredes primeiro, e os encostos por nível só
+   aparecem depois de haver parede desse lado. */
+.ll-par{margin:12px 0 2px}
+.ll-par .segbtns{margin-top:7px}
+.ll-encosto{display:flex;flex-direction:column;gap:3px;margin-top:6px}
+.ll-encosto .chk{font-size:12.5px}
+.ll-encosto i{font-style:normal;color:var(--mu);font-size:11.5px}

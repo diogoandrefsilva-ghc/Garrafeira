@@ -356,6 +356,7 @@ async function carregarGarrafeira(){
   await detetarLinks();
   await detetarAtualizado();
   await detetarLayoutLocais();
+  await detetarCaixaMadeira();
   await assinarImagens();
   reindexar();
   aplicarPermissoes();
@@ -405,6 +406,16 @@ async function detetarLayoutLocais(){
   if(db.locais.length){TEM_LOCAL_LAYOUT=('layout' in db.locais[0]);return;}
   try{await sbReq('GET','locais?select=layout&limit=1');TEM_LOCAL_LAYOUT=true;}
   catch(e){TEM_LOCAL_LAYOUT=false;}
+}
+// `garrafas.caixa_madeira` é coluna NOVA (migração 11) — mesmo padrão:
+// enquanto não existir, a moldura de madeira fica desligada e a garrafa
+// comporta-se como hoje. É da GARRAFA e não do vinho: o mesmo vinho pode
+// ter uma garrafa na caixa de origem e outra solta na prateleira.
+let TEM_CAIXA_MADEIRA=false;
+async function detetarCaixaMadeira(){
+  if(db.garrafas.length){TEM_CAIXA_MADEIRA=('caixa_madeira' in db.garrafas[0]);return;}
+  try{await sbReq('GET','garrafas?select=caixa_madeira&limit=1');TEM_CAIXA_MADEIRA=true;}
+  catch(e){TEM_CAIXA_MADEIRA=false;}
 }
 
 /* ── ÍNDICES E CÁLCULOS ────────────────────────────────────────────── */
@@ -594,6 +605,23 @@ function prateleiraLayoutInfo(p,opt){
   const meia=(!preview&&p&&p.desvio)?1:0;
   const off=colsw-cols+meia;              // meias-colunas livres à esquerda
   let slots=[];
+  /* O LUGAR DE ENCOSTO ocupa a coluna de folga do lado da parede — a
+     última (ou a primeira) meia-coluna da grelha do móvel. Fica na fila
+     de BAIXO, que é onde a garrafa assenta, e não leva berço: ela está
+     encostada ao lado do móvel, não deitada na régua (ver `ondaBgSVG`). */
+  const encosto=[];
+  if(!preview&&p){
+    const fundo=(formato==='sobrepostos'&&capacidade>1)?2:1;
+    if(p.encosto_dir)encosto.push({lugar:p.cod_dir,col:2*colsw-1,row:fundo,span:2,encosto:'dir'});
+    if(p.encosto_esq)encosto.push({lugar:p.cod_esq,col:1,row:fundo,span:2,encosto:'esq'});
+  }
+  // A fila em cima do móvel: encostada à parede que houver, e numerada
+  // T1…Tn (ver `chaveLugarLayout`).
+  if(!preview&&p&&p.topo){
+    const offT=p.alinha==='dir'?2*(colsw-capacidade):(p.alinha==='esq'?0:off);
+    slots=Array.from({length:capacidade},(_,i)=>({lugar:'T'+(i+1),col:offT+2*i+1,row:1,span:2,topo:true}));
+    return {formato:'fila',mais_em,capacidade,base:0,slots,cols,colsw,rows:1,gridCols:2*colsw,span:2,topo:true};
+  }
   if(formato==='sobrepostos'){
     // a fila que tem o lugar a mais (se houver) é a comprida; a outra
     // começa meia coluna à frente
@@ -612,10 +640,10 @@ function prateleiraLayoutInfo(p,opt){
        ficam alinhadas e apenas se sobrepõem. Quem desenha isso é o
        `.desenc` no `style.css`. */
     const desenc=capacidade>1&&capacidade%2===1;
-    return {formato,mais_em,capacidade,base,slots,cols,colsw,rows:capacidade>1?2:1,gridCols:2*colsw,span:2,desenc};
+    return {formato,mais_em,capacidade,base,slots:slots.concat(encosto),cols,colsw,rows:capacidade>1?2:1,gridCols:2*colsw,span:2,desenc};
   }
   slots=Array.from({length:capacidade},(_,i)=>({lugar:base+i+1,col:off+2*i+1,row:1,span:2}));
-  return {formato,mais_em,capacidade,base,slots,cols,colsw,rows:1,gridCols:2*colsw,span:2};
+  return {formato,mais_em,capacidade,base,slots:slots.concat(encosto),cols,colsw,rows:1,gridCols:2*colsw,span:2};
 }
 /* A LEITURA DO DESENHO — e é aqui que moram duas decisões.
 
@@ -671,12 +699,15 @@ function layoutLocal(l){
       // cima, a fila de cima é a que leva o lugar a mais
       const nCima=normalizarSobrepostosMaisEm(p&&p.mais_em)==='cima'?Math.ceil(capacidade/2):Math.floor(capacidade/2);
       convertido=true;
-      out.push({nome,origem:nome,capacidade:capacidade-nCima,formato:'fila',mais_em:'cima',encaixe:false});
-      if(nCima)out.push({nome,origem:nome,capacidade:nCima,formato:'fila',mais_em:'cima',encaixe:true});
+      out.push({nome,origem:nome,capacidade:capacidade-nCima,formato:'fila',mais_em:'cima',encaixe:false,
+        encosto_dir:false,encosto_esq:false});
+      if(nCima)out.push({nome,origem:nome,capacidade:nCima,formato:'fila',mais_em:'cima',encaixe:true,
+        encosto_dir:!!(p&&p.encosto_dir),encosto_esq:!!(p&&p.encosto_esq)});
       return;
     }
     out.push({nome,origem:nome,capacidade,formato:normalizarFormatoPrateleira(p&&p.formato),
-      mais_em:normalizarSobrepostosMaisEm(p&&p.mais_em),encaixe:!!(p&&p.encaixe)});
+      mais_em:normalizarSobrepostosMaisEm(p&&p.mais_em),encaixe:!!(p&&p.encaixe),
+      encosto_dir:!!(p&&p.encosto_dir),encosto_esq:!!(p&&p.encosto_esq)});
   });
   // Um local que teve ziguezagues passa a ter mais níveis do que tinha
   // prateleiras: os nomes gravados deixam de servir de numeração e são
@@ -701,10 +732,25 @@ function layoutLocal(l){
   // gastava-a toda e o último lugar ficava cortado pela borda.
   const colsMax=out.reduce((m,p)=>Math.max(m,p.formato==='sobrepostos'?Math.ceil(p.capacidade/2):p.capacidade),1);
   out.forEach(p=>{p.colsw=colsMax+2;});
+  /* O ENCOSTO só existe onde há parede: a folga de uma coluna que cada
+     nível tem de cada lado (o `+2` acima) é exatamente o vão entre o fim
+     da prateleira e a parede, e é lá que o lugar de encosto cai — sem
+     mexer na largura do móvel nem na numeração de ninguém. */
+  const par=paredesLocal(l);
+  out.forEach((p,i)=>{
+    p.nivel=numeroDoNivel(p.nome,i);
+    p.encosto_dir=!!p.encosto_dir&&par.dir;
+    p.encosto_esq=!!p.encosto_esq&&par.esq;
+    p.cod_dir=p.nivel+'D';
+    p.cod_esq=p.nivel+'E';
+  });
   return out;
 }
 function temLayoutLocal(l){return layoutLocal(l).length>0;}
-function lugaresLocal(l){return layoutLocal(l).reduce((s,p)=>s+p.capacidade,0);}
+function lugaresLocal(l){return layoutLocal(l).reduce((s,p)=>s+p.capacidade,0)+especiaisLocal(l).length;}
+// Os lugares da numeração corrida, sem os encostos nem o topo: é o que
+// vale para "o lugar 12 existe?".
+function lugaresCorridosLocal(l){return layoutLocal(l).reduce((s,p)=>s+p.capacidade,0);}
 function resumoLayoutLocal(l){
   const prats=layoutLocal(l);
   if(!prats.length)return '';
@@ -717,16 +763,95 @@ function lugarNumeroLayout(v){
   const n=inteiro(s);
   return n!=null&&String(n)===s?n:null;
 }
+/* OS LUGARES DE ENCOSTO E DE TOPO — e porque é que NÃO entram na
+   numeração corrida.
+
+   Um local pode ter PAREDE à esquerda, à direita e/ou em cima
+   (`layout.paredes`). Havendo parede, cada nível pode abrir UM lugar
+   entre o fim da prateleira e a parede (`encosto_dir`/`encosto_esq`) —
+   é onde entram as garrafas em caixa de madeira, encostadas ao lado do
+   móvel; e, com parede em cima, o cimo do móvel leva uma fila de
+   garrafas (`layout.topo.capacidade`).
+
+   Se estes lugares entrassem na contagem corrida, abrir um encosto no
+   Nível 3 empurrava a numeração de tudo o que está acima dele e todas
+   as garrafas gravadas passavam a apontar para o lugar errado. Por isso
+   têm CÓDIGO próprio e a numeração antiga fica intacta:
+     15D / 15E — encosto à direita / à esquerda do Nível 15
+     T1 … Tn   — a fila em cima do último nível
+   (o número do encosto é o do NOME do nível, não a ordem no array: é o
+   que a pessoa lê no rótulo.) */
+function chaveLugarLayout(v){
+  const s=String(v==null?'':v).trim().toUpperCase();
+  if(!s)return null;
+  const num=lugarNumeroLayout(s);
+  if(num!=null)return String(num);
+  return (/^\d+[DE]$/.test(s)||/^T\d+$/.test(s))?s:null;
+}
+function numeroDoNivel(nome,i){
+  const m=String(nome==null?'':nome).match(/(\d+)/);
+  return m?parseInt(m[1],10):i+1;
+}
+function paredesLocal(l){
+  const p=(l&&l.layout&&l.layout.paredes)||{};
+  return {esq:!!p.esq,dir:!!p.dir,topo:!!p.topo};
+}
+// Quantas garrafas cabem em cima do último nível. Só conta com parede em
+// cima: sem ela não há nada que as segure.
+function topoLocal(l){
+  if(!paredesLocal(l).topo)return 0;
+  return Math.max(0,Math.min(60,inteiro(l&&l.layout&&l.layout.topo&&l.layout.topo.capacidade)||0));
+}
+/* A fila de cima do móvel é uma prateleira A FINGIR: não está no array
+   (não tem `base`, não numera nada) e existe só para se desenhar e para
+   as garrafas lhe poderem apontar. `alinha` encosta-a à parede que
+   houver — é assim que o L ao contrário se fecha no canto. */
+function prateleiraTopo(l){
+  const cap=topoLocal(l);
+  if(!cap)return null;
+  const par=paredesLocal(l);
+  const prats=layoutLocal(l);
+  return {nome:'Em cima',origem:'Em cima',capacidade:cap,formato:'fila',mais_em:'cima',
+    encaixe:false,ondulada:false,topo:true,
+    alinha:par.dir?'dir':(par.esq?'esq':'centro'),
+    colsw:(prats[0]&&prats[0].colsw)||cap+2};
+}
+// Todos os lugares que NÃO são da numeração corrida, para as contagens.
+function especiaisLocal(l){
+  const out=[];
+  layoutLocal(l).forEach(p=>{
+    if(p.encosto_dir)out.push({codigo:p.cod_dir,prat:p});
+    if(p.encosto_esq)out.push({codigo:p.cod_esq,prat:p});
+  });
+  const t=prateleiraTopo(l);
+  if(t)for(let i=1;i<=t.capacidade;i++)out.push({codigo:'T'+i,prat:t});
+  return out;
+}
 /* Com a numeração corrida, o número do lugar diz sozinho em que prateleira
    ele está. */
 function prateleiraDoLugar(prats,lug){
   return (prats||[]).find(p=>lug>p.base&&lug<=p.base+p.capacidade)||null;
 }
+/* A prateleira de uma chave, seja ela um número corrido ou um código de
+   encosto/topo. É por aqui que passa TUDO o que antes só sabia números. */
+function prateleiraDaChave(l,k){
+  if(!l||k==null)return null;
+  const prats=layoutLocal(l);
+  if(/^\d+$/.test(k))return prateleiraDoLugar(prats,parseInt(k,10));
+  const mt=/^T(\d+)$/.exec(k);
+  if(mt){
+    const t=prateleiraTopo(l),i=parseInt(mt[1],10);
+    return (t&&i>=1&&i<=t.capacidade)?t:null;
+  }
+  const me=/^(\d+)([DE])$/.exec(k);
+  if(!me)return null;
+  return prats.find(p=>String(p.nivel)===me[1]&&(me[2]==='D'?p.encosto_dir:p.encosto_esq))||null;
+}
 function nomeDaPosicao(localId,lugar){
   const l=IDXL[localId];
-  const lug=lugarNumeroLayout(lugar);
-  if(!l||lug==null)return '';
-  const def=prateleiraDoLugar(layoutLocal(l),lug);
+  const k=chaveLugarLayout(lugar);
+  if(!l||k==null)return '';
+  const def=prateleiraDaChave(l,k);
   return def?def.nome:'';
 }
 /* O nome gravado na garrafa CONFIRMA o lugar, não o escolhe: vale se for
@@ -749,12 +874,12 @@ function ocupacaoLayout(localId,ignorarGid){
   const prats=l?layoutLocal(l):[];
   const occ={};
   db.garrafas.filter(g=>naGarrafeira(g)&&g.local_id===localId&&g.id!==ignorarGid).forEach(g=>{
-    const lug=lugarNumeroLayout(g.lugar);
-    if(lug==null)return;
-    const def=prateleiraDoLugar(prats,lug);
+    const k=chaveLugarLayout(g.lugar);
+    if(k==null)return;
+    const def=prateleiraDaChave(l,k);
     if(!def)return;
     if(!nomeBatePrateleira(def,g.prateleira))return;
-    (occ[lug]=occ[lug]||[]).push(g);
+    (occ[k]=occ[k]||[]).push(g);
   });
   return occ;
 }
@@ -770,9 +895,9 @@ function dadosForaLayout(l,gs){
   const prats=layoutLocal(l);
   if(!prats.length)return [];
   return gs.filter(g=>{
-    const lug=lugarNumeroLayout(g.lugar);
-    if(lug==null)return true;
-    const def=prateleiraDoLugar(prats,lug);
+    const k=chaveLugarLayout(g.lugar);
+    if(k==null)return true;
+    const def=prateleiraDaChave(l,k);
     if(!def)return true;
     return !nomeBatePrateleira(def,g.prateleira);
   }).sort((a,b)=>
@@ -785,12 +910,17 @@ function validarPosicaoLayout(localId,lugar,ignorarGid){
   if(!l||!temLayoutLocal(l))return '';
   const raw=String(lugar==null?'':lugar).trim();
   if(!raw)return '';
-  const lug=lugarNumeroLayout(raw);
-  if(lug==null)return 'Num local com desenho, o lugar tem de ser um número inteiro.';
-  const total=lugaresLocal(l);
-  if(lug<1||lug>total)return `${l.nome} vai do lugar 1 ao ${total}.`;
-  if((ocupacaoLayout(localId,ignorarGid)[lug]||[]).length)
-    return `O lugar ${lug} já está ocupado.`;
+  const k=chaveLugarLayout(raw);
+  if(k==null)return 'Num local com desenho, o lugar é um número (12), um encosto (15D, 15E) ou o topo (T2).';
+  if(/^\d+$/.test(k)){
+    const total=lugaresCorridosLocal(l);
+    const lug=parseInt(k,10);
+    if(lug<1||lug>total)return `${l.nome} vai do lugar 1 ao ${total}.`;
+  }else if(!prateleiraDaChave(l,k)){
+    return `${l.nome} não tem o lugar ${k}. Abre-o primeiro em Editar local.`;
+  }
+  if((ocupacaoLayout(localId,ignorarGid)[k]||[]).length)
+    return `O lugar ${k} já está ocupado.`;
   return '';
 }
 function ondeEsta(g){
@@ -2002,7 +2132,7 @@ function mapaGrupos(){
   grupos.forEach(x=>{x.n=filtrando?x.gs.filter(g=>okG.has(g.id)).length:x.gs.length;});
   return {filtrando,okG,grupos,visiveis:filtrando?grupos.filter(x=>x.n):grupos};
 }
-function capacidadeLocal(l){return layoutLocal(l).reduce((s,p)=>s+p.capacidade,0);}
+function capacidadeLocal(l){return lugaresLocal(l);}
 // "37 / 45 garrafas" num local com desenho; "12 garrafas · 9 vinhos" sem
 // ele; com a procura ligada, o que interessa é quantas passaram.
 function mapaContagemHTML(x,d){
@@ -2083,7 +2213,7 @@ function ondaBgSVG(info){
      assentam na madeira. Nos `sobrepostos`, as de cima assentam nas de
      baixo — dar-lhes berço era desenhar uma prateleira que não existe. */
   const fundo=info.slots.reduce((m,s)=>Math.max(m,s.row),1);
-  const cxs=info.slots.filter(s=>s.row===fundo)
+  const cxs=info.slots.filter(s=>s.row===fundo&&!s.encosto)
     .map(s=>((s.col-1+(s.span||1)/2)/2)*larg)     // meias-colunas → % da caixa
     .sort((a,b)=>a-b);
   if(!cxs.length)return '';
@@ -2174,41 +2304,74 @@ function mapaLocalListaHTML(gs,d){
 }
 // Um local COM desenho: nível a nível, de cima para baixo como na estante
 // a sério (o Nível 1 é o de baixo).
+/* AS PAREDES são desenhadas UMA VEZ para a estante toda e não nível a
+   nível: o que está no móvel é uma parede contínua, e uma tira por linha
+   dava uma linha picada (as linhas têm margens entre si, e o ziguezague
+   até margens negativas). Ficam num `.ml-est` em posição relativa, e o x
+   sai de medir a estante depois de ela existir (ver `posicionarParedes`)
+   — todas as prateleiras têm a MESMA largura, por isso a parede fica
+   naturalmente ao nível das mais compridas e as curtas deixam o vão à
+   vista, como no móvel. */
 function mapaEstanteHTML(l,gs,d){
   const prats=prateleirasDesc(layoutLocal(l));
   const occ=ocupacaoLayout(l.id);
-  const extras=dadosForaLayout(l,gs).filter(g=>!d.filtrando||d.okG.has(g.id));
-  return prats.map(p=>{
+  const par=paredesLocal(l);
+  const topo=prateleiraTopo(l);
+  const linhaHTML=p=>{
     const info=prateleiraLayoutInfo(p);
     const slots=info.slots.map(s=>{
-      const lugar=s.lugar,lista=occ[lugar]||[];
+      const k=String(s.lugar),lista=occ[k]||[];
       const pos=` style="${slotGridStyle(s)}"`;
-      if(!lista.length)return `<button class="msdot vazia"${pos}
-        onclick="mapaLugarVazio(${l.id},'${escJs(p.nome)}',${lugar})"
-        title="${esc(posicaoTxt(p.nome,lugar))} — vazio"><span class="msdot-id">${lugar}</span></button>`;
+      const extra=(s.encosto?' encosto':'')+(s.topo?' emcima':'');
+      if(!lista.length)return `<button class="msdot vazia${extra}"${pos}
+        onclick="mapaLugarVazio(${l.id},'${escJs(p.nome)}','${escJs(k)}')"
+        title="${esc(posicaoTxt(p.nome,k))} — vazio"><span class="msdot-id">${esc(k)}</span></button>`;
       const passam=d.filtrando?lista.filter(g=>d.okG.has(g.id)):lista;
       const g=passam[0]||lista[0],v=IDXV[g.vinho_id]||{nome:'?'};
-      /* A procura tem de se ver no DESENHO e não só na contagem do
-         cabeçalho: `achada` é o que passa (arco à volta), `fora` o que
-         está ocupado por garrafa que não passa (apagado). Ver "O LUGAR
-         DURANTE A PROCURA" no style.css. */
-      const achada=d.filtrando&&passam.length>0;
-      return `<button class="msdot cheia${lista.length>1?' conflito':''}${achada?' achada':''}${d.filtrando&&!passam.length?' fora':''}"${pos}
-        onclick="mapaPopupToggle(${l.id},'${escJs(p.nome)}',${lugar},this,event)"
-        onmouseenter="mapaPopupHover(${l.id},'${escJs(p.nome)}',${lugar},this)" onmouseleave="mapaPopupSair()"
-        title="${esc(v.nome)} ${v.ano||''} · ${esc(posicaoTxt(p.nome,lugar))}${lista.length>1?` · ${lista.length} garrafas`:''}">
+      // a moldura de madeira é da GARRAFA (`caixa_madeira`): um quadrado
+      // de madeira na mesma célula, por trás do círculo
+      const cx=g.caixa_madeira?`<span class="mscx" aria-hidden="true"${pos}></span>`:'';
+      return `${cx}<button class="msdot cheia${lista.length>1?' conflito':''}${d.filtrando&&!passam.length?' fora':''}${extra}"${pos}
+        onclick="mapaPopupToggle(${l.id},'${escJs(p.nome)}','${escJs(k)}',this,event)"
+        onmouseenter="mapaPopupHover(${l.id},'${escJs(p.nome)}','${escJs(k)}',this)" onmouseleave="mapaPopupSair()"
+        title="${esc(v.nome)} ${v.ano||''} · ${esc(posicaoTxt(p.nome,k))}${g.caixa_madeira?' · em caixa de madeira':''}${lista.length>1?` · ${lista.length} garrafas`:''}">
         <span class="msdot-id">${g.vinho_id}</span>
         ${lista.length>1?`<span class="msdot-q">×${lista.length}</span>`:''}
       </button>`;
     }).join('');
-    return `<div class="mprat-layout${p.encaixe?' encaixa':''}">
+    return `<div class="mprat-layout${p.encaixe?' encaixa':''}${p.topo?' mp-emcima':''}">
       <span class="mp-lbl">${esc(p.nome)}</span>
       <span class="mp-fio"></span>
-      <div class="est-wrap">${estanteHTML(p,info,slots)}</div>
+      <div class="est-wrap">${estanteHTML(p,info,slots,p.topo?'est-topo':'')}</div>
       <span class="mp-esp"></span>
     </div>`;
-  }).join('')+`
-    <div class="ml-leg"><span><i class="cheia"></i>Ocupado · nº do vinho</span><span><i class="vazia"></i>Vazio · nº do lugar</span></div>`;
+  };
+  const temCaixa=db.garrafas.some(g=>g.local_id===l.id&&naGarrafeira(g)&&g.caixa_madeira);
+  return `<div class="ml-est${par.dir?' pd-dir':''}${par.esq?' pd-esq':''}${par.topo?' pd-topo':''}">
+    ${par.topo?'<span class="pd-h" aria-hidden="true"></span>':''}
+    ${par.dir?'<span class="pd-v dir" aria-hidden="true"></span>':''}
+    ${par.esq?'<span class="pd-v esq" aria-hidden="true"></span>':''}
+    ${topo?linhaHTML(topo):''}${prats.map(linhaHTML).join('')}
+  </div>
+  <div class="ml-leg"><span><i class="cheia"></i>Ocupado · nº do vinho</span><span><i class="vazia"></i>Vazio · nº do lugar</span>${
+    temCaixa?'<span><i class="cx"></i>Em caixa de madeira</span>':''}${
+    (par.dir||par.esq||par.topo)?'<span><i class="pd"></i>Parede</span>':''}</div>`;
+}
+/* O x das paredes: medido, não calculado. A estante vive numa linha com o
+   nome do nível de um lado e um espaçador do outro, e a largura do lugar
+   é escolhida a correr (`ajustarEstantes`) — refazer essa conta aqui era
+   ficar a discordar dela. Mede-se a caixa da estante e diz-se à parede
+   onde parar. */
+function posicionarParedes(){
+  const box=document.getElementById('mapa');
+  const est=box&&box.querySelector('.ml-est');
+  if(!est)return;
+  const ests=est.querySelectorAll('.est');
+  const e=ests[ests.length-1];
+  if(!e)return;
+  const a=est.getBoundingClientRect(),b=e.getBoundingClientRect();
+  est.style.setProperty('--pd-l',Math.max(0,b.left-a.left).toFixed(1)+'px');
+  est.style.setProperty('--pd-r',Math.max(0,a.right-b.right).toFixed(1)+'px');
 }
 /* As garrafas que estão NESTE local mas sem um lugar válido no desenho.
    Ficam FORA do cartão e FECHADAS (`<details>`): são uma lista que pode
@@ -2233,7 +2396,7 @@ function mapaExtrasHTML(l,gs,d){
 function mapaLocalHTML(x,d){
   const l=x.l,pseudo=l.id<0,vis=d.visiveis,varios=vis.length>1;
   const i=vis.findIndex(y=>y.l.id===l.id);
-  return `<div class="ml${d.filtrando?' procurando':''}" style="--lc:${esc(l.cor||'#7b1f3d')}">
+  return `<div class="ml" style="--lc:${esc(l.cor||'#7b1f3d')}">
     <div class="ml-bar">
       <button class="ml-nav" onclick="mapaLocalIr(-1)" aria-label="Local anterior"${varios?'':' disabled'}>‹</button>
       <div class="ml-t">
@@ -2332,7 +2495,7 @@ function ajustarEstantes(){
   ajustar(lo);
 }
 let _estT=null;
-window.addEventListener('resize',()=>{clearTimeout(_estT);_estT=setTimeout(ajustarEstantes,120);});
+window.addEventListener('resize',()=>{clearTimeout(_estT);_estT=setTimeout(()=>{ajustarEstantes();posicionarParedes();},120);});
 
 function renderMapa(){
   const box=document.getElementById('mapa');
@@ -2353,6 +2516,7 @@ function renderMapa(){
   box.innerHTML=mapaLocalHTML(x,d);
   mapaSwipe(box.querySelector('.ml'));
   ajustarEstantes();
+  posicionarParedes();
 }
 function mapaLocalMostrar(id){
   MAPA_LOCAL=id;
@@ -2495,7 +2659,7 @@ function mapaLugarVazio(localId,prateleira,lugar){
   const l=IDXL[localId];if(!l)return;
   if(!db.vinhos.length){toast('Ainda não há vinhos para pôr aqui',1);return;}
   const soltas={};
-  db.garrafas.filter(g=>naGarrafeira(g)&&!lugarNumeroLayout(g.lugar))
+  db.garrafas.filter(g=>naGarrafeira(g)&&!chaveLugarLayout(g.lugar))
     .forEach(g=>{soltas[g.vinho_id]=(soltas[g.vinho_id]||0)+1;});
   const ordenados=[...db.vinhos].sort((a,b)=>
     String(a.nome||'').localeCompare(String(b.nome||''),'pt',{numeric:true,sensitivity:'base'})||
@@ -2515,7 +2679,7 @@ function mapaLugarVazio(localId,prateleira,lugar){
     </select>
     <div class="note">Se houver uma garrafa deste vinho por arrumar, é essa que vem para aqui. Se não houver, acrescenta-se uma.</div>
     <div class="macoes">
-      <button class="btn prim" id="lv-btn" onclick="guardarLugarVazio(${localId},'${escJs(prateleira)}',${lugar})">Guardar</button>
+      <button class="btn prim" id="lv-btn" onclick="guardarLugarVazio(${localId},'${escJs(prateleira)}','${escJs(String(lugar))}')">Guardar</button>
       <button class="btn ghost" onclick="fecharModal('modal-lugar')">Cancelar</button>
     </div>`;
   abrirModal('modal-lugar');
@@ -2530,7 +2694,7 @@ async function guardarLugarVazio(localId,prateleira,lugar){
   const dados={local_id:localId,prateleira,lugar:String(lugar)};
   // uma garrafa deste vinho que ainda não tenha lugar; a que já está neste
   // local ganha à que está noutro sítio ou sem local nenhum
-  const solta=db.garrafas.filter(g=>naGarrafeira(g)&&g.vinho_id===vinhoId&&!lugarNumeroLayout(g.lugar))
+  const solta=db.garrafas.filter(g=>naGarrafeira(g)&&g.vinho_id===vinhoId&&!chaveLugarLayout(g.lugar))
     .sort((a,b)=>(b.local_id===localId?1:0)-(a.local_id===localId?1:0))[0];
   const btn=document.getElementById('lv-btn');
   btn.disabled=true;btn.textContent='A guardar…';
@@ -3067,7 +3231,7 @@ function vinhoDetalheHTML(v){
     <div class="msec">Onde está</div>
     ${ativas.length
       ? ativas.map(g=>{
-          const pos=[g.prateleira,g.lugar?'lugar '+g.lugar:''].filter(Boolean).join(' · ');
+          const pos=[g.prateleira,g.lugar?'lugar '+g.lugar:'',g.caixa_madeira?'em caixa de madeira':''].filter(Boolean).join(' · ');
           const meta=[g.formato||'',g.preco_compra!=null?'comprada por '+eur(g.preco_compra):'',
                       g.comprado_em?dataPT(g.comprado_em):''].filter(Boolean).join(' · ');
           return `<div class="mgar">
@@ -3332,7 +3496,7 @@ function renderPickerPosicoes(prefix,gid){
   }
   const prats=layoutLocal(l);
   const occ=ocupacaoLayout(localId,gid||0);
-  const lugarAtual=lugarNumeroLayout(document.getElementById(`${prefix}-lugar`).value);
+  const chaveAtual=chaveLugarLayout(document.getElementById(`${prefix}-lugar`).value);
   // Com a numeração corrida a prateleira sai do número, e escrevê-la à mão
   // noutro campo só dava para os dois se contradizerem: aqui ela deixa de
   // se editar e passa a mostrar o que o lugar diz.
@@ -3340,17 +3504,19 @@ function renderPickerPosicoes(prefix,gid){
   const pratIn=document.getElementById(`${prefix}-prat`);
   if(pratIn){
     pratIn.readOnly=true;
-    pratIn.value=nomeDaPosicao(localId,lugarAtual)||'';
+    pratIn.value=nomeDaPosicao(localId,chaveAtual)||'';
     pratIn.placeholder='(pelo lugar)';
   }
   if(pratBox)pratBox.classList.add('derivado');
   const lbl=document.getElementById(`${prefix}-lugarlbl`);
-  if(lbl)lbl.textContent=`Lugar (1 a ${lugaresLocal(l)})`;
+  // com encostos e topo o lugar já não é só "1 a N": há códigos (15D, T2)
+  if(lbl)lbl.textContent=especiaisLocal(l).length?'Lugar (nº, 15D ou T2)':`Lugar (1 a ${lugaresCorridosLocal(l)})`;
   const livres=prats.reduce((s,p)=>{
     let n=0;
-    for(let i=1;i<=p.capacidade;i++)if(!(occ[p.base+i]||[]).length)n++;
+    for(let i=1;i<=p.capacidade;i++)if(!(occ[String(p.base+i)]||[]).length)n++;
     return s+n;
-  },0);
+  },0)+especiaisLocal(l).filter(x=>!(occ[x.codigo]||[]).length).length;
+  const topoPick=prateleiraTopo(l);
   box.innerHTML=`
     <div class="lpick">
       <div class="lpick-top">
@@ -3360,20 +3526,22 @@ function renderPickerPosicoes(prefix,gid){
         </div>
         <div class="lpick-n">${livres} ${livres===1?'livre':'livres'}</div>
       </div>
-      ${prateleirasDesc(prats).map(p=>`
+      ${(topoPick?[topoPick]:[]).concat(prateleirasDesc(prats)).map(p=>`
         ${(()=>{const pp=Object.assign({},p,{ondulada:false,desvio:0});const info=prateleiraLayoutInfo(pp);const compacto=p.formato!=='fila';return `<div class="lprat">
-          <div class="lprat-t">${esc(p.nome)} <span>${p.capacidade===1?`lugar ${p.base+1}`:`lugares ${p.base+1}–${p.base+p.capacidade}`}</span></div>
+          <div class="lprat-t">${esc(p.nome)} <span>${p.topo?(p.capacidade===1?'lugar T1':`lugares T1–T${p.capacidade}`)
+            :(p.capacidade===1?`lugar ${p.base+1}`:`lugares ${p.base+1}–${p.base+p.capacidade}`)}${
+            p.encosto_dir||p.encosto_esq?` · encosto ${[p.encosto_esq?p.cod_esq:'',p.encosto_dir?p.cod_dir:''].filter(Boolean).join(' e ')}`:''}</span></div>
           ${estanteHTML(pp,info,info.slots.map(s=>{
-            const lugar=s.lugar;
+            const k=String(s.lugar);
             const pos=` style="${slotGridStyle(s)}"`;
-            const lista=occ[lugar]||[];
-            const sel=lugarAtual===lugar;
+            const lista=occ[k]||[];
+            const sel=chaveAtual===k;
             if(lista.length){
               const v=IDXV[(lista[0]||{}).vinho_id]||{nome:'?'};
-              return `<button type="button" class="lpslot${compacto?' mini':''} ocup" disabled${pos} title="${esc(v.nome)} · ${esc(posicaoTxt(p.nome,lugar))}">${garrafaSVG(v,1)}<span>${lugar}</span></button>`;
+              return `<button type="button" class="lpslot${compacto?' mini':''} ocup" disabled${pos} title="${esc(v.nome)} · ${esc(posicaoTxt(p.nome,k))}">${garrafaSVG(v,1)}<span>${esc(k)}</span></button>`;
             }
-            return `<button type="button" class="lpslot${compacto?' mini':''}${sel?' on':''}"${pos} onclick="escolherPosicaoLayout('${prefix}',${lugar})" title="${esc(posicaoTxt(p.nome,lugar))}"><span>${lugar}</span></button>`;
-          }).join(''),'est-pick')}
+            return `<button type="button" class="lpslot${compacto?' mini':''}${sel?' on':''}"${pos} onclick="escolherPosicaoLayout('${prefix}','${escJs(k)}')" title="${esc(posicaoTxt(p.nome,k))}"><span>${esc(k)}</span></button>`;
+          }).join(''),'est-pick'+(p.topo?' est-topo':''))}
         </div>`;})()}
       `).join('')}
       <div class="lpick-foot">
@@ -3764,6 +3932,8 @@ function abrirGarrafa(gid,vinhoId){
     </div>
     <label>Comprada em</label>
     <input type="date" id="g-comprado" value="${esc(g&&g.comprado_em?g.comprado_em:'')}">
+    ${TEM_CAIXA_MADEIRA?`<label class="chk"><input type="checkbox" id="g-caixa"${g&&g.caixa_madeira?' checked':''}>Vem em caixa de madeira</label>
+    <div class="note">O lugar desta garrafa desenha-se em madeira em vez do círculo — em qualquer nível, e é a ela que pertence, não ao local.</div>`:''}
     <div class="macoes">
       <button class="btn prim" id="g-btn" onclick="guardarGarrafa(${gid||0},${vid})">Guardar</button>
       ${gid?`<button class="btn danger" onclick="apagarGarrafa(${gid})">🗑 Apagar</button>`:''}
@@ -3785,6 +3955,10 @@ async function guardarGarrafa(gid,vinhoId){
     preco_compra:num(document.getElementById('g-preco').value),
     comprado_em:document.getElementById('g-comprado').value||null
   };
+  if(TEM_CAIXA_MADEIRA){
+    const cx=document.getElementById('g-caixa');
+    dados.caixa_madeira=!!(cx&&cx.checked);
+  }
   dados.prateleira=nomeDaPosicao(dados.local_id,dados.lugar)||dados.prateleira;
   const erroPos=validarPosicaoLayout(dados.local_id,dados.lugar,gid);
   if(erroPos){toast(erroPos,1);return;}
@@ -5286,6 +5460,21 @@ function renderCfgLocais(){
   }).join('');
 }
 let LOC_LAYOUT_EDIT=[];
+let LOC_PAREDES={esq:false,dir:false,topo:false};
+let LOC_TOPO=0;
+const PAREDES_LADOS=[['esq','Esquerda'],['dir','Direita'],['topo','Em cima']];
+function locSetParede(lado,v){
+  LOC_PAREDES[lado]=!!v;
+  renderLocalLayoutEditor();
+}
+function locSetTopoCap(v){
+  LOC_TOPO=Math.max(0,Math.min(60,inteiro(v)||0));
+}
+function locSetEncosto(i,lado,v){
+  const p=LOC_LAYOUT_EDIT[i];
+  if(!p)return;
+  if(lado==='dir')p.encosto_dir=!!v;else p.encosto_esq=!!v;
+}
 function layoutPadraoEditor(){
   return [{nome:'Nível 1',capacidade:6,formato:'fila',mais_em:'cima'},{nome:'Nível 2',capacidade:6,formato:'fila',mais_em:'cima'}];
 }
@@ -5319,9 +5508,37 @@ function renderLocalLayoutEditor(){
      primeira prateleira não a tem: não há nada por baixo dela. */
   const encSel=(i,p)=>i===0?'':`<label class="ll-enc"><input type="checkbox"${p.encaixe?' checked':''}
       onchange="locSetPratEncaixe(${i},this.checked)"><span>Encaixa na de baixo <i>(ziguezague)</i></span></label>`;
+  /* O ENCOSTO é por nível e por lado: numa estante a sério há níveis onde
+     a garrafa cabe de lado e outros onde não (uma prateleira mais
+     comprida, um puxador, um tubo). O código do lugar (15D/15E) sai do
+     NÚMERO do nível e não da ordem no array, para ser o que se lê no
+     rótulo — e por isso não empurra a numeração de mais ninguém. */
+  const encostoSel=(i,p)=>{
+    const lados=PAREDES_LADOS.filter(([id])=>id!=='topo'&&LOC_PAREDES[id]);
+    if(!lados.length)return '';
+    const num=numeroDoNivel(p.nome,i);
+    return `<div class="ll-encosto">${lados.map(([id,nm])=>`
+      <label class="chk"><input type="checkbox"${(id==='dir'?p.encosto_dir:p.encosto_esq)?' checked':''}
+        onchange="locSetEncosto(${i},'${id}',this.checked)"><span>Cabe uma garrafa à ${nm.toLowerCase()} <i>(lugar ${num}${id==='dir'?'D':'E'})</i></span></label>`).join('')}</div>`;
+  };
   const uma=LOC_LAYOUT_EDIT.length<=1;
+  /* AS PAREDES do móvel, e o que elas abrem. Uma parede não é decoração:
+     é ela que cria o vão onde cabe uma garrafa a mais — ao lado de cada
+     nível (o encosto) e em cima do último. Sem parede não há vão, e por
+     isso os encostos só aparecem depois de a parede estar ligada. */
+  const paredesHTML=`
+    <div class="ll-par">
+      <div class="msec">Paredes</div>
+      <div class="note">Se o móvel está encostado a uma parede, dá para aproveitar o vão entre o fim das prateleiras e ela.</div>
+      <div class="segbtns">${PAREDES_LADOS.map(([id,nm])=>
+        `<button type="button" class="segbtn${LOC_PAREDES[id]?' on':''}" onclick="locSetParede('${id}',${LOC_PAREDES[id]?'false':'true'})">${nm}${LOC_PAREDES[id]?' ✓':''}</button>`).join('')}</div>
+      ${LOC_PAREDES.topo?`<div class="ll-odd"><span>Garrafas em cima do último nível</span>
+        <input type="number" inputmode="numeric" min="0" max="60" value="${esc(LOC_TOPO)}" oninput="locSetTopoCap(this.value)" aria-label="Quantas garrafas cabem em cima"></div>
+        <div class="note">Ficam numeradas T1, T2… e encostadas à parede, sem mexer na numeração dos níveis.</div>`:''}
+    </div>`;
   box.innerHTML=`
     <div class="note">A app desenha este local como estante: uma prateleira por linha, o Nível 1 em baixo. Os lugares são numerados de seguida ao longo do móvel — se o primeiro nível tem 4 lugares, o segundo começa no 5.</div>
+    ${paredesHTML}
     <div class="ll-lista">${LOC_LAYOUT_EDIT.map((p,i)=>`
       <div class="ll-row">
         <div class="ll-head">
@@ -5334,7 +5551,7 @@ function renderLocalLayoutEditor(){
           <div><label>Lugares</label>
             <input type="number" inputmode="numeric" min="1" max="240" value="${esc(p.capacidade)}" oninput="locSetPratCap(${i},this.value)" onchange="locCapMudou(${i})"></div>
         </div>
-        ${oddSel(i,p)}${encSel(i,p)}
+        ${oddSel(i,p)}${encSel(i,p)}${encostoSel(i,p)}
       </div>`).join('')}</div>
     <button type="button" class="btn ghost ll-add" onclick="locAddPrat()">+ Adicionar prateleira</button>`;
 }
@@ -5401,6 +5618,8 @@ function lerLayoutLocalModal(){
   if(!TEM_LOCAL_LAYOUT)return null;
   const chk=document.getElementById('loc-tem-layout');
   if(!chk||!chk.checked)return {prateleiras:[]};
+  const paredes={};
+  PAREDES_LADOS.forEach(([id])=>{if(LOC_PAREDES[id])paredes[id]=true;});
   const prateleiras=LOC_LAYOUT_EDIT.map((p,i)=>{
     const nome=String((p&&p.nome)||'').trim()||`Nível ${i+1}`;
     const capacidade=Math.max(1,Math.min(240,inteiro((p&&p.capacidade))||0));
@@ -5410,8 +5629,13 @@ function lerLayoutLocalModal(){
     // e `encaixe` só onde é verdade — um layout que não os precise fica
     // sem eles em vez de os levar a falso por todo o lado
     const enc=!!(p&&p.encaixe)&&i>0;
+    // os encostos só se guardam do lado que TEM parede: um encosto sem
+    // parede é um lugar que não existe
+    const ed=!!(p&&p.encosto_dir)&&!!LOC_PAREDES.dir;
+    const ee=!!(p&&p.encosto_esq)&&!!LOC_PAREDES.esq;
     return capacidade?Object.assign({nome,capacidade,formato},
-      formato==='sobrepostos'&&capacidade%2?{mais_em}:{}, enc?{encaixe:true}:{}) : null;
+      formato==='sobrepostos'&&capacidade%2?{mais_em}:{}, enc?{encaixe:true}:{},
+      ed?{encosto_dir:true}:{}, ee?{encosto_esq:true}:{}) : null;
   }).filter(Boolean);
   if(!prateleiras.length)throw new Error('Cria pelo menos uma prateleira para ligar o desenho.');
   const vistos=new Set();
@@ -5420,7 +5644,10 @@ function lerLayoutLocalModal(){
     if(vistos.has(k))throw new Error('Cada prateleira precisa de um nome diferente.');
     vistos.add(k);
   }
-  return {prateleiras};
+  const out={prateleiras};
+  if(Object.keys(paredes).length)out.paredes=paredes;
+  if(LOC_PAREDES.topo&&LOC_TOPO>0)out.topo={capacidade:LOC_TOPO};
+  return out;
 }
 function novoLocal(){
   if(roGuard())return;
@@ -5433,6 +5660,8 @@ function editarLocal(id){
 }
 function abrirLocalModal(l){
   LOC_LAYOUT_EDIT=layoutLocal(l);
+  LOC_PAREDES=paredesLocal(l);
+  LOC_TOPO=topoLocal(l);
   document.getElementById('modal-local-in').innerHTML=`
     <div class="mtop"><h3>${l?'Editar local':'Novo local'}</h3>
       <button class="mx" onclick="fecharModal('modal-local')">✕</button></div>
@@ -6473,7 +6702,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='83';
+const APP_BUILD='82';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
