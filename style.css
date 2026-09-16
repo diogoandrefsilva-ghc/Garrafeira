@@ -842,6 +842,39 @@ body:not(.readonly) .msdot.vazia:hover{background:#fff;border-color:var(--vh);co
    ~0), por isso encolhia até desaparecer em vez de quebrar. */
 .ua-row span.em{flex:1 1 100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .ua-row .tagme{font-family:var(--fd);font-size:12px;background:var(--vhp);color:var(--vh);padding:1px 9px;border-radius:99px;white-space:nowrap}
+/* ── LOCAIS (Definições) ──────────────────────────────────────────
+   Uma linha por local: o ponto da cor, o NOME numa linha só dele, e por
+   baixo o que ele é — a contagem de garrafas, a descrição, as
+   prateleiras. Os dois comandos ficam JUNTOS, num grupo com moldura à
+   direita: são as ações DESTA linha, e é o grupo que o diz.
+   NÃO se reaproveita a `.ua-row` dos utilizadores, e é de propósito:
+   ali o texto leva `flex:1 1 100%` (ocupa a linha toda e empurra tudo o
+   resto para baixo) e CADA `.jdel` leva `margin-left:auto` — o que punha
+   o lápis a meio de uma linha vazia e o ✕ no extremo oposto, a lerem-se
+   como comandos de coisas diferentes. A contagem também saiu do meio
+   deles: é informação, e informação lê-se no texto, não entre botões. */
+.loc-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--bo)}
+.loc-row:last-child{border-bottom:none}
+.loc-pip{width:10px;height:10px;border-radius:50%;flex-shrink:0;align-self:flex-start;margin-top:5px}
+/* `min-width:0` é o que deixa o ellipsis funcionar dentro do flex. */
+.loc-txt{flex:1 1 auto;min-width:0}
+.loc-nome{font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* O que o local É pode ser comprido ("Garagem (lado direito) · 15
+   prateleiras · 51 lugares") e numa linha só ficava cortado logo no
+   primeiro parêntesis. Duas linhas e reticências: chega para o dizer
+   quase sempre, e a linha não cresce sem fim. */
+.loc-meta{font-size:12px;line-height:1.45;color:var(--mu);margin-top:2px;overflow:hidden;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.loc-n{font-family:var(--fd);font-size:12px;background:var(--vhp);color:var(--vh);
+  padding:1px 8px;border-radius:99px;margin-right:5px}
+.loc-acoes{display:flex;align-items:center;gap:2px;flex-shrink:0;
+  background:var(--bg);border:1px solid var(--bo);border-radius:99px;padding:3px}
+.loc-ac{width:30px;height:30px;padding:0;border:none;border-radius:50%;background:none;cursor:pointer;
+  color:var(--vh);display:flex;align-items:center;justify-content:center}
+.loc-ac svg{width:16px;height:16px;display:block}
+.loc-ac:hover{background:var(--vhp)}
+.loc-ac.del{color:var(--dg)}
+.loc-ac.del:hover{background:var(--dgp)}
 /* O editor das prateleiras (modal do local): uma linha por prateleira,
    com o nome editável no sítio (sem caixa — é um título) e por baixo o
    formato e os lugares. O formato é um botão com os pontinhos do desenho
