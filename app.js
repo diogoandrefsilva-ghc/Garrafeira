@@ -3586,13 +3586,20 @@ function limparPosicaoLayout(prefix){
   renderPickerPosicoes(prefix,pickerGid(prefix));
 }
 
-/* ── FAB — "Novo vinho" e "Atualização massiva" ──
+/* ── FAB — "Novo vinho", "Atualização massiva" e "Importar por imagens" ──
    Mesmo desenho da WineCatalog: um "+" flutuante que abre duas ações, em
    vez de um botão só. O FAB do Garrafeira já vive a z-index 90, ABAIXO
    dos modais (200) — ao contrário da WineCatalog não há aqui o bug do FAB
    a roubar o toque ao modal, e por isso não precisa da mesma trava; ainda
    assim `abrirModal` fecha o menu do FAB, para não ficar um menu aberto
-   por trás de um modal que se abriu por cima. */
+   por trás de um modal que se abriu por cima.
+   A "Importar por imagens" esteve em Definições › Dados e veio para aqui:
+   é uma forma de ACRESCENTAR vinhos, como as outras duas, e estava
+   arrumada no cartão das cópias de segurança — que é por onde os dados
+   SAEM. Quem acabou de fotografar a prateleira procura o "+", não as
+   definições. O guarda continua a ser o da própria `importarAbrir()`
+   (`podeUsarIA()`), como no `loteAbrir()`: em `sem_ia` a opção aparece e
+   diz porque é que não dá, em vez de desaparecer sem explicação. */
 function fabToggle(){
   const w=document.getElementById('fab-wrap');
   if(w)w.classList.toggle('open');
@@ -3605,6 +3612,7 @@ function fabAcao(tipo){
   fabFechar();
   if(tipo==='novo')abrirNovoVinho();
   if(tipo==='lote')loteAbrir();
+  if(tipo==='importar')importarAbrir();
 }
 
 function abrirNovoVinho(){
@@ -6009,6 +6017,13 @@ function renderCfg(){
 }
 
 /* ── LOCAIS (config) ───────────────────────────────────────────────── */
+/* Os dois comandos de cada local desenham-se em SVG e não com os emoji
+   ✏️/✕: dentro do grupo com moldura, um emoji colorido do sistema é a
+   coisa mais berrante de um cartão feito de papel e bordô, e muda de
+   desenho de telemóvel para telemóvel. Aqui tomam a cor do botão — bordô
+   no editar, vermelho no apagar — que é o que os separa um do outro. */
+const ICO_LAPIS='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.9V20h3.1L17.2 9.9l-3.1-3.1L4 16.9zm15.7-9.5a.9.9 0 000-1.2l-1.9-1.9a.9.9 0 00-1.2 0l-1.5 1.5 3.1 3.1 1.5-1.5z" fill="currentColor"/></svg>';
+const ICO_X='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 function renderCfgLocais(){
   const box=document.getElementById('cfg-locais');
   if(!box)return;
@@ -6016,13 +6031,17 @@ function renderCfgLocais(){
   box.innerHTML=db.locais.map(l=>{
     const n=db.garrafas.filter(g=>g.local_id===l.id&&naGarrafeira(g)).length;
     const lay=resumoLayoutLocal(l);
-    const meta=[l.descricao,lay].filter(Boolean).join(' — ');
-    return `<div class="ua-row">
-      <span class="pip" style="width:11px;height:11px;border-radius:50%;background:${esc(l.cor||'#7b1f3d')};flex-shrink:0"></span>
-      <span class="em"><b>${esc(l.nome)}</b>${meta?` — ${esc(meta)}`:''}</span>
-      <span class="tagme">${n}</span>
-      <button class="jdel" style="color:var(--mu)" title="Editar" onclick="editarLocal(${l.id})">✏️</button>
-      <button class="jdel" title="Apagar" onclick="apagarLocal(${l.id})">✕</button>
+    const meta=[l.descricao,lay].filter(Boolean).join(' · ');
+    return `<div class="loc-row">
+      <span class="loc-pip" style="background:${esc(l.cor||'#7b1f3d')}"></span>
+      <div class="loc-txt">
+        <div class="loc-nome">${esc(l.nome)}</div>
+        <div class="loc-meta"><span class="loc-n">${n}</span>${n===1?'garrafa':'garrafas'}${meta?` · ${esc(meta)}`:''}</div>
+      </div>
+      <div class="loc-acoes">
+        <button type="button" class="loc-ac" title="Editar" aria-label="Editar ${esc(l.nome)}" onclick="editarLocal(${l.id})">${ICO_LAPIS}</button>
+        <button type="button" class="loc-ac del" title="Apagar" aria-label="Apagar ${esc(l.nome)}" onclick="apagarLocal(${l.id})">${ICO_X}</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -7275,7 +7294,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='89';
+const APP_BUILD='90';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="89">
+<body data-build="90">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone.svg" alt="">
@@ -262,8 +262,8 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 
     <div class="fcard ro-hide" id="fcard-dados">
       <h3>Dados</h3>
-      <div class="note">Cópia de segurança do que está na app, em JSON, e a lista em PDF. Só download — a app lê sempre do Supabase.</div>
-      <button class="btn ghost" onclick="importarAbrir()">📷 Importar por imagens</button>
+      <div class="note">Cópia de segurança do que está na app, em JSON, e a lista em PDF. Só download — a app lê sempre do Supabase.
+        (A importação por imagens mudou-se para o <b>+</b> flutuante, ao lado do "Novo vinho": é por onde entram vinhos, não por onde saem cópias.)</div>
       <button class="btn ghost" onclick="exportarJSON()">⬇️ Exportar JSON</button>
       <button class="btn ghost" onclick="exportarPDF()">⬇️ Exportar PDF</button>
     </div>
@@ -290,10 +290,11 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 
 <div class="fab-wrap ro-hide" id="fab-wrap">
   <div class="fab-menu" id="fab-menu">
+    <button class="fab-op" onclick="fabAcao('importar')">📷 Importar por imagens</button>
     <button class="fab-op" onclick="fabAcao('lote')">🔎 Atualização massiva</button>
     <button class="fab-op" onclick="fabAcao('novo')">🍷 Novo vinho</button>
   </div>
-  <button class="fab" onclick="fabToggle()" aria-label="Novo vinho ou atualização massiva">+</button>
+  <button class="fab" onclick="fabToggle()" aria-label="Acrescentar vinhos">+</button>
 </div>
 
 <!-- ═══ MODAIS ═══ -->

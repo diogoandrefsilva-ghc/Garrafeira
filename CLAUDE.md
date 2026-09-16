@@ -659,6 +659,17 @@ pixel. Um estado novo do lugar entra nesse bloco. Pela mesma razão o arco
 vive numa variável (`--arco`): `.msdot.cheia:hover` tem mais especificidade
 e, sem ela, passar o rato por cima apagava-o.
 
+Em **Definições › Locais da garrafeira** cada local é uma `.loc-row`: o ponto
+da cor, o NOME numa linha só dele e, por baixo, o que ele é — a contagem de
+garrafas, a descrição, as prateleiras. Os dois comandos ficam **juntos, num
+grupo com moldura** à direita (`.loc-acoes`), em SVG e não em emoji. Era a
+`.ua-row` dos utilizadores e não servia: ali o texto leva `flex:1 1 100%`
+(ocupa a linha toda e empurra o resto para baixo) e **cada** `.jdel` leva
+`margin-left:auto` — o lápis ficava a meio de uma linha vazia e o ✕ no
+extremo oposto, a lerem-se como comandos de coisas diferentes, com a
+contagem entalada entre os dois. A contagem é informação, e informação
+lê-se no texto, não entre botões.
+
 O **editor do local** (`abrirLocalModal`, `renderLocalLayoutEditor`) é uma
 linha por prateleira: o nome editável no sítio (sem caixa — é um título),
 e por baixo **Formato** e **Lugares**. O formato é um botão com os
@@ -1517,8 +1528,11 @@ distinção do vinho e isto é uma boa notícia sobre a PROCURA.
 
 ## Importar por imagens (`importar-vinhos`)
 
-O botão **Definições → Dados → Importar por imagens** aceita uma a três fotos
-de rótulos, listas ou prateleiras. `encolherImagem()` reduz cada uma no
+A **"📷 Importar por imagens"** vive no **FAB**, ao lado do "Novo vinho" e da
+"Atualização massiva" — as três formas de ACRESCENTAR vinhos no mesmo sítio.
+Esteve em Definições › Dados e veio de lá: aquele cartão é o das cópias de
+segurança, por onde os dados SAEM, e quem acabou de fotografar a prateleira
+procura o "+". Aceita uma a três fotos de rótulos, listas ou prateleiras. `encolherImagem()` reduz cada uma no
 browser; a função recebe os base64 apenas em memória, envia-os ao Gemini e
 descarta-os no fim. Não há upload para Storage nem imagens dentro da tabela
 `garrafeira.importacoes`: essa tabela guarda somente os metadados do pedido e
