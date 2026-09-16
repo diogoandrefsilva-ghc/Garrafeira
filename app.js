@@ -987,6 +987,22 @@ function esc(s){
 // Para valores que vão dentro de onclick="…('…')": além do HTML, escapa a
 // plica e a barra, senão um vinho chamado "Clefs D'or" parte o atributo.
 function escJs(s){return esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));}
+/* Um valor que é um ENDEREÇO mostra-se como hiperligação nos ecrãs onde se
+   aprova uma mudança (a procura da IA, o painel do catálogo). Só pelo texto
+   do link ninguém sabe se o Vivino aponta para o vinho certo — e é
+   exatamente isso que a app está ali a pedir para decidir; sem o <a> a única
+   saída era copiar o URL à mão para outro separador.
+   O texto continua a ser o endereço INTEIRO e não um "ver ↗": com dois links
+   à frente um do outro, o que os distingue é o próprio endereço, e escondê-lo
+   era tirar a única pista que se lê sem abrir nada.
+   Dentro de um <label> (as caixas e os rádios da comparação) não há conflito:
+   a spec manda o label ficar quieto quando o clique cai em conteúdo
+   interativo lá dentro — abre-se o link e a escolha não mexe. */
+function escLink(s){
+  const t=String(s==null?'':s).trim();
+  if(!/^https?:\/\/\S+$/i.test(t))return esc(s);
+  return `<a class="lnk-val" href="${esc(t)}" target="_blank" rel="noopener">${esc(t)}<span class="lnk-ext">↗</span></a>`;
+}
 // A leitura por IA das imagens devolve por vezes o texto do rótulo tal e
 // qual (CAIXA ALTA). Só mexe no que vier TODO em maiúsculas — um nome já
 // bem escrito não se toca — e mantém as ligações ("dos", "da"…) em minúscula.
@@ -2990,8 +3006,8 @@ function catCampoHTML(id,c,podeMexer,focado,soDeles){
   return `<div class="cat-cmp${focado?' focado':''}">
     <div class="cat-cmp-k">${esc(catNome(c.campo))}</div>
     <div class="cat-cmp-v">
-      ${soDeles?'':`<div class="lado meu"><span>o teu</span><b>${esc(catValTxt(c.meu))}</b></div>`}
-      <div class="lado deles"><span>no catálogo</span><b>${esc(catValTxt(c.catalogo))}</b>
+      ${soDeles?'':`<div class="lado meu"><span>o teu</span><b>${escLink(catValTxt(c.meu))}</b></div>`}
+      <div class="lado deles"><span>no catálogo</span><b>${escLink(catValTxt(c.catalogo))}</b>
         <i class="cat-de f${esc(String(f))}">${esc(catOrigemTxt(c.origem,f))}</i></div>
     </div>
     <div class="cat-cmp-a">
@@ -4734,7 +4750,7 @@ function iaMostrarResultado(res,vinhoId){
       <input type="checkbox" id="ia-${c.k}"${vazio?' checked':''}>
       <label for="ia-${c.k}" class="ia-campo" style="margin:0;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)">
         <b>${esc(c.rot)}${nota||''}</b>
-        ${ant?`<span class="ia-antes">${esc(ant)}</span> → `:''}${esc(txt)}
+        ${ant?`<span class="ia-antes">${escLink(ant)}</span> → `:''}${escLink(txt)}
       </label></div>`;
 
     if(!cmp)return caixa(g);
@@ -4752,7 +4768,7 @@ function iaMostrarResultado(res,vinhoId){
     const def=!vazio?'atual':(tPrem?rPrem:(tOutra?rOutra:'atual'));
     const op=(val,rot,txt,cls)=>`<label class="ia-op${cls||''}">
       <input type="radio" name="iap-${c.k}" value="${val}"${def===val?' checked':''}>
-      <span><i>${esc(rot)}</i>${esc(txt)}</span></label>`;
+      <span><i>${esc(rot)}</i>${escLink(txt)}</span></label>`;
     return `<div class="ia-cmp"><b class="ia-cmp-t">${esc(c.rot)}</b>
       ${op('atual','manter',ant||'(vazio)',' at')}
       ${g?op('r1',rot1,g,cls1):''}
@@ -7294,7 +7310,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='90';
+const APP_BUILD='91';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

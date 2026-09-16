@@ -1403,6 +1403,18 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   (`iaMostrarResultado`), com o que está agora ao lado do que a IA propõe.
   Vêm marcados **só os campos vazios**: substituir o que alguém escreveu à
   mão por uma leitura automática tem de ser um clique consciente.
+- **Um valor que é um ENDEREÇO abre-se ali** (`escLink`): o "antes" e o
+  "depois" de um `vivino_url`/`imagem_url` saem como hiperligação, nos três
+  caminhos que passam pelo `iaMostrarResultado` (procura de um vinho,
+  atualização massiva, procura manual) e também no painel do catálogo
+  (`catCampoHTML`). Ninguém decide qual dos dois links do Vivino é o do vinho
+  certo lendo a cadeia de caracteres — decide-se abrindo os dois, e sem o `<a>`
+  a única saída era copiá-los à mão para outro separador. O texto do link é o
+  endereço **inteiro**: é o fim dele (o id, o `?year=`) que distingue um do
+  outro, e cortá-lo deixava dois `https://www.vivino.com/…` iguais lado a
+  lado. O `<a>` dentro do `<label>` da caixa/rádio não é problema — a spec
+  manda o `label` ficar quieto quando o clique cai em conteúdo interativo lá
+  dentro.
 
 ## O catálogo partilhado com a WineSelection (não pagar duas vezes o mesmo)
 Há uma segunda app de vinhos no mesmo projeto Supabase — a **WineSelection**

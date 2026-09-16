@@ -1052,6 +1052,12 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .mlinks a{color:var(--in)}
 .mlink-x{border:none;background:none;padding:0 0 0 3px;font-size:10px;color:var(--mu);cursor:pointer;font-family:inherit;vertical-align:middle}
 .mlink-x:hover{color:var(--vh)}
+/* Um valor que é um endereço, nos ecrãs de aprovar uma mudança (a procura da
+   IA, o painel do catálogo). Fica com o endereço todo à vista e a quebrar
+   onde calhar: dois links do Vivino distinguem-se pelo FIM, e cortá-los com
+   reticências deixava dois "https://www.vivino.com/…" iguais lado a lado. */
+.lnk-val{color:var(--in);word-break:break-all}
+.lnk-ext{padding-left:3px;font-size:10px}
 .mini{padding:6px 11px;font-size:11.5px;border-radius:99px;border:1px solid var(--bo2);background:#fff;font-family:inherit;
   cursor:pointer;white-space:nowrap;font-weight:600;transition:all .15s}
 .mini:hover{border-color:var(--vh);color:var(--vh)}
