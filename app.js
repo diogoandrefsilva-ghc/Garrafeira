@@ -2787,6 +2787,7 @@ function renderConsumidos(){
       ${g.consumo_avaliacao?`<div class="estrelas">${estrelas(g.consumo_avaliacao)}</div>`:''}
       ${g.consumo_nota?`<div class="cc-nota">"${esc(g.consumo_nota)}"</div>`:''}
       <div class="macoes ro-hide" style="margin-top:10px">
+        <button class="mini" onclick="editarConsumo(${g.id})">✎ Editar</button>
         <button class="mini" onclick="reporGarrafa(${g.id})">↩︎ Repor na garrafeira</button>
       </div>
     </div>`;
@@ -3980,6 +3981,77 @@ async function reporGarrafa(gid){
     renderConsumidos();renderLista();refrescarVinhoAberto();
     toast('Garrafa reposta');
   }catch(e){toast('Não foi possível: '+e.message,1);}
+}
+
+/* Editar um consumo já registado — engano na data, na nota ou na nota do
+   Vivino… reabre o MESMO modal de "Dar saída", só que a preencher com o
+   que já lá está e sem o seletor de garrafa (já se sabe qual é). Guarda
+   com um PATCH direto às quatro colunas: o CHECK `garrafas_consumo_chk`
+   continua a valer (o estado não muda, o `consumido_em` nunca fica vazio),
+   por isso não precisa de passar pelo RPC `consumir_garrafa`. */
+function editarConsumo(gid){
+  if(roGuard())return;
+  const g=db.garrafas.find(x=>x.id===gid&&x.estado==='consumida');
+  if(!g){toast('Garrafa não encontrada',1);return;}
+  const v=IDXV[g.vinho_id]||{nome:'(vinho apagado)'};
+  document.getElementById('modal-consumir-in').innerHTML=`
+    <div class="mhero">
+      <button class="mx" onclick="fecharModal('modal-consumir')">✕</button>
+      <div class="mhero-in">
+        <div class="mhero-g">${garrafaSVG(v)}${imagemDe(v)
+          ?`<img src="${esc(imagemDe(v))}" alt="" onerror="this.remove()">`:''}</div>
+        <div class="mhero-tx">
+          <div class="mhero-k">Editar consumo</div>
+          <h3>${esc(v.nome)}</h3>
+          <div class="mhero-s">${esc([v.produtor,v.ano,v.regiao].filter(Boolean).join(' · '))}</div>
+        </div>
+      </div>
+    </div>
+
+    <input type="hidden" id="c-garrafa" value="${gid}">
+    <div class="mgar" style="margin-top:14px"><div class="g-onde"><b>📍 ${esc(ondeEsta(g))}</b></div></div>
+
+    <label>Quando</label>
+    <input type="date" id="c-data" value="${esc(g.consumido_em||hoje())}">
+    <label>Onde / com quem</label>
+    <input type="text" id="c-local" value="${esc(g.consumo_local||'')}" placeholder="Jantar de anos, lá em casa">
+
+    <label>Que tal era</label>
+    <input type="hidden" id="c-aval" value="${g.consumo_avaliacao||''}">
+    <div class="stars" id="c-stars">
+      ${[1,2,3,4,5].map(n=>`<button type="button" class="star${g.consumo_avaliacao&&n<=g.consumo_avaliacao?' on':''}" onclick="setAval(${n})" title="${n}">★</button>`).join('')}
+    </div>
+    <div class="stars-l" id="c-stars-l">${g.consumo_avaliacao?estrelas(g.consumo_avaliacao)+'  '+AVAL_TXT[g.consumo_avaliacao]:'Sem nota — toca numa estrela (e outra vez na mesma para tirar).'}</div>
+
+    <label>Observações</label>
+    <textarea id="c-nota" placeholder="Estava no ponto, ainda aguentava mais uns anos…">${esc(g.consumo_nota||'')}</textarea>
+
+    <div class="macoes">
+      <button class="btn prim" id="c-btn" onclick="guardarEdicaoConsumo(${gid})">Guardar</button>
+      <button class="btn ghost" onclick="fecharModal('modal-consumir')">Cancelar</button>
+    </div>`;
+  abrirModal('modal-consumir');
+}
+async function guardarEdicaoConsumo(gid){
+  if(roGuard())return;
+  const dados={
+    consumido_em:document.getElementById('c-data').value||hoje(),
+    consumo_local:document.getElementById('c-local').value.trim(),
+    consumo_nota:document.getElementById('c-nota').value.trim(),
+    consumo_avaliacao:inteiro(document.getElementById('c-aval').value)
+  };
+  const btn=document.getElementById('c-btn');
+  btn.disabled=true;btn.textContent='A gravar…';
+  try{
+    await sbReq('PATCH',`garrafas?id=eq.${gid}`,dados);
+    const g=db.garrafas.find(x=>x.id===gid);
+    if(g)Object.assign(g,dados);
+    fecharModal('modal-consumir');renderConsumidos();refrescarVinhoAberto();
+    toast('Consumo atualizado ✓');
+  }catch(e){
+    toast('Não foi possível: '+e.message,1);
+    btn.disabled=false;btn.textContent='Guardar';
+  }
 }
 
 /* ── MODAL DA GARRAFA (mover / acrescentar / apagar) ───────────────── */
@@ -7310,7 +7382,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='91';
+const APP_BUILD='92';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
