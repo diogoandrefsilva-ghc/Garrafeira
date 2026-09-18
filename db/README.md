@@ -213,6 +213,33 @@ revogadas a `anon` e `authenticated` no fim do ficheiro. Quem escreve do
 lado do browser é o trigger da Garrafeira, e esse é `SECURITY DEFINER` —
 escreve sem que a pessoa tenha (nem deva ter) direito nenhum ali.
 
+(A migração 13, `db/migracao-blindagem.sql`, já está aplicada — fecha o que
+o linter do Supabase apanhou. Auto-documentada no próprio ficheiro.)
+
+### Migração 14 — vários comentários por consumo (já aplicada)
+
+`db/migracao-notas-consumo.sql`. Um vinho muda ao longo de uma refeição —
+"ainda fechado" no início, "abriu bem" depois de arejar — e a nota única de
+sempre (`garrafas.consumo_nota`) só guardava a última: editar apagava a
+anterior por cima. Cria `garrafeira.consumo_notas` (uma linha por
+comentário, cada uma com a sua hora), migra para lá a nota que já existisse
+por garrafa, e **apaga** `garrafas.consumo_nota` — uma coluna e a tabela que
+a substitui não convivem sem uma delas ficar dessincronizada. Data, local e
+avaliação continuam únicos por garrafa: não mudam a meio da refeição, só o
+que se acha do vinho é que muda.
+
+`consumir_garrafa` continua a aceitar `p_nota` (é a primeira linha do
+histórico deste consumo); `repor_garrafa` passa a apagar também as notas da
+garrafa, mesma lógica que já limpava local/avaliação — repor é desfazer o
+consumo, não editá-lo. A app grava/apaga notas a mais diretamente (`POST`/
+`DELETE` a `consumo_notas`), como já fazia com `vinho_castas`.
+
+Correr no SQL Editor, por esta ordem:
+
+1. `db/migracao-notas-consumo.sql`
+2. `db/functions.sql`
+3. `db/policies.sql`
+
 ### `vinhos.imagem_url` (já aplicada)
 
 Link para uma foto do rótulo/garrafa — a `vinho-info` (Edge Function) tenta

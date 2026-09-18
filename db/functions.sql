@@ -171,6 +171,16 @@ AS $$
   SELECT garrafeira_id FROM garrafeira.vinhos WHERE id = p_vinho_id;
 $$;
 
+-- O mesmo, mas a partir de uma GARRAFA — para as policies de
+-- `consumo_notas`, que também não tem `garrafeira_id` próprio (o dela é o
+-- da garrafa a que pertence).
+CREATE OR REPLACE FUNCTION garrafeira.garrafeira_da_garrafa(p_garrafa_id bigint)
+  RETURNS bigint LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path TO 'garrafeira', 'public'
+AS $$
+  SELECT garrafeira_id FROM garrafeira.garrafas WHERE id = p_garrafa_id;
+$$;
+
 -- ---------------------------------------------------------------------
 -- A minha garrafeira, criada à primeira entrada
 -- ---------------------------------------------------------------------
@@ -463,10 +473,13 @@ $$;
 -- ---------------------------------------------------------------------
 -- Consumir uma garrafa (uma transação, não dois PATCH)
 -- ---------------------------------------------------------------------
--- Podia ser um PATCH simples da app, mas "consumir" mexe em cinco colunas
+-- Podia ser um PATCH simples da app, mas "consumir" mexe em várias colunas
 -- de uma vez e o CHECK `garrafas_consumo_chk` exige que estado e data
 -- andem juntos. Numa função, ou entra tudo ou não entra nada — e a app
 -- fica sem forma de gravar meia saída por a rede ter caído a meio.
+-- `p_nota`, se vier alguma coisa, é a PRIMEIRA linha do histórico deste
+-- consumo em `consumo_notas` — as seguintes (o vinho a mudar ao longo da
+-- refeição) entram à parte, um INSERT de cada vez, direto da app.
 CREATE OR REPLACE FUNCTION garrafeira.consumir_garrafa(
   p_garrafa_id bigint,
   p_data       date,
@@ -483,17 +496,21 @@ BEGIN
      SET estado = 'consumida',
          consumido_em = COALESCE(p_data, CURRENT_DATE),
          consumo_local = COALESCE(p_local, ''),
-         consumo_nota = COALESCE(p_nota, ''),
          consumo_avaliacao = p_avaliacao
    WHERE id = p_garrafa_id
      -- só garrafas que ainda lá estão: sem isto, tocar duas vezes no botão
-     -- reescrevia a data e a nota de um consumo já registado.
+     -- reescrevia a data e o local de um consumo já registado.
      AND estado = 'na_garrafeira'
   RETURNING id INTO v_id;
 
   IF v_id IS NULL THEN
     RAISE EXCEPTION 'Essa garrafa já não está na garrafeira.';
   END IF;
+
+  IF p_nota IS NOT NULL AND btrim(p_nota) <> '' THEN
+    INSERT INTO garrafeira.consumo_notas (garrafa_id, nota) VALUES (v_id, p_nota);
+  END IF;
+
   RETURN v_id;
 END;
 $$;
@@ -501,15 +518,28 @@ $$;
 -- ---------------------------------------------------------------------
 -- Repor uma garrafa consumida (enganou-se no botão)
 -- ---------------------------------------------------------------------
+-- Volta para a garrafeira e o histórico deste consumo fecha-se: os
+-- comentários (`consumo_notas`) vão atrás, mesma lógica que já limpava
+-- local/avaliação — um consumo reposto não é "editado", é desfeito.
 CREATE OR REPLACE FUNCTION garrafeira.repor_garrafa(p_garrafa_id bigint)
-  RETURNS bigint LANGUAGE sql SECURITY INVOKER
+  RETURNS bigint LANGUAGE plpgsql SECURITY INVOKER
   SET search_path TO 'garrafeira', 'public'
 AS $$
+DECLARE
+  v_id bigint;
+BEGIN
   UPDATE garrafeira.garrafas
      SET estado = 'na_garrafeira', consumido_em = NULL,
-         consumo_local = '', consumo_nota = '', consumo_avaliacao = NULL
+         consumo_local = '', consumo_avaliacao = NULL
    WHERE id = p_garrafa_id AND estado = 'consumida'
-  RETURNING id;
+  RETURNING id INTO v_id;
+
+  IF v_id IS NOT NULL THEN
+    DELETE FROM garrafeira.consumo_notas WHERE garrafa_id = v_id;
+  END IF;
+
+  RETURN v_id;
+END;
 $$;
 
 -- ---------------------------------------------------------------------

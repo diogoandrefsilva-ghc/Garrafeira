@@ -1187,9 +1187,13 @@ diferentes são **duas** linhas em `garrafas` e **uma** em `vinhos`.
 Consequências práticas, todas de propósito:
 - a ficha da IA é gravada **uma vez** por vinho, não copiada por garrafa;
 - **consumir não apaga**: muda `garrafas.estado` para `'consumida'` e
-  carimba data/sítio/nota. É esse histórico que responde ao "onde é que bebi
-  aquela relíquia" — apagar a linha era deitar isso fora, e é a única parte
-  destes dados que não se recupera;
+  carimba data/sítio/avaliação. É esse histórico que responde ao "onde é
+  que bebi aquela relíquia" — apagar a linha era deitar isso fora, e é a
+  única parte destes dados que não se recupera. Os COMENTÁRIOS são a
+  exceção que não vive na garrafa: um vinho muda ao longo de uma refeição
+  ("ainda fechado" no início, "abriu bem" depois de arejar), por isso são
+  vários (`garrafeira.consumo_notas`, uma linha por comentário, com hora) e
+  não um campo só que a próxima edição apagava por cima;
 - a lista principal só mostra vinhos com `stockDe(id) > 0`. Um vinho todo
   bebido continua na base de dados e no separador Consumidos, mas sai da
   garrafeira.

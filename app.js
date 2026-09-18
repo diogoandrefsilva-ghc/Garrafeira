@@ -331,7 +331,7 @@ async function carregarGarrafeira(){
     IMG_ASSINADA={};reindexar();aplicarPermissoes();return;
   }
   const f=`garrafeira_id=eq.${GA_ID}`;
-  const [locais,vinhos,garrafas,vc]=await Promise.all([
+  const [locais,vinhos,garrafas,vc,cn]=await Promise.all([
     sbReq('GET',`locais?${f}&select=*&order=ordem.asc,nome.asc`),
     sbReq('GET',`vinhos?${f}&select=*&order=nome.asc`),
     sbReq('GET',`garrafas?${f}&select=*&order=id.asc`),
@@ -339,9 +339,17 @@ async function carregarGarrafeira(){
     // vinho): a RLS já não deixa sair as linhas dos vinhos que não posso
     // ver, e as que sobram de outra garrafeira minha só ficam sem par no
     // `porVinho` — ninguém as procura.
-    sbReq('GET','vinho_castas?select=*')
+    sbReq('GET','vinho_castas?select=*'),
+    // `consumo_notas` não tem `garrafeira_id` pela mesma razão — a dela é
+    // a da garrafa — e junta-se aqui como as castas: em `porGarrafa`.
+    sbReq('GET','consumo_notas?select=*&order=criado_em.asc')
   ]);
   db.locais=locais||[];db.vinhos=vinhos||[];db.garrafas=garrafas||[];
+
+  const porGarrafa={};(cn||[]).forEach(n=>{
+    (porGarrafa[n.garrafa_id]=porGarrafa[n.garrafa_id]||[]).push(n);
+  });
+  db.garrafas.forEach(g=>{g.notas=porGarrafa[g.id]||[];});
 
   // castas por vinho: junta-se aqui, no cliente, em vez de pedir ao
   // PostgREST um select com relação embebida. O dataset é pequeno e assim
@@ -2760,7 +2768,19 @@ function mapaPopupSubstituir(gid){
 
 /* ── CONSUMIDOS ────────────────────────────────────────────────────
    O "onde é que bebi aquela relíquia". Consumir não apaga a garrafa: muda
-   o estado e carimba data/sítio/nota, e é esta lista que os mostra. */
+   o estado e carimba data/sítio/notas, e é esta lista que os mostra.
+   Um vinho muda ao longo de uma refeição — por isso as notas são VÁRIAS
+   (`consumo_notas`, uma linha por comentário), não um campo só que a
+   última edição apagava a anterior. A hora só aparece quando há mais do
+   que uma: com uma só, é a data do cartão que já diz quando foi. */
+function notasConsumoHTML(g){
+  const ns=g.notas||[];
+  if(!ns.length)return '';
+  const comHora=ns.length>1;
+  return `<div class="cc-notas">${ns.map(n=>
+    `<div class="cc-nota">${comHora?`<b>${esc(dataHoraLocal(n.criado_em).slice(11))}</b> `:''}"${esc(n.nota)}"</div>`
+  ).join('')}</div>`;
+}
 function renderConsumidos(){
   const gs=db.garrafas.filter(g=>g.estado==='consumida')
     .sort((a,b)=>String(b.consumido_em||'').localeCompare(String(a.consumido_em||'')));
@@ -2785,7 +2805,7 @@ function renderConsumidos(){
       </div>
       ${g.consumo_local?`<div class="cc-onde">📍 ${esc(g.consumo_local)}</div>`:''}
       ${g.consumo_avaliacao?`<div class="estrelas">${estrelas(g.consumo_avaliacao)}</div>`:''}
-      ${g.consumo_nota?`<div class="cc-nota">"${esc(g.consumo_nota)}"</div>`:''}
+      ${notasConsumoHTML(g)}
       <div class="macoes ro-hide" style="margin-top:10px">
         <button class="mini" onclick="editarConsumo(${g.id})">✎ Editar</button>
         <button class="mini" onclick="reporGarrafa(${g.id})">↩︎ Repor na garrafeira</button>
@@ -3319,7 +3339,7 @@ function vinhoDetalheHTML(v){
     ${bebidas.length?`<div class="msec">Já bebidas (${bebidas.length})</div>
       ${bebidas.sort((a,b)=>String(b.consumido_em).localeCompare(String(a.consumido_em))).map(g=>`
         <div class="mgar"><div class="g-onde"><b>${dataPT(g.consumido_em)}${g.consumo_local?' · '+esc(g.consumo_local):''}</b>
-          <i>${g.consumo_avaliacao?estrelas(g.consumo_avaliacao)+' ':''}${esc(g.consumo_nota||'')}</i></div></div>`).join('')}`:''}
+          <i>${g.consumo_avaliacao?estrelas(g.consumo_avaliacao)+' ':''}${(g.notas||[]).map(n=>esc(n.nota)).join(' · ')}</i></div></div>`).join('')}`:''}
 
     <div class="msec">Atualizações</div>
     <div class="ia-fontes">
@@ -3945,24 +3965,27 @@ async function confirmarConsumo(vinhoId){
   if(roGuard())return;
   const gid=parseInt(document.getElementById('c-garrafa').value,10);
   const data=document.getElementById('c-data').value||hoje();
+  const nota=document.getElementById('c-nota').value.trim();
   const btn=document.getElementById('c-btn');
   btn.disabled=true;btn.textContent='A gravar…';
   try{
     // RPC e não PATCH: estado + data têm de entrar juntos (é o que o CHECK
     // `garrafas_consumo_chk` exige), e a função recusa consumir duas vezes a
-    // mesma garrafa — o que um duplo toque conseguia fazer.
+    // mesma garrafa — o que um duplo toque conseguia fazer. A nota (se
+    // vier alguma) é a função que a grava em `consumo_notas` — é a
+    // primeira do histórico deste consumo.
     await sbRpc('consumir_garrafa',{
       p_garrafa_id:gid,
       p_data:data,
       p_local:document.getElementById('c-local').value.trim(),
-      p_nota:document.getElementById('c-nota').value.trim(),
+      p_nota:nota,
       p_avaliacao:inteiro(document.getElementById('c-aval').value)
     });
     const g=db.garrafas.find(x=>x.id===gid);
     if(g)Object.assign(g,{estado:'consumida',consumido_em:data,
       consumo_local:document.getElementById('c-local').value.trim(),
-      consumo_nota:document.getElementById('c-nota').value.trim(),
-      consumo_avaliacao:inteiro(document.getElementById('c-aval').value)});
+      consumo_avaliacao:inteiro(document.getElementById('c-aval').value),
+      notas:nota?[{id:null,nota,criado_em:new Date().toISOString()}]:[]});
     fecharModal('modal-consumir');renderLista();refrescarVinhoAberto();
     if(tabAtiva==='locais')renderMapa();
     if(tabAtiva==='consumidos')renderConsumidos();
@@ -3975,25 +3998,33 @@ async function confirmarConsumo(vinhoId){
 async function reporGarrafa(gid){
   if(roGuard())return;
   try{
+    // O RPC apaga também as linhas de `consumo_notas` desta garrafa — é o
+    // mesmo "enganei-me no botão" que já limpava local/nota/avaliação.
     await sbRpc('repor_garrafa',{p_garrafa_id:gid});
     const g=db.garrafas.find(x=>x.id===gid);
-    if(g)Object.assign(g,{estado:'na_garrafeira',consumido_em:null,consumo_local:'',consumo_nota:'',consumo_avaliacao:null});
+    if(g)Object.assign(g,{estado:'na_garrafeira',consumido_em:null,consumo_local:'',consumo_avaliacao:null,notas:[]});
     renderConsumidos();renderLista();refrescarVinhoAberto();
     toast('Garrafa reposta');
   }catch(e){toast('Não foi possível: '+e.message,1);}
 }
 
-/* Editar um consumo já registado — engano na data, na nota ou na nota do
-   Vivino… reabre o MESMO modal de "Dar saída", só que a preencher com o
-   que já lá está e sem o seletor de garrafa (já se sabe qual é). Guarda
-   com um PATCH direto às quatro colunas: o CHECK `garrafas_consumo_chk`
-   continua a valer (o estado não muda, o `consumido_em` nunca fica vazio),
-   por isso não precisa de passar pelo RPC `consumir_garrafa`. */
+/* Editar um consumo já registado — engano na data, na nota do Vivino, ou
+   só mais um comentário porque o vinho abriu de maneira diferente a meio
+   da refeição. Reabre o MESMO modal de "Dar saída", a preencher com o que
+   já lá está e sem o seletor de garrafa (já se sabe qual é).
+
+   Data/local/avaliação são um PATCH direto (o CHECK `garrafas_consumo_chk`
+   continua a valer: o estado não muda, o `consumido_em` nunca fica vazio).
+   As notas são a exceção: NÃO se editam aqui — um vinho tem vários
+   momentos ao longo de uma refeição, e cada comentário é a sua própria
+   linha em `consumo_notas` (`adicionarNotaConsumo`/`apagarNotaConsumo`),
+   nunca um campo que a próxima edição reescreve por cima. */
 function editarConsumo(gid){
   if(roGuard())return;
   const g=db.garrafas.find(x=>x.id===gid&&x.estado==='consumida');
   if(!g){toast('Garrafa não encontrada',1);return;}
   const v=IDXV[g.vinho_id]||{nome:'(vinho apagado)'};
+  const notas=g.notas||[];
   document.getElementById('modal-consumir-in').innerHTML=`
     <div class="mhero">
       <button class="mx" onclick="fecharModal('modal-consumir')">✕</button>
@@ -4023,21 +4054,58 @@ function editarConsumo(gid){
     </div>
     <div class="stars-l" id="c-stars-l">${g.consumo_avaliacao?estrelas(g.consumo_avaliacao)+'  '+AVAL_TXT[g.consumo_avaliacao]:'Sem nota — toca numa estrela (e outra vez na mesma para tirar).'}</div>
 
-    <label>Observações</label>
-    <textarea id="c-nota" placeholder="Estava no ponto, ainda aguentava mais uns anos…">${esc(g.consumo_nota||'')}</textarea>
-
-    <div class="macoes">
+    <div class="macoes" style="margin-top:14px">
       <button class="btn prim" id="c-btn" onclick="guardarEdicaoConsumo(${gid})">Guardar</button>
       <button class="btn ghost" onclick="fecharModal('modal-consumir')">Cancelar</button>
+    </div>
+
+    <label style="margin-top:18px">Comentários (um vinho vai mudando ao longo de uma refeição — acrescenta quantos quiseres)</label>
+    <div id="c-notas-lista">${notasEditavelHTML(gid,notas)}</div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input type="text" id="c-nota-nova" style="flex:1;min-width:0" placeholder="Depois de arejar, abriu bem…" onkeydown="if(event.key==='Enter'){event.preventDefault();adicionarNotaConsumo(${gid});}">
+      <button class="btn ghost" id="c-nota-add-btn" style="flex:none" onclick="adicionarNotaConsumo(${gid})">+ Acrescentar</button>
     </div>`;
   abrirModal('modal-consumir');
+}
+function notasEditavelHTML(gid,notas){
+  if(!notas.length)return '<div class="note" style="padding:6px 0">Ainda sem comentários.</div>';
+  return notas.map(n=>`<div class="cc-nota" style="display:flex;gap:6px;align-items:flex-start;justify-content:space-between">
+    <span>${notas.length>1?`<b>${esc(dataHoraLocal(n.criado_em).slice(11))}</b> `:''}"${esc(n.nota)}"</span>
+    <button type="button" class="jdel" style="flex:none" title="Apagar" onclick="apagarNotaConsumo(${n.id},${gid})">✕</button>
+  </div>`).join('');
+}
+async function adicionarNotaConsumo(gid){
+  if(roGuard())return;
+  const inp=document.getElementById('c-nota-nova');
+  const texto=inp.value.trim();
+  if(!texto)return;
+  const btn=document.getElementById('c-nota-add-btn');
+  btn.disabled=true;
+  try{
+    const r=await sbReq('POST','consumo_notas',[{garrafa_id:gid,nota:texto}],{'Prefer':'return=representation'});
+    const g=db.garrafas.find(x=>x.id===gid);
+    if(g){g.notas=g.notas||[];g.notas.push((r||[])[0]||{id:null,nota:texto,criado_em:new Date().toISOString()});}
+    document.getElementById('c-notas-lista').innerHTML=notasEditavelHTML(gid,g?g.notas:[]);
+    inp.value='';
+    renderConsumidos();refrescarVinhoAberto();
+  }catch(e){toast('Não foi possível: '+e.message,1);}
+  finally{btn.disabled=false;}
+}
+async function apagarNotaConsumo(notaId,gid){
+  if(roGuard())return;
+  try{
+    await sbReq('DELETE',`consumo_notas?id=eq.${notaId}`);
+    const g=db.garrafas.find(x=>x.id===gid);
+    if(g)g.notas=(g.notas||[]).filter(n=>n.id!==notaId);
+    document.getElementById('c-notas-lista').innerHTML=notasEditavelHTML(gid,g?g.notas:[]);
+    renderConsumidos();refrescarVinhoAberto();
+  }catch(e){toast('Não foi possível: '+e.message,1);}
 }
 async function guardarEdicaoConsumo(gid){
   if(roGuard())return;
   const dados={
     consumido_em:document.getElementById('c-data').value||hoje(),
     consumo_local:document.getElementById('c-local').value.trim(),
-    consumo_nota:document.getElementById('c-nota').value.trim(),
     consumo_avaliacao:inteiro(document.getElementById('c-aval').value)
   };
   const btn=document.getElementById('c-btn');
@@ -7382,7 +7450,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='92';
+const APP_BUILD='93';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

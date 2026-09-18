@@ -225,6 +225,19 @@ CREATE POLICY garrafas_edit ON garrafeira.garrafas
   FOR ALL TO authenticated
   USING (garrafeira.pode_mexer(garrafeira_id)) WITH CHECK (garrafeira.pode_mexer(garrafeira_id));
 
+-- `consumo_notas` não tem `garrafeira_id` próprio, mesma razão do
+-- `vinho_castas` lá em cima: a garrafeira desta linha é a da GARRAFA, e a
+-- função `garrafeira_da_garrafa` vai buscá-la lá.
+DROP POLICY IF EXISTS consumo_notas_sel ON garrafeira.consumo_notas;
+CREATE POLICY consumo_notas_sel ON garrafeira.consumo_notas
+  FOR SELECT TO authenticated
+  USING (garrafeira.pode_ver(garrafeira.garrafeira_da_garrafa(garrafa_id)));
+DROP POLICY IF EXISTS consumo_notas_edit ON garrafeira.consumo_notas;
+CREATE POLICY consumo_notas_edit ON garrafeira.consumo_notas
+  FOR ALL TO authenticated
+  USING (garrafeira.pode_mexer(garrafeira.garrafeira_da_garrafa(garrafa_id)))
+  WITH CHECK (garrafeira.pode_mexer(garrafeira.garrafeira_da_garrafa(garrafa_id)));
+
 -- ---------------------------------------------------------------------
 -- analises — a procura à IA é de quem a pediu.
 -- Não há policy de UPDATE de propósito: quem fecha a linha é a Edge
