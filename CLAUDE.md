@@ -1581,8 +1581,8 @@ cria o vinho, as castas e as garrafas.
   causa está lá. Definições › Diagnóstico.
 
 ## O registo central de acessos ao Gemini (schema `ia_uso`)
-Esta app não é a única a chamar o Gemini: são **cinco** no mesmo projeto
-Supabase, por oito Edge Functions, e cada uma tinha só o seu `sync_log` —
+Esta app não é a única a chamar o Gemini: são **seis** no mesmo projeto
+Supabase, por nove Edge Functions, e cada uma tinha só o seu `sync_log` —
 a pergunta *"quanto é que isto custa ao todo?"* não tinha onde ser
 respondida. O schema **`ia_uso`** é uma linha por chamada (app, função,
 modelo, tokens, custo estimado, duração, quem, erro).
@@ -1591,6 +1591,12 @@ modelo, tokens, custo estimado, duração, quem, erro).
 verdade do schema é o `db/ia_uso.sql` desse repo, não deste. Aqui fica só
 o que é preciso saber para não partir nada:
 
+- **Um 200 com o corpo VAZIO não é resposta, e não pode passar por
+  sucesso.** O modelo gasta o orçamento a pensar e não escreve uma letra —
+  HTTP 200, `candidatesTokenCount: 0`. A `importar-vinhos` devolvia uma lista de ZERO vinhos como se a leitura tivesse corrido bem; a `vinho-info` já dava erro, mas chamava-lhe "resposta ilegível", que é outra coisa (ali houve texto e não se entendeu). Agora o corpo lê-se DENTRO do
+  ciclo dos modelos (um vazio passa ao seguinte) e, se nenhum escrever,
+  fecha em **erro** com o `finishReason` à frente. A lição inteira, com o
+  caso que a pagou, está no `CLAUDE.md` da WineCatalog ("O 200 vazio").
 - **Daqui escrevem duas funções**: `vinho-info.ts` e `importar-vinhos.ts`,
   as duas com `app: "garrafeira"`. A `registarIaUso()` de cada uma é
   chamada no fim do `registar()` local — o mesmo `detalhe` que vai para o
@@ -1598,7 +1604,7 @@ o que é preciso saber para não partir nada:
   um `POST` para outro schema (`Content-Profile: ia_uso`).
 - **Está duplicada nas duas de propósito**, como tudo neste projeto (cada
   Edge Function é auto-contida). Se mexeres nela aqui, a regra do costume
-  aplica-se: vê as outras seis no mesmo dia.
+  aplica-se: vê as outras sete no mesmo dia.
 
 - **Nunca deita abaixo o trabalho que estava a ser feito**: vive num
   `try/catch` que engole tudo — é registo, não é o trabalho.
