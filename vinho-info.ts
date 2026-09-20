@@ -76,7 +76,7 @@ function comLimiteProprio(sinalPai: AbortSignal, ms: number) {
 type Fonte = { titulo: string; url: string };
 type PesquisaWeb = { texto: string; fontes: Fonte[]; status: string };
 type CacheItem = { resultado: Record<string, unknown>; fontes: Fonte[]; modelo: string; modo: string; expira_em: string; id?: number };
-type UsageMetadata = { promptTokenCount: number; candidatesTokenCount: number; totalTokenCount: number };
+type UsageMetadata = { promptTokenCount: number; candidatesTokenCount: number; thoughtsTokenCount: number; totalTokenCount: number };
 
 function usageMetadata(raw: any): UsageMetadata | null {
   const toInt = (v: unknown) => {
@@ -88,6 +88,7 @@ function usageMetadata(raw: any): UsageMetadata | null {
   const out = {
     promptTokenCount: toInt(src.promptTokenCount),
     candidatesTokenCount: toInt(src.candidatesTokenCount),
+    thoughtsTokenCount: toInt(src.thoughtsTokenCount),
     totalTokenCount: toInt(src.totalTokenCount),
   };
   return (out.promptTokenCount || out.candidatesTokenCount || out.totalTokenCount) ? out : null;
@@ -98,6 +99,7 @@ function somarUsage(total: UsageMetadata | null, add: UsageMetadata | null): Usa
   return {
     promptTokenCount: total.promptTokenCount + add.promptTokenCount,
     candidatesTokenCount: total.candidatesTokenCount + add.candidatesTokenCount,
+    thoughtsTokenCount: total.thoughtsTokenCount + add.thoughtsTokenCount,
     totalTokenCount: total.totalTokenCount + add.totalTokenCount,
   };
 }
@@ -953,9 +955,16 @@ async function chamarGemini(
   try { body = JSON.parse(txt); } catch (_) { /**/ }
   const usage = usageMetadata(body);
   const cand = body?.candidates?.[0];
+  const motivo = String(cand?.finishReason ?? "");
   const bruto = (cand?.content?.parts ?? []).map((p: any) => p?.text ?? "").join("").trim();
+  // Um 200 com o corpo VAZIO não é o mesmo que uma resposta que não se
+  // entendeu: ali houve texto, aqui o modelo gastou o orçamento a pensar e
+  // não escreveu nada. O `finishReason` é o que diz qual dos dois foi —
+  // ver o CLAUDE.md da WineCatalog, "O 200 vazio". (A escada já trata do
+  // resto: uma falha TÉCNICA destas escala para o modelo seguinte.)
+  if (!bruto) return { ok: false as const, status: 502, erro: `o modelo não devolveu resposta (${motivo || "vazia"})`, usage };
   const parsed = extrairJson(bruto);
-  if (!parsed) return { ok: false as const, status: 502, erro: "resposta ilegível do modelo", usage };
+  if (!parsed) return { ok: false as const, status: 502, erro: `resposta ilegível do modelo (${motivo || "sem finishReason"})`, usage };
   return { ok: true as const, parsed, fontes: comGrounding ? fontesGrounding(body) : [], usage };
 }
 
