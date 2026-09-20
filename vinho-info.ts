@@ -767,6 +767,50 @@ async function registar(estado: string, detalhe: Record<string, unknown>, quem: 
     });
     if (!r.ok) console.log("VINHO sync_log falhou:", r.status, (await r.text().catch(() => "")).slice(0, 200));
   } catch (e) { console.log("VINHO sync_log erro:", String((e as Error).message).slice(0, 200)); }
+  await registarIaUso("vinho-info", estado, detalhe, quem);
+}
+
+/* Espelho em `ia_uso.registos` — schema à parte, no MESMO projeto Supabase,
+   partilhado pelas cinco apps que chamam o Gemini (ver CLAUDE.md "O registo
+   central de acessos ao Gemini"). O MESMO `detalhe` de cima, com
+   tokens/modelo/custo também promovidos a colunas, para uma tabela que soma
+   o gasto ao todo em vez de app a app. Nunca deita a chamada principal
+   abaixo por isto falhar — mesma regra do `registar()` local, só que este
+   POST vai para outro schema (`Content-Profile: ia_uso`). */
+async function registarIaUso(funcao: string, estado: string, detalhe: Record<string, unknown>, quem: string | null): Promise<void> {
+  try {
+    const usage = (detalhe.usageMetadata ?? null) as
+      | { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number; totalTokenCount?: number }
+      | null;
+    const pesquisa = detalhe.pesquisa as unknown;
+    await fetch(`${SB_URL}/rest/v1/registos`, {
+      method: "POST",
+      headers: {
+        apikey: SB_SRV, Authorization: "Bearer " + SB_SRV,
+        "Content-Type": "application/json", "Content-Profile": "ia_uso",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        app: "garrafeira", funcao,
+        estado: estado === "pedido" || estado === "erro" ? estado : "ok",
+        modelo: (detalhe.modelo as string | undefined) ?? null,
+        pesquisa_web: typeof pesquisa === "boolean" ? pesquisa : (typeof pesquisa === "string" ? pesquisa.length > 0 : null),
+        tokens_entrada: usage?.promptTokenCount ?? null,
+        tokens_saida: usage?.candidatesTokenCount ?? null,
+        tokens_pensamento: usage?.thoughtsTokenCount ?? null,
+        tokens_total: usage?.totalTokenCount ?? null,
+        custo_estimado_eur: (detalhe.custo_estimado_eur as number | undefined) ?? null,
+        duracao_ms: (detalhe.ms as number | undefined) ?? null,
+        quem,
+        erro: estado === "erro"
+          ? (String((detalhe.erro as string | undefined) ?? (detalhe.passo as string | undefined) ?? "").slice(0, 500) || null)
+          : null,
+        detalhe,
+      }),
+    });
+  } catch (_e) {
+    // nunca deita a chamada principal abaixo
+  }
 }
 
 /* Cria a linha 'pendente' com o PRÓPRIO JWT de quem carregou — assim a RLS
