@@ -925,14 +925,24 @@ function fezPesquisa(body: any): boolean {
     (Array.isArray(gm?.groundingChunks) && gm.groundingChunks.length > 0) ||
     Number(body?.usageMetadata?.toolUsePromptTokenCount ?? 0) > 0;
 }
-const PROMPT_PROFUNDA = `
-
-OBRIGATÓRIO — PESQUISA A SÉRIO, NÃO DE MEMÓRIA:
-- Antes de escreveres o JSON, usa a ferramenta de pesquisa Google — pelo
-  menos o Vivino deste vinho e o preço em lojas portuguesas.
-- Um campo que a pesquisa não confirmar fica vazio, MESMO que aches que
-  sabes a resposta. Esta pesquisa foi pedida precisamente porque a
-  resposta de memória não chega.`;
+/* O que faz o modelo pesquisar a sério (testado a 24/09/2026 — ver o
+   CLAUDE.md da WineCatalog, "De memória ou pesquisado"): não é pedir-lho
+   com mais força. Com "Responde SÓ com este JSON" o lite e o flash
+   responderam de MEMÓRIA em todas as tentativas, com ou sem "OBRIGATÓRIO",
+   com ou sem temperatura 0. Com o mesmo pedido mas a deixá-los escrever
+   primeiro o que encontraram, e o JSON só no fim numa linha "JSON:",
+   pesquisaram sempre. A profunda troca essa instrução, e a leitura vai
+   buscar o JSON a seguir a "JSON:". */
+const INSTR_JSON = "Responde SÓ com este JSON, sem texto à volta e sem blocos de código:";
+const INSTR_PROFUNDA = `Primeiro PESQUISA no Google (o Vivino deste vinho e o preço em lojas
+portuguesas, pelo menos) e escreve, em texto corrido, o que encontraste e em
+que sítio. Depois, no FIM da resposta, numa linha que comece por JSON:,
+escreve o resultado neste formato — um campo que a pesquisa não confirmou
+fica de fora, MESMO que aches que sabes a resposta:`;
+function jsonDoFim(txt: string): string {
+  const i = txt.lastIndexOf("JSON:");
+  return i >= 0 ? txt.slice(i + 5) : txt;
+}
 
 function fontesGrounding(body: any): Fonte[] {
   const chunks = body?.candidates?.[0]?.groundingMetadata?.groundingChunks;
@@ -950,6 +960,7 @@ function fontesGrounding(body: any): Fonte[] {
 
 async function chamarGemini(
   modelo: string, textoPrompt: string, signal: AbortSignal, maxTokens = 2048, semThinking = true, comGrounding = false,
+  jsonNoFim = false,
 ) {
   // A pesquisa (grounding) precisa de "pensar" para decidir o quê e quando
   // pesquisar: pedir thinkingBudget:0 ao mesmo tempo que se liga o tool
@@ -1001,7 +1012,7 @@ async function chamarGemini(
   // ver o CLAUDE.md da WineCatalog, "O 200 vazio". (A escada já trata do
   // resto: uma falha TÉCNICA destas escala para o modelo seguinte.)
   if (!bruto) return { ok: false as const, status: 502, erro: `o modelo não devolveu resposta (${motivo || "vazia"})`, usage };
-  const parsed = extrairJson(bruto);
+  const parsed = extrairJson(jsonNoFim ? jsonDoFim(bruto) : bruto);
   if (!parsed) return { ok: false as const, status: 502, erro: `resposta ilegível do modelo (${motivo || "sem finishReason"})`, usage };
   return { ok: true as const, parsed, fontes: comGrounding ? fontesGrounding(body) : [], usage,
     pesquisou: comGrounding ? fezPesquisa(body) : null };
@@ -1095,8 +1106,10 @@ async function produzirFicha(
   }
 
   const texto0 = modoIA === "premium"
-    ? promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, new Date().toISOString().slice(0, 10), campos_ia, colheitaEspecifica) +
-      (profunda ? PROMPT_PROFUNDA : "")
+    ? (() => {
+        const p = promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, new Date().toISOString().slice(0, 10), campos_ia, colheitaEspecifica);
+        return profunda ? p.replace(INSTR_JSON, INSTR_PROFUNDA) : p;
+      })()
     : prompt(nome, ano, produtor, regiao, tipo, notas, new Date().toISOString().slice(0, 10), campos_ia, pesquisa.texto, colheitaEspecifica);
   const tentativas: { modelo: string; modo: string; estado: number | string; usageMetadata?: UsageMetadata }[] = [];
   let usageTotal: UsageMetadata | null = null;
@@ -1106,7 +1119,7 @@ async function produzirFicha(
     if (ms < 2_000) return null;
     const { signal: sp, limpar } = comLimiteProprio(signal, ms);
     try {
-      const g = await chamarGemini(modelo, texto0, sp, maxTokens, semThinking, modoIA === "premium");
+      const g = await chamarGemini(modelo, texto0, sp, maxTokens, semThinking, modoIA === "premium", profunda);
       limpar();
       usageTotal = somarUsage(usageTotal, g.usage ?? null);
       tentativas.push({ modelo, modo, estado: g.ok ? 200 : g.status, ...(g.usage ? { usageMetadata: g.usage } : {}) });
@@ -1120,7 +1133,9 @@ async function produzirFicha(
     }
   };
 
-  const primeira = await run(MODELO_BARATO, "barato", 1800, true);
+  // A profunda escreve primeiro o que encontrou, e só depois o JSON: precisa
+  // de mais espaço de saída do que a resposta só em JSON.
+  const primeira = await run(MODELO_BARATO, "barato", profunda ? 3500 : 1800, true);
   let usadoModelo = MODELO_BARATO;
   let usadoModo = "barato";
   let parsed: any = primeira && primeira.ok ? primeira.parsed : null;
@@ -1130,7 +1145,7 @@ async function produzirFicha(
   // Profunda: o barato respondeu mas não pesquisou — tenta-se o maior, e só
   // se ELE pesquisar é que a resposta dele fica no lugar da primeira.
   if (profunda && primeira && primeira.ok && primeira.pesquisou === false && MODELO_ESCALADO !== MODELO_BARATO) {
-    const outra = await run(MODELO_ESCALADO, "escalado", 2800, false);
+    const outra = await run(MODELO_ESCALADO, "escalado", 4500, false);
     if (outra && outra.ok && outra.pesquisou) {
       usadoModelo = MODELO_ESCALADO; usadoModo = "escalado";
       parsed = outra.parsed; pesquisou = true;
