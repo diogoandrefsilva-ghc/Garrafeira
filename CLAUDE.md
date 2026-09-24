@@ -1291,6 +1291,16 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   de memória, que é exatamente o que não se quer numa base de dados. Por
   causa do tool, a API **recusa** `response_mime_type: json` — o JSON vem em
   texto e é extraído na função (`extrairJson`).
+  **Mas o tool não OBRIGA a pesquisar** — o modelo decide, e nas 25
+  procuras premium registadas até 24/09/2026 nunca pesquisou (tokens
+  totais = entrada + saída, ~5 s): respondeu de memória. Para toda a gente
+  fica assim; o resultado leva `pesquisaWeb` (também na cache), e ao admin
+  (`garrafeira.is_admin()`, confirmado na função) a procura de memória
+  mostra 🧠 e o botão **🔬 Pesquisa profunda** (`profunda:true`): o prompt
+  exige a pesquisa, salta a cache e o catálogo, e passa ao modelo maior se
+  o barato não pesquisar. Os prompts MANUAIS pedem sempre a pesquisa a
+  sério (`IA_MANUAL_PESQUISA`). Mesmo critério nas quatro apps — ver o
+  `CLAUDE.md` da WineCatalog, "De memória ou pesquisado".
 - **`gratis`** ("IA sem pesquisa web" na UI) — pesquisa **externa** primeiro
   (Search API, secrets `SEARCH_API_KEY`/`SEARCH_API_URL`), os resultados vão
   no PROMPT como "base de evidência", e o Gemini só EXTRAI o JSON — nunca

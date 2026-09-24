@@ -890,11 +890,49 @@ async function ehEditor(auth: string, signal: AbortSignal): Promise<{ ok: boolea
   } catch (e) { console.log("VINHO is_editor excecao:", String((e as Error).message).slice(0, 200)); return { ok: false, email, plano: "sem_ia" }; }
 }
 
+/* O admin da Garrafeira — quem decide é a base (`garrafeira.is_admin()`),
+   com o JWT da pessoa. Só é perguntado quando alguém pede a profunda. */
+async function souAdmin(auth: string, signal: AbortSignal): Promise<boolean> {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/is_admin`, {
+      method: "POST",
+      headers: { apikey: SB_SRV, Authorization: auth, "Content-Type": "application/json", "Content-Profile": "garrafeira" },
+      signal, body: "{}",
+    });
+    return r.ok && (await r.json()) === true;
+  } catch (_) { return false; }
+}
+
 /* ── O TRABALHO A SÉRIO ──
    Toda a conversa com o Gemini num sítio só, para poder correr nos DOIS
    modos: à espera, ou em segundo plano. Nunca escreve na resposta HTTP —
    devolve o corpo final ou o erro já com o status certo. */
 type Res = { ok: true; corpo: Record<string, unknown> } | { ok: false; status: number; erro: string };
+
+/* HOUVE PESQUISA OU NÃO. Ligar o `google_search` não obriga o modelo a
+   pesquisar — ele decide, e nas 25 procuras premium registadas até
+   24/09/2026 nunca o fez (total de tokens = entrada + saída, ~5 s): as
+   respostas vinham do que o modelo aprendeu no treino. Para toda a gente
+   isto fica como está; o resultado passa a dizê-lo (`pesquisaWeb`) e ao
+   admin a app oferece a "pesquisa profunda" (`profunda:true`), que exige a
+   pesquisa no prompt, salta a cache e o catálogo, e passa ao modelo maior
+   se o barato responder sem pesquisar. Mesmo critério da `catalogo-info`
+   (WineCatalog) e da `verificar-vinhos` (WineSelection) — ver o CLAUDE.md
+   da WineCatalog, "De memória ou pesquisado". */
+function fezPesquisa(body: any): boolean {
+  const gm = body?.candidates?.[0]?.groundingMetadata;
+  return (Array.isArray(gm?.webSearchQueries) && gm.webSearchQueries.length > 0) ||
+    (Array.isArray(gm?.groundingChunks) && gm.groundingChunks.length > 0) ||
+    Number(body?.usageMetadata?.toolUsePromptTokenCount ?? 0) > 0;
+}
+const PROMPT_PROFUNDA = `
+
+OBRIGATÓRIO — PESQUISA A SÉRIO, NÃO DE MEMÓRIA:
+- Antes de escreveres o JSON, usa a ferramenta de pesquisa Google — pelo
+  menos o Vivino deste vinho e o preço em lojas portuguesas.
+- Um campo que a pesquisa não confirmar fica vazio, MESMO que aches que
+  sabes a resposta. Esta pesquisa foi pedida precisamente porque a
+  resposta de memória não chega.`;
 
 function fontesGrounding(body: any): Fonte[] {
   const chunks = body?.candidates?.[0]?.groundingMetadata?.groundingChunks;
@@ -965,7 +1003,8 @@ async function chamarGemini(
   if (!bruto) return { ok: false as const, status: 502, erro: `o modelo não devolveu resposta (${motivo || "vazia"})`, usage };
   const parsed = extrairJson(bruto);
   if (!parsed) return { ok: false as const, status: 502, erro: `resposta ilegível do modelo (${motivo || "sem finishReason"})`, usage };
-  return { ok: true as const, parsed, fontes: comGrounding ? fontesGrounding(body) : [], usage };
+  return { ok: true as const, parsed, fontes: comGrounding ? fontesGrounding(body) : [], usage,
+    pesquisou: comGrounding ? fezPesquisa(body) : null };
 }
 
 async function produzirFicha(
@@ -973,14 +1012,16 @@ async function produzirFicha(
   nome: string, ano: number | null, produtor: string, regiao: string,
   quem: string | null, signal: AbortSignal, budgetMs: number,
   campos: string[] | null = null, colheitaEspecifica: boolean = false,
-  tipo: string = "", notas: string = "", sites: string[] = [],
+  tipo: string = "", notas: string = "", sites: string[] = [], profunda: boolean = false,
 ): Promise<Res> {
   if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
   if (modoIA === "gratis" && !SEARCH_API_KEY)
     return { ok: false, status: 503, erro: "a IA sem pesquisa web ainda não está configurada (falta SEARCH_API_KEY)" };
   const inicio = Date.now();
   const chave = chaveCache(modoIA, nome, ano, produtor, regiao, tipo, notas, sites, campos, colheitaEspecifica);
-  const cache = await cacheLer(chave, signal);
+  // A profunda existe para refazer o que veio de memória: nem a cache nem o
+  // catálogo (onde essa resposta de memória foi parar) respondem por ela.
+  const cache = profunda ? null : await cacheLer(chave, signal);
   if (cache?.resultado) {
     await registar("ok", {
       nome, ano, modo: "cache", modelo: cache.modelo, ms: Date.now() - inicio,
@@ -1000,7 +1041,7 @@ async function produzirFicha(
      mais barato e melhor respondido (é a mesma razão por que a app já
      deixa escolher os campos, ver `iaEscolher`). */
   const pedidos = campos && campos.length ? campos : Object.keys(CAMPOS);
-  const conhecido = await catalogoProcurar(nome, produtor, ano, signal);
+  const conhecido = profunda ? null : await catalogoProcurar(nome, produtor, ano, signal);
   const doCatalogo = conhecido ? catalogoResponde(conhecido, pedidos) : {};
   const emFalta = pedidos.filter((k) => !(k in doCatalogo));
 
@@ -1054,7 +1095,8 @@ async function produzirFicha(
   }
 
   const texto0 = modoIA === "premium"
-    ? promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, new Date().toISOString().slice(0, 10), campos_ia, colheitaEspecifica)
+    ? promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, new Date().toISOString().slice(0, 10), campos_ia, colheitaEspecifica) +
+      (profunda ? PROMPT_PROFUNDA : "")
     : prompt(nome, ano, produtor, regiao, tipo, notas, new Date().toISOString().slice(0, 10), campos_ia, pesquisa.texto, colheitaEspecifica);
   const tentativas: { modelo: string; modo: string; estado: number | string; usageMetadata?: UsageMetadata }[] = [];
   let usageTotal: UsageMetadata | null = null;
@@ -1083,8 +1125,20 @@ async function produzirFicha(
   let usadoModo = "barato";
   let parsed: any = primeira && primeira.ok ? primeira.parsed : null;
   let erroUltimo = primeira && !primeira.ok ? primeira.erro : "";
+  let pesquisou: boolean | null = primeira && primeira.ok ? primeira.pesquisou : null;
+
+  // Profunda: o barato respondeu mas não pesquisou — tenta-se o maior, e só
+  // se ELE pesquisar é que a resposta dele fica no lugar da primeira.
+  if (profunda && primeira && primeira.ok && primeira.pesquisou === false && MODELO_ESCALADO !== MODELO_BARATO) {
+    const outra = await run(MODELO_ESCALADO, "escalado", 2800, false);
+    if (outra && outra.ok && outra.pesquisou) {
+      usadoModelo = MODELO_ESCALADO; usadoModo = "escalado";
+      parsed = outra.parsed; pesquisou = true;
+    }
+  }
 
   let ficha = parsed ? normalizar(parsed, ano, campos_ia) : null;
+  if (!pesquisou) fontesGround = [];
   // Só escala em falha TÉCNICA do barato (erro HTTP, timeout, resposta
   // ilegível) — nunca só porque o conteúdo (já respondido com sucesso) ficou
   // com poucos campos. Um modelo maior não inventa o que a pesquisa não
@@ -1097,6 +1151,7 @@ async function produzirFicha(
       usadoModelo = MODELO_ESCALADO;
       usadoModo = "escalado";
       parsed = segunda.parsed;
+      pesquisou = segunda.pesquisou;
       ficha = normalizar(parsed, ano, campos_ia);
     } else if (segunda && !segunda.ok) {
       erroUltimo = segunda.erro;
@@ -1132,7 +1187,9 @@ async function produzirFicha(
   await cacheEscrever(
     chave,
     { nome, ano, produtor, regiao, tipo, notas, sites, campos, query, fonte: pesquisa.status, modo_ia: modoIA },
-    ficha,
+    // `pesquisaWeb` vai com a cache para o botão da profunda não se perder
+    // quando a mesma procura volta a sair daqui.
+    { ...ficha, ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}) },
     (modoIA === "premium" ? fontesGround : pesquisa.fontes),
     usadoModelo,
     usadoModo,
@@ -1147,6 +1204,7 @@ async function produzirFicha(
     // se vê se isto está a valer a pena (Definições › Diagnóstico).
     catalogo_campos: Object.keys(doCatalogo).length,
     ia_campos: emFalta.length,
+    ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}), ...(profunda ? { profunda: true } : {}),
     ms: dur, tentativas, custo_estimado_eur: custoEstimado,
     ...(usageTotal ? { usageMetadata: usageTotal } : {}),
   }, quem);
@@ -1163,6 +1221,8 @@ async function produzirFicha(
         : {}),
       pesquisa: true,
       plano: modoIA,
+      ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}),
+      ...(profunda ? { profunda: true } : {}),
       modelo: usadoModelo,
       modo: usadoModo,
       custoEstimadoEur: custoEstimado,
@@ -1271,6 +1331,7 @@ async function produzirFichaLote(
 
   const primeira = await run(MODELO_BARATO, "barato", maxTokBarato, true);
   let usadoModelo = MODELO_BARATO, usadoModo = "barato";
+  let pesquisouLote: boolean | null = primeira && primeira.ok ? primeira.pesquisou : null;
   let parsed: any = primeira && primeira.ok ? primeira.parsed : null;
   let erroUltimo = primeira && !primeira.ok ? primeira.erro : "";
 
@@ -1280,7 +1341,7 @@ async function produzirFichaLote(
   const falhouTecnicamente = !primeira || !primeira.ok;
   if (falhouTecnicamente && MODELO_ESCALADO !== MODELO_BARATO) {
     const segunda = await run(MODELO_ESCALADO, "escalado", maxTokEscalado, false);
-    if (segunda && segunda.ok) { usadoModelo = MODELO_ESCALADO; usadoModo = "escalado"; parsed = segunda.parsed; }
+    if (segunda && segunda.ok) { usadoModelo = MODELO_ESCALADO; usadoModo = "escalado"; parsed = segunda.parsed; pesquisouLote = segunda.pesquisou; }
     else if (segunda && !segunda.ok) erroUltimo = segunda.erro;
   }
 
@@ -1326,6 +1387,7 @@ async function produzirFichaLote(
     nome: `lote de ${vinhos.length}`, modo: usadoModo, modelo: usadoModelo,
     vinhos: vinhos.length, catalogo_vinhos: catalogoVinhos, ia_vinhos: precisamIA.length,
     ia_campos: camposIA.length, ms: dur, tentativas, custo_estimado_eur: custoEstimado,
+    ...(pesquisouLote !== null ? { pesquisaWeb: pesquisouLote } : {}),
     ...(usageTotal ? { usageMetadata: usageTotal } : {}),
   }, quem);
 
@@ -1335,6 +1397,7 @@ async function produzirFichaLote(
       resultados,
       fontes: (modoIA === "premium" ? fontesGround : []).slice(0, 8),
       pesquisa: true, plano: modoIA, modelo: usadoModelo, modo: usadoModo,
+      ...(pesquisouLote !== null ? { pesquisaWeb: pesquisouLote } : {}),
       custoEstimadoEur: custoEstimado,
       ...(usageTotal ? { usageMetadata: usageTotal } : {}),
       ...(tentativas.length ? { tentativas } : {}),
@@ -1474,6 +1537,16 @@ Deno.serve(async (req) => {
     // Vivino em `regraVivino`) — só se torna estrita quando o ecrã de
     // escolha de campos manda isto explicitamente.
     const colheitaEspecifica = body?.colheitaEspecifica === true;
+    // Pesquisa profunda: só o admin, e só no modo com grounding (é o único
+    // em que o modelo pode escolher não pesquisar).
+    let profunda = false;
+    if (body?.profunda === true) {
+      if (!(await souAdmin(authHeader, ctrl.signal))) {
+        await registar("erro", { passo: "profunda_nao_admin" }, quem);
+        return json({ error: "a pesquisa profunda é só para o admin" }, 403);
+      }
+      profunda = modoIA === "premium";
+    }
 
     /* ── MODO ASSÍNCRONO ──
        Responde já com o `id` e faz o trabalho depois, com muito mais tempo
@@ -1489,7 +1562,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-          const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites);
+          const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -1507,7 +1580,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites);
+    const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";
