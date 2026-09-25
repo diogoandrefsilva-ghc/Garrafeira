@@ -275,7 +275,7 @@ async function obterResultadosPesquisa(query: string, signal: AbortSignal): Prom
       const title = String(x?.title || "").trim();
       const snip = String(x?.snippet || "").replace(/\s+/g, " ").trim();
       const link = String(x?.link || "").trim();
-      return `[${i + 1}] ${title}\nURL: ${link}\nResumo: ${snip}`;
+      return `[${i + 1}] ${title}\nURL: ${link}\nResumo: ${snip}` + (x?.rating != null ? `\nEstrelas no Google: ${x.rating}${x.ratingCount != null ? ` (${x.ratingCount} avaliações)` : ""}` : "");
     }).join("\n\n");
     const estado = `search-api:${extrairHost(SEARCH_API_URL) || "externa"}`;
     return { texto: texto.slice(0, 6000), fontes, status: estado };
@@ -1093,7 +1093,7 @@ async function produzirFicha(
   if (usarSerper) {
     try {
       if (profunda) {
-        const qVivino = [nome, produtor, "vivino"].filter(Boolean).join(" ");
+        const qVivino = `"${nome.replace(/"/g, "")}" ${produtor} site:vivino.com`.replace(/\s+/g, " ");
         const rs = await Promise.allSettled([obterResultadosPesquisa(query, signal), obterResultadosPesquisa(qVivino, signal)]);
         serperConsultas = 2;
         const boas = rs.filter((r) => r.status === "fulfilled").map((r) => (r as PromiseFulfilledResult<PesquisaWeb>).value);
