@@ -1088,6 +1088,19 @@ numa base nova antes do `db/schema.sql` correr, esconde o campo e não o
 manda nas gravações — sem isso um PATCH rebentava **todas** as gravações
 com 400.
 
+## A exceção: as marcas dos amigos na WineSelection (25/09/2026)
+Por decisão do dono das apps, **dentro do grupo das Prendas de Anos**
+(`anniversarygifts.amigos`) a WineSelection mostra que um amigo TEM um
+vinho (garrafas na garrafeira), o BEBEU e lhe deu nota
+(`garrafas.consumo_avaliacao`) ou o tem na WISHLIST (`vinhos.desejado`).
+Quem lê é a `winecatalog.marcas_amigos` (SECURITY DEFINER, `db/amigos.sql`
+no repo WineCatalog): só responde a quem é do grupo e só conta as
+garrafeiras cujo dono é do grupo. Nunca sai a linha — nem notas, preço,
+local ou fotografia: só o nome do amigo, quantas garrafas, as colheitas, a
+nota e a data. As partilhas e a RLS daqui ficam exatamente como estavam.
+**Se mexeres em `garrafas.estado`, `consumo_avaliacao` ou `desejado`**
+(nomes ou significado), vê essa função no mesmo dia.
+
 ## Cada um vê a sua garrafeira (a outra decisão que segura o resto)
 Um **vinho**, uma **garrafa** e um **local** pertencem sempre a uma
 **garrafeira** (`garrafeiras`, com um `dono` que é um email), e ninguém vê
