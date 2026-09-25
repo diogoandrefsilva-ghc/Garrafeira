@@ -314,6 +314,14 @@ senão davam acesso aos buckets das outras apps.
 **Falta o que não é SQL** — ver "Passos manuais" mais abaixo. Enquanto o
 schema não estiver exposto na API, a app dá 404 em tudo.
 
+### Migração 16 — sem colheita não há janela de consumo (já aplicada)
+
+`db/migracao-janela-sem-colheita.sql`. Um trigger em `vinhos`
+(`vinhos_sem_colheita`) que apaga `beber_de`/`beber_ate` sempre que o `ano`
+é nulo — a janela são anos de UMA colheita, e sem ela seriam os de uma
+qualquer. É a mesma regra do catálogo (`winecatalog.da_colheita`).
+**Aplicada em 2026-09-25**; não havia nenhum vinho sem ano com janela.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as

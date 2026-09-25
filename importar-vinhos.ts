@@ -95,7 +95,9 @@ function extrairJson(s:string):any|null{
 function normalizar(raw:any):Record<string,unknown>|null{
  const nome=texto(raw?.nome,160);if(nome.length<2)return null;
  const castas=Array.isArray(raw?.castas)?[...new Set(raw.castas.map((x:unknown)=>texto(x,50)).filter((x:string)=>x&&!/^(blend|lote|castas?|várias)$/i.test(x)))].slice(0,12):[];
- const de=ano(raw?.beberDe);let ate=ano(raw?.beberAte);if(de!==null&&ate!==null&&ate<de)ate=null;
+ // Sem colheita não há janela de consumo (seria a de uma colheita qualquer).
+ const colheita=ano(raw?.ano);
+ const de=colheita===null?null:ano(raw?.beberDe);let ate=colheita===null?null:ano(raw?.beberAte);if(de!==null&&ate!==null&&ate<de)ate=null;
  const o:Record<string,unknown>={nome,produtor:texto(raw?.produtor,90),ano:ano(raw?.ano),tipo:escolha(raw?.tipo,TIPOS)||"Tinto",estilo:escolha(raw?.estilo,ESTILOS),regiao:texto(raw?.regiao,60),sub_regiao:texto(raw?.subRegiao,60),mencao:escolha(raw?.mencao,MENCOES),classificacao:escolha(raw?.classificacao,CLASSIF),castas,teor:numero(raw?.teor,4,25,1),estagio_meses:numero(raw?.estagioMeses,0,400),estagio_texto:texto(raw?.estagioTexto,160),notas_prova:texto(raw?.notasProva,600),harmonizacao:texto(raw?.harmonizacao,300),ai_resumo:texto(raw?.resumo,900),beber_de:de,beber_ate:ate,quantidade:Math.round(numero(raw?.quantidade,1,60)??1),aviso:texto(raw?.aviso,300)};
  Object.keys(o).forEach(k=>{const v=o[k];if(v===null||v===""||(Array.isArray(v)&&!v.length))delete o[k];});return o;
 }

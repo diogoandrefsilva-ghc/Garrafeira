@@ -269,6 +269,8 @@ CREATE TABLE IF NOT EXISTS garrafeira.vinhos (
   -- janela de consumo recomendada, em ANOS (não em idade): "beber entre
   -- 2026 e 2034". Guardado assim porque é o que as fichas dão e é o que
   -- deixa calcular "está no ponto?" sem saber a data de hoje ao gravar.
+  -- Só com `ano`: sem colheita não há janela (trigger `vinhos_sem_colheita`,
+  -- db/migracao-janela-sem-colheita.sql).
   beber_de         integer,
   beber_ate        integer,
   notas_prova      text NOT NULL DEFAULT '',

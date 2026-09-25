@@ -390,8 +390,9 @@ REGRAS, e são a sério:
 7. As castas vão SEPARADAS, uma a uma, com o nome português corrente
    ("Touriga Nacional", "Alicante Bouschet", "Aragonez"). Nunca "blend",
    "lote" nem "várias castas" — isso é contado do lado da app.
-8. "beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que o vinho
-   está no ponto. Para um vinho para beber já, "beberAte" é daqui a 2-3 anos.
+8. ${ano ? `"beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que ESTA
+   colheita está no ponto. Para um vinho para beber já, "beberAte" é daqui a 2-3 anos.` : `Este vinho não tem ano: sem colheita NÃO há janela de consumo — deixa
+   "beberDe"/"beberAte" de fora.`}
 9. "imagemUrl" é o link DIRECTO de uma fotografia da garrafa ou do rótulo
    (termina em .jpg/.jpeg/.png/.webp), de uma página que tenhas mesmo visto —
    site do produtor ou de uma loja. Não é o link da página, é o da imagem. Se
@@ -418,9 +419,9 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
   "vivinoUrl": "",
   "imagemUrl": "",
   "precoMedio": 18.5,
-  "beberDe": 2026,
+${ano ? `  "beberDe": 2026,
   "beberAte": 2034,
-  "notasProva": "duas ou três frases sobre aroma, boca e final",
+` : ""}  "notasProva": "duas ou três frases sobre aroma, boca e final",
   "harmonizacao": "com que pratos",
   "resumo": "duas ou três frases sobre o vinho e o produtor",
   "aviso": "vazio, ou o que ficou por confirmar"
@@ -454,7 +455,7 @@ REGRAS:
 4. "imagemUrl" tem de ser link DIRETO de imagem (.jpg/.jpeg/.png/.webp/.avif), não link de página.
 5. Se houver dúvida de homónimo, prioriza ano + produtor + região e explica no "aviso".
 6. Castas separadas por nome (nunca "blend"/"lote"/"várias castas").
-7. "beberDe"/"beberAte" são anos.
+7. ${ano ? `"beberDe"/"beberAte" são anos (a janela DESTA colheita).` : `Este vinho não tem ano: sem colheita NÃO há janela de consumo — deixa "beberDe"/"beberAte" de fora.`}
 
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
 {
@@ -476,9 +477,9 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
   "vivinoUrl": "",
   "imagemUrl": "",
   "precoMedio": 18.5,
-  "beberDe": 2026,
+${ano ? `  "beberDe": 2026,
   "beberAte": 2034,
-  "notasProva": "duas ou três frases sobre aroma, boca e final",
+` : ""}  "notasProva": "duas ou três frases sobre aroma, boca e final",
   "harmonizacao": "com que pratos",
   "resumo": "duas ou três frases sobre o vinho e o produtor",
   "aviso": "vazio, ou o que ficou por confirmar"
@@ -540,7 +541,7 @@ REGRAS, e são a sério:
 4. "imagemUrl" tem de ser link DIRETO de imagem (.jpg/.jpeg/.png/.webp/.avif), nunca o link da página.
 5. Se houver dúvida de homónimo, prioriza produtor + ano + região e explica no "aviso".
 6. Castas separadas por nome (nunca "blend"/"lote"/"várias castas").
-7. "beberDe"/"beberAte" são anos.
+7. "beberDe"/"beberAte" são anos, a janela da colheita indicada. Um vinho SEM ano na lista não tem janela de consumo: deixa "beberDe"/"beberAte" de fora do objeto dele.
 8. O "id" de cada resultado tem de ser EXATAMENTE o "id" da lista acima — é assim que se sabe a que vinho corresponde cada objeto, nunca pela posição na lista.
 9. Se não conseguires identificar um vinho de todo, o objeto dele fica só {"id": <id>, "encontrado": false, "aviso": "porquê"} — sem inventar os outros campos.
 
@@ -579,7 +580,7 @@ REGRAS, e são a sério:
 3. ${regraCuvee}
 4. ${regraVivino(false)}
 5. Castas separadas por nome (nunca "blend"/"lote"/"várias castas").
-6. "beberDe"/"beberAte" são anos.
+6. "beberDe"/"beberAte" são anos, a janela da colheita indicada. Um vinho SEM ano não tem janela de consumo: deixa "beberDe"/"beberAte" de fora do objeto dele.
 7. O "id" de cada resultado tem de ser EXATAMENTE o "id" indicado acima — é assim que se sabe a que vinho corresponde cada objeto, nunca pela posição na lista.
 8. Se a evidência de um vinho não chegar para o identificar, o objeto dele fica só {"id": <id>, "encontrado": false, "aviso": "porquê"}.
 
@@ -707,6 +708,9 @@ function normalizar(raw: any, anoPedido: number | null, campos: string[] | null 
     ai_resumo: texto(raw.resumo, 900),
     aviso: texto(raw.aviso, 300),
   };
+  // Sem colheita não há janela de consumo: os anos dela seriam os de uma
+  // colheita qualquer (a BD também a recusa, trigger `vinhos_sem_colheita`).
+  if (out.ano == null) { out.beber_de = null; out.beber_ate = null; }
   // Campos vazios/null saem do objeto: a app decide o que fazer com o que
   // vem, e um `null` explícito ali era indistinguível de "a IA diz que é
   // nulo" — o que apagava dados bons ao aceitar tudo.
@@ -1039,7 +1043,10 @@ async function produzirFicha(
      coisa, vai à IA só ESSA: um pedido mais estreito é também um pedido
      mais barato e melhor respondido (é a mesma razão por que a app já
      deixa escolher os campos, ver `iaEscolher`). */
-  const pedidos = campos && campos.length ? campos : Object.keys(CAMPOS);
+  // Sem colheita, a janela de consumo nem se pede — nem ao catálogo (que
+  // responderia com a de uma colheita qualquer) nem à IA.
+  const pedidos = (campos && campos.length ? campos : Object.keys(CAMPOS))
+    .filter((k) => ano !== null || (k !== "beber_de" && k !== "beber_ate"));
   const conhecido = profunda ? null : await catalogoProcurar(nome, produtor, ano, signal);
   const doCatalogo = conhecido ? catalogoResponde(conhecido, pedidos) : {};
   const emFalta = pedidos.filter((k) => !(k in doCatalogo));
@@ -1074,7 +1081,8 @@ async function produzirFicha(
      de campos, e passar-lhe agora os 22 nomes era mudar-lhe o texto sem
      necessidade nenhuma — e a lista dos 22 é exatamente o que faz o modelo
      "andar atrás de tudo e voltar com meia dúzia de coisas mornas". */
-  const campos_ia = Object.keys(doCatalogo).length ? emFalta : campos;
+  const campos_ia = Object.keys(doCatalogo).length ? emFalta
+    : (campos && ano === null ? campos.filter((k) => k !== "beber_de" && k !== "beber_ate") : campos);
 
   // Os `sites` de confiança viram operadores `site:` na pesquisa externa —
   // é a única das duas formas de os aplicar que restringe a sério (o
@@ -1260,9 +1268,11 @@ async function produzirFichaLote(
   type Item = { v: VinhoLote; conhecido: Conhecido | null; doCatalogo: Record<string, unknown>; emFalta: string[] };
   const itens: Item[] = [];
   for (const v of vinhos) {
+    // Sem colheita, a janela de consumo não se pede (ver `produzirFicha`).
+    const pedidosV = campos.filter((k) => v.ano !== null || (k !== "beber_de" && k !== "beber_ate"));
     const conhecido = await catalogoProcurar(v.nome, v.produtor, v.ano, signal);
-    const doCatalogo = conhecido ? catalogoResponde(conhecido, campos) : {};
-    const emFalta = campos.filter((k) => !(k in doCatalogo));
+    const doCatalogo = conhecido ? catalogoResponde(conhecido, pedidosV) : {};
+    const emFalta = pedidosV.filter((k) => !(k in doCatalogo));
     itens.push({ v, conhecido, doCatalogo, emFalta });
   }
   const precisamIA = itens.filter((it) => it.emFalta.length > 0);

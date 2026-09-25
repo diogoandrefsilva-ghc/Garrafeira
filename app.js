@@ -1272,7 +1272,8 @@ const FALTAS=[
   {k:'Sem classificação',   tem:v=>!!v.classificacao},
   {k:'Sem nota Vivino',     tem:v=>v.vivino_nota!=null},
   {k:'Sem informação de harmonização',       tem:v=>!!v.harmonizacao},
-  {k:'Sem informação de intervalo de consumo',tem:v=>v.beber_de!=null||v.beber_ate!=null}
+  // Sem colheita não há janela de consumo (ver `IA_JANELA`) — não é falta.
+  {k:'Sem informação de intervalo de consumo',tem:v=>v.ano==null||v.beber_de!=null||v.beber_ate!=null}
 ];
 function faltasDe(v){return FALTAS.filter(f=>!f.tem(v)).map(f=>f.k);}
 
@@ -3850,7 +3851,7 @@ function abrirEditarVinho(id,modo){
     <label>Nome</label>
     <input type="text" id="e-nome" value="${esc(o('nome'))}" placeholder="Quinta do Vallado Touriga Nacional">
     <div class="mrow">
-      <div><label>Ano</label><input type="number" id="e-ano" inputmode="numeric" value="${esc(o('ano'))}" placeholder="2021"></div>
+      <div><label>Ano</label><input type="number" id="e-ano" inputmode="numeric" value="${esc(o('ano'))}" placeholder="2021" oninput="janelaSincronizarForm()"></div>
       <div>${id
         ?`<label>Produtor</label><input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado">`
         // Num vinho novo quase ninguém sabe o produtor de cabeça — é a
@@ -3901,7 +3902,9 @@ function abrirEditarVinho(id,modo){
     <label>Estágio (descrição)</label>
     <input type="text" id="e-estagio-txt" value="${esc(o('estagio_texto'))}" placeholder="18 meses em barrica de carvalho francês">
 
-    <div class="mrow">
+    <div class="note" id="e-jan-nota" style="display:none">Sem ano não há <b>janela de consumo</b>:
+      os anos dela seriam os de uma colheita qualquer.</div>
+    <div class="mrow" id="e-jan">
       <div><label>Beber a partir de</label><input type="number" id="e-beber-de" inputmode="numeric" value="${esc(o('beber_de'))}" placeholder="2026"></div>
       <div><label>Beber até</label><input type="number" id="e-beber-ate" inputmode="numeric" value="${esc(o('beber_ate'))}" placeholder="2034"></div>
     </div>
@@ -3946,6 +3949,7 @@ function abrirEditarVinho(id,modo){
       <button class="btn ghost" onclick="fecharModal('modal-edit')">Cancelar</button>
     </div>`;
   abrirModal('modal-edit');
+  janelaSincronizarForm();
   if(comGarrafa){
     const loc=document.getElementById('e-local');
     if(loc)loc.onchange=()=>renderPickerPosicoes('e',0);
@@ -3969,8 +3973,10 @@ function lerFormVinho(){
     estagio_meses:inteiro(g('e-estagio')),
     estagio_texto:g('e-estagio-txt'),
     teor:num(g('e-teor')),
-    beber_de:inteiro(g('e-beber-de')),
-    beber_ate:inteiro(g('e-beber-ate')),
+    // Sem ano, a janela não se grava (a BD também a recusa: trigger
+    // `vinhos_sem_colheita`).
+    beber_de:inteiro(g('e-ano'))==null?null:inteiro(g('e-beber-de')),
+    beber_ate:inteiro(g('e-ano'))==null?null:inteiro(g('e-beber-ate')),
     preco_medio:num(g('e-preco')),
     vivino_nota:num(g('e-vivino')),
     vivino_url:g('e-vivino-url'),
@@ -4610,7 +4616,7 @@ function iaEscolher(vinhoId){
   if(roGuard())return;
   if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
   const v=IDXV[vinhoId];if(!v)return;
-  const linhas=IA_CAMPOS.map(c=>{
+  const linhas=iaCamposPara(v).map(c=>{
     const tem=!!iaValorAtual(v,c.k);
     return `<label class="ia-esc">
       <input type="checkbox" class="ia-esc-c" value="${esc(c.k)}"${tem?'':' checked'}>
@@ -4959,6 +4965,23 @@ function iaManualNovoPreencher(){
 
 /* Campos que a IA pode trazer, na ordem em que fazem sentido a ler.
    `rot` é o rótulo; `fmt` só existe onde o valor cru não se lê bem. */
+/* A JANELA DE CONSUMO SÓ EXISTE COM COLHEITA. "Beber entre 2026 e 2034" são
+   anos de UMA colheita; num vinho sem ano (é o normal na wishlist) seriam os
+   de uma colheita qualquer, e no ano em que sair a seguinte continuavam a
+   dizer o mesmo. Por isso não se pede, não se propõe nem se grava sem ano —
+   e a BD garante-o (trigger `vinhos_sem_colheita`, migração 16), tal como o
+   catálogo (`winecatalog.da_colheita`). */
+const IA_JANELA=['beber_de','beber_ate'];
+function iaCamposPara(v){
+  return (v&&v.ano)?IA_CAMPOS:IA_CAMPOS.filter(c=>!IA_JANELA.includes(c.k));
+}
+function janelaSincronizarForm(){
+  const a=document.getElementById('e-ano');
+  const sem=!a||inteiro(a.value)==null;
+  const j=document.getElementById('e-jan'), n=document.getElementById('e-jan-nota');
+  if(j)j.style.display=sem?'none':'';
+  if(n)n.style.display=sem?'':'none';
+}
 const IA_CAMPOS=[
   {k:'produtor',rot:'Produtor'},
   {k:'ano',rot:'Ano'},
@@ -5095,7 +5118,9 @@ function iaMostrarResultado(res,vinhoId){
   const mini1=IA_MOTOR==='premium'?' o':'', mini2=IA_MOTOR2==='premium'?' o':'';
   const atual=k=>k==='castas'?(v.castas||[]).join(', '):(v[k]==null?'':String(v[k]));
 
+  const comAno=v.ano||IA_RES.ano||(IA_RES2&&IA_RES2.ano);
   const linhas=IA_CAMPOS.map(c=>{
+    if(!comAno&&IA_JANELA.includes(c.k))return '';          // sem colheita não há janela
     const ant=atual(c.k), g=iaTxt(c,IA_RES), p=cmp?iaTxt(c,IA_RES2):'';
     const novoG=g&&chave(g)!==chave(ant), novoP=p&&chave(p)!==chave(ant);
     if(!novoG&&!novoP)return '';                              // já lá está igual
@@ -5224,6 +5249,7 @@ async function iaAplicar(){
     if(c.k==='castas'){castasNovas=Array.isArray(val)?val:String(val).split(',').map(s=>s.trim()).filter(Boolean);return;}
     patch[c.k]=val;
   });
+  if(('ano' in patch?patch.ano:v.ano)==null)IA_JANELA.forEach(k=>delete patch[k]);
   if(!Object.keys(patch).length&&!castasNovas){toast('Não escolheste nada');return;}
 
   // Carimbo da procura: fica sempre, mesmo que só se tenha aceitado um
@@ -5288,6 +5314,7 @@ function iaPreencherForm(res,substituir){
   por('e-estagio',res.estagio_meses);por('e-estagio-txt',res.estagio_texto);
   por('e-teor',res.teor);
   por('e-beber-de',res.beber_de);por('e-beber-ate',res.beber_ate);
+  janelaSincronizarForm();
   por('e-preco',res.preco_medio);por('e-vivino',res.vivino_nota);
   por('e-imagem',res.imagem_url);por('e-harmonizacao',res.harmonizacao);
   // O resumo e as notas de prova só entram quando o vinho for gravado (o
@@ -5363,7 +5390,7 @@ let IA_MANUAL_CAMPOS=null;
 function iaManualEscolher(vinhoId){
   if(roGuard())return;
   const v=IDXV[vinhoId];if(!v)return;
-  const linhas=IA_CAMPOS.map(c=>{
+  const linhas=iaCamposPara(v).map(c=>{
     const tem=!!iaValorAtual(v,c.k);
     return `<label class="ia-esc">
       <input type="checkbox" class="ia-esc-c" value="${esc(c.k)}"${tem?'':' checked'}>
@@ -5472,7 +5499,7 @@ REGRAS, e são a sério:
 4. Se houver dúvida entre dois vinhos parecidos, escolhe o que bate certo com o ano e a região indicados, e escreve a hesitação em "aviso".
 5. O preço é o de UMA garrafa de 0,75L, em euros, em Portugal.
 6. As castas vão SEPARADAS, uma a uma, com o nome português corrente ("Touriga Nacional", "Alicante Bouschet"). Nunca "blend"/"lote"/"várias castas".
-7. "beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que o vinho está no ponto.
+7. ${v.ano?'"beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que ESTA colheita está no ponto.':'Este vinho não tem ano: sem colheita NÃO há janela de consumo — deixa "beberDe"/"beberAte" de fora.'}
 8. "imagemUrl" é o link DIRETO de uma fotografia (acaba em .jpg/.jpeg/.png/.webp/.avif), nunca o link da página. Sem certeza, deixa vazio.
 
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código \`\`\`:
@@ -5495,9 +5522,9 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código \`\`\`:
   "vivinoUrl": "",
   "imagemUrl": "",
   "precoMedio": 18.5,
-  "beberDe": 2026,
+${v.ano?`  "beberDe": 2026,
   "beberAte": 2034,
-  "notasProva": "duas ou três frases sobre aroma, boca e final",
+`:''}  "notasProva": "duas ou três frases sobre aroma, boca e final",
   "harmonizacao": "com que pratos",
   "resumo": "duas ou três frases sobre o vinho e o produtor",
   "aviso": "vazio, ou o que ficou por confirmar"
@@ -5949,7 +5976,8 @@ function loteManualRegras(campos){
   if(campos.includes('imagem_url'))r.push('"imagemUrl" é o link DIRETO de uma fotografia (acaba em '+
     '.jpg/.jpeg/.png/.webp/.avif), nunca o link da página.');
   if(campos.includes('preco_medio'))r.push('"precoMedio" é o preço de UMA garrafa de 0,75L, em euros, em Portugal.');
-  if(campos.includes('beber_de')||campos.includes('beber_ate'))r.push('"beberDe"/"beberAte" são anos.');
+  if(campos.includes('beber_de')||campos.includes('beber_ate'))r.push('"beberDe"/"beberAte" são anos, a janela da '+
+    'colheita indicada. Um vinho SEM ano na lista não tem janela de consumo: deixa "beberDe"/"beberAte" de fora do objeto dele.');
   r.push('O "id" de cada resultado tem de ser EXATAMENTE o "id" da lista de entrada — é assim que sei a que '+
     'vinho corresponde cada objeto, nunca pela posição na lista.');
   r.push('Se não conseguires identificar um vinho de todo, o objeto dele fica só '+
@@ -7677,7 +7705,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='96';
+const APP_BUILD='97';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

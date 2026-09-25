@@ -1235,6 +1235,15 @@ lado para o outro, e duas cópias divergem no dia em que se edita uma.
   notas: é para enviar.
 - Enquanto a coluna não existir, `detetarDesejo()` liga `body.sem-desejo` e
   tudo o que é `.desejo-only` desaparece — separador e opção do FAB.
+- **Sem ano não há janela de consumo** (migração 16) — e na wishlist o
+  normal é não haver ano. `beber_de`/`beber_ate` são anos de UMA colheita;
+  sem ela seriam os de uma qualquer. A app não os pede à IA nem os propõe
+  (`IA_JANELA`/`iaCamposPara`), o formulário esconde o campo enquanto o ano
+  estiver vazio (`janelaSincronizarForm`), o "A completar" não conta a
+  falta, e a BD apaga-os em qualquer escrita sem ano (trigger
+  `vinhos_sem_colheita`). A `vinho-info` e a `importar-vinhos` fazem o
+  mesmo do lado delas; o catálogo tem a mesma regra
+  (`winecatalog.da_colheita`, no `CLAUDE.md` da WineCatalog).
 
 ## Monocasta / várias castas é CALCULADO, não guardado
 `castaLabel(v)` conta as linhas de `vinho_castas`: 1 → "Monocasta", 2+ →
