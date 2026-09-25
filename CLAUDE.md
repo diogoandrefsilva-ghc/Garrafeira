@@ -1296,9 +1296,12 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   totais = entrada + saída, ~5 s): respondeu de memória. Para toda a gente
   fica assim; o resultado leva `pesquisaWeb` (também na cache), e ao admin
   (`garrafeira.is_admin()`, confirmado na função) a procura de memória
-  mostra 🧠 e o botão **🔬 Pesquisa profunda** (`profunda:true`): o prompt
-  exige a pesquisa, salta a cache e o catálogo, e passa ao modelo maior se
-  o barato não pesquisar. Os prompts MANUAIS pedem sempre a pesquisa a
+  mostra 🧠 e o botão **🔬 Pesquisa profunda** (`profunda:true`), que salta
+  a cache e o catálogo e **corre como o modo `gratis`** (abaixo): a pesquisa
+  é feita por nós (Serper, geral + uma consulta ao Vivino) e o Gemini só lê
+  os resultados. Até 25/09/2026 a profunda era o grounding com um prompt a
+  "exigir" a pesquisa — e respondeu de memória na mesma: não há parâmetro
+  na API que obrigue o Gemini a pesquisar. Os prompts MANUAIS pedem sempre a pesquisa a
   sério (`IA_MANUAL_PESQUISA`). Mesmo critério nas quatro apps — ver o
   `CLAUDE.md` da WineCatalog, "De memória ou pesquisado".
 - **`gratis`** ("IA sem pesquisa web" na UI) — pesquisa **externa** primeiro

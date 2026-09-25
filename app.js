@@ -4871,11 +4871,12 @@ function iaOrigemHTML(res){
    Com o grounding ligado, o Gemini decide sozinho se pesquisa no Google — e
    muitas vezes responde com o que aprendeu no treino (`pesquisaWeb:false`,
    ver o `vinho-info.ts`). Para toda a gente fica como está; ao admin
-   diz-se, e oferece-se a PESQUISA PROFUNDA: a mesma pergunta, a exigir a
-   pesquisa, sem cache nem catálogo. A função volta a confirmar o admin. */
+   diz-se, e oferece-se a PESQUISA PROFUNDA: a mesma pergunta, sem cache nem
+   catálogo, com a pesquisa feita pela Edge Function (Serper) e o Gemini só
+   a ler os resultados — garantida, ao contrário do grounding. A função
+   volta a confirmar o admin. */
 function iaMemoriaHTML(res,acao){
   if(!isAdmin()||!res||res.pesquisaWeb!==false)return '';
-  if(res.profunda)return `<div class="aviso">🧠 Mesmo obrigado, o Gemini não pesquisou no Google — isto veio de memória. A pesquisa manual (colar num assistente) é a alternativa.</div>`;
   return `<div class="ia-prbar"><span>🧠 O Gemini respondeu <b>de memória</b>, sem pesquisa Google. Costuma acertar em vinhos conhecidos, mas pode estar desatualizado.</span>
     <button class="mini o" onclick="${acao}">🔬 Pesquisa profunda</button></div>`;
 }

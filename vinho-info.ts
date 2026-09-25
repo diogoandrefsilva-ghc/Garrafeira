@@ -914,34 +914,23 @@ type Res = { ok: true; corpo: Record<string, unknown> } | { ok: false; status: n
    24/09/2026 nunca o fez (total de tokens = entrada + saída, ~5 s): as
    respostas vinham do que o modelo aprendeu no treino. Para toda a gente
    isto fica como está; o resultado passa a dizê-lo (`pesquisaWeb`) e ao
-   admin a app oferece a "pesquisa profunda" (`profunda:true`), que exige a
-   pesquisa no prompt, salta a cache e o catálogo, e passa ao modelo maior
-   se o barato responder sem pesquisar. Mesmo critério da `catalogo-info`
-   (WineCatalog) e da `verificar-vinhos` (WineSelection) — ver o CLAUDE.md
-   da WineCatalog, "De memória ou pesquisado". */
+   admin a app oferece a "pesquisa profunda" (`profunda:true`).
+
+   PESQUISA PROFUNDA = SERPER (25/09/2026). Não há parâmetro nenhum na API
+   do Gemini que o OBRIGUE a pesquisar, e mudar o prompt só mexe nas
+   probabilidades: com o prompt a pedir "primeiro pesquisa, depois o JSON",
+   a primeira profunda a sério (Quinta dos Sentidos, 24/09/2026) respondeu
+   de memória na mesma, no lite e no flash. A profunda passou a ser o
+   "modo grátis" que já existia: a pesquisa é NOSSA (Serper — geral + uma
+   ao Vivino), o Gemini só lê os resultados, sem `google_search`. Salta a
+   cache e o catálogo. Mesmo critério da `catalogo-info` (WineCatalog), da
+   `verificar-vinhos` (WineSelection) e da `prendas-vinho` — ver o
+   CLAUDE.md da WineCatalog, "De memória ou pesquisado". */
 function fezPesquisa(body: any): boolean {
   const gm = body?.candidates?.[0]?.groundingMetadata;
   return (Array.isArray(gm?.webSearchQueries) && gm.webSearchQueries.length > 0) ||
     (Array.isArray(gm?.groundingChunks) && gm.groundingChunks.length > 0) ||
     Number(body?.usageMetadata?.toolUsePromptTokenCount ?? 0) > 0;
-}
-/* O que faz o modelo pesquisar a sério (testado a 24/09/2026 — ver o
-   CLAUDE.md da WineCatalog, "De memória ou pesquisado"): não é pedir-lho
-   com mais força. Com "Responde SÓ com este JSON" o lite e o flash
-   responderam de MEMÓRIA em todas as tentativas, com ou sem "OBRIGATÓRIO",
-   com ou sem temperatura 0. Com o mesmo pedido mas a deixá-los escrever
-   primeiro o que encontraram, e o JSON só no fim numa linha "JSON:",
-   pesquisaram sempre. A profunda troca essa instrução, e a leitura vai
-   buscar o JSON a seguir a "JSON:". */
-const INSTR_JSON = "Responde SÓ com este JSON, sem texto à volta e sem blocos de código:";
-const INSTR_PROFUNDA = `Primeiro PESQUISA no Google (o Vivino deste vinho e o preço em lojas
-portuguesas, pelo menos) e escreve, em texto corrido, o que encontraste e em
-que sítio. Depois, no FIM da resposta, numa linha que comece por JSON:,
-escreve o resultado neste formato — um campo que a pesquisa não confirmou
-fica de fora, MESMO que aches que sabes a resposta:`;
-function jsonDoFim(txt: string): string {
-  const i = txt.lastIndexOf("JSON:");
-  return i >= 0 ? txt.slice(i + 5) : txt;
 }
 
 function fontesGrounding(body: any): Fonte[] {
@@ -960,7 +949,6 @@ function fontesGrounding(body: any): Fonte[] {
 
 async function chamarGemini(
   modelo: string, textoPrompt: string, signal: AbortSignal, maxTokens = 2048, semThinking = true, comGrounding = false,
-  jsonNoFim = false,
 ) {
   // A pesquisa (grounding) precisa de "pensar" para decidir o quê e quando
   // pesquisar: pedir thinkingBudget:0 ao mesmo tempo que se liga o tool
@@ -1012,7 +1000,7 @@ async function chamarGemini(
   // ver o CLAUDE.md da WineCatalog, "O 200 vazio". (A escada já trata do
   // resto: uma falha TÉCNICA destas escala para o modelo seguinte.)
   if (!bruto) return { ok: false as const, status: 502, erro: `o modelo não devolveu resposta (${motivo || "vazia"})`, usage };
-  const parsed = extrairJson(jsonNoFim ? jsonDoFim(bruto) : bruto);
+  const parsed = extrairJson(bruto);
   if (!parsed) return { ok: false as const, status: 502, erro: `resposta ilegível do modelo (${motivo || "sem finishReason"})`, usage };
   return { ok: true as const, parsed, fontes: comGrounding ? fontesGrounding(body) : [], usage,
     pesquisou: comGrounding ? fezPesquisa(body) : null };
@@ -1095,22 +1083,36 @@ async function produzirFicha(
   const siteQuery = sites.length ? ` (${sites.map((s) => `site:${s}`).join(" OR ")})` : "";
   const query = [nome, ano || "", produtor, regiao, notas, "vivino garrafeira nacional vinho portugal"]
     .filter(Boolean).join(" ") + siteQuery;
+  /* A PROFUNDA É O "MODO GRÁTIS" (25/09/2026): a pesquisa é NOSSA (Serper)
+     e o Gemini só lê os resultados, sem `google_search`. É a única forma de
+     a pesquisa ser garantida — ver `PESQUISA PROFUNDA`, mais acima. Faz
+     uma consulta a mais, ao Vivino, que a consulta geral nem sempre traz. */
+  const usarSerper = modoIA === "gratis" || profunda;
   let pesquisa: PesquisaWeb = { texto: "", fontes: [], status: "grounding:google_search" };
-  if (modoIA === "gratis") {
+  let serperConsultas = 0;
+  if (usarSerper) {
     try {
-      pesquisa = await obterResultadosPesquisa(query, signal);
+      if (profunda) {
+        const qVivino = [nome, produtor, "vivino"].filter(Boolean).join(" ");
+        const rs = await Promise.allSettled([obterResultadosPesquisa(query, signal), obterResultadosPesquisa(qVivino, signal)]);
+        serperConsultas = 2;
+        const boas = rs.filter((r) => r.status === "fulfilled").map((r) => (r as PromiseFulfilledResult<PesquisaWeb>).value);
+        if (!boas.length) throw (rs[0] as PromiseRejectedResult).reason;
+        const fontes = boas.flatMap((b) => b.fontes).filter((f, i, a) => a.findIndex((x) => x.url === f.url) === i);
+        pesquisa = { texto: boas.map((b) => b.texto).join("\n\n").slice(0, 9000), fontes, status: boas[0].status };
+      } else {
+        serperConsultas = 1;
+        pesquisa = await obterResultadosPesquisa(query, signal);
+      }
     } catch (e) {
-      await registar("erro", { passo: "search-api", erro: String((e as Error).message || "").slice(0, 300) }, quem);
+      await registar("erro", { passo: "search-api", ...(profunda ? { profunda: true } : {}), erro: String((e as Error).message || "").slice(0, 300) }, quem);
       return { ok: false, status: 503, erro: "não consegui obter resultados de pesquisa agora — tenta outra vez daqui a pouco" };
     }
   }
 
-  const texto0 = modoIA === "premium"
-    ? (() => {
-        const p = promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, new Date().toISOString().slice(0, 10), campos_ia, colheitaEspecifica);
-        return profunda ? p.replace(INSTR_JSON, INSTR_PROFUNDA) : p;
-      })()
-    : prompt(nome, ano, produtor, regiao, tipo, notas, new Date().toISOString().slice(0, 10), campos_ia, pesquisa.texto, colheitaEspecifica);
+  const texto0 = usarSerper
+    ? prompt(nome, ano, produtor, regiao, tipo, notas, new Date().toISOString().slice(0, 10), campos_ia, pesquisa.texto, colheitaEspecifica)
+    : promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, new Date().toISOString().slice(0, 10), campos_ia, colheitaEspecifica);
   const tentativas: { modelo: string; modo: string; estado: number | string; usageMetadata?: UsageMetadata }[] = [];
   let usageTotal: UsageMetadata | null = null;
   let fontesGround: Fonte[] = [];
@@ -1119,7 +1121,7 @@ async function produzirFicha(
     if (ms < 2_000) return null;
     const { signal: sp, limpar } = comLimiteProprio(signal, ms);
     try {
-      const g = await chamarGemini(modelo, texto0, sp, maxTokens, semThinking, modoIA === "premium", profunda);
+      const g = await chamarGemini(modelo, texto0, sp, maxTokens, semThinking, !usarSerper);
       limpar();
       usageTotal = somarUsage(usageTotal, g.usage ?? null);
       tentativas.push({ modelo, modo, estado: g.ok ? 200 : g.status, ...(g.usage ? { usageMetadata: g.usage } : {}) });
@@ -1133,24 +1135,12 @@ async function produzirFicha(
     }
   };
 
-  // A profunda escreve primeiro o que encontrou, e só depois o JSON: precisa
-  // de mais espaço de saída do que a resposta só em JSON.
-  const primeira = await run(MODELO_BARATO, "barato", profunda ? 3500 : 1800, true);
+  const primeira = await run(MODELO_BARATO, "barato", 1800, true);
   let usadoModelo = MODELO_BARATO;
   let usadoModo = "barato";
   let parsed: any = primeira && primeira.ok ? primeira.parsed : null;
   let erroUltimo = primeira && !primeira.ok ? primeira.erro : "";
   let pesquisou: boolean | null = primeira && primeira.ok ? primeira.pesquisou : null;
-
-  // Profunda: o barato respondeu mas não pesquisou — tenta-se o maior, e só
-  // se ELE pesquisar é que a resposta dele fica no lugar da primeira.
-  if (profunda && primeira && primeira.ok && primeira.pesquisou === false && MODELO_ESCALADO !== MODELO_BARATO) {
-    const outra = await run(MODELO_ESCALADO, "escalado", 4500, false);
-    if (outra && outra.ok && outra.pesquisou) {
-      usadoModelo = MODELO_ESCALADO; usadoModo = "escalado";
-      parsed = outra.parsed; pesquisou = true;
-    }
-  }
 
   let ficha = parsed ? normalizar(parsed, ano, campos_ia) : null;
   if (!pesquisou) fontesGround = [];
@@ -1173,6 +1163,9 @@ async function produzirFicha(
     }
   }
 
+  // Na profunda a pesquisa foi nossa (Serper): houve pesquisa, garantida.
+  if (profunda) pesquisou = true;
+
   if (!ficha && !Object.keys(doCatalogo).length) {
     await registar("erro", {
       passo: "vazio", nome, modo: usadoModo, modelo: usadoModelo,
@@ -1190,7 +1183,7 @@ async function produzirFicha(
     const { aviso: _aviso, ...factos } = ficha as Record<string, unknown>;
     await catalogoJuntar(
       nome, produtor, ano, factos, `vinho-info-${modoIA}`,
-      (modoIA === "premium" ? fontesGround : pesquisa.fontes), signal,
+      (usarSerper ? pesquisa.fontes : fontesGround), signal,
     );
   }
 
@@ -1205,13 +1198,13 @@ async function produzirFicha(
     // `pesquisaWeb` vai com a cache para o botão da profunda não se perder
     // quando a mesma procura volta a sair daqui.
     { ...ficha, ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}) },
-    (modoIA === "premium" ? fontesGround : pesquisa.fontes),
+    (usarSerper ? pesquisa.fontes : fontesGround),
     usadoModelo,
     usadoModo,
     signal,
   );
   const dur = Date.now() - inicio;
-  const custoEstimado = usadoModo === "barato" ? 0.001 : 0.0035;
+  const custoEstimado = (usadoModo === "barato" ? 0.001 : 0.0035) + serperConsultas * 0.001; // o Serper à parte, ~1 $ por 1000 consultas
   await registar("ok", {
     nome, ano, modo: usadoModo, modelo: usadoModelo,
     pesquisa: pesquisa.status, campos: Object.keys(ficha).length,
@@ -1220,6 +1213,7 @@ async function produzirFicha(
     catalogo_campos: Object.keys(doCatalogo).length,
     ia_campos: emFalta.length,
     ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}), ...(profunda ? { profunda: true } : {}),
+    ...(serperConsultas ? { serper_consultas: serperConsultas } : {}),
     ms: dur, tentativas, custo_estimado_eur: custoEstimado,
     ...(usageTotal ? { usageMetadata: usageTotal } : {}),
   }, quem);
@@ -1228,7 +1222,7 @@ async function produzirFicha(
     corpo: {
       ...ficha,
       fontes: [
-        ...(modoIA === "premium" ? fontesGround : pesquisa.fontes),
+        ...(usarSerper ? pesquisa.fontes : fontesGround),
         ...(Object.keys(doCatalogo).length ? (conhecido?.fontes ?? []) : []),
       ].filter((f, i, a) => a.findIndex((x) => x.url === f.url) === i).slice(0, 8),
       ...(Object.keys(doCatalogo).length
@@ -1553,7 +1547,7 @@ Deno.serve(async (req) => {
     // escolha de campos manda isto explicitamente.
     const colheitaEspecifica = body?.colheitaEspecifica === true;
     // Pesquisa profunda: só o admin, e só no modo com grounding (é o único
-    // em que o modelo pode escolher não pesquisar).
+    // em que o modelo pode escolher não pesquisar; o grátis já é Serper).
     let profunda = false;
     if (body?.profunda === true) {
       if (!(await souAdmin(authHeader, ctrl.signal))) {
