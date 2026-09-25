@@ -1565,12 +1565,13 @@ Deno.serve(async (req) => {
       : [];
     // Os sites viram só o domínio (acima) — mas um link do Vivino de UM vinho
     // colado ali é a resposta, não uma fonte: guarda-se inteiro, antes de o
-    // corte o reduzir a "www.vivino.com", e o prompt fica a sabê-lo.
+    // corte o reduzir a "www.vivino.com", e ganha no fim (`comVivinoDado`).
+    // Não vai para as `notas`: essas entram também na consulta da pesquisa
+    // externa, e um URL lá dentro estragava-a.
     const vivinoDado = Array.isArray(body?.sites)
       ? (body.sites as unknown[]).map((s) => vivinoLink(texto(s, 300))).find(Boolean) ?? ""
       : "";
-    const notas = [texto(body?.notas, 300), vivinoDado ? `A página do Vivino deste vinho é ${vivinoDado} — usa esta, é a certa.` : ""]
-      .filter(Boolean).join("\n");
+    const notas = texto(body?.notas, 300);
     const vinhoId = typeof body?.vinhoId === "number" ? body.vinhoId : null;
     /* `campos`: a app diz o que quer que se procure. Só se aceitam nomes
        conhecidos — um nome inventado aqui era um campo a menos no prompt e,
