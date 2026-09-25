@@ -240,7 +240,7 @@ Correr no SQL Editor, por esta ordem:
 2. `db/functions.sql`
 3. `db/policies.sql`
 
-### Migração 15 — a wishlist (**por aplicar**)
+### Migração 15 — a wishlist (já aplicada)
 
 `db/migracao-wishlist.sql`. Acrescenta `vinhos.desejado` (boolean, `false`
 por omissão): um vinho da wishlist é uma linha normal de `vinhos`, sem
@@ -253,7 +253,10 @@ A app deteta a coluna sozinha (`TEM_DESEJO`, mesmo padrão do `imagem_url`):
 enquanto a migração não correr, o separador Wishlist não aparece e nada
 muda.
 
-Correr no SQL Editor, por esta ordem:
+**Aplicada em 2026-09-25** como a migração `garrafeira_15_wishlist`: o
+`migracao-wishlist.sql` mais a `catalogar_vinho` nova (só essa função do
+`catalogo-partilhado.sql` — a definição que estava na base batia certo com o
+repo, e as outras não mudaram). Numa base nova, por esta ordem:
 
 1. `db/migracao-wishlist.sql`
 2. `db/catalogo-partilhado.sql`
