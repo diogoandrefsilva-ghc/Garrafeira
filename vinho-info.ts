@@ -652,6 +652,31 @@ function daLista(v: unknown, lista: string[]): string {
   const achado = lista.find((x) => x && x.toLowerCase() === t.toLowerCase());
   return achado ?? "";
 }
+/* ── O link do Vivino: só o formato que o Vivino usa ──
+   A página de um vinho no Vivino é SEMPRE `/<nome>/w/<nº>` — o número é o
+   do vinho e não muda. Um modelo que responda de memória (o normal — ver o
+   CLAUDE.md da WineCatalog, "De memória ou pesquisado") escreve links com
+   ar de verdadeiros que nunca existiram: `/Wines/<nome>`,
+   `/Wineries/<x>/Wines/<y>`, `/pt-pt/<nome>` sem número. Até 25/09/2026 só
+   se exigia o domínio, e esses entravam e partiam ao abrir. `/wines/<nº>`
+   também sai: é o número de UMA colheita, não o do vinho. Devolve-se o
+   link limpo (sem país, língua, ?year=, ?srsltid) — a MESMA regra do
+   `urlLimpo` do `batch/vivino-verificar.mjs` (WineCatalog). */
+function vivinoLink(u: unknown): string {
+  try {
+    const url = new URL(String(u ?? "").trim());
+    if (!/(^|\.)vivino\.com$/i.test(url.hostname)) return "";
+    const m = url.pathname.match(/\/([a-z0-9-]+)\/w\/(\d+)/i);
+    return m ? `https://www.vivino.com/${m[1].toLowerCase()}/w/${m[2]}` : "";
+  } catch { return ""; }
+}
+/* O link do Vivino que quem procura colou nos sites de confiança é FACTO
+   (abriu-o), e ganha ao que veio da IA, da cache ou do catálogo. */
+function comVivinoDado(res: Res, vivinoDado: string, campos: string[] | null): Res {
+  if (res.ok && vivinoDado && (!campos || campos.includes("vivino_url"))) res.corpo.vivino_url = vivinoDado;
+  return res;
+}
+
 function normalizar(raw: any, anoPedido: number | null, campos: string[] | null = null): Record<string, unknown> | null {
   if (!raw || typeof raw !== "object") return null;
   if (raw.encontrado === false) return null;
@@ -688,12 +713,10 @@ function normalizar(raw: any, anoPedido: number | null, campos: string[] | null 
     estagio_texto: texto(raw.estagioTexto, 160),
     vivino_nota: numero(raw.vivinoNota, 1, 5, 2),
     vivino_avaliacoes: (() => { const n = numero(raw.vivinoAvaliacoes, 0, 10_000_000, 0); return n === null ? null : Math.round(n); })(),
-    // Exige-se o domínio do Vivino (não basta ser um http qualquer): reduz o
-    // risco de o link vir de uma loja ou do site do produtor por engano. Não
-    // chega para apanhar um link de um vinho HOMÓNIMO — isso é a regra 2, no
-    // prompt — mas evita pelo menos um link que nem é do Vivino.
-    vivino_url: /^https?:\/\/([a-z0-9-]+\.)*vivino\.com\//i.test(String(raw.vivinoUrl ?? "").trim())
-      ? texto(raw.vivinoUrl, 300) : "",
+    // Só `/<nome>/w/<nº>` (ver `vivinoLink`). Não chega para apanhar um
+    // link de um vinho HOMÓNIMO — isso é a regra 2, no prompt — mas apanha
+    // os inventados.
+    vivino_url: vivinoLink(raw.vivinoUrl),
     // Aqui a validação é mais apertada do que no `vivino_url`: exige-se a
     // extensão da imagem. O modelo tende a devolver o link da PÁGINA do
     // produto em vez do da fotografia, e isso dava um <img> partido na ficha
@@ -1537,10 +1560,17 @@ Deno.serve(async (req) => {
        vinho com um homónimo ("grande reserva", "edição limitada", …) e a
        dar prioridade a fontes em que a pessoa confia. Nunca são pedidos de
        volta à IA, só entram no prompt/pesquisa como contexto. */
-    const notas = texto(body?.notas, 300);
     const sites: string[] = Array.isArray(body?.sites)
       ? [...new Set<string>(body.sites.map((s: unknown) => texto(s, 100).replace(/^https?:\/\//i, "").replace(/\/.*$/, "")).filter(Boolean))].slice(0, 5)
       : [];
+    // Os sites viram só o domínio (acima) — mas um link do Vivino de UM vinho
+    // colado ali é a resposta, não uma fonte: guarda-se inteiro, antes de o
+    // corte o reduzir a "www.vivino.com", e o prompt fica a sabê-lo.
+    const vivinoDado = Array.isArray(body?.sites)
+      ? (body.sites as unknown[]).map((s) => vivinoLink(texto(s, 300))).find(Boolean) ?? ""
+      : "";
+    const notas = [texto(body?.notas, 300), vivinoDado ? `A página do Vivino deste vinho é ${vivinoDado} — usa esta, é a certa.` : ""]
+      .filter(Boolean).join("\n");
     const vinhoId = typeof body?.vinhoId === "number" ? body.vinhoId : null;
     /* `campos`: a app diz o que quer que se procure. Só se aceitam nomes
        conhecidos — um nome inventado aqui era um campo a menos no prompt e,
@@ -1581,7 +1611,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-          const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda);
+          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda), vivinoDado, camposPedidos);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -1599,7 +1629,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda);
+    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda), vivinoDado, camposPedidos);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";

@@ -4609,8 +4609,24 @@ function iaContextoLer(pref){
   pref=pref||'ia';
   const notas=(document.getElementById(`${pref}-notas`)?.value||'').trim().slice(0,300);
   const sites=(document.getElementById(`${pref}-sites`)?.value||'')
-    .split(/[,\n]/).map(s=>s.trim().replace(/^https?:\/\//i,'').replace(/\/.*$/,'')).filter(Boolean).slice(0,5);
+    .split(/[,\n]/).map(s=>s.trim()).filter(Boolean).slice(0,5);
+  // Inteiros, e não só o domínio: um link do Vivino de UM vinho colado aqui
+  // é a resposta (a `vinho-info` e a manual usam-no como vivino_url). O
+  // corte ao domínio, para o prompt e a pesquisa, faz-se na função.
   return {notas,sites};
+}
+/* O link do Vivino só no formato que o Vivino usa: `/<nome>/w/<nº>`, limpo
+   de país, língua e ?year=. `/Wines/<nome>`, `/pt-pt/<nome>` sem número e
+   afins são o que um modelo escreve de memória — nunca existiram, e
+   entravam na ficha a partir ao abrir. `/wines/<nº>` é de UMA colheita.
+   A MESMA regra do `vivinoLink` da `vinho-info.ts`. */
+function vivinoLink(u){
+  try{
+    const url=new URL(String(u??'').trim());
+    if(!/(^|\.)vivino\.com$/i.test(url.hostname))return '';
+    const m=url.pathname.match(/\/([a-z0-9-]+)\/w\/(\d+)/i);
+    return m?`https://www.vivino.com/${m[1].toLowerCase()}/w/${m[2]}`:'';
+  }catch(_){return '';}
 }
 function iaEscolher(vinhoId){
   if(roGuard())return;
@@ -5386,6 +5402,7 @@ async function iaCaminhoCatalogo(vinhoId){
 // comparação final saber a que se pediu (os mesmos `campos` que a Edge
 // Function usaria para cortar a resposta).
 let IA_MANUAL_CAMPOS=null;
+let IA_MANUAL_VIVINO=''; // o link do Vivino colado nos sites de confiança
 
 function iaManualEscolher(vinhoId){
   if(roGuard())return;
@@ -5543,6 +5560,7 @@ async function iaManualGerarPrompt(vinhoId){
   const colheitaEspecifica=!!document.getElementById('ia-colheita-esp')?.checked;
   const ctx=iaContextoLer();
   IA_MANUAL_CAMPOS=campos;
+  IA_MANUAL_VIVINO=ctx.sites.map(vivinoLink).find(Boolean)||'';
   const txt=iaManualPrompt(v,campos,colheitaEspecifica,ctx.notas,ctx.sites);
   document.getElementById('modal-ia-in').innerHTML=`
     <div class="mtop"><div><h3>✍️ Pesquisa manual</h3>
@@ -5656,7 +5674,7 @@ function iaManualNormalizar(raw,anoPedido,campos){
     estagio_texto:iaManualTxt(raw.estagioTexto,160),
     vivino_nota:iaManualNum(raw.vivinoNota,1,5,2),
     vivino_avaliacoes:(()=>{const n=iaManualNum(raw.vivinoAvaliacoes,0,10000000,0);return n===null?null:Math.round(n);})(),
-    vivino_url:/^https?:\/\/([a-z0-9-]+\.)*vivino\.com\//i.test(String(raw.vivinoUrl||'').trim())?iaManualTxt(raw.vivinoUrl,300):'',
+    vivino_url:vivinoLink(raw.vivinoUrl),
     imagem_url:/^https?:\/\/\S+\.(jpe?g|png|webp|avif)(\?\S*)?$/i.test(String(raw.imagemUrl||'').trim())?iaManualTxt(raw.imagemUrl,400):'',
     preco_medio:iaManualNum(raw.precoMedio,0.5,100000,2),
     beber_de:beberDe,beber_ate:beberAte,
@@ -5698,6 +5716,8 @@ async function iaManualColar(vinhoId){
     if(erroEl)erroEl.textContent='O JSON leu-se, mas não trouxe nenhum campo válido — confere se respeitou o formato pedido.';
     return;
   }
+  // O link que quem pesquisa colou e abriu ganha ao que a resposta trouxe.
+  if(IA_MANUAL_VIVINO&&(!IA_MANUAL_CAMPOS||IA_MANUAL_CAMPOS.includes('vivino_url')))ficha.vivino_url=IA_MANUAL_VIVINO;
   if(erroEl)erroEl.textContent='';
   // Não se assume qual foi o modelo (o utilizador procura onde quiser) — só
   // se marca que foi uma pesquisa a sério, colada à mão. `iaUltimaProcura`
@@ -7705,7 +7725,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='97';
+const APP_BUILD='98';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
