@@ -40,6 +40,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `catalogo-partilhado.sql` é a 12 e era a única que criava um schema que **não
   é desta app**: o `catalogo`, partilhado com a WineSelection (ver secção
   própria). Também é seguida por `functions.sql`.
+  `migracao-wishlist.sql` é a 15 (a wishlist, `vinhos.desejado`), seguida
+  por `catalogo-partilhado.sql`.
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
@@ -48,7 +50,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
 - Não mexer à mão: `apple-touch-icon.png` (é gerado — ver "Ícones").
 
 ## Os cinco separadores (o ecrã inicial não é a lista)
-`Garrafeira` (resumo) · `Detalhe` · `Locais` · `Consumidos` · `Definições`.
+`Garrafeira` (resumo) · `Detalhe` · `Locais` · `Consumidos` · `Definições`
+— mais a **`Wishlist`** (antes do ⚙️), que só aparece depois da migração 15
+(ver "A wishlist é um vinho sem garrafas").
 
 O ecrã inicial (`Garrafeira`) é **só o resumo** — nada de procura aqui. Já
 teve os cards em cima e a procura por baixo, mas com a procura a viver
@@ -1197,6 +1201,40 @@ Consequências práticas, todas de propósito:
 - a lista principal só mostra vinhos com `stockDe(id) > 0`. Um vinho todo
   bebido continua na base de dados e no separador Consumidos, mas sai da
   garrafeira.
+
+## A wishlist é um vinho sem garrafas (migração 15)
+Os vinhos que não estão cá mas que se querem ter. **Não é uma tabela à
+parte**: é uma linha normal de `vinhos`, sem garrafas, com
+`vinhos.desejado = true` — a consequência direta do "vinho ≠ garrafa" logo
+acima. Por isso a ficha, a procura da IA, a página do vinho e o Editar são
+os de sempre, e **passar um desejo para a garrafeira** é desligar a marca e
+acrescentar garrafas no MESMO passo (`abrirEditarVinho(id,'converter')`:
+a ficha editável — o ano, sobretudo — mais a "Primeira garrafa" com o local
+e o preço de compra). Uma tabela de desejos obrigava a copiar a ficha de um
+lado para o outro, e duas cópias divergem no dia em que se edita uma.
+
+- **Não aparece em Detalhe/Locais/Resumo sem ninguém o esconder**: esses só
+  contam vinhos com `stockDe>0`. Onde a lista é de TODOS os vinhos (pôr um
+  vinho num lugar vazio, substituir o vinho de uma garrafa) filtra-se à mão
+  com `desejado(v)` — um desejo não tem lugar na prateleira.
+- **Um vinho com garrafas não é um desejo**: o `guardarGarrafa` desliga a
+  marca se uma garrafa chegar por outro caminho.
+- **Quem se esquecer de passar o desejo** e puser o vinho pelo "Novo vinho"
+  (ou pela importação) é apanhado no fim da gravação
+  (`oferecerRetirarDesejos`/`mesmoDesejo`): a app PROPÕE, par a par, e a
+  pessoa confirma — a semelhança sugere, nunca decide (a lição dos
+  Duplicados da WineCatalog). A regra é apertada de propósito (ver o
+  comentário no app.js): o ano não conta, o produtor e a cor contam.
+- **Não alimenta o catálogo partilhado** enquanto for desejo: a
+  `catalogar_vinho` salta-o, porque quem o escreveu não tem a garrafa na mão
+  e o catálogo dar-lhe-ia essa força. Ao passar para a garrafeira, o UPDATE
+  volta a disparar o trigger.
+- **É visível numa garrafeira emprestada** (é aí que um amigo vai ver o que
+  oferecer), e o **PDF** também (`exportarWishlistPDF`, a mesma folha do
+  Exportar PDF). Mexer é só de quem pode editar. O PDF não leva as minhas
+  notas: é para enviar.
+- Enquanto a coluna não existir, `detetarDesejo()` liga `body.sem-desejo` e
+  tudo o que é `.desejo-only` desaparece — separador e opção do FAB.
 
 ## Monocasta / várias castas é CALCULADO, não guardado
 `castaLabel(v)` conta as linhas de `vinho_castas`: 1 → "Monocasta", 2+ →

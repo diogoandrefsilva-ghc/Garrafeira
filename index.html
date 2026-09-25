@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="93">
+<body data-build="96">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone.svg" alt="">
@@ -114,6 +114,10 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
     <button class="it" onclick="tab('detalhe',this)"><span class="ic">📋</span> Detalhe</button>
     <button class="it" onclick="tab('locais',this)"><span class="ic">📍</span> Locais</button>
     <button class="it" onclick="tab('consumidos',this)"><span class="ic">📖</span> Consumidos</button>
+    <!-- A WISHLIST (migração 15): escondida enquanto a coluna não existir
+         (`body.sem-desejo`, ver `detetarDesejo`). Fica ANTES do ⚙️ porque o
+         `restaurarTab` casa a posição do botão com o `ORDEM_TABS`. -->
+    <button class="it desejo-only" onclick="tab('desejos',this)"><span class="ic">⭐</span> Wishlist</button>
     <button class="it so-ic" onclick="tab('cfg',this)" title="Definições" aria-label="Definições">⚙️</button>
   </div>
 
@@ -200,6 +204,21 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
   <section class="sec" id="s-consumidos">
     <div class="g4" id="stats-consumo"></div>
     <div id="consumidos"></div>
+  </section>
+
+  <!-- ═══ WISHLIST (os vinhos que se querem ter) ═══
+       Vinhos sem garrafas e com `desejado` ligado — ver "WISHLIST" no
+       app.js. O PDF fica à vista de quem só VÊ (uma garrafeira emprestada
+       é justamente onde um amigo vai ver o que oferecer); acrescentar não. -->
+  <section class="sec" id="s-desejos">
+    <div class="dbar">
+      <span class="fcount" id="desejos-count"></span>
+      <div class="dbar-a">
+        <button class="btn ghost dbar-btn" id="desejos-pdf" onclick="exportarWishlistPDF()">⬇️ PDF</button>
+        <button class="btn prim dbar-btn ro-hide" onclick="novoDesejo()">+ Adicionar</button>
+      </div>
+    </div>
+    <div id="desejos"></div>
   </section>
 
   <!-- ═══ DEFINIÇÕES ═══ -->
@@ -292,6 +311,7 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
   <div class="fab-menu" id="fab-menu">
     <button class="fab-op" onclick="fabAcao('importar')">📷 Importar por imagens</button>
     <button class="fab-op" onclick="fabAcao('lote')">🔎 Atualização massiva</button>
+    <button class="fab-op desejo-only" onclick="fabAcao('desejo')">⭐ Adicionar à wishlist</button>
     <button class="fab-op" onclick="fabAcao('novo')">🍷 Novo vinho</button>
   </div>
   <button class="fab" onclick="fabToggle()" aria-label="Acrescentar vinhos">+</button>

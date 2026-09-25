@@ -9,7 +9,7 @@
 // os dois últimos que o app.js apanha ao arrancar — o network-first abaixo
 // manda no browser, mas não no CDN do GitHub Pages, que propaga um
 // ficheiro de cada vez.
-const CACHE_NAME = 'garrafeira-v95';
+const CACHE_NAME = 'garrafeira-v96';
 
 self.addEventListener('install', () => self.skipWaiting());
 

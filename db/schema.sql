@@ -235,6 +235,14 @@ CREATE TABLE IF NOT EXISTS garrafeira.vinhos (
   -- procura e é substituído por inteiro na procura seguinte; isto é do
   -- utilizador e a IA nunca lhe mexe.
   links         jsonb NOT NULL DEFAULT '[]'::jsonb,
+  -- WISHLIST: um vinho que ainda NÃO está cá, mas que se quer ter (migração
+  -- 15). É a mesma linha de sempre — a mesma ficha, a mesma procura da IA —
+  -- só que sem garrafas e com esta marca. Passar para a garrafeira é
+  -- desligá-la e acrescentar as garrafas; não se copia nada para lado
+  -- nenhum. Enquanto está ligada, o vinho NÃO alimenta o catálogo
+  -- partilhado (ver `catalogar_vinho`): quem o escreveu não tem a garrafa na
+  -- mão, e o catálogo daria a isto a força de quem a tem.
+  desejado      boolean NOT NULL DEFAULT false,
 
   -- ── o que a IA/pesquisa descobriu (Edge Function `vinho-info`) ──
   -- Fica na mesma linha do vinho (e não numa tabela à parte) porque é UMA

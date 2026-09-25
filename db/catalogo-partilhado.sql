@@ -122,6 +122,12 @@ DECLARE
 BEGIN
   SELECT * INTO v FROM garrafeira.vinhos WHERE id = p_vinho_id;
   IF v.id IS NULL OR COALESCE(v.nome, '') = '' THEN RETURN NULL; END IF;
+  -- Um vinho da WISHLIST (migração 15) ainda não está na mão de ninguém: o
+  -- que lá está escrito é o que se leu algures, não o rótulo — e entrava no
+  -- catálogo com a força de quem tem a garrafa. O que a IA descobriu sobre
+  -- ele já lá chegou pela `vinho-info`. Quando passar para a garrafeira, o
+  -- UPDATE que desliga a marca volta a disparar o trigger e ele entra.
+  IF v.desejado THEN RETURN NULL; END IF;
 
   v_ficha := garrafeira.ficha_catalogo(v.id);
   IF v_ficha IS NULL THEN RETURN NULL; END IF;

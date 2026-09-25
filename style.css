@@ -1706,3 +1706,16 @@ body:not(.readonly) .msdot.emcima.vazia:hover{opacity:1}
    garrafa. */
 .ml.procurando .msdot.vazia{opacity:.4}
 body:not(.readonly) .ml.procurando .msdot.vazia:hover{opacity:1}
+
+/* ── WISHLIST (migração 15) ─────────────────────────────────────────
+   Tudo o que é da wishlist some enquanto a coluna `vinhos.desejado` não
+   existir (`detetarDesejo` liga `body.sem-desejo`) — o separador, a opção
+   do FAB. Os cartões são os `.vcard` de sempre: um desejo é um vinho. */
+body.sem-desejo .desejo-only{display:none!important}
+/* Os botões da barra da wishlist são mais baixos do que os `.btn` de um
+   formulário: vivem na mesma linha que a contagem, como o ⇅ do Detalhe. */
+.dbar .dbar-btn{margin-top:0;padding:7px 13px;font-size:12px}
+/* Na página de um desejo, a secção "Wishlist" toma o lugar do "Onde está".
+   Tracejada de propósito: é o sítio de uma garrafa que ainda não chegou. */
+.desejo-faixa{background:var(--bg);border:1px dashed var(--bo2);border-radius:11px;padding:10px 12px;margin-top:8px}
+.desejo-faixa .macoes{margin-top:10px}

@@ -240,6 +240,24 @@ Correr no SQL Editor, por esta ordem:
 2. `db/functions.sql`
 3. `db/policies.sql`
 
+### Migração 15 — a wishlist (**por aplicar**)
+
+`db/migracao-wishlist.sql`. Acrescenta `vinhos.desejado` (boolean, `false`
+por omissão): um vinho da wishlist é uma linha normal de `vinhos`, sem
+garrafas e com a marca ligada. Nenhuma tabela nova, nenhuma policy nova —
+é da garrafeira do vinho, como tudo o resto. A `catalogar_vinho` passa a
+saltar estes vinhos (ninguém tem a garrafa na mão); quando um passa para a
+garrafeira, o UPDATE que desliga a marca volta a disparar o trigger.
+
+A app deteta a coluna sozinha (`TEM_DESEJO`, mesmo padrão do `imagem_url`):
+enquanto a migração não correr, o separador Wishlist não aparece e nada
+muda.
+
+Correr no SQL Editor, por esta ordem:
+
+1. `db/migracao-wishlist.sql`
+2. `db/catalogo-partilhado.sql`
+
 ### `vinhos.imagem_url` (já aplicada)
 
 Link para uma foto do rótulo/garrafa — a `vinho-info` (Edge Function) tenta
