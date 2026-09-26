@@ -360,6 +360,8 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
   font-size:9.5px;letter-spacing:.6px;text-transform:uppercase;font-weight:600}
 .bdg.men,.bdg.viv{background:var(--oup);color:var(--ou2);border-color:#eddfba;font-weight:600}
 .bdg.viv{background:#fff;border-color:#e6d7ad}
+/* "todas": a nota que conta é a de todas as colheitas (`notaVivino`). */
+.bdg.viv .viv-de{font-size:.78em;font-weight:500;opacity:.8}
 .bdg.loc{background:var(--inp);color:var(--in);border-color:#d7e4f0}
 .bdg.reg{background:var(--vhp);color:var(--vh);border-color:#f0dbe2}
 .bdg.qtd{background:var(--vh);color:#fff;border-color:var(--vh);font-weight:600}

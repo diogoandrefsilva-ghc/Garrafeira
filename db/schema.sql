@@ -248,8 +248,12 @@ CREATE TABLE IF NOT EXISTS garrafeira.vinhos (
   -- Fica na mesma linha do vinho (e não numa tabela à parte) porque é UMA
   -- ficha por vinho, sempre substituída por inteiro na procura seguinte —
   -- não é histórico, é o estado atual do que se sabe.
-  vivino_nota      numeric(3,2),               -- 0.00 a 5.00
+  vivino_nota      numeric(3,2),               -- 0.00 a 5.00 — da COLHEITA
   vivino_avaliacoes integer,
+  -- A de TODAS as colheitas (o Vivino sem `?year=`), à parte da de cima
+  -- (migração 22). Qual se mostra decide-o a app (`notaVivino`).
+  vivino_nota_global       numeric(3,2),
+  vivino_avaliacoes_global integer,
   vivino_url       text NOT NULL DEFAULT '',
   -- URL de uma foto do rótulo/garrafa (site do produtor, loja, Vivino…), não
   -- a imagem em si — guardar bytes numa coluna de texto é o que o Supabase
@@ -290,6 +294,7 @@ CREATE TABLE IF NOT EXISTS garrafeira.vinhos (
   CONSTRAINT vinhos_pkey PRIMARY KEY (id),
   CONSTRAINT vinhos_ano_chk CHECK (ano IS NULL OR (ano BETWEEN 1900 AND 2100)),
   CONSTRAINT vinhos_vivino_chk CHECK (vivino_nota IS NULL OR (vivino_nota >= 0 AND vivino_nota <= 5)),
+  CONSTRAINT vinhos_vivino_global_chk CHECK (vivino_nota_global IS NULL OR (vivino_nota_global >= 0 AND vivino_nota_global <= 5)),
   CONSTRAINT vinhos_beber_chk CHECK (beber_ate IS NULL OR beber_de IS NULL OR beber_ate >= beber_de)
 );
 CREATE INDEX IF NOT EXISTS vinhos_garrafeira_idx ON garrafeira.vinhos (garrafeira_id);

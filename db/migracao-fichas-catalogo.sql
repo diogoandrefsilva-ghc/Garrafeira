@@ -44,7 +44,8 @@ DECLARE
   -- (migração 18) e a identidade/`precos`, que a `comparar` também devolve.
   c_campos CONSTANT text[] := ARRAY['estilo','mencao','classificacao','regiao',
     'sub_regiao','pais','teor','estagio_meses','estagio_texto','castas',
-    'vivino_nota','vivino_avaliacoes','imagem_url','preco_medio','beber_de',
+    'vivino_nota','vivino_avaliacoes','vivino_nota_global','vivino_avaliacoes_global',
+    'imagem_url','preco_medio','beber_de',
     'beber_ate','notas_prova','harmonizacao','ai_resumo'];
   r        record;
   e        jsonb;

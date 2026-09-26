@@ -1328,6 +1328,68 @@ function precoPrincipal(v){
   return v.preco_medio!=null?{preco:Number(v.preco_medio),loja:null}:null;
 }
 function precoVinho(v){const p=precoPrincipal(v);return p?p.preco:null;}
+
+/* A NOTA DO VIVINO SÃO DUAS (migração 22, 26/09/2026): a da COLHEITA
+   (`vivino_nota`/`vivino_avaliacoes` — o Vivino com `?year=`) e a de TODAS
+   as colheitas (`vivino_nota_global`/`vivino_avaliacoes_global`). Um 4,5 com
+   40 avaliações de 2019 diz menos do que o 4,2 de 5000 do vinho todo. A
+   que CONTA — no crachá do cartão e da grelha, na página do vinho, na
+   ordenação, no filtro por Vivino, no "A completar" e nos PDFs — é uma só,
+   e sai sempre daqui (nunca `v.vivino_nota` à mão nesses sítios):
+   · a da colheita, se tiver pelo menos 100 avaliações;
+   · senão a que tiver MAIS avaliações — quase sempre a de todas as
+     colheitas (o vinho todo não pode ter menos do que um dos anos dele); em
+     empate, a de todas. É isto que resolve o caso de nenhuma chegar às 100.
+   Uma nota sem contagem conta como zero avaliações; havendo só uma, é essa.
+   Nunca uma média das duas: era um número que ninguém encontra no Vivino.
+   A MESMA regra do `wcNotaVivino` da WineCatalog — mexer numa é mexer na
+   outra, no mesmo dia. */
+const VIVINO_MIN_AVAL=100;
+function notaVivino(v){
+  if(!v)return null;
+  const n=x=>{if(x==null||x==='')return null;const y=Number(x);return isFinite(y)?y:null;};
+  const c=n(v.vivino_nota)!=null?{nota:n(v.vivino_nota),aval:n(v.vivino_avaliacoes),de:'colheita'}:null;
+  const g=n(v.vivino_nota_global)!=null?{nota:n(v.vivino_nota_global),aval:n(v.vivino_avaliacoes_global),de:'global'}:null;
+  if(!c||!g)return c||g;
+  if((c.aval||0)>=VIVINO_MIN_AVAL)return c;
+  return (c.aval||0)>(g.aval||0)?c:g;
+}
+function notaVivinoNum(v){const x=notaVivino(v);return x?x.nota:null;}
+/* Na PDF da wishlist: a mesma, com "(todas)" quando é a de todas as colheitas. */
+function vivinoPDF(v){
+  const x=notaVivino(v);
+  return x?esc('★ '+x.nota.toFixed(1)+(x.de==='global'?' (todas)':'')):'';
+}
+/* Na página do vinho: a que conta primeiro e, havendo as duas, a outra ao
+   lado — cada uma dita pelo nome ("2019" ou "todas as colheitas"). Com uma
+   só, fica como sempre foi. */
+function notaVivinoHeroHTML(v){
+  const x=notaVivino(v);
+  if(!x)return '';
+  const duas=v.vivino_nota!=null&&v.vivino_nota_global!=null;
+  const pill=y=>`<span class="mhero-n" title="${esc(notaVivinoTitulo(y,v.ano))}">★ ${y.nota.toFixed(2)} Vivino${
+    y.aval?` · ${y.aval}`:''}${y.de==='global'?' · todas as colheitas':duas&&v.ano?' · '+v.ano:''}</span>`;
+  if(!duas)return pill(x);
+  const outra=x.de==='global'?notaVivino({...v,vivino_nota_global:null}):notaVivino({...v,vivino_nota:null});
+  return pill(x)+(outra?pill(outra):'');
+}
+/* O porquê, para o `title` do crachá. */
+function notaVivinoTitulo(x,ano){
+  if(!x)return '';
+  const q=x.aval!=null?` · ${x.aval} avaliações`:'';
+  return x.de==='global'?`Nota do Vivino de todas as colheitas${q}`
+    :`Nota do Vivino${ano?' da colheita '+ano:''}${q}`;
+}
+/* O crachá: a estrela e, quando é a de todas as colheitas, a palavra
+   "todas". A da colheita não leva nada — até 26/09/2026 era a única, e
+   muita veio de pesquisas que não sabiam a colheita; chamar-lhe "da
+   colheita" no cartão era dizer o que não se sabe. */
+function notaVivinoBadge(v){
+  const x=notaVivino(v);
+  if(!x)return '';
+  return `<span class="bdg viv" title="${esc(notaVivinoTitulo(x,v.ano))}">★ ${x.nota.toFixed(1)}${
+    x.de==='global'?' <small class="viv-de">todas</small>':''}</span>`;
+}
 // De onde veio, em poucas palavras: "Granvine", "Granvine · 2019" (outra
 // colheita), "Vivino · média" (sem colheita, o Vivino dá a média das
 // colheitas), "preço médio".
@@ -1412,7 +1474,7 @@ const FALTAS=[
   {k:'Sem castas',          tem:v=>(v.castas||[]).length>0},
   {k:'Sem preço',           tem:v=>precoVinho(v)!=null},
   {k:'Sem classificação',   tem:v=>!!v.classificacao},
-  {k:'Sem nota Vivino',     tem:v=>v.vivino_nota!=null},
+  {k:'Sem nota Vivino',     tem:v=>notaVivinoNum(v)!=null},
   {k:'Sem informação de harmonização',       tem:v=>!!v.harmonizacao},
   // Sem colheita não há janela de consumo (ver `IA_JANELA`) — não é falta.
   {k:'Sem informação de intervalo de consumo',tem:v=>v.ano==null||v.beber_de!=null||v.beber_ate!=null}
@@ -1640,7 +1702,7 @@ function valorDe(v,k){
     case 'local':   return [...new Set(garrafasDe(v.id,true).map(g=>String(g.local_id)))];
     case 'preco':   {const x=precoVinho(v);return x==null?[]:[String(faixaIndice(x))];}
     case 'teor':    return v.teor==null?[]:[String(faixaTeorIndice(v.teor))];
-    case 'vivino':  return v.vivino_nota==null?[]:[String(faixaVivinoIndice(v.vivino_nota))];
+    case 'vivino':  {const x=notaVivinoNum(v);return x==null?[]:[String(faixaVivinoIndice(x))];}
     /* A maturação não filtra por "No ponto" — filtra pelo TERÇO da janela.
        "No ponto" sozinho está em quase todos os vinhos e devolvia a lista
        quase inteira; a pergunta que sobra é em que parte da janela se está.
@@ -2061,7 +2123,7 @@ function passaFiltros(v,termos,ignorar){
 // destes bebo primeiro?". Sem nota fica no fim, por nome.
 function ordenarPorVivino(lista){
   return lista.slice().sort((a,b)=>
-    (b.vivino_nota??-1)-(a.vivino_nota??-1)||a.nome.localeCompare(b.nome,'pt'));
+    (notaVivinoNum(b)??-1)-(notaVivinoNum(a)??-1)||a.nome.localeCompare(b.nome,'pt'));
 }
 // Agrupa a lista já filtrada para o separador Detalhe. Por região e por
 // casta: grupos alfabéticos; por ano: do mais recente para o mais velho.
@@ -2165,9 +2227,9 @@ function vinhoCardHTML(v,termos,loteSel){
     <div class="vc-top">
       ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
       <div class="vc-main">
-        ${semAno&&!v.vivino_nota?'':`<div class="vc-anofloat">
+        ${semAno&&!notaVivino(v)?'':`<div class="vc-anofloat">
           ${semAno?'':`<div class="vc-ano">${v.ano||'s/a'}</div>`}
-          ${v.vivino_nota?`<span class="bdg viv">★ ${Number(v.vivino_nota).toFixed(1)}</span>`:''}
+          ${notaVivinoBadge(v)}
         </div>`}
         <div class="vc-nome">${esc(v.nome)}</div>
         <div class="vc-sub">${esc([v.produtor,[v.tipo,v.estilo].filter(Boolean).join(' '),v.regiao].filter(Boolean).join(' · '))}</div>
@@ -2221,7 +2283,7 @@ function vinhoGrelhaHTML(v,termos,loteSel){
     <div class="vg-nome">${esc(v.nome)}</div>
     <div class="vg-sub">${esc([v.ano||'s/a',v.produtor,v.regiao].filter(Boolean).join(' · '))}</div>
     <div class="vg-foot">
-      ${v.vivino_nota?`<span class="bdg viv">★ ${Number(v.vivino_nota).toFixed(1)}</span>`:''}
+      ${notaVivinoBadge(v)}
     </div>
     ${trechosMatch(v,termos)}
   </article>`;
@@ -3062,7 +3124,9 @@ const CAT_NOMES={
   tipo:'Tipo',estilo:'Estilo',mencao:'Menção',classificacao:'Classificação',
   castas:'Castas',regiao:'Região',sub_regiao:'Sub-região',pais:'País',
   teor:'Álcool',estagio_meses:'Estágio (meses)',estagio_texto:'Estágio',
-  vivino_nota:'Nota Vivino',vivino_avaliacoes:'Avaliações Vivino',
+  vivino_nota:'Nota Vivino (colheita)',vivino_avaliacoes:'Avaliações Vivino (colheita)',
+  vivino_nota_global:'Nota Vivino (todas as colheitas)',
+  vivino_avaliacoes_global:'Avaliações Vivino (todas as colheitas)',
   vivino_url:'Link do Vivino',preco_medio:'Preço de referência',
   beber_de:'Beber de',beber_ate:'Beber até',notas_prova:'Notas de prova',
   harmonizacao:'Harmoniza com',ai_resumo:'Resumo',imagem_url:'Imagem'
@@ -3451,7 +3515,7 @@ function vinhoDetalheHTML(v){
           <h3>${esc(v.nome)}</h3>
           <div class="mhero-s"><span class="mhero-o">${origem}${origem&&v.ano?' · ':''}</span>${v.ano?`<b>${v.ano}</b>`:''}</div>
           ${v.ano?`<div class="mhero-ab">${v.ano}</div>`:''}
-          ${v.vivino_nota?`<span class="mhero-n">★ ${Number(v.vivino_nota).toFixed(2)} Vivino${v.vivino_avaliacoes?` · ${v.vivino_avaliacoes}`:''}</span>`:''}
+          ${notaVivinoHeroHTML(v)}
           ${jan?`<span class="mhero-n">${JANELA_TXT[jan]}</span>`:''}
         </div>
       </div>
@@ -3833,8 +3897,8 @@ function exportarWishlistPDF(){
       <td>${esc((v.castas||[]).join(', '))}</td>
       <td>${esc([v.mencao,v.classificacao].filter(Boolean).join(' · '))}</td>
       <td class="pc">${precoPDF(v)}</td>
-      <td class="pc">${v.vivino_nota?'★ '+Number(v.vivino_nota).toFixed(1):''}${v.vivino_url
-        ?`${v.vivino_nota?' · ':''}<a href="${esc(v.vivino_url)}">ver</a>`:''}</td>
+      <td class="pc">${vivinoPDF(v)}${v.vivino_url
+        ?`${notaVivino(v)?' · ':''}<a href="${esc(v.vivino_url)}">ver</a>`:''}</td>
     </tr>`).join('');
   const sub=[nomeGarrafeira(),`${ds.length} vinho${ds.length===1?'':'s'} que gostava de ter`].filter(Boolean).join(' · ');
   pdfPreAbrir(`
@@ -4077,7 +4141,11 @@ function abrirEditarVinho(id,modo){
     </div>
     <div class="mrow">
       <div><label>Preço de referência (€)</label><input type="text" id="e-preco" inputmode="decimal" value="${esc(o('preco_medio'))}" placeholder="18.50"></div>
-      <div><label>Nota Vivino</label><input type="text" id="e-vivino" inputmode="decimal" value="${esc(o('vivino_nota'))}" placeholder="4.1"></div>
+      <div><label>Nota Vivino (colheita)</label><input type="text" id="e-vivino" inputmode="decimal" value="${esc(o('vivino_nota'))}" placeholder="4.1"></div>
+    </div>
+    <div class="mrow">
+      <div><label>Nota Vivino (todas as colheitas)</label><input type="text" id="e-vivino-g" inputmode="decimal" value="${esc(o('vivino_nota_global'))}" placeholder="4.0"></div>
+      <div></div>
     </div>
     <label>Link do Vivino</label>
     <input type="url" id="e-vivino-url" value="${esc(o('vivino_url'))}" placeholder="https://www.vivino.com/…">
@@ -4146,6 +4214,7 @@ function lerFormVinho(){
     beber_ate:inteiro(g('e-ano'))==null?null:inteiro(g('e-beber-ate')),
     preco_medio:num(g('e-preco')),
     vivino_nota:num(g('e-vivino')),
+    vivino_nota_global:num(g('e-vivino-g')),
     vivino_url:g('e-vivino-url'),
     harmonizacao:g('e-harmonizacao'),
     notas:g('e-notas'),
@@ -5065,7 +5134,9 @@ async function iaSegundaOpiniao(){
    Com ano e o catálogo a responder com outra colheita, só servem os factos
    estáveis — a nota, o preço, a imagem e a janela são DAQUELA colheita
    (`winecatalog.da_colheita`, que aqui se repete à mão por ser uma lista
-   de seis nomes; se ela mudar, muda esta). */
+   de seis nomes; se ela mudar, muda esta). A nota de TODAS as colheitas
+   (`vivino_nota_global`) não está aqui de propósito: é do vinho, não de um
+   ano, e serve a qualquer colheita. */
 const CAT_DA_COLHEITA=['vivino_nota','vivino_avaliacoes','vivino_url','preco_medio','imagem_url','precos','beber_de','beber_ate'];
 async function catalogoNovoProcurar(){
   const nome=document.getElementById('e-nome').value.trim();
@@ -5613,6 +5684,7 @@ function iaPreencherForm(res,substituir){
   por('e-beber-de',res.beber_de);por('e-beber-ate',res.beber_ate);
   janelaSincronizarForm();
   por('e-preco',res.preco_medio);por('e-vivino',res.vivino_nota);
+  por('e-vivino-g',res.vivino_nota_global);
   // O link do Vivino TEM campo no formulário: vai para lá, à vista. Ia só
   // para o `_iaExtraNovo` — o campo ficava em branco e, ao gravar, o que lá
   // estivesse escrito à mão era tapado pelo da procura (ou por nada).
@@ -5627,6 +5699,7 @@ function iaPreencherForm(res,substituir){
     notas_prova:res.notas_prova||ant.notas_prova||'',
     ai_resumo:res.ai_resumo||ant.ai_resumo||'',
     vivino_avaliacoes:res.vivino_avaliacoes||ant.vivino_avaliacoes||null,
+    vivino_avaliacoes_global:res.vivino_avaliacoes_global||ant.vivino_avaliacoes_global||null,
     ai_fontes:res.fontes||ant.ai_fontes||null,ai_modelo:res.modelo||ant.ai_modelo||'',
     ai_atualizado_em:new Date().toISOString()
   };
@@ -8014,7 +8087,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='108';
+const APP_BUILD='109';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
