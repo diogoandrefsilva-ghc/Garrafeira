@@ -1478,7 +1478,11 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   catálogo responde com a colheita mais completa e, em empate, a mais
   recente; com ano e outra colheita, só os factos estáveis
   (`CAT_DA_COLHEITA`). Cor diferente da escolhida = outro vinho, não se
-  copia nada.
+  copia nada. Um link do Vivino fora do formato (`vivinoLink`) não se copia
+  e o ecrã DIZ que não copiou — calado, parecia esquecido. E o link do
+  Vivino vai para o campo `e-vivino-url`, à vista: ia só para o
+  `_iaExtraNovo`, o campo ficava em branco e, ao gravar, o que lá estivesse
+  escrito à mão era tapado pelo da procura.
 - **A COR diz-se ANTES de se procurar** (`iaCorGuard`). O `tipo` nasce
   'Tinto' por omissão e a cor faz parte da identidade do vinho no catálogo
   partilhado — um branco que ninguém corrigiu ia procurar (e gravar) com a

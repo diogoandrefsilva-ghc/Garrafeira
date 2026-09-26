@@ -4018,7 +4018,7 @@ async function guardarVinho(id,modo){
     if(erroPos){toast(erroPos,1);return;}
   }
   const castas=f._castas;delete f._castas;
-  // O formulário não tem campos para o resumo/notas de prova/link do Vivino:
+  // O formulário não tem campos para o resumo/notas de prova/avaliações:
   // a procura da IA deixou-os em `_iaExtraNovo` e é aqui que se juntam. Só na
   // CRIAÇÃO — a editar, quem manda nesses campos é o painel de confirmação.
   if(!id&&_iaExtraNovo)Object.assign(f,_iaExtraNovo);
@@ -4936,7 +4936,14 @@ async function catalogoNovoProcurar(){
     res[k]=c.catalogo;
   });
   if(r.produtor&&!res.produtor)res.produtor=r.produtor;
-  if(res.vivino_url)res.vivino_url=vivinoLink(res.vivino_url);
+  // Um link fora do formato do Vivino (`/wines/<nº>`, `/Wines/<nome>`) não
+  // se copia — abre uma colheita, ou nada. Diz-se, para não parecer esquecido.
+  let vivinoMau='';
+  if(res.vivino_url){
+    const bom=vivinoLink(res.vivino_url);
+    if(!bom){vivinoMau=String(res.vivino_url);delete res.vivino_url;}
+    else res.vivino_url=bom;
+  }
   // Outra cor = outro vinho (o "Papa Figos" tinto não é o branco): não se
   // copia nada, e diz-se porquê — o mesmo que as Prendas de Anos fazem.
   if(elTipo&&res.tipo&&res.tipo!==elTipo.value){
@@ -4952,6 +4959,7 @@ async function catalogoNovoProcurar(){
     &&(ano!==null||(c.k!=='beber_de'&&c.k!=='beber_ate'))).map(c=>c.rot);
   const colheita=r.ano?` (colheita ${esc(r.ano)}${outraColheita?' — outra colheita: sem nota, preço nem imagem':''})`:'';
   est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">📚 Preenchido com o que o catálogo já sabia: <b>${n}</b> ${n===1?'campo':'campos'}${colheita}. Confere antes de gravar.</div>`+
+    (vivinoMau?`<div class="note" style="margin-top:6px">O link do Vivino que o catálogo tem não está no formato do Vivino (<code>${esc(vivinoMau)}</code>) — não o copiei.</div>`:'')+
     (faltam.length?`<div class="note" style="margin-top:6px">Falta: ${esc(faltam.join(', '))}.</div>`+
       botaoIA('✨ Completar o que falta com a IA'):'');
 }
@@ -5419,6 +5427,10 @@ function iaPreencherForm(res,substituir){
   por('e-beber-de',res.beber_de);por('e-beber-ate',res.beber_ate);
   janelaSincronizarForm();
   por('e-preco',res.preco_medio);por('e-vivino',res.vivino_nota);
+  // O link do Vivino TEM campo no formulário: vai para lá, à vista. Ia só
+  // para o `_iaExtraNovo` — o campo ficava em branco e, ao gravar, o que lá
+  // estivesse escrito à mão era tapado pelo da procura (ou por nada).
+  por('e-vivino-url',res.vivino_url?vivinoLink(res.vivino_url):'');
   por('e-imagem',res.imagem_url);por('e-harmonizacao',res.harmonizacao);
   // O resumo e as notas de prova só entram quando o vinho for gravado (o
   // formulário não tem campos para eles) — ficam aqui à espera disso.
@@ -5427,7 +5439,7 @@ function iaPreencherForm(res,substituir){
   const ant=_iaExtraNovo||{};
   _iaExtraNovo={
     notas_prova:res.notas_prova||ant.notas_prova||'',
-    ai_resumo:res.ai_resumo||ant.ai_resumo||'',vivino_url:res.vivino_url||ant.vivino_url||'',
+    ai_resumo:res.ai_resumo||ant.ai_resumo||'',
     vivino_avaliacoes:res.vivino_avaliacoes||ant.vivino_avaliacoes||null,
     ai_fontes:res.fontes||ant.ai_fontes||null,ai_modelo:res.modelo||ant.ai_modelo||'',
     ai_atualizado_em:new Date().toISOString()
@@ -7815,7 +7827,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='99';
+const APP_BUILD='100';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
