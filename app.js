@@ -1271,6 +1271,22 @@ const LOJAS=[
 ];
 function lojaInfo(k){return LOJAS.find(l=>l.k===k)||{k,nome:k,curto:k};}
 function lojaOrdem(k){const i=LOJAS.findIndex(l=>l.k===k);return i<0?99:i;}
+/* Os preços acham-se pelo NOME e pelo PRODUTOR (a chave do catálogo) e só
+   se liam no `carregarGarrafeira`. Um vinho acabado de gravar — ou com o
+   nome mudado — ficava com o preço de referência e sem loja nenhuma até
+   alguém recarregar a app, com o catálogo a ter o preço da Garrafeira
+   Nacional à espera (26/09/2026, o Dona Sancha na wishlist do Barrona). Por
+   isso relê-se depois de gravar: é um pedido só, pela garrafeira toda. Não
+   se espera por ele — o cartão acerta-se quando a resposta chegar. */
+async function recarregarPrecosLoja(){
+  const ga=GA_ID;
+  if(!ga)return;
+  let pl=null;
+  try{pl=await sbRpc('precos_lojas',{p_garrafeira_id:ga});}catch(e){return;}
+  if(ga!==GA_ID||!pl||typeof pl!=='object')return;   // trocou-se de garrafeira entretanto
+  PRECOS_LOJA=pl;
+  renderLista();refrescarVinhoAberto();
+}
 // A colheita do preço: a que a loja diz, ou o `?year=` de um link do Vivino.
 function colheitaPreco(p){
   if(p.colheita)return Number(p.colheita);
@@ -3067,7 +3083,14 @@ function catOrigemTxt(o,f){
     'ws-verificacao':'verificação com pesquisa Google',
     'ws-sugestao':'sugestão de uma carta (com pesquisa)',
     'vinho-info-premium':'procura da Garrafeira (grounding)',
-    'vinho-info-gratis':'procura da Garrafeira (pesquisa + extração)'
+    'vinho-info-gratis':'procura da Garrafeira (pesquisa + extração)',
+    // Os scripts da WineCatalog, que leem a página do vinho no Vivino e nas
+    // lojas: o preço de referência que vem daqui diz de que loja é.
+    'vivino-pagina':'página do Vivino',
+    'lojas-script':'preços das lojas',
+    'loja-garrafeira-nacional':'Garrafeira Nacional',
+    'loja-granvine':'Granvine',
+    'loja-vinha':'Vinha'
   })[o]||(o||'(sem origem)');
 }
 function catValTxt(v){
@@ -4177,6 +4200,8 @@ async function guardarVinho(id,modo){
 
   const btn=document.getElementById('e-guardar');
   btn.disabled=true;btn.textContent='A guardar…';
+  // Nome e produtor são a chave dos preços das lojas (`recarregarPrecosLoja`).
+  const outraChave=!id||f.nome!==IDXV[id].nome||f.produtor!==(IDXV[id].produtor||'');
   try{
     let vinhoId=id;
     if(id){
@@ -4217,6 +4242,7 @@ async function guardarVinho(id,modo){
     }
     _iaExtraNovo=null;
     fecharModal('modal-edit');renderLista();refrescarVinhoAberto();
+    if(outraChave)recarregarPrecosLoja();
     if(tabAtiva==='locais')renderMapa();
     toast(conv?'Na garrafeira ✓':id?'Guardado ✓':paraDesejo?'Na wishlist ⭐':'Vinho adicionado ✓');
     // Quem comprou um vinho da wishlist e o pôs pelo "Novo vinho" (em vez
@@ -5079,6 +5105,15 @@ async function catalogoNovoProcurar(){
     if(outraColheita&&CAT_DA_COLHEITA.includes(k))return;
     res[k]=c.catalogo;
   });
+  // Os preços das LOJAS não são um campo do formulário: o vinho lê-os do
+  // catálogo sempre que a app carrega (`precos_lojas`) e uma cópia ficava
+  // velha. Mas diz-se aqui que existem e de que loja são — sem isto o preço
+  // de referência aparecia sozinho, sem se saber que era o da Garrafeira
+  // Nacional. Nem contam como campo preenchido: não preenchem nenhum.
+  const lojas=Object.entries(res.precos&&typeof res.precos==='object'?res.precos:{})
+    .filter(([,p])=>p&&typeof p==='object'&&!p.retirado&&Number(p.preco)>0)
+    .sort((a,b)=>lojaOrdem(a[0])-lojaOrdem(b[0]));
+  delete res.precos;
   if(r.produtor&&!res.produtor)res.produtor=r.produtor;
   // Um link fora do formato do Vivino (`/wines/<nº>`, `/Wines/<nome>`) não
   // se copia — abre uma colheita, ou nada. Diz-se, para não parecer esquecido.
@@ -5103,6 +5138,9 @@ async function catalogoNovoProcurar(){
     &&(ano!==null||(c.k!=='beber_de'&&c.k!=='beber_ate'))).map(c=>c.rot);
   const colheita=r.ano?` (colheita ${esc(r.ano)}${outraColheita?' — outra colheita: sem nota, preço nem imagem':''})`:'';
   est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">📚 Preenchido com o que o catálogo já sabia: <b>${n}</b> ${n===1?'campo':'campos'}${colheita}. Confere antes de gravar.</div>`+
+    (lojas.length?`<div class="note" style="margin-top:6px">💶 Nas lojas: ${lojas.map(([k,p])=>
+      `<b>${esc(lojaInfo(k).nome)}</b> ${esc(eur(p.preco))}${p.colheita?' ('+esc(p.colheita)+')':''}`).join(' · ')}
+      — não se copiam: o vinho lê-os do catálogo, sempre atualizados.</div>`:'')+
     (vivinoMau?`<div class="note" style="margin-top:6px">O link do Vivino que o catálogo tem não está no formato do Vivino (<code>${esc(vivinoMau)}</code>) — não o copiei.</div>`:'')+
     (faltam.length?`<div class="note" style="margin-top:6px">Falta: ${esc(faltam.join(', '))}.</div>`+
       botaoIA('✨ Completar o que falta com a IA'):'');
@@ -7972,7 +8010,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='106';
+const APP_BUILD='107';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
