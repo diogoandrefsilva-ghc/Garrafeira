@@ -2141,14 +2141,18 @@ function vinhoCardHTML(v,termos,loteSel){
   const on=loteSel&&loteSelTem(v.id);
   const cheio=loteSel&&!on&&loteSelCheio();
   const clique=loteSel?`loteSelToggle(${v.id})`:`verVinho(${v.id})`;
+  // Na wishlist, sem ano quer dizer "qualquer colheita" e não uma falta: o
+  // "s/a" lia-se como um dado em branco. Cala-se, e a nota do Vivino sobe
+  // para o lugar dele. Um desejo COM ano (uma colheita em concreto) mostra-o.
+  const semAno=!v.ano&&desejado(v);
   return `<article class="vcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}" onclick="${clique}">
     <div class="vc-top">
       ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
       <div class="vc-main">
-        <div class="vc-anofloat">
-          <div class="vc-ano">${v.ano||'s/a'}</div>
+        ${semAno&&!v.vivino_nota?'':`<div class="vc-anofloat">
+          ${semAno?'':`<div class="vc-ano">${v.ano||'s/a'}</div>`}
           ${v.vivino_nota?`<span class="bdg viv">★ ${Number(v.vivino_nota).toFixed(1)}</span>`:''}
-        </div>
+        </div>`}
         <div class="vc-nome">${esc(v.nome)}</div>
         <div class="vc-sub">${esc([v.produtor,[v.tipo,v.estilo].filter(Boolean).join(' '),v.regiao].filter(Boolean).join(' · '))}</div>
         <div class="vc-badges">
@@ -7968,7 +7972,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='104';
+const APP_BUILD='105';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
