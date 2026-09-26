@@ -68,8 +68,8 @@ vinhos, monocasta, regiões, castas, os dois **dourados** de preferência
 (região e casta preferida — ver abaixo), **valor estimado** e **a completar**.
 
 O **valor** é uma estimativa e diz-se isso no subtítulo: vale o que se pagou
-(`preco_compra`) quando se sabe, e o `preco_medio` do vinho quando não se
-sabe; garrafas sem nenhum dos dois não entram na conta (inventar um preço
+(`preco_compra`) quando se sabe, e o **preço que conta** do vinho
+(`precoPrincipal`, ver "O preço de um vinho") quando não se sabe; garrafas sem nenhum dos dois não entram na conta (inventar um preço
 era pôr no cartão um número que ninguém podia conferir). Abre por
 **intervalo de preço** (`FAIXAS_PRECO`/`faixaIndice`: até 15€, 15€–30€,
 30€–50€, acima de 50€) — é a pergunta que se faz a seguir a "quanto vale
@@ -1257,6 +1257,33 @@ lado para o outro, e duas cópias divergem no dia em que se edita uma.
   `vinhos_sem_colheita`). A `vinho-info` e a `importar-vinhos` fazem o
   mesmo do lado delas; o catálogo tem a mesma regra
   (`winecatalog.da_colheita`, no `CLAUDE.md` da WineCatalog).
+
+## O preço de um vinho: as lojas primeiro, a colheita antes da loja
+Um vinho tem o `preco_medio` da ficha (a IA ou quem o escreveu) e, quando o
+catálogo partilhado os tem, os **preços das lojas** — Garrafeira Nacional,
+Granvine, Vinha, Vivino — com link, colheita e data da recolha. Estes
+**não se copiam para `vinhos`**: lê-os a `precos_lojas` (migração 17) ao
+carregar, para `PRECOS_LOJA`. Uma cópia ficava velha no dia a seguir, e o
+que uma loja pede hoje não é um dado da garrafeira.
+
+O preço que CONTA — no crachá do cartão, no valor da garrafeira, no filtro
+por preço, no "A completar" e nos dois PDFs — é **um só**, e sai sempre de
+`precoPrincipal(v)`/`precoVinho(v)`; nunca `v.preco_medio` à mão nesses
+sítios. A ordem, decidida pelo dono da app:
+1. uma loja **da minha colheita** (GN → Granvine → Vinha);
+2. o Vivino da minha colheita (só se souber qual — `?year=` no link);
+3. uma loja de **outra** colheita, pela mesma ordem;
+4. o Vivino sem colheita conhecida;
+5. o `preco_medio`.
+Uma loja vende a colheita que tem AGORA, raramente a minha — por isso a
+colheita pesa antes da loja. Num vinho sem ano qualquer colheita é a
+minha. O cartão diz sempre de onde veio o preço quando não é o médio
+("63 € · G. Nacional · 2016"), e a página do vinho lista **todas** as
+lojas (`precosLojaHTML`) com a que conta marcada.
+
+`ano`, `produtor` e `precos` também existem na ficha do catálogo e **não**
+entram na comparação do "≠ catálogo" (`catCampos` filtra por `CAT_NOMES`):
+os dois primeiros são a identidade do vinho, o terceiro vive aqui.
 
 ## Monocasta / várias castas é CALCULADO, não guardado
 `castaLabel(v)` conta as linhas de `vinho_castas`: 1 → "Monocasta", 2+ →
