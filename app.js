@@ -327,11 +327,11 @@ function escolherGarrafeira(acabadaDeNascer){
    garrafeira: a lista de garrafeiras, quem sou eu e as castas não mudaram. */
 async function carregarGarrafeira(){
   if(!GA_ID){
-    db.locais=[];db.vinhos=[];db.garrafas=[];
+    db.locais=[];db.vinhos=[];db.garrafas=[];PRECOS_LOJA={};
     IMG_ASSINADA={};reindexar();aplicarPermissoes();return;
   }
   const f=`garrafeira_id=eq.${GA_ID}`;
-  const [locais,vinhos,garrafas,vc,cn]=await Promise.all([
+  const [locais,vinhos,garrafas,vc,cn,pl]=await Promise.all([
     sbReq('GET',`locais?${f}&select=*&order=ordem.asc,nome.asc`),
     sbReq('GET',`vinhos?${f}&select=*&order=nome.asc`),
     sbReq('GET',`garrafas?${f}&select=*&order=id.asc`),
@@ -342,9 +342,14 @@ async function carregarGarrafeira(){
     sbReq('GET','vinho_castas?select=*'),
     // `consumo_notas` não tem `garrafeira_id` pela mesma razão — a dela é
     // a da garrafa — e junta-se aqui como as castas: em `porGarrafa`.
-    sbReq('GET','consumo_notas?select=*&order=criado_em.asc')
+    sbReq('GET','consumo_notas?select=*&order=criado_em.asc'),
+    // Os preços das lojas vêm do CATÁLOGO, não da garrafeira (ver
+    // "O PREÇO QUE CONTA"). Uma poupança e não uma dependência: se falhar,
+    // cada vinho fica com o preço médio de sempre.
+    sbRpc('precos_lojas',{p_garrafeira_id:GA_ID}).catch(()=>null)
   ]);
   db.locais=locais||[];db.vinhos=vinhos||[];db.garrafas=garrafas||[];
+  PRECOS_LOJA=(pl&&typeof pl==='object')?pl:{};
 
   const porGarrafa={};(cn||[]).forEach(n=>{
     (porGarrafa[n.garrafa_id]=porGarrafa[n.garrafa_id]||[]).push(n);
@@ -1235,14 +1240,114 @@ function resumoPainel(id,titulo,rows,filtroFn,listaBase,notaTop){
       :'<div class="note" style="padding:8px 0">Sem dados ainda.</div>'}</div>
   </div>`;
 }
+/* ── O PREÇO QUE CONTA ─────────────────────────────────────────────
+   Um vinho tem até dois tipos de preço: o que as LOJAS pedem hoje (lido do
+   catálogo partilhado, `precos_lojas` — nunca copiado para cá, que ficava
+   velho no dia a seguir) e o PREÇO MÉDIO da ficha (a IA ou quem o
+   escreveu). O que conta — no cartão, no valor da garrafeira, no filtro
+   por preço, nos PDFs — é UM só, `precoPrincipal`, e diz sempre de onde
+   veio.
+
+   A ordem é das lojas que vendem a garrafa a sério para o agregador:
+   Garrafeira Nacional → Granvine → Vinha → Vivino. Mas uma loja vende a
+   colheita que tem AGORA, e raramente é a minha — por isso a colheita
+   pesa antes da loja:
+     1. uma loja, da MINHA colheita;
+     2. o Vivino, da minha colheita;
+     3. uma loja, de OUTRA colheita (marcado como tal);
+     4. o Vivino sem colheita conhecida (o Vivino quase nunca a diz);
+     5. o preço médio da ficha.
+   Num vinho SEM ano (o normal na wishlist) qualquer colheita é a minha.
+   Uma loja que não diga a colheita não conta como a minha — conta como
+   outra: um preço que ninguém consegue datar não passa à frente de um
+   que se sabe de que ano é. Lojas que não estejam em `LOJAS` aparecem no
+   detalhe mas nunca contam. */
+let PRECOS_LOJA={};   // vinho_id -> [{loja,preco,url,nome,colheita,em}]
+const LOJAS=[
+  {k:'garrafeira_nacional',nome:'Garrafeira Nacional',curto:'G. Nacional'},
+  {k:'granvine',nome:'Granvine',curto:'Granvine'},
+  {k:'vinha',nome:'Vinha',curto:'Vinha'},
+  {k:'vivino',nome:'Vivino',curto:'Vivino'}
+];
+function lojaInfo(k){return LOJAS.find(l=>l.k===k)||{k,nome:k,curto:k};}
+function lojaOrdem(k){const i=LOJAS.findIndex(l=>l.k===k);return i<0?99:i;}
+// A colheita do preço: a que a loja diz, ou o `?year=` de um link do Vivino.
+function colheitaPreco(p){
+  if(p.colheita)return Number(p.colheita);
+  const m=/[?&]year=(\d{4})\b/.exec(p.url||'');
+  return m?Number(m[1]):null;
+}
+function precosLojaDe(v){
+  const ps=(v&&PRECOS_LOJA[v.id])||[];
+  return ps.filter(p=>p&&Number(p.preco)>0)
+    .map(p=>({...p,preco:Number(p.preco),colheita:colheitaPreco(p)}))
+    .sort((a,b)=>lojaOrdem(a.loja)-lojaOrdem(b.loja)||(b.colheita||0)-(a.colheita||0));
+}
+function precoPrincipal(v){
+  if(!v)return null;
+  const ps=precosLojaDe(v).filter(p=>lojaOrdem(p.loja)<99);
+  const minha=p=>v.ano==null||(p.colheita!=null&&p.colheita===Number(v.ano));
+  const loja=p=>p.loja!=='vivino', viv=p=>p.loja==='vivino';
+  const p=ps.find(p=>loja(p)&&minha(p))||ps.find(p=>viv(p)&&minha(p))
+        ||ps.find(loja)||ps.find(viv);
+  if(p)return {preco:p.preco,loja:p.loja,colheita:p.colheita,outra:!minha(p),url:p.url,em:p.em};
+  return v.preco_medio!=null?{preco:Number(v.preco_medio),loja:null}:null;
+}
+function precoVinho(v){const p=precoPrincipal(v);return p?p.preco:null;}
+// De onde veio, em poucas palavras: "Granvine", "Granvine · 2019" (outra
+// colheita), "Vivino · colheita ?" (não se sabe de qual), "preço médio".
+function precoFonteTxt(p,curto){
+  if(!p)return '';
+  if(!p.loja)return 'preço médio';
+  const l=lojaInfo(p.loja);
+  return (curto?l.curto:l.nome)+(p.outra?(p.colheita?' · '+p.colheita:' · colheita ?'):'');
+}
+
+// O crachá do cartão: o preço e, em pequeno, de onde veio — só quando não
+// é o preço médio, que é o que o cartão sempre mostrou.
+function precoBadge(v){
+  const p=precoPrincipal(v);
+  if(!p)return '';
+  const f=p.loja?precoFonteTxt(p,true):'';
+  return `<span class="bdg preco"${p.loja?` title="${esc(precoFonteTxt(p))}"`:''}>${esc(eur0(p.preco))}${f?`<small>· ${esc(f)}</small>`:''}</span>`;
+}
+function precoPDF(v){
+  const p=precoPrincipal(v);
+  if(!p)return '';
+  return esc(eur(p.preco))+(p.loja?`<span class="pfonte">${esc(precoFonteTxt(p,true))}</span>`:'');
+}
+/* A lista das lojas na página do vinho: TODAS, com o link, a colheita e a
+   data da recolha — as de outra colheita também, que é informação, só não
+   é o preço deste vinho. A que conta leva a marca. */
+function precosLojaHTML(v){
+  const ps=precosLojaDe(v);
+  if(!ps.length)return '';
+  const pp=precoPrincipal(v);
+  return `<div class="msec">Preços nas lojas</div>
+    <div class="mprecos">${ps.map(p=>{
+      const conta=pp&&pp.loja===p.loja&&pp.preco===p.preco&&pp.colheita===p.colheita&&pp.url===p.url;
+      const outra=v.ano!=null&&p.colheita!=null&&p.colheita!==Number(v.ano);
+      const meta=[p.colheita?(outra?'colheita '+p.colheita:'a tua colheita'):'colheita não indicada',
+                  p.em?'visto a '+dataPT(p.em):''].filter(Boolean).join(' · ');
+      const nome=esc(lojaInfo(p.loja).nome);
+      return `<div class="mpreco${conta?' conta':''}${outra?' outra':''}">
+        <div class="mp-l">${p.url?`<a href="${esc(p.url)}" target="_blank" rel="noopener">${nome}</a>`:nome}
+          <i>${esc(meta)}</i></div>
+        <div class="mp-v">${esc(eur(p.preco))}${conta?'<span>conta</span>':''}</div>
+      </div>`;}).join('')}
+    </div>
+    <div class="note mp-nota">Conta a primeira loja da tua colheita (Garrafeira Nacional, Granvine, Vinha, Vivino);
+      sem nenhuma, a de outra colheita${v.preco_medio!=null?'; sem loja nenhuma, o preço médio':''}.</div>`;
+}
+
 /* O VALOR da garrafeira é uma ESTIMATIVA e diz-se isso: vale o que se
-   pagou (`preco_compra`) quando se sabe, e o preço médio do vinho quando
-   não se sabe. Garrafas sem nenhum dos dois não contam — inventar um preço
-   para elas era pôr no cartão um número que ninguém podia conferir. */
+   pagou (`preco_compra`) quando se sabe, e o preço que conta do vinho
+   (`precoPrincipal`) quando não se sabe. Garrafas sem nenhum dos dois não
+   contam — inventar um preço para elas era pôr no cartão um número que
+   ninguém podia conferir. */
 function valorGarrafa(g){
   if(g.preco_compra!=null)return Number(g.preco_compra);
-  const v=IDXV[g.vinho_id];
-  return v&&v.preco_medio!=null?Number(v.preco_medio):null;
+  return precoVinho(IDXV[g.vinho_id]);
 }
 function valorVinho(v){
   return garrafasDe(v.id,true).reduce((s,g)=>{const x=valorGarrafa(g);return x==null?s:s+x;},0);
@@ -1268,7 +1373,7 @@ function faixaIndice(valor){
 const FALTAS=[
   {k:'Sem imagem do rótulo',tem:imagemFuncional},
   {k:'Sem castas',          tem:v=>(v.castas||[]).length>0},
-  {k:'Sem preço médio',     tem:v=>v.preco_medio!=null},
+  {k:'Sem preço',           tem:v=>precoVinho(v)!=null},
   {k:'Sem classificação',   tem:v=>!!v.classificacao},
   {k:'Sem nota Vivino',     tem:v=>v.vivino_nota!=null},
   {k:'Sem informação de harmonização',       tem:v=>!!v.harmonizacao},
@@ -1496,7 +1601,7 @@ function valorDe(v,k){
     case 'mencao':  return v.mencao?[v.mencao]:[];
     case 'ano':     return v.ano?[String(v.ano)]:[];
     case 'local':   return [...new Set(garrafasDe(v.id,true).map(g=>String(g.local_id)))];
-    case 'preco':   return v.preco_medio==null?[]:[String(faixaIndice(v.preco_medio))];
+    case 'preco':   {const x=precoVinho(v);return x==null?[]:[String(faixaIndice(x))];}
     case 'teor':    return v.teor==null?[]:[String(faixaTeorIndice(v.teor))];
     case 'vivino':  return v.vivino_nota==null?[]:[String(faixaVivinoIndice(v.vivino_nota))];
     /* A maturação não filtra por "No ponto" — filtra pelo TERÇO da janela.
@@ -2029,7 +2134,7 @@ function vinhoCardHTML(v,termos,loteSel){
           ${castasTxt?`<span class="bdg cas">🍇 ${esc(castasTxt)}</span>`:''}
           ${cl?`<span class="bdg mono">${esc(cl)}</span>`:''}
           ${v.mencao?`<span class="bdg men">${esc(v.mencao)}</span>`:''}
-          ${v.preco_medio!=null?`<span class="bdg">${esc(eur0(v.preco_medio))}</span>`:''}
+          ${precoBadge(v)}
         </div>
         <div class="vc-foot">
           ${sitios.map(x=>`<span class="vc-l"><span class="vc-pip" style="background:${esc(x.cor)}"></span><b>${esc(x.txt)}</b></span>`).join('')}
@@ -3353,12 +3458,16 @@ function vinhoDetalheHTML(v){
       ${linha('Castas',(v.castas||[]).length?esc(v.castas.join(', ')):'',v.id,'castas')}
       ${linha('Estágio',esc(estagio),v.id,['estagio_meses','estagio_texto'])}
       ${linha('Álcool',v.teor?esc(v.teor)+'%':'',v.id,'teor')}
+      ${(()=>{const p=precoPrincipal(v);return p&&p.loja
+        ?linha('Preço',esc(eur(p.preco))+` <span class="mp-de">· ${esc(precoFonteTxt(p))}</span>`):'';})()}
       ${linha('Preço médio',v.preco_medio!=null?eur(v.preco_medio):'',v.id,'preco_medio')}
       ${linha('Beber entre',idadeInfo,v.id,['beber_de','beber_ate'])}
       ${linha('Notas de prova',esc(v.notas_prova),v.id,'notas_prova')}
       ${linha('Harmoniza com',esc(v.harmonizacao),v.id,'harmonizacao')}
       ${linha('As minhas notas',esc(v.notas))}
     </div>
+
+    ${precosLojaHTML(v)}
 
     ${v.ai_resumo?`<div class="msec">O que se sabe</div>
       <div class="note" style="margin-top:8px;font-size:12.5px">${esc(v.ai_resumo)}</div>`:''}
@@ -3666,7 +3775,7 @@ async function oferecerRetirarDesejos(novos){
 function exportarWishlistPDF(){
   const ds=desejos();
   if(!ds.length){toast('A wishlist está vazia',1);return;}
-  const cols=['Vinho','Ano','Produtor','Tipo','Região','Castas','Menção','Preço méd.','Vivino'];
+  const cols=['Vinho','Ano','Produtor','Tipo','Região','Castas','Menção','Preço','Vivino'];
   const linhas=ds.map(v=>`<tr>
       <td class="pnome">${esc(v.nome)}</td>
       <td class="pc">${v.ano||''}</td>
@@ -3675,7 +3784,7 @@ function exportarWishlistPDF(){
       <td>${esc([v.regiao,v.sub_regiao].filter(Boolean).join(' · '))}</td>
       <td>${esc((v.castas||[]).join(', '))}</td>
       <td>${esc([v.mencao,v.classificacao].filter(Boolean).join(' · '))}</td>
-      <td class="pc">${v.preco_medio!=null?eur(v.preco_medio):''}</td>
+      <td class="pc">${precoPDF(v)}</td>
       <td class="pc">${v.vivino_nota?'★ '+Number(v.vivino_nota).toFixed(1):''}${v.vivino_url
         ?`${v.vivino_nota?' · ':''}<a href="${esc(v.vivino_url)}">ver</a>`:''}</td>
     </tr>`).join('');
@@ -7292,7 +7401,7 @@ function exportarPDF(){
   };
 
   const cols=['Vinho','Ano','Produtor','Tipo','Região','Castas','Menção / Class.',
-              '% Álc.','Preço méd.','Beber','Onde está','Gar.'];
+              '% Álc.','Preço','Beber','Onde está','Gar.'];
   const linhas=grupos.map(g=>`
     <tr class="pgrupo"><td colspan="${cols.length}">${esc(g.titulo)} — ${g.vinhos.length} vinho${g.vinhos.length===1?'':'s'}</td></tr>
     ${g.vinhos.map(v=>`<tr>
@@ -7304,7 +7413,7 @@ function exportarPDF(){
       <td>${esc((v.castas||[]).join(', '))}</td>
       <td>${esc([v.mencao,v.classificacao].filter(Boolean).join(' · '))}</td>
       <td class="pc">${v.teor!=null&&v.teor!==''?esc(v.teor):''}</td>
-      <td class="pc">${v.preco_medio!=null?eur(v.preco_medio):''}</td>
+      <td class="pc">${precoPDF(v)}</td>
       <td class="pc">${janela(v)}</td>
       <td>${esc(onde(v))}</td>
       <td class="pc">${stockDe(v.id)}</td>
@@ -7400,6 +7509,7 @@ const PDF_CSS=`
   td{padding:4px 5px;border-bottom:1px solid #ccc;vertical-align:top}
   .pnome{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:600;font-size:12px}
   .pc{text-align:center;white-space:nowrap}
+  .pfonte{display:block;font-size:8px;color:#8a7d78}
   .pgrupo td{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:600;font-size:12.5px;
     color:#7b1f3d;background:#f6f1ea;padding-top:8px;border-bottom:1px solid #7b1f3d}
   /* No iOS a "Orientação" do ecrã de impressão é do próprio sistema e o
@@ -7837,7 +7947,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='101';
+const APP_BUILD='102';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

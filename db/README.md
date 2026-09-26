@@ -322,6 +322,18 @@ schema não estiver exposto na API, a app dá 404 em tudo.
 qualquer. É a mesma regra do catálogo (`winecatalog.da_colheita`).
 **Aplicada em 2026-09-25**; não havia nenhum vinho sem ano com janela.
 
+### Migração 17 — os preços das lojas (já aplicada)
+
+`db/migracao-precos-lojas.sql`. Só uma função, `garrafeira.precos_lojas(garrafeira_id)`:
+devolve, por vinho, os preços loja a loja que o catálogo partilhado tem em
+`ficha -> 'precos'` (Garrafeira Nacional, Granvine, Vinha, Vivino — com
+link, colheita e data). Nada é copiado para `vinhos`: a app lê-os ao
+carregar e escolhe o preço que conta (`precoPrincipal` no app.js). Sem
+catálogo devolve `{}` e a app fica com o preço médio. Nenhuma tabela nova,
+nenhuma policy nova — o guarda é `pode_ver`.
+
+**Aplicada em 2026-09-26** como `garrafeira_17_precos_lojas`.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
