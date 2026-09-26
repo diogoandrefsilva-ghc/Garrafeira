@@ -3869,11 +3869,11 @@ function abrirEditarVinho(id,modo){
     </div>
     <div class="note">Aplica-se a todas as garrafas deste vinho ainda na garrafeira.</div>`:''}
 
-    ${id?'':podeUsarIA()?`<div class="aviso">Escreve o nome (e o ano, se souberes) e escolhe a cor, e carrega em <b>Procurar informação</b>: a pesquisa preenche o resto — produtor, castas, região, nota do Vivino, preço médio e quando beber. Confirmas antes de gravar.</div>
-      ${iaContextoHTML('e-ia')}
-      <button class="btn prim full" id="e-btn-ia" onclick="iaProcurarNovo()">🔎 Procurar informação</button>
-      ${isAdmin()?`<button class="btn ghost full" style="margin-top:8px" onclick="iaManualNovoAbrir()">✍️ Pesquisa manual</button>`:''}
-      <div id="e-ia-estado"></div>`:'<div class="note">A pesquisa por IA não está incluída no teu acesso. Pede ao admin para te atribuir um modo com IA.</div>'}
+    ${id?'':`<div class="aviso">Escreve o nome (e o ano, só se o souberes) e escolhe a cor, e carrega em <b>Procurar informação</b>: primeiro vê-se o que o catálogo partilhado já sabe deste vinho, sem custo${podeUsarIA()?', e depois podes completar o resto com a IA, se quiseres':''}. Confirmas antes de gravar.</div>
+      ${podeUsarIA()?iaContextoHTML('e-ia'):''}
+      <button class="btn prim full" id="e-btn-cat" onclick="catalogoNovoProcurar()">🔎 Procurar informação</button>
+      ${podeUsarIA()&&isAdmin()?`<button class="btn ghost full" style="margin-top:8px" onclick="iaManualNovoAbrir()">✍️ Pesquisa manual</button>`:''}
+      <div id="e-ia-estado"></div>`}
 
     <div class="mrow">
       <div>${id
@@ -4876,6 +4876,86 @@ async function iaSegundaOpiniao(){
   }
   iaMostrarResultado(IA_RES,IA_VINHO);
 }
+/* ── VINHO NOVO: PRIMEIRO O CATÁLOGO, A IA SÓ SE SE PEDIR ──
+   "Procurar informação" no formulário de vinho novo (e da wishlist) já não
+   vai direto à IA: pergunta primeiro ao catálogo partilhado
+   (`winecatalog.comparar`, aberta a quem tem sessão, grátis), preenche os
+   campos vazios com o que lá está e só DEPOIS oferece completar o resto com
+   a IA — um botão, nunca automático. Antes, a `vinho-info` juntava as duas
+   coisas numa chamada só: o catálogo respondia ao que sabia, a IA era paga
+   pelo resto, e quem procurava via só "preenchido pela IA" (26/09/2026, o
+   Sidónio de Sousa na wishlist do Barrona).
+
+   O ANO É DE QUEM ESCREVE. Vai ao catálogo só se estiver no formulário, e
+   nunca volta de lá: sem ano, a `comparar` (a `achar` sem exigir colheita)
+   dá a linha do vinho com MAIS informação e, em empate, a mais recente.
+   Com ano e o catálogo a responder com outra colheita, só servem os factos
+   estáveis — a nota, o preço, a imagem e a janela são DAQUELA colheita
+   (`winecatalog.da_colheita`, que aqui se repete à mão por ser uma lista
+   de seis nomes; se ela mudar, muda esta). */
+const CAT_DA_COLHEITA=['vivino_nota','vivino_avaliacoes','vivino_url','preco_medio','imagem_url','precos','beber_de','beber_ate'];
+async function catalogoNovoProcurar(){
+  const nome=document.getElementById('e-nome').value.trim();
+  if(!nome){toast('Escreve primeiro o nome do vinho',1);document.getElementById('e-nome').focus();return;}
+  // A cor antes de procurar (ver `iaCorGuard`): o catálogo ainda não a tem
+  // na chave, e é ela que separa o tinto do branco do mesmo nome.
+  const elTipo=document.getElementById('e-tipo');
+  if(elTipo&&!elTipo.value){toast('Escolhe primeiro a cor do vinho',1);elTipo.focus();return;}
+  const ano=inteiro(document.getElementById('e-ano').value);
+  const produtor=document.getElementById('e-produtor').value.trim();
+  const btn=document.getElementById('e-btn-cat');
+  const est=document.getElementById('e-ia-estado');
+  const botaoIA=(txt)=>podeUsarIA()
+    ?`<button class="btn full" id="e-btn-ia" style="margin-top:8px" onclick="iaProcurarNovo()">${txt}</button>`:'';
+  if(btn){btn.disabled=true;btn.textContent='🔎 A ver o catálogo…';}
+  est.innerHTML='';
+  let r=null;
+  try{
+    r=await sbReq('POST','rpc/comparar',{p_nome:nome,p_produtor:produtor,p_ano:ano,p_ficha:{}},
+      {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
+  }catch(e){
+    // O catálogo é uma poupança, nunca uma dependência: se falhar, fica a IA.
+    est.innerHTML=`<div class="note" style="margin-top:8px">Não consegui perguntar ao catálogo (${esc(e.message)}).</div>`+
+      botaoIA('✨ Procurar com a IA');
+    if(btn){btn.disabled=false;btn.textContent='🔎 Procurar informação';}
+    return;
+  }
+  if(btn){btn.disabled=false;btn.textContent='🔎 Procurar informação';}
+  if(!r||!r.encontrado){
+    est.innerHTML=`<div class="note" style="margin-top:8px">O catálogo ainda não conhece este vinho.</div>`+
+      botaoIA('✨ Procurar com a IA');
+    return;
+  }
+  const outraColheita=ano!==null&&r.mesmaColheita===false;
+  const res={};
+  (r.campos||[]).forEach(c=>{
+    if(!c||!c.soCatalogo)return;              // com p_ficha vazio, é tudo "só do catálogo"
+    const k=c.campo;
+    if(k==='ano')return;                      // o ano nunca vem do catálogo
+    if(outraColheita&&CAT_DA_COLHEITA.includes(k))return;
+    res[k]=c.catalogo;
+  });
+  if(r.produtor&&!res.produtor)res.produtor=r.produtor;
+  if(res.vivino_url)res.vivino_url=vivinoLink(res.vivino_url);
+  // Outra cor = outro vinho (o "Papa Figos" tinto não é o branco): não se
+  // copia nada, e diz-se porquê — o mesmo que as Prendas de Anos fazem.
+  if(elTipo&&res.tipo&&res.tipo!==elTipo.value){
+    est.innerHTML=`<div class="note" style="margin-top:8px">O catálogo tem um <b>${esc(r.nome)}</b> mas ${esc(String(res.tipo).toLowerCase())}, não ${esc(elTipo.value.toLowerCase())} — não copiei nada.</div>`+
+      botaoIA('✨ Procurar com a IA');
+    return;
+  }
+  delete res.tipo;
+  _iaAuto=[];
+  iaPreencherForm({...res,modelo:'catálogo partilhado'},false);
+  const n=Object.keys(res).length;
+  const faltam=IA_CAMPOS.filter(c=>c.k!=='ano'&&c.k!=='tipo'&&!(c.k in res)
+    &&(ano!==null||(c.k!=='beber_de'&&c.k!=='beber_ate'))).map(c=>c.rot);
+  const colheita=r.ano?` (colheita ${esc(r.ano)}${outraColheita?' — outra colheita: sem nota, preço nem imagem':''})`:'';
+  est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">📚 Preenchido com o que o catálogo já sabia: <b>${n}</b> ${n===1?'campo':'campos'}${colheita}. Confere antes de gravar.</div>`+
+    (faltam.length?`<div class="note" style="margin-top:6px">Falta: ${esc(faltam.join(', '))}.</div>`+
+      botaoIA('✨ Completar o que falta com a IA'):'');
+}
+
 // Do formulário de "novo vinho": preenche os campos em vez de gravar.
 async function iaProcurarNovo(motor,profunda){
   if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
@@ -4896,7 +4976,7 @@ async function iaProcurarNovo(motor,profunda){
   const m=profunda?'premium':motor&&temPremium()?motor:motorDoPlano();
   const outro=motorOposto(m);
   if(!motor)_iaAuto=[];
-  btn.disabled=true;btn.textContent='🔎 A procurar…';
+  if(btn){btn.disabled=true;btn.textContent='🔎 A procurar…';}
   est.innerHTML=`<div class="note" style="margin-top:8px">A ${esc(rotuloMotor(m))} está a procurar na net. Pode levar até dois minutos — podes ir fazendo o resto.</div>`;
   const botaoOutro=!motor&&temPremium()
     ? `<button class="mini${outro==='premium'?' o':''}" style="margin-top:8px" onclick="iaProcurarNovo('${outro}')">✨ Tentar com a ${esc(rotuloMotor(outro))}</button>`:'';
@@ -4908,14 +4988,19 @@ async function iaProcurarNovo(motor,profunda){
   try{
     const res=await iaPedir(pedido,null,m);
     iaPreencherForm(res,!!motor||!!profunda);
-    est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">✓ Preenchido pela ${esc(rotuloMotor(m))}${res.fontes&&res.fontes.length?' ('+res.fontes.length+' fontes)':''}. Confere antes de gravar.</div>`+
+    // Quanto veio do catálogo e quanto da IA: sem isto, "preenchido pela IA"
+    // escondia que parte da ficha já se sabia e não custou nada.
+    const nCat=res.origem==='catalogo'?-1:Array.isArray(res.catalogoCampos)?res.catalogoCampos.length:0;
+    const deOnde=nCat<0?'pelo catálogo partilhado (a IA não foi precisa)'
+      :`pela ${esc(rotuloMotor(m))}${nCat?` (${nCat} ${nCat===1?'campo já vinha':'campos já vinham'} do catálogo)`:''}`;
+    est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">✓ Preenchido ${deOnde}${res.fontes&&res.fontes.length?' · '+res.fontes.length+' fontes':''}. Confere antes de gravar.</div>`+
       iaMemoriaHTML(res,"iaProcurarNovo('premium',true)")+(profunda?'':botaoOutro);
   }catch(e){
     // Mesma ideia do `iaMostrarErro`: o motor do plano falhou, mas quem é
     // premium tem o outro para onde ir.
     est.innerHTML=`<div class="erro">${esc(e.message)}</div>`+botaoOutro;
   }
-  btn.disabled=false;btn.textContent='🔎 Procurar informação';
+  if(btn){btn.disabled=false;btn.textContent='🔎 Procurar informação';}
 }
 
 /* ── PESQUISA MANUAL NO VINHO NOVO (só admin) ──
@@ -5322,7 +5407,9 @@ function iaPreencherForm(res,substituir){
     e.value=txt;
     if(!_iaAuto.includes(id))_iaAuto.push(id);
   };
-  por('e-produtor',res.produtor);por('e-ano',res.ano);
+  // O ANO NÃO: é de quem escreve. Uma procura sem ano que devolvesse um
+  // (o do catálogo, ou o que a IA achou) era inventar a colheita da garrafa.
+  por('e-produtor',res.produtor);
   por('e-tipo',res.tipo);por('e-estilo',res.estilo);
   por('e-regiao',res.regiao);por('e-subregiao',res.sub_regiao);
   por('e-mencao',res.mencao);por('e-classificacao',res.classificacao);
@@ -5335,11 +5422,14 @@ function iaPreencherForm(res,substituir){
   por('e-imagem',res.imagem_url);por('e-harmonizacao',res.harmonizacao);
   // O resumo e as notas de prova só entram quando o vinho for gravado (o
   // formulário não tem campos para eles) — ficam aqui à espera disso.
+  // Por cima do que já lá estava (o catálogo antes da IA): uma volta que
+  // não traga as notas de prova não apaga as que a anterior trouxe.
+  const ant=_iaExtraNovo||{};
   _iaExtraNovo={
-    notas_prova:res.notas_prova||'',
-    ai_resumo:res.ai_resumo||'',vivino_url:res.vivino_url||'',
-    vivino_avaliacoes:res.vivino_avaliacoes||null,
-    ai_fontes:res.fontes||null,ai_modelo:res.modelo||'',
+    notas_prova:res.notas_prova||ant.notas_prova||'',
+    ai_resumo:res.ai_resumo||ant.ai_resumo||'',vivino_url:res.vivino_url||ant.vivino_url||'',
+    vivino_avaliacoes:res.vivino_avaliacoes||ant.vivino_avaliacoes||null,
+    ai_fontes:res.fontes||ant.ai_fontes||null,ai_modelo:res.modelo||ant.ai_modelo||'',
     ai_atualizado_em:new Date().toISOString()
   };
 }
@@ -7725,7 +7815,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='98';
+const APP_BUILD='99';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

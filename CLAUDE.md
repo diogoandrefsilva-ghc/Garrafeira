@@ -1465,6 +1465,20 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   vinhos no primeiro dia, e um aviso que aparece sempre não se lê. Se a consulta falhar, não se avisa e procura-se na mesma:
   um soluço de rede não pode impedir alguém de procurar. No formulário de
   **vinho novo** não há aviso nenhum — ainda não há vinho para ter história.
+- **No vinho novo (e na wishlist), primeiro o CATÁLOGO, a IA só se se
+  pedir** (26/09/2026, `catalogoNovoProcurar`). "Procurar informação"
+  pergunta à `winecatalog.comparar` (grátis, aberta a quem tem sessão),
+  preenche os campos vazios com o que lá está e diz quantos vieram e o que
+  falta; completar com a IA é um botão à parte, nunca automático. Antes ia
+  direto à `vinho-info`, que já usava o catálogo mas escondia-o atrás de
+  "preenchido pela IA" — e pagava a IA pelo resto sem ninguém ter pedido.
+  **O ano é de quem escreve**: só vai ao catálogo se estiver no formulário,
+  e nunca volta de lá nem da IA (`iaPreencherForm` já não toca no
+  `e-ano`; a `vinho-info` não devolve ano sem ano no pedido). Sem ano, o
+  catálogo responde com a colheita mais completa e, em empate, a mais
+  recente; com ano e outra colheita, só os factos estáveis
+  (`CAT_DA_COLHEITA`). Cor diferente da escolhida = outro vinho, não se
+  copia nada.
 - **A COR diz-se ANTES de se procurar** (`iaCorGuard`). O `tipo` nasce
   'Tinto' por omissão e a cor faz parte da identidade do vinho no catálogo
   partilhado — um branco que ninguém corrigiu ia procurar (e gravar) com a

@@ -700,7 +700,10 @@ function normalizar(raw: any, anoPedido: number | null, campos: string[] | null 
 
   const out: Record<string, unknown> = {
     produtor: texto(raw.produtor, 90),
-    ano: anoValido(raw.ano) ?? anoPedido,
+    // Sem ano no pedido, não há ano na resposta: a colheita é de quem tem a
+    // garrafa (ou a quer), e um ano achado pela IA era inventar-lha — e ia
+    // parar ao catálogo pelo `juntar` (o Sidónio de Sousa, 25/09/2026).
+    ano: anoPedido === null ? null : (anoValido(raw.ano) ?? anoPedido),
     tipo: daLista(raw.tipo, TIPOS),
     estilo: daLista(raw.estilo, ESTILOS),
     regiao: texto(raw.regiao, 60),
@@ -1068,8 +1071,9 @@ async function produzirFicha(
      deixa escolher os campos, ver `iaEscolher`). */
   // Sem colheita, a janela de consumo nem se pede — nem ao catálogo (que
   // responderia com a de uma colheita qualquer) nem à IA.
+  // Nem o ano, que sem ano no pedido não se procura (ver `normalizar`).
   const pedidos = (campos && campos.length ? campos : Object.keys(CAMPOS))
-    .filter((k) => ano !== null || (k !== "beber_de" && k !== "beber_ate"));
+    .filter((k) => ano !== null || (k !== "beber_de" && k !== "beber_ate" && k !== "ano"));
   const conhecido = profunda ? null : await catalogoProcurar(nome, produtor, ano, signal);
   const doCatalogo = conhecido ? catalogoResponde(conhecido, pedidos) : {};
   const emFalta = pedidos.filter((k) => !(k in doCatalogo));
