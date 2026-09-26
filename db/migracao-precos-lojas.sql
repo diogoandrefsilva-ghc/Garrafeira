@@ -63,6 +63,9 @@ BEGIN
                 OR (cv.base_nome IS NOT NULL AND cv.base_nome IN (gv.b, gv.bn))
        CROSS JOIN LATERAL jsonb_each(cv.precos) e
        WHERE jsonb_typeof(e.value) = 'object'
+         -- Retirada à mão na WineCatalog (Editar › Fontes de preço): o preço
+         -- estava errado. Fica no catálogo marcada, mas não conta aqui.
+         AND NOT COALESCE((e.value ->> 'retirado')::boolean, false)
          AND (e.value ->> 'preco') ~ '^\d+(\.\d+)?$'
          AND (e.value ->> 'preco')::numeric > 0
     )

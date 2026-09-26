@@ -1289,6 +1289,10 @@ página, não na colheita — o Casa de Saima Garrafeira veio a 8,49 € do
 Vivino com as lojas a 63 € e 69 €. Aparece riscado no detalhe e nunca é o
 principal; sem outro preço com que comparar, conta.
 
+Um preço que o admin **retirou** na WineCatalog (Editar › Fontes de preço,
+`retirado:true` na entrada) não sai da `precos_lojas` — nem riscado: para
+esta app, essa loja não o tem.
+
 `ano`, `produtor` e `precos` também existem na ficha do catálogo e **não**
 entram na comparação do "≠ catálogo" (`catCampos` filtra por `CAT_NOMES`):
 os dois primeiros são a identidade do vinho, o terceiro vive aqui.
