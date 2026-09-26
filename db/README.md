@@ -341,7 +341,10 @@ que o painel do batch da WineCatalog (no PC do admin) chama para comparar o
 `vivino_url` de cada vinho das garrafeiras com o do catálogo e trocar os que
 estão errados — sem `/w/<nº>`, ou a abrir outro vinho — ou vazios pelo link
 do catálogo, quando esse está confirmado. Um link para uma colheita do mesmo
-vinho nunca se toca. As regras estão no cabeçalho do ficheiro.
+vinho nunca se toca. As regras estão no cabeçalho do ficheiro. Os "Por
+confirmar" (link do catálogo ainda não confirmado) só se trocam se o admin
+os marcar no painel (`p_forcar`, a 3.ª assinatura — a de dois argumentos
+saiu com um `DROP`).
 
 Só a `service_role` a executa (o `REVOKE`/`GRANT` estão no fim, com a
 consulta de confirmação). Precisa do `winecatalog` já montado (usa a

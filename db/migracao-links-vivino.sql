@@ -38,10 +38,20 @@
 --
 -- `p_aplicar` só com `p_ids` (os escolhidos no painel), e as regras voltam a
 -- correr no momento: o que mudou entretanto não se aplica.
+--
+-- `p_forcar` (26/09/2026, pedido do dono): os "Por confirmar" que o admin
+-- ABRIU e aceitou no painel ("usar o do catálogo"). Quem confirma é ele — o
+-- visto é a confirmação que faltava. Só vale a aplicar, só para ids que
+-- também vão em `p_ids`, e só com o link do catálogo num formato de vinho.
+-- O registo diz `confirmado_por: admin`.
 -- ════════════════════════════════════════════════════════════════════
 
+-- A assinatura ganhou o `p_forcar`: a antiga sai, senão ficavam as duas.
+DROP FUNCTION IF EXISTS garrafeira.links_vivino_rever(bigint[], boolean);
+
 CREATE OR REPLACE FUNCTION garrafeira.links_vivino_rever(
-  p_ids bigint[] DEFAULT NULL, p_aplicar boolean DEFAULT false
+  p_ids bigint[] DEFAULT NULL, p_aplicar boolean DEFAULT false,
+  p_forcar bigint[] DEFAULT NULL
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
   SET search_path TO 'garrafeira', 'public'
 AS $$
@@ -51,6 +61,7 @@ DECLARE
   v_porc   jsonb := '[]';
   v_n      jsonb := '{}';
   v_feitos int := 0;
+  v_forcado boolean;
 BEGIN
   IF COALESCE(auth.role(), '') <> 'service_role' THEN
     RAISE EXCEPTION 'Só o batch (service_role) chama isto.';
@@ -111,7 +122,10 @@ BEGIN
     v_n := jsonb_set(v_n, ARRAY[r.caso], to_jsonb(COALESCE((v_n ->> r.caso)::int, 0) + 1));
     CONTINUE WHEN r.caso NOT IN ('vazio', 'formato_invalido', 'outro_vinho');
 
-    IF NOT r.confirmado THEN
+    v_forcado := NOT r.confirmado AND p_aplicar AND r.caso <> 'vazio'
+                 AND r.id = ANY (COALESCE(p_forcar, ARRAY[]::bigint[]))
+                 AND COALESCE(r.cat_url ~ '^https://www\.vivino\.com/[a-z0-9-]+/w/[0-9]+$', false);
+    IF NOT r.confirmado AND NOT v_forcado THEN
       -- o `vazio` não é um erro na garrafeira: sem link confirmado, cala-se.
       IF r.caso <> 'vazio' THEN
         v_porc := v_porc || jsonb_build_object(
@@ -138,7 +152,8 @@ BEGIN
         VALUES ('winecatalog-batch', 'link_vivino_corrigido', 'ok', 'script no PC (admin)',
                 jsonb_build_object('vinho_id', r.id, 'garrafeira_id', r.garrafeira_id,
                                    'antes', r.url, 'depois', r.cat_url, 'caso', r.caso,
-                                   'catalogo_id', r.cid));
+                                   'catalogo_id', r.cid,
+                                   'confirmado_por', CASE WHEN v_forcado THEN 'admin' ELSE 'catalogo' END));
       END IF;
     END IF;
   END LOOP;
@@ -148,8 +163,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION garrafeira.links_vivino_rever(bigint[], boolean) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION garrafeira.links_vivino_rever(bigint[], boolean) TO service_role;
+REVOKE ALL ON FUNCTION garrafeira.links_vivino_rever(bigint[], boolean, bigint[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION garrafeira.links_vivino_rever(bigint[], boolean, bigint[]) TO service_role;
 
 -- Confirmar (tem de dar só service_role e o dono):
 -- select grantee, privilege_type from information_schema.routine_privileges
