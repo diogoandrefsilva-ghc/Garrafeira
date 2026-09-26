@@ -1049,22 +1049,23 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
    nível e o lugar. Numa linha só, o nome do local partia-se a meio. */
 .mgar .g-onde .g-pos{display:block;font-size:12px;color:var(--tx);margin-top:1px}
 /* PREÇOS NAS LOJAS (página do vinho): uma linha por loja, o preço em serifa
-   à direita. A que CONTA leva a marca em bordô (é a app a dizer "é este que
-   uso"), não dourado — o dourado é a distinção do vinho. As de outra
-   colheita ficam mais apagadas: são informação, não o preço deste vinho. */
+   à direita. A que CONTA leva uma nota pequena à frente do nome, "(preço de
+   referência)", em bordô (é a app a dizer "é este que uso"), não dourado —
+   o dourado é a distinção do vinho. Foi uma pastilha "CONTA" ao lado do
+   preço, com um parágrafo por baixo a explicar a regra: demasiado para uma
+   coisa que se lê de relance. As de outra colheita ficam mais apagadas:
+   são informação, não o preço deste vinho. */
 .mprecos{margin-top:8px}
 .mpreco{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bo);font-size:13px}
 .mpreco:last-child{border-bottom:none}
 .mpreco .mp-l{flex:1;min-width:0}
 .mpreco .mp-l a{color:var(--in);font-weight:600;text-decoration:none}
+.mpreco .mp-l .mp-ref{font-size:11px;font-weight:500;color:var(--vh)}
 .mpreco .mp-l i{display:block;font-style:normal;font-size:11px;color:var(--mu);margin-top:1px}
 .mpreco .mp-v{font-family:var(--fd);font-weight:600;font-size:15px;white-space:nowrap;display:flex;align-items:center;gap:6px}
-.mpreco .mp-v span{font-family:var(--ff);font-size:9px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;
-  color:var(--vh);background:var(--vhp);border:1px solid #f0dbe2;border-radius:99px;padding:1px 7px}
 .mpreco.outra:not(.conta) .mp-v{color:var(--mu)}
 .mpreco.duvidoso .mp-v{color:var(--mu);text-decoration:line-through;font-weight:400}
 .mpreco.duvidoso .mp-l i{color:var(--dg)}
-.mp-nota{font-size:11px;margin-top:6px}
 .mp-de{color:var(--mu);font-size:12px}
 /* Links do vinho: pequenos, seguidos por vírgula, numa linha só (em vez
    de uma caixa `.mgar` por link) — o ✕ de remover cola-se ao nome, não
