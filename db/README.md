@@ -373,6 +373,17 @@ siglas ("CARM — …", "JCA", "DOC") ficam como estão; as regras estão no
 o `vinhos_catalogo` desligado — não foi o dono a gravar — e cada um ficou
 no `sync_log` (`nome_capitalizado`). Aplicada a 26/09/2026.
 
+### Migração 21 — a região normalizada, sem impedir um vinho sem região (já aplicada)
+
+`db/migracao-regiao.sql`. O trigger `vinhos_normalizar_regiao` ("DOURO" →
+"Douro", Península de Setúbal → "Setúbal") estava no Supabase desde
+13/09/2026 sem nunca ter vindo para o repo, com a regra COPIADA do catálogo
+e a devolver NULL para uma região vazia — numa coluna NOT NULL, ou seja,
+gravar um vinho sem região (um desejo da wishlist, uma importação por foto,
+o campo em branco) dava erro. Agora chama a `winecatalog.normalizar_regiao`
+(a regra vive só lá) e uma região vazia fica `''`; a cópia
+`garrafeira.normalizar_regiao` foi apagada. Aplicada a 26/09/2026.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -416,6 +427,8 @@ Numa base de dados limpa:
 7. **`migracao-fichas-catalogo.sql`** — a do resto da ficha (migração 19).
 8. **`migracao-nomes.sql`** — os nomes sem CAPS LOCK (migração 20). Só
    depois do `db/nomes.sql` do WineCatalog (usa a `winecatalog.nome_proprio`).
+9. **`migracao-regiao.sql`** — a região normalizada pela
+   `winecatalog.normalizar_regiao` (migração 21).
 
 Todos são idempotentes: podem ser corridos outra vez sem estragar nada.
 

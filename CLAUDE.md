@@ -48,6 +48,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-fichas-catalogo.sql` é a 19: a irmã, para o resto da ficha.
   `migracao-nomes.sql` é a 20: os nomes sem CAPS LOCK (ver "O vocabulário
   do tipo" › "Os nomes").
+  `migracao-regiao.sql` é a 21: o trigger que normaliza a região ("DOURO"
+  → "Douro"), com a regra do catálogo — esteve no Supabase sem estar aqui,
+  e a devolver NULL numa coluna NOT NULL (um vinho sem região não gravava).
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
