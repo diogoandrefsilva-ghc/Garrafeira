@@ -1121,6 +1121,17 @@ a vê), `'leitura'`, `'edicao'`. `is_admin()` sozinho não abre nada — nem em
 escolheu em Definições › Garrafeiras › **Permissões ao admin**. Assim o
 admin pode ajudar quem lho pedir, e mais ninguém.
 
+**A exceção é o batch do admin, e só para os links do Vivino** (26/09/2026):
+o painel da WineCatalog, no PC do admin e com a service role, compara o
+`vivino_url` de cada vinho de TODAS as garrafeiras com o do catálogo e troca
+os errados (sem `/w/<nº>`, ou a abrir outro vinho) ou vazios pelo link
+confirmado do catálogo — `garrafeira.links_vivino_rever`, em
+`db/migracao-links-vivino.sql`. Um link para uma colheita do mesmo vinho
+fica como a pessoa o pôs. O admin vê de quem é cada vinho: "não há segredos
+numa correção que melhora a informação" (o dono das apps). Cada troca fica
+no `sync_log` (origem `winecatalog-batch`). Não é uma porta na app: é uma
+função que só a `service_role` executa.
+
 Mesmo com `'edicao'`, o admin mexe nas GARRAFAS e não na fechadura: renomear,
 partilhar, passar e mudar o próprio `admin_acesso` continuam a ser só do
 dono (as policies de `garrafeiras`/`partilhas` comparam o `dono` à mão, não

@@ -240,6 +240,19 @@ Correr no SQL Editor, por esta ordem:
 2. `db/functions.sql`
 3. `db/policies.sql`
 
+### Migração 15 — o batch do admin corrige links do Vivino (já aplicada)
+
+`db/migracao-links-vivino.sql`. A função `garrafeira.links_vivino_rever`,
+que o painel do batch da WineCatalog (no PC do admin) chama para comparar o
+`vivino_url` de cada vinho das garrafeiras com o do catálogo e trocar os que
+estão errados — sem `/w/<nº>`, ou a abrir outro vinho — ou vazios pelo link
+do catálogo, quando esse está confirmado. Um link para uma colheita do mesmo
+vinho nunca se toca. As regras estão no cabeçalho do ficheiro.
+
+Só a `service_role` a executa (o `REVOKE`/`GRANT` estão no fim, com a
+consulta de confirmação). Precisa do `winecatalog` já montado (usa a
+`winecatalog.achar` e a `vivino_verificacoes`). Aplicada a 26/09/2026.
+
 ### `vinhos.imagem_url` (já aplicada)
 
 Link para uma foto do rótulo/garrafa — a `vinho-info` (Edge Function) tenta
@@ -331,6 +344,9 @@ Numa base de dados limpa:
    mesma (o admin tem acesso por ser admin), mas ele não aparece na lista de
    utilizadores e a passagem da app a outra pessoa fica bloqueada —
    `definir_admin()` exige que o novo dono já esteja na lista.
+
+6. **`migracao-links-vivino.sql`** — a função do batch do admin para os
+   links do Vivino (migração 15). Só depois do `winecatalog`.
 
 Todos são idempotentes: podem ser corridos outra vez sem estragar nada.
 
