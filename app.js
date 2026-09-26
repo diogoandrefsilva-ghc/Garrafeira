@@ -4205,8 +4205,11 @@ async function guardarVinho(id,modo){
   try{
     let vinhoId=id;
     if(id){
-      await sbReq('PATCH',`vinhos?id=eq.${id}`,f);
-      Object.assign(IDXV[id],f);
+      // A BD arruma o nome e o produtor (trigger `vinhos_nomes`: nada de
+      // CAPS LOCK, "do/da/de" pequenos) e a região — no ecrã fica o que ela
+      // gravou, não o que se escreveu.
+      const r=await sbReq('PATCH',`vinhos?id=eq.${id}`,f,{'Prefer':'return=representation'});
+      Object.assign(IDXV[id],f,(r&&r[0])||{});
       const feEl=document.getElementById('e-formato-edit');   // não existe ao passar um desejo
       const novoFormato=feEl?feEl.value:'';
       const ativas=feEl?garrafasDe(id,true).filter(g=>g.formato!==novoFormato):[];
@@ -5557,8 +5560,9 @@ async function iaAplicar(){
   const btn=document.getElementById('ia-btn');
   if(btn){btn.disabled=true;btn.textContent='A guardar…';}
   try{
-    await sbReq('PATCH',`vinhos?id=eq.${IA_VINHO}`,patch);
-    Object.assign(v,patch);
+    // O produtor que a IA trouxer passa pelo mesmo arrumo da BD (ver guardarVinho).
+    const r=await sbReq('PATCH',`vinhos?id=eq.${IA_VINHO}`,patch,{'Prefer':'return=representation'});
+    Object.assign(v,patch,(r&&r[0])||{});
     if(castasNovas){
       await sbRpc('definir_castas',{p_vinho_id:IA_VINHO,p_nomes:castasNovas});
       v.castas=castasNovas.slice().sort((a,b)=>a.localeCompare(b,'pt'));
@@ -8010,7 +8014,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='107';
+const APP_BUILD='108';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

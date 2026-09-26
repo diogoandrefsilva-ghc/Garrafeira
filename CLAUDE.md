@@ -46,6 +46,11 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   corrige os links do Vivino nas garrafeiras (ver "Cada um vê a sua
   garrafeira").
   `migracao-fichas-catalogo.sql` é a 19: a irmã, para o resto da ficha.
+  `migracao-nomes.sql` é a 20: os nomes sem CAPS LOCK (ver "O vocabulário
+  do tipo" › "Os nomes").
+  `migracao-regiao.sql` é a 21: o trigger que normaliza a região ("DOURO"
+  → "Douro"), com a regra do catálogo — esteve no Supabase sem estar aqui,
+  e a devolver NULL numa coluna NOT NULL (um vinho sem região não gravava).
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
@@ -1359,6 +1364,20 @@ As listas estão em `app.js` (`TIPOS`/`ESTILOS`/`MENCOES`/`CLASSIF`) **e** em
 `vinho-info.ts` — a Edge Function deita fora o que o modelo devolver fora
 delas. Se acrescentares um valor, acrescenta nos dois sítios, senão a IA
 propõe uma coisa que a app nunca mostra.
+
+### Os nomes: nunca em CAPS LOCK (migração 20)
+A importação por fotografias lê o rótulo como está impresso, e entraram a
+"HERDADE DO SOBROSO RESERVA TINTO" e o produtor "CARTUXA". A regra do dono
+das apps: Herdades, Montes, Quintas… com maiúscula; "do/da/de" sempre
+pequenos. Quem a aplica é a BD — o trigger `vinhos_nomes`, ao nome e ao
+produtor, em qualquer escrita (formulário, importação, wishlist, IA,
+atualização massiva) — e a regra é a `winecatalog.nome_proprio`, a MESMA do
+catálogo (ver o `CLAUDE.md` da WineCatalog, "Os nomes sem CAPS LOCK"): uma
+sigla sozinha num nome normal ("CARM — …", "JCA", "DOC") fica como está.
+**A app não tem cópia da regra em JS**, e por isso lê de volta o que a BD
+gravou (`Prefer: return=representation` nos PATCH do `guardarVinho` e da
+confirmação da IA): sem isso, quem escrevesse em maiúsculas via-as no ecrã
+até recarregar.
 
 ## Três níveis de permissão, mais a garrafeira
 ```
