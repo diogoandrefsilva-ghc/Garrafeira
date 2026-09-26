@@ -1317,7 +1317,7 @@ function precoVinho(v){const p=precoPrincipal(v);return p?p.preco:null;}
 // colheitas), "preço médio".
 function precoFonteTxt(p,curto){
   if(!p)return '';
-  if(!p.loja)return 'preço médio';
+  if(!p.loja)return 'preço de referência';
   const l=lojaInfo(p.loja);
   return (curto?l.curto:l.nome)+(p.outra?(p.colheita?' · '+p.colheita:(curto?' · média':' · média das colheitas')):'');
 }
@@ -1358,7 +1358,7 @@ function precosLojaHTML(v){
       </div>`;}).join('')}
     </div>
     <div class="note mp-nota">Conta a primeira loja da tua colheita (Garrafeira Nacional, Granvine, Vinha, Vivino);
-      sem nenhuma, a de outra colheita${v.preco_medio!=null?'; sem loja nenhuma, o preço médio':''}.</div>`;
+      sem nenhuma, a de outra colheita${v.preco_medio!=null?'; sem loja nenhuma, o preço de referência':''}.</div>`;
 }
 
 /* O VALOR da garrafeira é uma ESTIMATIVA e diz-se isso: vale o que se
@@ -3043,7 +3043,7 @@ const CAT_NOMES={
   castas:'Castas',regiao:'Região',sub_regiao:'Sub-região',pais:'País',
   teor:'Álcool',estagio_meses:'Estágio (meses)',estagio_texto:'Estágio',
   vivino_nota:'Nota Vivino',vivino_avaliacoes:'Avaliações Vivino',
-  vivino_url:'Link do Vivino',preco_medio:'Preço médio',
+  vivino_url:'Link do Vivino',preco_medio:'Preço de referência',
   beber_de:'Beber de',beber_ate:'Beber até',notas_prova:'Notas de prova',
   harmonizacao:'Harmoniza com',ai_resumo:'Resumo',imagem_url:'Imagem'
 };
@@ -3481,7 +3481,7 @@ function vinhoDetalheHTML(v){
       ${linha('Álcool',v.teor?esc(v.teor)+'%':'',v.id,'teor')}
       ${(()=>{const p=precoPrincipal(v);return p&&p.loja
         ?linha('Preço',esc(eur(p.preco))+` <span class="mp-de">· ${esc(precoFonteTxt(p))}</span>`):'';})()}
-      ${linha('Preço médio',v.preco_medio!=null?eur(v.preco_medio):'',v.id,'preco_medio')}
+      ${linha('Preço de referência',v.preco_medio!=null?eur(v.preco_medio):'',v.id,'preco_medio')}
       ${linha('Beber entre',idadeInfo,v.id,['beber_de','beber_ate'])}
       ${linha('Notas de prova',esc(v.notas_prova),v.id,'notas_prova')}
       ${linha('Harmoniza com',esc(v.harmonizacao),v.id,'harmonizacao')}
@@ -4049,7 +4049,7 @@ function abrirEditarVinho(id,modo){
       <div><label>Beber até</label><input type="number" id="e-beber-ate" inputmode="numeric" value="${esc(o('beber_ate'))}" placeholder="2034"></div>
     </div>
     <div class="mrow">
-      <div><label>Preço médio (€)</label><input type="text" id="e-preco" inputmode="decimal" value="${esc(o('preco_medio'))}" placeholder="18.50"></div>
+      <div><label>Preço de referência (€)</label><input type="text" id="e-preco" inputmode="decimal" value="${esc(o('preco_medio'))}" placeholder="18.50"></div>
       <div><label>Nota Vivino</label><input type="text" id="e-vivino" inputmode="decimal" value="${esc(o('vivino_nota'))}" placeholder="4.1"></div>
     </div>
     <label>Link do Vivino</label>
@@ -5246,7 +5246,7 @@ const IA_CAMPOS=[
   {k:'estagio_texto',rot:'Estágio'},
   {k:'vivino_nota',rot:'Nota Vivino'},
   {k:'vivino_avaliacoes',rot:'Avaliações Vivino'},
-  {k:'preco_medio',rot:'Preço médio (€)'},
+  {k:'preco_medio',rot:'Preço de referência (€)'},
   {k:'beber_de',rot:'Beber a partir de'},
   {k:'beber_ate',rot:'Beber até'},
   {k:'notas_prova',rot:'Notas de prova'},
@@ -7968,7 +7968,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='103';
+const APP_BUILD='104';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

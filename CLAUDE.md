@@ -1259,6 +1259,8 @@ lado para o outro, e duas cópias divergem no dia em que se edita uma.
   (`winecatalog.da_colheita`, no `CLAUDE.md` da WineCatalog).
 
 ## O preço de um vinho: as lojas primeiro, a colheita antes da loja
+Nos ecrãs, o `preco_medio` chama-se **preço de referência** (26/09/2026,
+igual na WineCatalog); a coluna mantém o nome.
 Um vinho tem o `preco_medio` da ficha (a IA ou quem o escreveu) e, quando o
 catálogo partilhado os tem, os **preços das lojas** — Garrafeira Nacional,
 Granvine, Vinha, Vivino — com link, colheita e data da recolha. Estes
