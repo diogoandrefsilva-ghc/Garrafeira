@@ -275,7 +275,7 @@ async function obterResultadosPesquisa(query: string, signal: AbortSignal): Prom
       const title = String(x?.title || "").trim();
       const snip = String(x?.snippet || "").replace(/\s+/g, " ").trim();
       const link = String(x?.link || "").trim();
-      return `[${i + 1}] ${title}\nURL: ${link}\nResumo: ${snip}`;
+      return `[${i + 1}] ${title}\nURL: ${link}\nResumo: ${snip}` + (x?.rating != null ? `\nEstrelas no Google: ${x.rating}${x.ratingCount != null ? ` (${x.ratingCount} avaliações)` : ""}` : "");
     }).join("\n\n");
     const estado = `search-api:${extrairHost(SEARCH_API_URL) || "externa"}`;
     return { texto: texto.slice(0, 6000), fontes, status: estado };
@@ -390,8 +390,9 @@ REGRAS, e são a sério:
 7. As castas vão SEPARADAS, uma a uma, com o nome português corrente
    ("Touriga Nacional", "Alicante Bouschet", "Aragonez"). Nunca "blend",
    "lote" nem "várias castas" — isso é contado do lado da app.
-8. "beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que o vinho
-   está no ponto. Para um vinho para beber já, "beberAte" é daqui a 2-3 anos.
+8. ${ano ? `"beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que ESTA
+   colheita está no ponto. Para um vinho para beber já, "beberAte" é daqui a 2-3 anos.` : `Este vinho não tem ano: sem colheita NÃO há janela de consumo — deixa
+   "beberDe"/"beberAte" de fora.`}
 9. "imagemUrl" é o link DIRECTO de uma fotografia da garrafa ou do rótulo
    (termina em .jpg/.jpeg/.png/.webp), de uma página que tenhas mesmo visto —
    site do produtor ou de uma loja. Não é o link da página, é o da imagem. Se
@@ -418,9 +419,9 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
   "vivinoUrl": "",
   "imagemUrl": "",
   "precoMedio": 18.5,
-  "beberDe": 2026,
+${ano ? `  "beberDe": 2026,
   "beberAte": 2034,
-  "notasProva": "duas ou três frases sobre aroma, boca e final",
+` : ""}  "notasProva": "duas ou três frases sobre aroma, boca e final",
   "harmonizacao": "com que pratos",
   "resumo": "duas ou três frases sobre o vinho e o produtor",
   "aviso": "vazio, ou o que ficou por confirmar"
@@ -454,7 +455,7 @@ REGRAS:
 4. "imagemUrl" tem de ser link DIRETO de imagem (.jpg/.jpeg/.png/.webp/.avif), não link de página.
 5. Se houver dúvida de homónimo, prioriza ano + produtor + região e explica no "aviso".
 6. Castas separadas por nome (nunca "blend"/"lote"/"várias castas").
-7. "beberDe"/"beberAte" são anos.
+7. ${ano ? `"beberDe"/"beberAte" são anos (a janela DESTA colheita).` : `Este vinho não tem ano: sem colheita NÃO há janela de consumo — deixa "beberDe"/"beberAte" de fora.`}
 
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
 {
@@ -476,9 +477,9 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
   "vivinoUrl": "",
   "imagemUrl": "",
   "precoMedio": 18.5,
-  "beberDe": 2026,
+${ano ? `  "beberDe": 2026,
   "beberAte": 2034,
-  "notasProva": "duas ou três frases sobre aroma, boca e final",
+` : ""}  "notasProva": "duas ou três frases sobre aroma, boca e final",
   "harmonizacao": "com que pratos",
   "resumo": "duas ou três frases sobre o vinho e o produtor",
   "aviso": "vazio, ou o que ficou por confirmar"
@@ -540,7 +541,7 @@ REGRAS, e são a sério:
 4. "imagemUrl" tem de ser link DIRETO de imagem (.jpg/.jpeg/.png/.webp/.avif), nunca o link da página.
 5. Se houver dúvida de homónimo, prioriza produtor + ano + região e explica no "aviso".
 6. Castas separadas por nome (nunca "blend"/"lote"/"várias castas").
-7. "beberDe"/"beberAte" são anos.
+7. "beberDe"/"beberAte" são anos, a janela da colheita indicada. Um vinho SEM ano na lista não tem janela de consumo: deixa "beberDe"/"beberAte" de fora do objeto dele.
 8. O "id" de cada resultado tem de ser EXATAMENTE o "id" da lista acima — é assim que se sabe a que vinho corresponde cada objeto, nunca pela posição na lista.
 9. Se não conseguires identificar um vinho de todo, o objeto dele fica só {"id": <id>, "encontrado": false, "aviso": "porquê"} — sem inventar os outros campos.
 
@@ -579,7 +580,7 @@ REGRAS, e são a sério:
 3. ${regraCuvee}
 4. ${regraVivino(false)}
 5. Castas separadas por nome (nunca "blend"/"lote"/"várias castas").
-6. "beberDe"/"beberAte" são anos.
+6. "beberDe"/"beberAte" são anos, a janela da colheita indicada. Um vinho SEM ano não tem janela de consumo: deixa "beberDe"/"beberAte" de fora do objeto dele.
 7. O "id" de cada resultado tem de ser EXATAMENTE o "id" indicado acima — é assim que se sabe a que vinho corresponde cada objeto, nunca pela posição na lista.
 8. Se a evidência de um vinho não chegar para o identificar, o objeto dele fica só {"id": <id>, "encontrado": false, "aviso": "porquê"}.
 
@@ -651,6 +652,31 @@ function daLista(v: unknown, lista: string[]): string {
   const achado = lista.find((x) => x && x.toLowerCase() === t.toLowerCase());
   return achado ?? "";
 }
+/* ── O link do Vivino: só o formato que o Vivino usa ──
+   A página de um vinho no Vivino é SEMPRE `/<nome>/w/<nº>` — o número é o
+   do vinho e não muda. Um modelo que responda de memória (o normal — ver o
+   CLAUDE.md da WineCatalog, "De memória ou pesquisado") escreve links com
+   ar de verdadeiros que nunca existiram: `/Wines/<nome>`,
+   `/Wineries/<x>/Wines/<y>`, `/pt-pt/<nome>` sem número. Até 25/09/2026 só
+   se exigia o domínio, e esses entravam e partiam ao abrir. `/wines/<nº>`
+   também sai: é o número de UMA colheita, não o do vinho. Devolve-se o
+   link limpo (sem país, língua, ?year=, ?srsltid) — a MESMA regra do
+   `urlLimpo` do `batch/vivino-verificar.mjs` (WineCatalog). */
+function vivinoLink(u: unknown): string {
+  try {
+    const url = new URL(String(u ?? "").trim());
+    if (!/(^|\.)vivino\.com$/i.test(url.hostname)) return "";
+    const m = url.pathname.match(/\/([a-z0-9-]+)\/w\/(\d+)/i);
+    return m ? `https://www.vivino.com/${m[1].toLowerCase()}/w/${m[2]}` : "";
+  } catch { return ""; }
+}
+/* O link do Vivino que quem procura colou nos sites de confiança é FACTO
+   (abriu-o), e ganha ao que veio da IA, da cache ou do catálogo. */
+function comVivinoDado(res: Res, vivinoDado: string, campos: string[] | null): Res {
+  if (res.ok && vivinoDado && (!campos || campos.includes("vivino_url"))) res.corpo.vivino_url = vivinoDado;
+  return res;
+}
+
 function normalizar(raw: any, anoPedido: number | null, campos: string[] | null = null): Record<string, unknown> | null {
   if (!raw || typeof raw !== "object") return null;
   if (raw.encontrado === false) return null;
@@ -674,7 +700,10 @@ function normalizar(raw: any, anoPedido: number | null, campos: string[] | null 
 
   const out: Record<string, unknown> = {
     produtor: texto(raw.produtor, 90),
-    ano: anoValido(raw.ano) ?? anoPedido,
+    // Sem ano no pedido, não há ano na resposta: a colheita é de quem tem a
+    // garrafa (ou a quer), e um ano achado pela IA era inventar-lha — e ia
+    // parar ao catálogo pelo `juntar` (o Sidónio de Sousa, 25/09/2026).
+    ano: anoPedido === null ? null : (anoValido(raw.ano) ?? anoPedido),
     tipo: daLista(raw.tipo, TIPOS),
     estilo: daLista(raw.estilo, ESTILOS),
     regiao: texto(raw.regiao, 60),
@@ -687,12 +716,10 @@ function normalizar(raw: any, anoPedido: number | null, campos: string[] | null 
     estagio_texto: texto(raw.estagioTexto, 160),
     vivino_nota: numero(raw.vivinoNota, 1, 5, 2),
     vivino_avaliacoes: (() => { const n = numero(raw.vivinoAvaliacoes, 0, 10_000_000, 0); return n === null ? null : Math.round(n); })(),
-    // Exige-se o domínio do Vivino (não basta ser um http qualquer): reduz o
-    // risco de o link vir de uma loja ou do site do produtor por engano. Não
-    // chega para apanhar um link de um vinho HOMÓNIMO — isso é a regra 2, no
-    // prompt — mas evita pelo menos um link que nem é do Vivino.
-    vivino_url: /^https?:\/\/([a-z0-9-]+\.)*vivino\.com\//i.test(String(raw.vivinoUrl ?? "").trim())
-      ? texto(raw.vivinoUrl, 300) : "",
+    // Só `/<nome>/w/<nº>` (ver `vivinoLink`). Não chega para apanhar um
+    // link de um vinho HOMÓNIMO — isso é a regra 2, no prompt — mas apanha
+    // os inventados.
+    vivino_url: vivinoLink(raw.vivinoUrl),
     // Aqui a validação é mais apertada do que no `vivino_url`: exige-se a
     // extensão da imagem. O modelo tende a devolver o link da PÁGINA do
     // produto em vez do da fotografia, e isso dava um <img> partido na ficha
@@ -707,6 +734,9 @@ function normalizar(raw: any, anoPedido: number | null, campos: string[] | null 
     ai_resumo: texto(raw.resumo, 900),
     aviso: texto(raw.aviso, 300),
   };
+  // Sem colheita não há janela de consumo: os anos dela seriam os de uma
+  // colheita qualquer (a BD também a recusa, trigger `vinhos_sem_colheita`).
+  if (out.ano == null) { out.beber_de = null; out.beber_ate = null; }
   // Campos vazios/null saem do objeto: a app decide o que fazer com o que
   // vem, e um `null` explícito ali era indistinguível de "a IA diz que é
   // nulo" — o que apagava dados bons ao aceitar tudo.
@@ -914,34 +944,23 @@ type Res = { ok: true; corpo: Record<string, unknown> } | { ok: false; status: n
    24/09/2026 nunca o fez (total de tokens = entrada + saída, ~5 s): as
    respostas vinham do que o modelo aprendeu no treino. Para toda a gente
    isto fica como está; o resultado passa a dizê-lo (`pesquisaWeb`) e ao
-   admin a app oferece a "pesquisa profunda" (`profunda:true`), que exige a
-   pesquisa no prompt, salta a cache e o catálogo, e passa ao modelo maior
-   se o barato responder sem pesquisar. Mesmo critério da `catalogo-info`
-   (WineCatalog) e da `verificar-vinhos` (WineSelection) — ver o CLAUDE.md
-   da WineCatalog, "De memória ou pesquisado". */
+   admin a app oferece a "pesquisa profunda" (`profunda:true`).
+
+   PESQUISA PROFUNDA = SERPER (25/09/2026). Não há parâmetro nenhum na API
+   do Gemini que o OBRIGUE a pesquisar, e mudar o prompt só mexe nas
+   probabilidades: com o prompt a pedir "primeiro pesquisa, depois o JSON",
+   a primeira profunda a sério (Quinta dos Sentidos, 24/09/2026) respondeu
+   de memória na mesma, no lite e no flash. A profunda passou a ser o
+   "modo grátis" que já existia: a pesquisa é NOSSA (Serper — geral + uma
+   ao Vivino), o Gemini só lê os resultados, sem `google_search`. Salta a
+   cache e o catálogo. Mesmo critério da `catalogo-info` (WineCatalog), da
+   `verificar-vinhos` (WineSelection) e da `prendas-vinho` — ver o
+   CLAUDE.md da WineCatalog, "De memória ou pesquisado". */
 function fezPesquisa(body: any): boolean {
   const gm = body?.candidates?.[0]?.groundingMetadata;
   return (Array.isArray(gm?.webSearchQueries) && gm.webSearchQueries.length > 0) ||
     (Array.isArray(gm?.groundingChunks) && gm.groundingChunks.length > 0) ||
     Number(body?.usageMetadata?.toolUsePromptTokenCount ?? 0) > 0;
-}
-/* O que faz o modelo pesquisar a sério (testado a 24/09/2026 — ver o
-   CLAUDE.md da WineCatalog, "De memória ou pesquisado"): não é pedir-lho
-   com mais força. Com "Responde SÓ com este JSON" o lite e o flash
-   responderam de MEMÓRIA em todas as tentativas, com ou sem "OBRIGATÓRIO",
-   com ou sem temperatura 0. Com o mesmo pedido mas a deixá-los escrever
-   primeiro o que encontraram, e o JSON só no fim numa linha "JSON:",
-   pesquisaram sempre. A profunda troca essa instrução, e a leitura vai
-   buscar o JSON a seguir a "JSON:". */
-const INSTR_JSON = "Responde SÓ com este JSON, sem texto à volta e sem blocos de código:";
-const INSTR_PROFUNDA = `Primeiro PESQUISA no Google (o Vivino deste vinho e o preço em lojas
-portuguesas, pelo menos) e escreve, em texto corrido, o que encontraste e em
-que sítio. Depois, no FIM da resposta, numa linha que comece por JSON:,
-escreve o resultado neste formato — um campo que a pesquisa não confirmou
-fica de fora, MESMO que aches que sabes a resposta:`;
-function jsonDoFim(txt: string): string {
-  const i = txt.lastIndexOf("JSON:");
-  return i >= 0 ? txt.slice(i + 5) : txt;
 }
 
 function fontesGrounding(body: any): Fonte[] {
@@ -960,7 +979,6 @@ function fontesGrounding(body: any): Fonte[] {
 
 async function chamarGemini(
   modelo: string, textoPrompt: string, signal: AbortSignal, maxTokens = 2048, semThinking = true, comGrounding = false,
-  jsonNoFim = false,
 ) {
   // A pesquisa (grounding) precisa de "pensar" para decidir o quê e quando
   // pesquisar: pedir thinkingBudget:0 ao mesmo tempo que se liga o tool
@@ -1012,7 +1030,7 @@ async function chamarGemini(
   // ver o CLAUDE.md da WineCatalog, "O 200 vazio". (A escada já trata do
   // resto: uma falha TÉCNICA destas escala para o modelo seguinte.)
   if (!bruto) return { ok: false as const, status: 502, erro: `o modelo não devolveu resposta (${motivo || "vazia"})`, usage };
-  const parsed = extrairJson(jsonNoFim ? jsonDoFim(bruto) : bruto);
+  const parsed = extrairJson(bruto);
   if (!parsed) return { ok: false as const, status: 502, erro: `resposta ilegível do modelo (${motivo || "sem finishReason"})`, usage };
   return { ok: true as const, parsed, fontes: comGrounding ? fontesGrounding(body) : [], usage,
     pesquisou: comGrounding ? fezPesquisa(body) : null };
@@ -1051,7 +1069,11 @@ async function produzirFicha(
      coisa, vai à IA só ESSA: um pedido mais estreito é também um pedido
      mais barato e melhor respondido (é a mesma razão por que a app já
      deixa escolher os campos, ver `iaEscolher`). */
-  const pedidos = campos && campos.length ? campos : Object.keys(CAMPOS);
+  // Sem colheita, a janela de consumo nem se pede — nem ao catálogo (que
+  // responderia com a de uma colheita qualquer) nem à IA.
+  // Nem o ano, que sem ano no pedido não se procura (ver `normalizar`).
+  const pedidos = (campos && campos.length ? campos : Object.keys(CAMPOS))
+    .filter((k) => ano !== null || (k !== "beber_de" && k !== "beber_ate" && k !== "ano"));
   const conhecido = profunda ? null : await catalogoProcurar(nome, produtor, ano, signal);
   const doCatalogo = conhecido ? catalogoResponde(conhecido, pedidos) : {};
   const emFalta = pedidos.filter((k) => !(k in doCatalogo));
@@ -1086,7 +1108,8 @@ async function produzirFicha(
      de campos, e passar-lhe agora os 22 nomes era mudar-lhe o texto sem
      necessidade nenhuma — e a lista dos 22 é exatamente o que faz o modelo
      "andar atrás de tudo e voltar com meia dúzia de coisas mornas". */
-  const campos_ia = Object.keys(doCatalogo).length ? emFalta : campos;
+  const campos_ia = Object.keys(doCatalogo).length ? emFalta
+    : (campos && ano === null ? campos.filter((k) => k !== "beber_de" && k !== "beber_ate") : campos);
 
   // Os `sites` de confiança viram operadores `site:` na pesquisa externa —
   // é a única das duas formas de os aplicar que restringe a sério (o
@@ -1095,22 +1118,36 @@ async function produzirFicha(
   const siteQuery = sites.length ? ` (${sites.map((s) => `site:${s}`).join(" OR ")})` : "";
   const query = [nome, ano || "", produtor, regiao, notas, "vivino garrafeira nacional vinho portugal"]
     .filter(Boolean).join(" ") + siteQuery;
+  /* A PROFUNDA É O "MODO GRÁTIS" (25/09/2026): a pesquisa é NOSSA (Serper)
+     e o Gemini só lê os resultados, sem `google_search`. É a única forma de
+     a pesquisa ser garantida — ver `PESQUISA PROFUNDA`, mais acima. Faz
+     uma consulta a mais, ao Vivino, que a consulta geral nem sempre traz. */
+  const usarSerper = modoIA === "gratis" || profunda;
   let pesquisa: PesquisaWeb = { texto: "", fontes: [], status: "grounding:google_search" };
-  if (modoIA === "gratis") {
+  let serperConsultas = 0;
+  if (usarSerper) {
     try {
-      pesquisa = await obterResultadosPesquisa(query, signal);
+      if (profunda) {
+        const qVivino = `"${nome.replace(/"/g, "")}" ${produtor} site:vivino.com`.replace(/\s+/g, " ");
+        const rs = await Promise.allSettled([obterResultadosPesquisa(query, signal), obterResultadosPesquisa(qVivino, signal)]);
+        serperConsultas = 2;
+        const boas = rs.filter((r) => r.status === "fulfilled").map((r) => (r as PromiseFulfilledResult<PesquisaWeb>).value);
+        if (!boas.length) throw (rs[0] as PromiseRejectedResult).reason;
+        const fontes = boas.flatMap((b) => b.fontes).filter((f, i, a) => a.findIndex((x) => x.url === f.url) === i);
+        pesquisa = { texto: boas.map((b) => b.texto).join("\n\n").slice(0, 9000), fontes, status: boas[0].status };
+      } else {
+        serperConsultas = 1;
+        pesquisa = await obterResultadosPesquisa(query, signal);
+      }
     } catch (e) {
-      await registar("erro", { passo: "search-api", erro: String((e as Error).message || "").slice(0, 300) }, quem);
+      await registar("erro", { passo: "search-api", ...(profunda ? { profunda: true } : {}), erro: String((e as Error).message || "").slice(0, 300) }, quem);
       return { ok: false, status: 503, erro: "não consegui obter resultados de pesquisa agora — tenta outra vez daqui a pouco" };
     }
   }
 
-  const texto0 = modoIA === "premium"
-    ? (() => {
-        const p = promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, new Date().toISOString().slice(0, 10), campos_ia, colheitaEspecifica);
-        return profunda ? p.replace(INSTR_JSON, INSTR_PROFUNDA) : p;
-      })()
-    : prompt(nome, ano, produtor, regiao, tipo, notas, new Date().toISOString().slice(0, 10), campos_ia, pesquisa.texto, colheitaEspecifica);
+  const texto0 = usarSerper
+    ? prompt(nome, ano, produtor, regiao, tipo, notas, new Date().toISOString().slice(0, 10), campos_ia, pesquisa.texto, colheitaEspecifica)
+    : promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, new Date().toISOString().slice(0, 10), campos_ia, colheitaEspecifica);
   const tentativas: { modelo: string; modo: string; estado: number | string; usageMetadata?: UsageMetadata }[] = [];
   let usageTotal: UsageMetadata | null = null;
   let fontesGround: Fonte[] = [];
@@ -1119,7 +1156,7 @@ async function produzirFicha(
     if (ms < 2_000) return null;
     const { signal: sp, limpar } = comLimiteProprio(signal, ms);
     try {
-      const g = await chamarGemini(modelo, texto0, sp, maxTokens, semThinking, modoIA === "premium", profunda);
+      const g = await chamarGemini(modelo, texto0, sp, maxTokens, semThinking, !usarSerper);
       limpar();
       usageTotal = somarUsage(usageTotal, g.usage ?? null);
       tentativas.push({ modelo, modo, estado: g.ok ? 200 : g.status, ...(g.usage ? { usageMetadata: g.usage } : {}) });
@@ -1133,24 +1170,12 @@ async function produzirFicha(
     }
   };
 
-  // A profunda escreve primeiro o que encontrou, e só depois o JSON: precisa
-  // de mais espaço de saída do que a resposta só em JSON.
-  const primeira = await run(MODELO_BARATO, "barato", profunda ? 3500 : 1800, true);
+  const primeira = await run(MODELO_BARATO, "barato", 1800, true);
   let usadoModelo = MODELO_BARATO;
   let usadoModo = "barato";
   let parsed: any = primeira && primeira.ok ? primeira.parsed : null;
   let erroUltimo = primeira && !primeira.ok ? primeira.erro : "";
   let pesquisou: boolean | null = primeira && primeira.ok ? primeira.pesquisou : null;
-
-  // Profunda: o barato respondeu mas não pesquisou — tenta-se o maior, e só
-  // se ELE pesquisar é que a resposta dele fica no lugar da primeira.
-  if (profunda && primeira && primeira.ok && primeira.pesquisou === false && MODELO_ESCALADO !== MODELO_BARATO) {
-    const outra = await run(MODELO_ESCALADO, "escalado", 4500, false);
-    if (outra && outra.ok && outra.pesquisou) {
-      usadoModelo = MODELO_ESCALADO; usadoModo = "escalado";
-      parsed = outra.parsed; pesquisou = true;
-    }
-  }
 
   let ficha = parsed ? normalizar(parsed, ano, campos_ia) : null;
   if (!pesquisou) fontesGround = [];
@@ -1173,6 +1198,9 @@ async function produzirFicha(
     }
   }
 
+  // Na profunda a pesquisa foi nossa (Serper): houve pesquisa, garantida.
+  if (profunda) pesquisou = true;
+
   if (!ficha && !Object.keys(doCatalogo).length) {
     await registar("erro", {
       passo: "vazio", nome, modo: usadoModo, modelo: usadoModelo,
@@ -1190,7 +1218,7 @@ async function produzirFicha(
     const { aviso: _aviso, ...factos } = ficha as Record<string, unknown>;
     await catalogoJuntar(
       nome, produtor, ano, factos, `vinho-info-${modoIA}`,
-      (modoIA === "premium" ? fontesGround : pesquisa.fontes), signal,
+      (usarSerper ? pesquisa.fontes : fontesGround), signal,
     );
   }
 
@@ -1205,13 +1233,13 @@ async function produzirFicha(
     // `pesquisaWeb` vai com a cache para o botão da profunda não se perder
     // quando a mesma procura volta a sair daqui.
     { ...ficha, ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}) },
-    (modoIA === "premium" ? fontesGround : pesquisa.fontes),
+    (usarSerper ? pesquisa.fontes : fontesGround),
     usadoModelo,
     usadoModo,
     signal,
   );
   const dur = Date.now() - inicio;
-  const custoEstimado = usadoModo === "barato" ? 0.001 : 0.0035;
+  const custoEstimado = (usadoModo === "barato" ? 0.001 : 0.0035) + serperConsultas * 0.001; // o Serper à parte, ~1 $ por 1000 consultas
   await registar("ok", {
     nome, ano, modo: usadoModo, modelo: usadoModelo,
     pesquisa: pesquisa.status, campos: Object.keys(ficha).length,
@@ -1220,6 +1248,7 @@ async function produzirFicha(
     catalogo_campos: Object.keys(doCatalogo).length,
     ia_campos: emFalta.length,
     ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}), ...(profunda ? { profunda: true } : {}),
+    ...(serperConsultas ? { serper_consultas: serperConsultas } : {}),
     ms: dur, tentativas, custo_estimado_eur: custoEstimado,
     ...(usageTotal ? { usageMetadata: usageTotal } : {}),
   }, quem);
@@ -1228,7 +1257,7 @@ async function produzirFicha(
     corpo: {
       ...ficha,
       fontes: [
-        ...(modoIA === "premium" ? fontesGround : pesquisa.fontes),
+        ...(usarSerper ? pesquisa.fontes : fontesGround),
         ...(Object.keys(doCatalogo).length ? (conhecido?.fontes ?? []) : []),
       ].filter((f, i, a) => a.findIndex((x) => x.url === f.url) === i).slice(0, 8),
       ...(Object.keys(doCatalogo).length
@@ -1266,9 +1295,11 @@ async function produzirFichaLote(
   type Item = { v: VinhoLote; conhecido: Conhecido | null; doCatalogo: Record<string, unknown>; emFalta: string[] };
   const itens: Item[] = [];
   for (const v of vinhos) {
+    // Sem colheita, a janela de consumo não se pede (ver `produzirFicha`).
+    const pedidosV = campos.filter((k) => v.ano !== null || (k !== "beber_de" && k !== "beber_ate"));
     const conhecido = await catalogoProcurar(v.nome, v.produtor, v.ano, signal);
-    const doCatalogo = conhecido ? catalogoResponde(conhecido, campos) : {};
-    const emFalta = campos.filter((k) => !(k in doCatalogo));
+    const doCatalogo = conhecido ? catalogoResponde(conhecido, pedidosV) : {};
+    const emFalta = pedidosV.filter((k) => !(k in doCatalogo));
     itens.push({ v, conhecido, doCatalogo, emFalta });
   }
   const precisamIA = itens.filter((it) => it.emFalta.length > 0);
@@ -1533,10 +1564,18 @@ Deno.serve(async (req) => {
        vinho com um homónimo ("grande reserva", "edição limitada", …) e a
        dar prioridade a fontes em que a pessoa confia. Nunca são pedidos de
        volta à IA, só entram no prompt/pesquisa como contexto. */
-    const notas = texto(body?.notas, 300);
     const sites: string[] = Array.isArray(body?.sites)
       ? [...new Set<string>(body.sites.map((s: unknown) => texto(s, 100).replace(/^https?:\/\//i, "").replace(/\/.*$/, "")).filter(Boolean))].slice(0, 5)
       : [];
+    // Os sites viram só o domínio (acima) — mas um link do Vivino de UM vinho
+    // colado ali é a resposta, não uma fonte: guarda-se inteiro, antes de o
+    // corte o reduzir a "www.vivino.com", e ganha no fim (`comVivinoDado`).
+    // Não vai para as `notas`: essas entram também na consulta da pesquisa
+    // externa, e um URL lá dentro estragava-a.
+    const vivinoDado = Array.isArray(body?.sites)
+      ? (body.sites as unknown[]).map((s) => vivinoLink(texto(s, 300))).find(Boolean) ?? ""
+      : "";
+    const notas = texto(body?.notas, 300);
     const vinhoId = typeof body?.vinhoId === "number" ? body.vinhoId : null;
     /* `campos`: a app diz o que quer que se procure. Só se aceitam nomes
        conhecidos — um nome inventado aqui era um campo a menos no prompt e,
@@ -1553,7 +1592,7 @@ Deno.serve(async (req) => {
     // escolha de campos manda isto explicitamente.
     const colheitaEspecifica = body?.colheitaEspecifica === true;
     // Pesquisa profunda: só o admin, e só no modo com grounding (é o único
-    // em que o modelo pode escolher não pesquisar).
+    // em que o modelo pode escolher não pesquisar; o grátis já é Serper).
     let profunda = false;
     if (body?.profunda === true) {
       if (!(await souAdmin(authHeader, ctrl.signal))) {
@@ -1577,7 +1616,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-          const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda);
+          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda), vivinoDado, camposPedidos);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -1595,7 +1634,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda);
+    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda), vivinoDado, camposPedidos);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";

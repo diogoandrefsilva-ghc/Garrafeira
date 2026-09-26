@@ -240,18 +240,26 @@ Correr no SQL Editor, por esta ordem:
 2. `db/functions.sql`
 3. `db/policies.sql`
 
-### Migração 15 — o batch do admin corrige links do Vivino (já aplicada)
+### Migração 15 — a wishlist (já aplicada)
 
-`db/migracao-links-vivino.sql`. A função `garrafeira.links_vivino_rever`,
-que o painel do batch da WineCatalog (no PC do admin) chama para comparar o
-`vivino_url` de cada vinho das garrafeiras com o do catálogo e trocar os que
-estão errados — sem `/w/<nº>`, ou a abrir outro vinho — ou vazios pelo link
-do catálogo, quando esse está confirmado. Um link para uma colheita do mesmo
-vinho nunca se toca. As regras estão no cabeçalho do ficheiro.
+`db/migracao-wishlist.sql`. Acrescenta `vinhos.desejado` (boolean, `false`
+por omissão): um vinho da wishlist é uma linha normal de `vinhos`, sem
+garrafas e com a marca ligada. Nenhuma tabela nova, nenhuma policy nova —
+é da garrafeira do vinho, como tudo o resto. A `catalogar_vinho` passa a
+saltar estes vinhos (ninguém tem a garrafa na mão); quando um passa para a
+garrafeira, o UPDATE que desliga a marca volta a disparar o trigger.
 
-Só a `service_role` a executa (o `REVOKE`/`GRANT` estão no fim, com a
-consulta de confirmação). Precisa do `winecatalog` já montado (usa a
-`winecatalog.achar` e a `vivino_verificacoes`). Aplicada a 26/09/2026.
+A app deteta a coluna sozinha (`TEM_DESEJO`, mesmo padrão do `imagem_url`):
+enquanto a migração não correr, o separador Wishlist não aparece e nada
+muda.
+
+**Aplicada em 2026-09-25** como a migração `garrafeira_15_wishlist`: o
+`migracao-wishlist.sql` mais a `catalogar_vinho` nova (só essa função do
+`catalogo-partilhado.sql` — a definição que estava na base batia certo com o
+repo, e as outras não mudaram). Numa base nova, por esta ordem:
+
+1. `db/migracao-wishlist.sql`
+2. `db/catalogo-partilhado.sql`
 
 ### `vinhos.imagem_url` (já aplicada)
 
@@ -306,6 +314,39 @@ senão davam acesso aos buckets das outras apps.
 **Falta o que não é SQL** — ver "Passos manuais" mais abaixo. Enquanto o
 schema não estiver exposto na API, a app dá 404 em tudo.
 
+### Migração 16 — sem colheita não há janela de consumo (já aplicada)
+
+`db/migracao-janela-sem-colheita.sql`. Um trigger em `vinhos`
+(`vinhos_sem_colheita`) que apaga `beber_de`/`beber_ate` sempre que o `ano`
+é nulo — a janela são anos de UMA colheita, e sem ela seriam os de uma
+qualquer. É a mesma regra do catálogo (`winecatalog.da_colheita`).
+**Aplicada em 2026-09-25**; não havia nenhum vinho sem ano com janela.
+
+### Migração 17 — os preços das lojas (já aplicada)
+
+`db/migracao-precos-lojas.sql`. Só uma função, `garrafeira.precos_lojas(garrafeira_id)`:
+devolve, por vinho, os preços loja a loja que o catálogo partilhado tem em
+`ficha -> 'precos'` (Garrafeira Nacional, Granvine, Vinha, Vivino — com
+link, colheita e data). Nada é copiado para `vinhos`: a app lê-os ao
+carregar e escolhe o preço que conta (`precoPrincipal` no app.js). Sem
+catálogo devolve `{}` e a app fica com o preço médio. Nenhuma tabela nova,
+nenhuma policy nova — o guarda é `pode_ver`.
+
+**Aplicada em 2026-09-26** como `garrafeira_17_precos_lojas`.
+
+### Migração 18 — o batch do admin corrige links do Vivino (já aplicada)
+
+`db/migracao-links-vivino.sql`. A função `garrafeira.links_vivino_rever`,
+que o painel do batch da WineCatalog (no PC do admin) chama para comparar o
+`vivino_url` de cada vinho das garrafeiras com o do catálogo e trocar os que
+estão errados — sem `/w/<nº>`, ou a abrir outro vinho — ou vazios pelo link
+do catálogo, quando esse está confirmado. Um link para uma colheita do mesmo
+vinho nunca se toca. As regras estão no cabeçalho do ficheiro.
+
+Só a `service_role` a executa (o `REVOKE`/`GRANT` estão no fim, com a
+consulta de confirmação). Precisa do `winecatalog` já montado (usa a
+`winecatalog.achar` e a `vivino_verificacoes`). Aplicada a 26/09/2026.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -344,9 +385,8 @@ Numa base de dados limpa:
    mesma (o admin tem acesso por ser admin), mas ele não aparece na lista de
    utilizadores e a passagem da app a outra pessoa fica bloqueada —
    `definir_admin()` exige que o novo dono já esteja na lista.
-
 6. **`migracao-links-vivino.sql`** — a função do batch do admin para os
-   links do Vivino (migração 15). Só depois do `winecatalog`.
+   links do Vivino (migração 18). Só depois do `winecatalog`.
 
 Todos são idempotentes: podem ser corridos outra vez sem estragar nada.
 

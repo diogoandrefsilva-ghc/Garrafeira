@@ -40,6 +40,11 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `catalogo-partilhado.sql` é a 12 e era a única que criava um schema que **não
   é desta app**: o `catalogo`, partilhado com a WineSelection (ver secção
   própria). Também é seguida por `functions.sql`.
+  `migracao-wishlist.sql` é a 15 (a wishlist, `vinhos.desejado`), seguida
+  por `catalogo-partilhado.sql`.
+  `migracao-links-vivino.sql` é a 18: a função do batch do admin que
+  corrige os links do Vivino nas garrafeiras (ver "Cada um vê a sua
+  garrafeira").
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
@@ -48,7 +53,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
 - Não mexer à mão: `apple-touch-icon.png` (é gerado — ver "Ícones").
 
 ## Os cinco separadores (o ecrã inicial não é a lista)
-`Garrafeira` (resumo) · `Detalhe` · `Locais` · `Consumidos` · `Definições`.
+`Garrafeira` (resumo) · `Detalhe` · `Locais` · `Consumidos` · `Definições`
+— mais a **`Wishlist`** (antes do ⚙️), que só aparece depois da migração 15
+(ver "A wishlist é um vinho sem garrafas").
 
 O ecrã inicial (`Garrafeira`) é **só o resumo** — nada de procura aqui. Já
 teve os cards em cima e a procura por baixo, mas com a procura a viver
@@ -64,8 +71,8 @@ vinhos, monocasta, regiões, castas, os dois **dourados** de preferência
 (região e casta preferida — ver abaixo), **valor estimado** e **a completar**.
 
 O **valor** é uma estimativa e diz-se isso no subtítulo: vale o que se pagou
-(`preco_compra`) quando se sabe, e o `preco_medio` do vinho quando não se
-sabe; garrafas sem nenhum dos dois não entram na conta (inventar um preço
+(`preco_compra`) quando se sabe, e o **preço que conta** do vinho
+(`precoPrincipal`, ver "O preço de um vinho") quando não se sabe; garrafas sem nenhum dos dois não entram na conta (inventar um preço
 era pôr no cartão um número que ninguém podia conferir). Abre por
 **intervalo de preço** (`FAIXAS_PRECO`/`faixaIndice`: até 15€, 15€–30€,
 30€–50€, acima de 50€) — é a pergunta que se faz a seguir a "quanto vale
@@ -1084,6 +1091,19 @@ numa base nova antes do `db/schema.sql` correr, esconde o campo e não o
 manda nas gravações — sem isso um PATCH rebentava **todas** as gravações
 com 400.
 
+## A exceção: as marcas dos amigos na WineSelection (25/09/2026)
+Por decisão do dono das apps, **dentro do grupo das Prendas de Anos**
+(`anniversarygifts.amigos`) a WineSelection mostra que um amigo TEM um
+vinho (garrafas na garrafeira), o BEBEU e lhe deu nota
+(`garrafas.consumo_avaliacao`) ou o tem na WISHLIST (`vinhos.desejado`).
+Quem lê é a `winecatalog.marcas_amigos` (SECURITY DEFINER, `db/amigos.sql`
+no repo WineCatalog): só responde a quem é do grupo e só conta as
+garrafeiras cujo dono é do grupo. Nunca sai a linha — nem notas, preço,
+local ou fotografia: só o nome do amigo, quantas garrafas, as colheitas, a
+nota e a data. As partilhas e a RLS daqui ficam exatamente como estavam.
+**Se mexeres em `garrafas.estado`, `consumo_avaliacao` ou `desejado`**
+(nomes ou significado), vê essa função no mesmo dia.
+
 ## Cada um vê a sua garrafeira (a outra decisão que segura o resto)
 Um **vinho**, uma **garrafa** e um **local** pertencem sempre a uma
 **garrafeira** (`garrafeiras`, com um `dono` que é um email), e ninguém vê
@@ -1209,6 +1229,90 @@ Consequências práticas, todas de propósito:
   bebido continua na base de dados e no separador Consumidos, mas sai da
   garrafeira.
 
+## A wishlist é um vinho sem garrafas (migração 15)
+Os vinhos que não estão cá mas que se querem ter. **Não é uma tabela à
+parte**: é uma linha normal de `vinhos`, sem garrafas, com
+`vinhos.desejado = true` — a consequência direta do "vinho ≠ garrafa" logo
+acima. Por isso a ficha, a procura da IA, a página do vinho e o Editar são
+os de sempre, e **passar um desejo para a garrafeira** é desligar a marca e
+acrescentar garrafas no MESMO passo (`abrirEditarVinho(id,'converter')`:
+a ficha editável — o ano, sobretudo — mais a "Primeira garrafa" com o local
+e o preço de compra). Uma tabela de desejos obrigava a copiar a ficha de um
+lado para o outro, e duas cópias divergem no dia em que se edita uma.
+
+- **Não aparece em Detalhe/Locais/Resumo sem ninguém o esconder**: esses só
+  contam vinhos com `stockDe>0`. Onde a lista é de TODOS os vinhos (pôr um
+  vinho num lugar vazio, substituir o vinho de uma garrafa) filtra-se à mão
+  com `desejado(v)` — um desejo não tem lugar na prateleira.
+- **Um vinho com garrafas não é um desejo**: o `guardarGarrafa` desliga a
+  marca se uma garrafa chegar por outro caminho.
+- **Quem se esquecer de passar o desejo** e puser o vinho pelo "Novo vinho"
+  (ou pela importação) é apanhado no fim da gravação
+  (`oferecerRetirarDesejos`/`mesmoDesejo`): a app PROPÕE, par a par, e a
+  pessoa confirma — a semelhança sugere, nunca decide (a lição dos
+  Duplicados da WineCatalog). A regra é apertada de propósito (ver o
+  comentário no app.js): o ano não conta, o produtor e a cor contam.
+- **Não alimenta o catálogo partilhado** enquanto for desejo: a
+  `catalogar_vinho` salta-o, porque quem o escreveu não tem a garrafa na mão
+  e o catálogo dar-lhe-ia essa força. Ao passar para a garrafeira, o UPDATE
+  volta a disparar o trigger.
+- **É visível numa garrafeira emprestada** (é aí que um amigo vai ver o que
+  oferecer), e o **PDF** também (`exportarWishlistPDF`, a mesma folha do
+  Exportar PDF). Mexer é só de quem pode editar. O PDF não leva as minhas
+  notas: é para enviar.
+- Enquanto a coluna não existir, `detetarDesejo()` liga `body.sem-desejo` e
+  tudo o que é `.desejo-only` desaparece — separador e opção do FAB.
+- **Sem ano não há janela de consumo** (migração 16) — e na wishlist o
+  normal é não haver ano. `beber_de`/`beber_ate` são anos de UMA colheita;
+  sem ela seriam os de uma qualquer. A app não os pede à IA nem os propõe
+  (`IA_JANELA`/`iaCamposPara`), o formulário esconde o campo enquanto o ano
+  estiver vazio (`janelaSincronizarForm`), o "A completar" não conta a
+  falta, e a BD apaga-os em qualquer escrita sem ano (trigger
+  `vinhos_sem_colheita`). A `vinho-info` e a `importar-vinhos` fazem o
+  mesmo do lado delas; o catálogo tem a mesma regra
+  (`winecatalog.da_colheita`, no `CLAUDE.md` da WineCatalog).
+
+## O preço de um vinho: as lojas primeiro, a colheita antes da loja
+Nos ecrãs, o `preco_medio` chama-se **preço de referência** (26/09/2026,
+igual na WineCatalog); a coluna mantém o nome.
+Um vinho tem o `preco_medio` da ficha (a IA ou quem o escreveu) e, quando o
+catálogo partilhado os tem, os **preços das lojas** — Garrafeira Nacional,
+Granvine, Vinha, Vivino — com link, colheita e data da recolha. Estes
+**não se copiam para `vinhos`**: lê-os a `precos_lojas` (migração 17) ao
+carregar, para `PRECOS_LOJA`. Uma cópia ficava velha no dia a seguir, e o
+que uma loja pede hoje não é um dado da garrafeira.
+
+O preço que CONTA — no crachá do cartão, no valor da garrafeira, no filtro
+por preço, no "A completar" e nos dois PDFs — é **um só**, e sai sempre de
+`precoPrincipal(v)`/`precoVinho(v)`; nunca `v.preco_medio` à mão nesses
+sítios. A ordem, decidida pelo dono da app:
+1. uma loja **da minha colheita** (GN → Granvine → Vinha);
+2. o Vivino da minha colheita (só se souber qual — `?year=` no link);
+3. uma loja de **outra** colheita, pela mesma ordem;
+4. o Vivino sem colheita conhecida;
+5. o `preco_medio`.
+Uma loja vende a colheita que tem AGORA, raramente a minha — por isso a
+colheita pesa antes da loja. Num vinho sem ano qualquer colheita é a
+minha. O cartão diz sempre de onde veio o preço quando não é o médio
+("63 € · G. Nacional · 2016"; o Vivino sem colheita é "Vivino · média",
+que é o que ele mostra sem ano — nunca "colheita ?"), e a página do vinho
+lista **todas** as lojas (`precosLojaHTML`) com a que conta marcada.
+
+**Um preço desalinhado não conta** (`duvidoso`, em `precosLojaDe`): abaixo
+de metade ou acima do dobro da mediana dos OUTROS preços do vinho (as
+outras lojas e o `preco_medio`). Quando o script das lojas falha é na
+página, não na colheita — o Casa de Saima Garrafeira veio a 8,49 € do
+Vivino com as lojas a 63 € e 69 €. Aparece riscado no detalhe e nunca é o
+principal; sem outro preço com que comparar, conta.
+
+Um preço que o admin **retirou** na WineCatalog (Editar › Fontes de preço,
+`retirado:true` na entrada) não sai da `precos_lojas` — nem riscado: para
+esta app, essa loja não o tem.
+
+`ano`, `produtor` e `precos` também existem na ficha do catálogo e **não**
+entram na comparação do "≠ catálogo" (`catCampos` filtra por `CAT_NOMES`):
+os dois primeiros são a identidade do vinho, o terceiro vive aqui.
+
 ## Monocasta / várias castas é CALCULADO, não guardado
 `castaLabel(v)` conta as linhas de `vinho_castas`: 1 → "Monocasta", 2+ →
 "Várias castas". Uma coluna na base de dados ficava dessincronizada assim
@@ -1307,9 +1411,12 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   totais = entrada + saída, ~5 s): respondeu de memória. Para toda a gente
   fica assim; o resultado leva `pesquisaWeb` (também na cache), e ao admin
   (`garrafeira.is_admin()`, confirmado na função) a procura de memória
-  mostra 🧠 e o botão **🔬 Pesquisa profunda** (`profunda:true`): o prompt
-  exige a pesquisa, salta a cache e o catálogo, e passa ao modelo maior se
-  o barato não pesquisar. Os prompts MANUAIS pedem sempre a pesquisa a
+  mostra 🧠 e o botão **🔬 Pesquisa profunda** (`profunda:true`), que salta
+  a cache e o catálogo e **corre como o modo `gratis`** (abaixo): a pesquisa
+  é feita por nós (Serper, geral + uma consulta ao Vivino) e o Gemini só lê
+  os resultados. Até 25/09/2026 a profunda era o grounding com um prompt a
+  "exigir" a pesquisa — e respondeu de memória na mesma: não há parâmetro
+  na API que obrigue o Gemini a pesquisar. Os prompts MANUAIS pedem sempre a pesquisa a
   sério (`IA_MANUAL_PESQUISA`). Mesmo critério nas quatro apps — ver o
   `CLAUDE.md` da WineCatalog, "De memória ou pesquisado".
 - **`gratis`** ("IA sem pesquisa web" na UI) — pesquisa **externa** primeiro
@@ -1413,6 +1520,24 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   vinhos no primeiro dia, e um aviso que aparece sempre não se lê. Se a consulta falhar, não se avisa e procura-se na mesma:
   um soluço de rede não pode impedir alguém de procurar. No formulário de
   **vinho novo** não há aviso nenhum — ainda não há vinho para ter história.
+- **No vinho novo (e na wishlist), primeiro o CATÁLOGO, a IA só se se
+  pedir** (26/09/2026, `catalogoNovoProcurar`). "Procurar informação"
+  pergunta à `winecatalog.comparar` (grátis, aberta a quem tem sessão),
+  preenche os campos vazios com o que lá está e diz quantos vieram e o que
+  falta; completar com a IA é um botão à parte, nunca automático. Antes ia
+  direto à `vinho-info`, que já usava o catálogo mas escondia-o atrás de
+  "preenchido pela IA" — e pagava a IA pelo resto sem ninguém ter pedido.
+  **O ano é de quem escreve**: só vai ao catálogo se estiver no formulário,
+  e nunca volta de lá nem da IA (`iaPreencherForm` já não toca no
+  `e-ano`; a `vinho-info` não devolve ano sem ano no pedido). Sem ano, o
+  catálogo responde com a colheita mais completa e, em empate, a mais
+  recente; com ano e outra colheita, só os factos estáveis
+  (`CAT_DA_COLHEITA`). Cor diferente da escolhida = outro vinho, não se
+  copia nada. Um link do Vivino fora do formato (`vivinoLink`) não se copia
+  e o ecrã DIZ que não copiou — calado, parecia esquecido. E o link do
+  Vivino vai para o campo `e-vivino-url`, à vista: ia só para o
+  `_iaExtraNovo`, o campo ficava em branco e, ao gravar, o que lá estivesse
+  escrito à mão era tapado pelo da procura.
 - **A COR diz-se ANTES de se procurar** (`iaCorGuard`). O `tipo` nasce
   'Tinto' por omissão e a cor faz parte da identidade do vinho no catálogo
   partilhado — um branco que ninguém corrigiu ia procurar (e gravar) com a

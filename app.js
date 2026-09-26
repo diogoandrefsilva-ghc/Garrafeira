@@ -327,11 +327,11 @@ function escolherGarrafeira(acabadaDeNascer){
    garrafeira: a lista de garrafeiras, quem sou eu e as castas não mudaram. */
 async function carregarGarrafeira(){
   if(!GA_ID){
-    db.locais=[];db.vinhos=[];db.garrafas=[];
+    db.locais=[];db.vinhos=[];db.garrafas=[];PRECOS_LOJA={};
     IMG_ASSINADA={};reindexar();aplicarPermissoes();return;
   }
   const f=`garrafeira_id=eq.${GA_ID}`;
-  const [locais,vinhos,garrafas,vc,cn]=await Promise.all([
+  const [locais,vinhos,garrafas,vc,cn,pl]=await Promise.all([
     sbReq('GET',`locais?${f}&select=*&order=ordem.asc,nome.asc`),
     sbReq('GET',`vinhos?${f}&select=*&order=nome.asc`),
     sbReq('GET',`garrafas?${f}&select=*&order=id.asc`),
@@ -342,9 +342,14 @@ async function carregarGarrafeira(){
     sbReq('GET','vinho_castas?select=*'),
     // `consumo_notas` não tem `garrafeira_id` pela mesma razão — a dela é
     // a da garrafa — e junta-se aqui como as castas: em `porGarrafa`.
-    sbReq('GET','consumo_notas?select=*&order=criado_em.asc')
+    sbReq('GET','consumo_notas?select=*&order=criado_em.asc'),
+    // Os preços das lojas vêm do CATÁLOGO, não da garrafeira (ver
+    // "O PREÇO QUE CONTA"). Uma poupança e não uma dependência: se falhar,
+    // cada vinho fica com o preço médio de sempre.
+    sbRpc('precos_lojas',{p_garrafeira_id:GA_ID}).catch(()=>null)
   ]);
   db.locais=locais||[];db.vinhos=vinhos||[];db.garrafas=garrafas||[];
+  PRECOS_LOJA=(pl&&typeof pl==='object')?pl:{};
 
   const porGarrafa={};(cn||[]).forEach(n=>{
     (porGarrafa[n.garrafa_id]=porGarrafa[n.garrafa_id]||[]).push(n);
@@ -365,6 +370,7 @@ async function carregarGarrafeira(){
   await detetarAtualizado();
   await detetarLayoutLocais();
   await detetarCaixaMadeira();
+  await detetarDesejo();
   await assinarImagens();
   reindexar();
   aplicarPermissoes();
@@ -425,6 +431,20 @@ async function detetarCaixaMadeira(){
   try{await sbReq('GET','garrafas?select=caixa_madeira&limit=1');TEM_CAIXA_MADEIRA=true;}
   catch(e){TEM_CAIXA_MADEIRA=false;}
 }
+// `vinhos.desejado` é coluna NOVA (migração 15, a wishlist) — mesmo padrão:
+// enquanto não existir, o separador Wishlist não aparece e o POST de um
+// vinho novo não a leva (senão rebentava com 400).
+let TEM_DESEJO=false;
+async function detetarDesejo(){
+  if(db.vinhos.length)TEM_DESEJO=('desejado' in db.vinhos[0]);
+  else{
+    try{await sbReq('GET','vinhos?select=desejado&limit=1');TEM_DESEJO=true;}
+    catch(e){TEM_DESEJO=false;}
+  }
+  document.body.classList.toggle('sem-desejo',!TEM_DESEJO);
+}
+// Um vinho da wishlist: não tem garrafas e não está na garrafeira — quer-se.
+function desejado(v){return !!(TEM_DESEJO&&v&&v.desejado);}
 
 /* ── ÍNDICES E CÁLCULOS ────────────────────────────────────────────── */
 let IDXV={}, IDXL={}, GARV={};
@@ -1086,7 +1106,7 @@ document.addEventListener('click',e=>{
 
 /* ── NAVEGAÇÃO ─────────────────────────────────────────────────────── */
 let tabAtiva='garrafeira';
-const ORDEM_TABS=['garrafeira','detalhe','locais','consumidos','cfg'];
+const ORDEM_TABS=['garrafeira','detalhe','locais','consumidos','desejos','cfg'];
 function tab(nome,btn){
   tabAtiva=nome;
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));
@@ -1100,12 +1120,14 @@ function tab(nome,btn){
   // dentro do `renderMapa` não tinha alturas para medir
   if(nome==='locais')ajustarEstantes();
   if(nome==='consumidos')renderConsumidos();
+  if(nome==='desejos')renderDesejos();
   if(nome==='cfg')renderCfg();
   window.scrollTo({top:0,behavior:'instant'});
 }
 function restaurarTab(){
   let t=null;try{t=localStorage.getItem('gf_tab');}catch(e){}
   if(!t||t==='garrafeira')return;
+  if(t==='desejos'&&!TEM_DESEJO)return;   // a migração 15 ainda não correu
   const bts=document.querySelectorAll('.itabs .it');
   const i=ORDEM_TABS.indexOf(t);
   if(i>0&&bts[i])tab(t,bts[i]);
@@ -1218,14 +1240,135 @@ function resumoPainel(id,titulo,rows,filtroFn,listaBase,notaTop){
       :'<div class="note" style="padding:8px 0">Sem dados ainda.</div>'}</div>
   </div>`;
 }
+/* ── O PREÇO QUE CONTA ─────────────────────────────────────────────
+   Um vinho tem até dois tipos de preço: o que as LOJAS pedem hoje (lido do
+   catálogo partilhado, `precos_lojas` — nunca copiado para cá, que ficava
+   velho no dia a seguir) e o PREÇO MÉDIO da ficha (a IA ou quem o
+   escreveu). O que conta — no cartão, no valor da garrafeira, no filtro
+   por preço, nos PDFs — é UM só, `precoPrincipal`, e diz sempre de onde
+   veio.
+
+   A ordem é das lojas que vendem a garrafa a sério para o agregador:
+   Garrafeira Nacional → Granvine → Vinha → Vivino. Mas uma loja vende a
+   colheita que tem AGORA, e raramente é a minha — por isso a colheita
+   pesa antes da loja:
+     1. uma loja, da MINHA colheita;
+     2. o Vivino, da minha colheita;
+     3. uma loja, de OUTRA colheita (marcado como tal);
+     4. o Vivino sem colheita conhecida (o Vivino quase nunca a diz);
+     5. o preço médio da ficha.
+   Num vinho SEM ano (o normal na wishlist) qualquer colheita é a minha.
+   Uma loja que não diga a colheita não conta como a minha — conta como
+   outra: um preço que ninguém consegue datar não passa à frente de um
+   que se sabe de que ano é. Lojas que não estejam em `LOJAS` aparecem no
+   detalhe mas nunca contam. */
+let PRECOS_LOJA={};   // vinho_id -> [{loja,preco,url,nome,colheita,em}]
+const LOJAS=[
+  {k:'garrafeira_nacional',nome:'Garrafeira Nacional',curto:'G. Nacional'},
+  {k:'granvine',nome:'Granvine',curto:'Granvine'},
+  {k:'vinha',nome:'Vinha',curto:'Vinha'},
+  {k:'vivino',nome:'Vivino',curto:'Vivino'}
+];
+function lojaInfo(k){return LOJAS.find(l=>l.k===k)||{k,nome:k,curto:k};}
+function lojaOrdem(k){const i=LOJAS.findIndex(l=>l.k===k);return i<0?99:i;}
+// A colheita do preço: a que a loja diz, ou o `?year=` de um link do Vivino.
+function colheitaPreco(p){
+  if(p.colheita)return Number(p.colheita);
+  const m=/[?&]year=(\d{4})\b/.exec(p.url||'');
+  return m?Number(m[1]):null;
+}
+/* UM PREÇO DESALINHADO NÃO CONTA. O script que recolhe os preços acerta
+   quase sempre, mas quando falha é na PÁGINA (outro vinho da mesma casa,
+   meia garrafa): o Casa de Saima Garrafeira apareceu a 8,49 € no Vivino com
+   as duas lojas a pedirem 63 € e 69 €. Uma colheita diferente mexe no preço
+   uns 10–20%, não o divide por sete. Por isso um preço que fique abaixo de
+   metade ou acima do dobro da MEDIANA dos outros (as outras lojas e o
+   preço médio da ficha) é marcado `duvidoso`: aparece no detalhe, riscado,
+   e nunca é o que conta. Sem mais nenhum preço com que comparar não há
+   como saber, e conta. */
+function mediana(xs){
+  const a=[...xs].sort((x,y)=>x-y), n=a.length;
+  return n?(n%2?a[(n-1)/2]:(a[n/2-1]+a[n/2])/2):null;
+}
+function precosLojaDe(v){
+  const ps=((v&&PRECOS_LOJA[v.id])||[]).filter(p=>p&&Number(p.preco)>0)
+    .map(p=>({...p,preco:Number(p.preco),colheita:colheitaPreco(p)}))
+    .sort((a,b)=>lojaOrdem(a.loja)-lojaOrdem(b.loja)||(b.colheita||0)-(a.colheita||0));
+  ps.forEach((p,i)=>{
+    const ref=mediana(ps.filter((_,j)=>j!==i).map(q=>q.preco)
+      .concat(v.preco_medio!=null?[Number(v.preco_medio)]:[]));
+    p.duvidoso=ref!=null&&(p.preco<ref/2||p.preco>ref*2);
+  });
+  return ps;
+}
+function precoPrincipal(v){
+  if(!v)return null;
+  const ps=precosLojaDe(v).filter(p=>lojaOrdem(p.loja)<99&&!p.duvidoso);
+  const minha=p=>v.ano==null||(p.colheita!=null&&p.colheita===Number(v.ano));
+  const loja=p=>p.loja!=='vivino', viv=p=>p.loja==='vivino';
+  const p=ps.find(p=>loja(p)&&minha(p))||ps.find(p=>viv(p)&&minha(p))
+        ||ps.find(loja)||ps.find(viv);
+  if(p)return {preco:p.preco,loja:p.loja,colheita:p.colheita,outra:!minha(p),url:p.url,em:p.em};
+  return v.preco_medio!=null?{preco:Number(v.preco_medio),loja:null}:null;
+}
+function precoVinho(v){const p=precoPrincipal(v);return p?p.preco:null;}
+// De onde veio, em poucas palavras: "Granvine", "Granvine · 2019" (outra
+// colheita), "Vivino · média" (sem colheita, o Vivino dá a média das
+// colheitas), "preço médio".
+function precoFonteTxt(p,curto){
+  if(!p)return '';
+  if(!p.loja)return 'preço de referência';
+  const l=lojaInfo(p.loja);
+  return (curto?l.curto:l.nome)+(p.outra?(p.colheita?' · '+p.colheita:(curto?' · média':' · média das colheitas')):'');
+}
+
+// O crachá do cartão: o preço e, em pequeno, de onde veio — só quando não
+// é o preço médio, que é o que o cartão sempre mostrou.
+function precoBadge(v){
+  const p=precoPrincipal(v);
+  if(!p)return '';
+  const f=p.loja?precoFonteTxt(p,true):'';
+  return `<span class="bdg preco"${p.loja?` title="${esc(precoFonteTxt(p))}"`:''}>${esc(eur0(p.preco))}${f?`<small>· ${esc(f)}</small>`:''}</span>`;
+}
+function precoPDF(v){
+  const p=precoPrincipal(v);
+  if(!p)return '';
+  return esc(eur(p.preco))+(p.loja?`<span class="pfonte">${esc(precoFonteTxt(p,true))}</span>`:'');
+}
+/* A lista das lojas na página do vinho: TODAS, com o link, a colheita e a
+   data da recolha — as de outra colheita também, que é informação, só não
+   é o preço deste vinho. A que conta leva a marca. */
+function precosLojaHTML(v){
+  const ps=precosLojaDe(v);
+  if(!ps.length)return '';
+  const pp=precoPrincipal(v);
+  return `<div class="msec">Preços nas lojas</div>
+    <div class="mprecos">${ps.map(p=>{
+      const conta=pp&&pp.loja===p.loja&&pp.preco===p.preco&&pp.colheita===p.colheita&&pp.url===p.url;
+      const outra=v.ano!=null&&p.colheita!=null&&p.colheita!==Number(v.ano);
+      const meta=p.duvidoso?'muito diferente dos outros — provavelmente não é deste vinho'
+        :[p.colheita?(outra?'colheita '+p.colheita:'a tua colheita')
+                    :(p.loja==='vivino'?'média das colheitas':''),
+          p.em?'visto a '+dataPT(p.em):''].filter(Boolean).join(' · ');
+      const nome=esc(lojaInfo(p.loja).nome);
+      return `<div class="mpreco${conta?' conta':''}${outra?' outra':''}${p.duvidoso?' duvidoso':''}">
+        <div class="mp-l">${p.url?`<a href="${esc(p.url)}" target="_blank" rel="noopener">${nome}</a>`:nome}
+          <i>${esc(meta)}</i></div>
+        <div class="mp-v">${esc(eur(p.preco))}${conta?'<span>conta</span>':''}</div>
+      </div>`;}).join('')}
+    </div>
+    <div class="note mp-nota">Conta a primeira loja da tua colheita (Garrafeira Nacional, Granvine, Vinha, Vivino);
+      sem nenhuma, a de outra colheita${v.preco_medio!=null?'; sem loja nenhuma, o preço de referência':''}.</div>`;
+}
+
 /* O VALOR da garrafeira é uma ESTIMATIVA e diz-se isso: vale o que se
-   pagou (`preco_compra`) quando se sabe, e o preço médio do vinho quando
-   não se sabe. Garrafas sem nenhum dos dois não contam — inventar um preço
-   para elas era pôr no cartão um número que ninguém podia conferir. */
+   pagou (`preco_compra`) quando se sabe, e o preço que conta do vinho
+   (`precoPrincipal`) quando não se sabe. Garrafas sem nenhum dos dois não
+   contam — inventar um preço para elas era pôr no cartão um número que
+   ninguém podia conferir. */
 function valorGarrafa(g){
   if(g.preco_compra!=null)return Number(g.preco_compra);
-  const v=IDXV[g.vinho_id];
-  return v&&v.preco_medio!=null?Number(v.preco_medio):null;
+  return precoVinho(IDXV[g.vinho_id]);
 }
 function valorVinho(v){
   return garrafasDe(v.id,true).reduce((s,g)=>{const x=valorGarrafa(g);return x==null?s:s+x;},0);
@@ -1251,11 +1394,12 @@ function faixaIndice(valor){
 const FALTAS=[
   {k:'Sem imagem do rótulo',tem:imagemFuncional},
   {k:'Sem castas',          tem:v=>(v.castas||[]).length>0},
-  {k:'Sem preço médio',     tem:v=>v.preco_medio!=null},
+  {k:'Sem preço',           tem:v=>precoVinho(v)!=null},
   {k:'Sem classificação',   tem:v=>!!v.classificacao},
   {k:'Sem nota Vivino',     tem:v=>v.vivino_nota!=null},
   {k:'Sem informação de harmonização',       tem:v=>!!v.harmonizacao},
-  {k:'Sem informação de intervalo de consumo',tem:v=>v.beber_de!=null||v.beber_ate!=null}
+  // Sem colheita não há janela de consumo (ver `IA_JANELA`) — não é falta.
+  {k:'Sem informação de intervalo de consumo',tem:v=>v.ano==null||v.beber_de!=null||v.beber_ate!=null}
 ];
 function faltasDe(v){return FALTAS.filter(f=>!f.tem(v)).map(f=>f.k);}
 
@@ -1478,7 +1622,7 @@ function valorDe(v,k){
     case 'mencao':  return v.mencao?[v.mencao]:[];
     case 'ano':     return v.ano?[String(v.ano)]:[];
     case 'local':   return [...new Set(garrafasDe(v.id,true).map(g=>String(g.local_id)))];
-    case 'preco':   return v.preco_medio==null?[]:[String(faixaIndice(v.preco_medio))];
+    case 'preco':   {const x=precoVinho(v);return x==null?[]:[String(faixaIndice(x))];}
     case 'teor':    return v.teor==null?[]:[String(faixaTeorIndice(v.teor))];
     case 'vivino':  return v.vivino_nota==null?[]:[String(faixaVivinoIndice(v.vivino_nota))];
     /* A maturação não filtra por "No ponto" — filtra pelo TERÇO da janela.
@@ -1997,21 +2141,25 @@ function vinhoCardHTML(v,termos,loteSel){
   const on=loteSel&&loteSelTem(v.id);
   const cheio=loteSel&&!on&&loteSelCheio();
   const clique=loteSel?`loteSelToggle(${v.id})`:`verVinho(${v.id})`;
+  // Na wishlist, sem ano quer dizer "qualquer colheita" e não uma falta: o
+  // "s/a" lia-se como um dado em branco. Cala-se, e a nota do Vivino sobe
+  // para o lugar dele. Um desejo COM ano (uma colheita em concreto) mostra-o.
+  const semAno=!v.ano&&desejado(v);
   return `<article class="vcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}" onclick="${clique}">
     <div class="vc-top">
       ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
       <div class="vc-main">
-        <div class="vc-anofloat">
-          <div class="vc-ano">${v.ano||'s/a'}</div>
+        ${semAno&&!v.vivino_nota?'':`<div class="vc-anofloat">
+          ${semAno?'':`<div class="vc-ano">${v.ano||'s/a'}</div>`}
           ${v.vivino_nota?`<span class="bdg viv">★ ${Number(v.vivino_nota).toFixed(1)}</span>`:''}
-        </div>
+        </div>`}
         <div class="vc-nome">${esc(v.nome)}</div>
         <div class="vc-sub">${esc([v.produtor,[v.tipo,v.estilo].filter(Boolean).join(' '),v.regiao].filter(Boolean).join(' · '))}</div>
         <div class="vc-badges">
           ${castasTxt?`<span class="bdg cas">🍇 ${esc(castasTxt)}</span>`:''}
           ${cl?`<span class="bdg mono">${esc(cl)}</span>`:''}
           ${v.mencao?`<span class="bdg men">${esc(v.mencao)}</span>`:''}
-          ${v.preco_medio!=null?`<span class="bdg">${esc(eur0(v.preco_medio))}</span>`:''}
+          ${precoBadge(v)}
         </div>
         <div class="vc-foot">
           ${sitios.map(x=>`<span class="vc-l"><span class="vc-pip" style="background:${esc(x.cor)}"></span><b>${esc(x.txt)}</b></span>`).join('')}
@@ -2123,6 +2271,7 @@ function renderDetalhe(){
 function renderLista(){
   renderResumo();
   renderFiltrados();
+  if(tabAtiva==='desejos')renderDesejos();
   verificarImagens();
 }
 
@@ -2709,7 +2858,7 @@ function mapaLugarVazio(localId,prateleira,lugar){
   const soltas={};
   db.garrafas.filter(g=>naGarrafeira(g)&&!chaveLugarLayout(g.lugar))
     .forEach(g=>{soltas[g.vinho_id]=(soltas[g.vinho_id]||0)+1;});
-  const ordenados=[...db.vinhos].sort((a,b)=>
+  const ordenados=db.vinhos.filter(v=>!desejado(v)).sort((a,b)=>
     String(a.nome||'').localeCompare(String(b.nome||''),'pt',{numeric:true,sensitivity:'base'})||
     String(a.ano||'').localeCompare(String(b.ano||''),'pt',{numeric:true}));
   const opt=v=>`<option value="${v.id}">${esc(v.nome)}${v.ano?` · ${esc(v.ano)}`:''}${soltas[v.id]?` · ${soltas[v.id]} por arrumar`:''}</option>`;
@@ -2881,15 +3030,24 @@ function refrescarVinhoAberto(){
 let CAT_CMP={};        // vinho_id -> resposta da comparação
 let CAT_ACARREGAR={};  // vinho_id -> true enquanto vai a caminho
 
-/* Os campos do catálogo pelo nome que têm no ecrã. O que não estiver aqui
-   aparece com a chave crua — um campo novo do outro lado não pode
-   desaparecer só porque ninguém veio cá acrescentá-lo. */
+/* Os campos do catálogo pelo nome que têm no ecrã — e, ao mesmo tempo, os
+   ÚNICOS que se comparam. São exatamente os que a `ficha_catalogo` manda e
+   o `aplicar_do_catalogo` sabe gravar. O catálogo guarda mais do que isso
+   (`ano`, `produtor`, `precos`, escritos por outros scripts), e mostrá-los
+   aqui era pior do que inútil: do nosso lado nunca estão na ficha, por isso
+   apareciam SEMPRE como "o catálogo sabe e tu não" — o produtor igual ao
+   meu, o ano de uma colheita que não é a minha, `precos` como
+   [object Object] — e "Usar a do catálogo" dizia "3 campos trazidos ✓" sem
+   mudar nada. O ano e o produtor são a IDENTIDADE do vinho (é por eles que
+   se acha a linha do catálogo), não factos para trazer de lá. Um campo novo
+   do outro lado entra aqui no dia em que a `ficha_catalogo` o souber
+   escrever. */
 const CAT_NOMES={
   tipo:'Tipo',estilo:'Estilo',mencao:'Menção',classificacao:'Classificação',
   castas:'Castas',regiao:'Região',sub_regiao:'Sub-região',pais:'País',
   teor:'Álcool',estagio_meses:'Estágio (meses)',estagio_texto:'Estágio',
   vivino_nota:'Nota Vivino',vivino_avaliacoes:'Avaliações Vivino',
-  vivino_url:'Link do Vivino',preco_medio:'Preço médio',
+  vivino_url:'Link do Vivino',preco_medio:'Preço de referência',
   beber_de:'Beber de',beber_ate:'Beber até',notas_prova:'Notas de prova',
   harmonizacao:'Harmoniza com',ai_resumo:'Resumo',imagem_url:'Imagem'
 };
@@ -2939,7 +3097,8 @@ async function catComparar(id,forcar){
 function catDados(id){return CAT_CMP[id]||null;}
 function catCampos(id){
   const d=catDados(id);
-  return (d&&d.encontrado&&Array.isArray(d.campos))?d.campos:[];
+  return (d&&d.encontrado&&Array.isArray(d.campos))
+    ?d.campos.filter(c=>c&&Object.prototype.hasOwnProperty.call(CAT_NOMES,c.campo)):[];
 }
 function catDiferentes(id){return catCampos(id).filter(c=>c.difere);}
 function catSoCatalogo(id){return catCampos(id).filter(c=>c.soCatalogo);}
@@ -3265,7 +3424,7 @@ function vinhoDetalheHTML(v){
           <span class="mhero-lupa">⤢</span>
         </button>
         <div class="mhero-tx">
-          <div class="mhero-k">${esc([v.tipo,v.estilo,v.classificacao].filter(Boolean).join(' · '))||'&nbsp;'}</div>
+          <div class="mhero-k">${desejado(v)?'⭐ Wishlist · ':''}${esc([v.tipo,v.estilo,v.classificacao].filter(Boolean).join(' · '))||(desejado(v)?'':'&nbsp;')}</div>
           <h3>${esc(v.nome)}</h3>
           <div class="mhero-s"><span class="mhero-o">${origem}${origem&&v.ano?' · ':''}</span>${v.ano?`<b>${v.ano}</b>`:''}</div>
           ${v.ano?`<div class="mhero-ab">${v.ano}</div>`:''}
@@ -3289,7 +3448,14 @@ function vinhoDetalheHTML(v){
     </div>
     ${catTiraHTML(v)}
 
-    <div class="msec">Onde está</div>
+    ${desejado(v)?`<div class="msec">Wishlist</div>
+    <div class="desejo-faixa">
+      <div class="note">⭐ Ainda não está na garrafeira — é um vinho que se quer ter.${v.criado_em?` Na wishlist desde ${dataPT(String(v.criado_em).slice(0,10))}.`:''}</div>
+      <div class="macoes ro-hide" style="margin-top:10px">
+        <button class="btn prim" onclick="abrirEditarVinho(${v.id},'converter')">🍷 Passar para a garrafeira</button>
+        <button class="btn ghost" onclick="retirarDesejo(${v.id})">Retirar da wishlist</button>
+      </div>
+    </div>`:`<div class="msec">Onde está</div>
     ${ativas.length
       ? ativas.map(g=>{
           const pos=[g.prateleira,g.lugar?'lugar '+g.lugar:'',g.caixa_madeira?'em caixa de madeira':''].filter(Boolean).join(' · ');
@@ -3305,7 +3471,7 @@ function vinhoDetalheHTML(v){
           <button class="mini o ro-hide" onclick="abrirConsumir(${v.id},${g.id})">Consumir</button>
         </div>`;}).join('')
       : `<div class="note" style="padding:8px 0">Não há garrafas deste vinho na garrafeira${bebidas.length?' — já foram todas bebidas':''}.</div>`}
-    <button class="btn ghost ro-hide" onclick="abrirGarrafa(0,${v.id})">+ Acrescentar garrafa</button>
+    <button class="btn ghost ro-hide" onclick="abrirGarrafa(0,${v.id})">+ Acrescentar garrafa</button>`}
 
     <div class="msec">Ficha</div>
     <div class="mdet">
@@ -3317,12 +3483,16 @@ function vinhoDetalheHTML(v){
       ${linha('Castas',(v.castas||[]).length?esc(v.castas.join(', ')):'',v.id,'castas')}
       ${linha('Estágio',esc(estagio),v.id,['estagio_meses','estagio_texto'])}
       ${linha('Álcool',v.teor?esc(v.teor)+'%':'',v.id,'teor')}
-      ${linha('Preço médio',v.preco_medio!=null?eur(v.preco_medio):'',v.id,'preco_medio')}
+      ${(()=>{const p=precoPrincipal(v);return p&&p.loja
+        ?linha('Preço',esc(eur(p.preco))+` <span class="mp-de">· ${esc(precoFonteTxt(p))}</span>`):'';})()}
+      ${linha('Preço de referência',v.preco_medio!=null?eur(v.preco_medio):'',v.id,'preco_medio')}
       ${linha('Beber entre',idadeInfo,v.id,['beber_de','beber_ate'])}
       ${linha('Notas de prova',esc(v.notas_prova),v.id,'notas_prova')}
       ${linha('Harmoniza com',esc(v.harmonizacao),v.id,'harmonizacao')}
       ${linha('As minhas notas',esc(v.notas))}
     </div>
+
+    ${precosLojaHTML(v)}
 
     ${v.ai_resumo?`<div class="msec">O que se sabe</div>
       <div class="note" style="margin-top:8px;font-size:12.5px">${esc(v.ai_resumo)}</div>`:''}
@@ -3350,7 +3520,7 @@ function vinhoDetalheHTML(v){
 
     <div class="macoes">
       <button class="btn ghost" onclick="fecharModal('modal-vinho')">Fechar</button>
-      <button class="btn danger ro-hide" onclick="apagarVinho(${v.id})">🗑 Apagar vinho</button>
+      ${desejado(v)?'':`<button class="btn danger ro-hide" onclick="apagarVinho(${v.id})">🗑 Apagar vinho</button>`}
     </div>`;
 }
 // Diferente de `ai_fontes` (o que a IA encontrou, substituído por inteiro a
@@ -3527,6 +3697,136 @@ async function apagarVinho(id){
   }catch(e){toast('Não foi possível apagar: '+e.message,1);}
 }
 
+/* ── WISHLIST ──────────────────────────────────────────────────────
+   Os vinhos que não estão cá mas que se querem ter (migração 15). Não é
+   uma tabela à parte: é um vinho como os outros, sem garrafas e com
+   `desejado` ligado — por isso a ficha, a procura da IA, a página do vinho
+   e o Editar são os de sempre, e passar um desejo para a garrafeira é
+   desligar a marca e acrescentar garrafas (`abrirEditarVinho(id,'converter')`),
+   sem copiar a ficha de um lado para o outro.
+   Não aparece em Detalhe/Locais/Resumo sem ninguém ter de o esconder: esses
+   só contam vinhos com garrafas (`stockDe>0`), e um desejo não tem nenhuma.
+   É visível também numa garrafeira EMPRESTADA — é o sítio onde um amigo vai
+   ver o que oferecer — mas só o dono lhe mexe (`ro-hide`/`roGuard`). */
+function desejos(){
+  return db.vinhos.filter(desejado).sort((a,b)=>
+    String(a.nome||'').localeCompare(String(b.nome||''),'pt',{numeric:true,sensitivity:'base'})||
+    String(a.ano||'').localeCompare(String(b.ano||''),'pt',{numeric:true}));
+}
+function renderDesejos(){
+  const box=document.getElementById('desejos');
+  if(!box)return;
+  const ds=desejos();
+  document.getElementById('desejos-count').textContent=`${ds.length} vinho${ds.length===1?'':'s'}`;
+  const pdf=document.getElementById('desejos-pdf');
+  if(pdf)pdf.disabled=!ds.length;
+  box.innerHTML=ds.length
+    ? ds.map(v=>vinhoCardHTML(v,[],false)).join('')
+    : `<div class="vazio"><b>A wishlist está vazia</b>Os vinhos que ainda não tens mas queres ter.${isReadOnly?'':' Toca em <b>+ Adicionar</b> — a procura preenche a ficha, como num vinho novo.'}</div>`;
+}
+function novoDesejo(){
+  if(!TEM_DESEJO||roGuard())return;
+  abrirEditarVinho(0,'desejo');
+}
+// Retirar um desejo é apagá-lo: não tem garrafas nem histórico de consumo,
+// é só a ficha — e o que ela tinha de sabido já foi para o catálogo pela
+// procura da IA. `semPerguntar` é para quem já perguntou (o
+// `oferecerRetirarDesejos`, a seguir a um vinho novo).
+async function retirarDesejo(id,semPerguntar){
+  if(roGuard())return false;
+  const v=IDXV[id];if(!v||!desejado(v))return false;
+  if(!semPerguntar&&!confirm(`Retirar "${v.nome}" da wishlist?`))return false;
+  try{
+    const foto=String(v.imagem_path||'').trim();
+    await sbReq('DELETE',`vinhos?id=eq.${id}`);
+    if(foto)apagarObjeto(foto);
+    db.vinhos=db.vinhos.filter(x=>x.id!==id);
+    reindexar();
+    if(VINHO_ABERTO===id)fecharModal('modal-vinho');
+    renderLista();
+    toast('Retirado da wishlist');
+    return true;
+  }catch(e){toast('Não foi possível retirar: '+e.message,1);return false;}
+}
+
+/* "Este vinho novo é um da wishlist?" — para quem comprou um desejo e o pôs
+   pelo "Novo vinho" (ou pela importação) em vez de o passar a partir da
+   wishlist. É uma SUGESTÃO, e a pessoa confirma par a par: a semelhança
+   serve para propor, nunca para decidir (a lição dos Duplicados da
+   WineCatalog). Por isso a regra é apertada:
+   - as palavras do NOME de cada um têm de estar todas no nome+produtor do
+     outro — é o que deixa "Touriga Nacional" (produtor Quinta do Vallado)
+     casar com "Quinta do Vallado Touriga Nacional", e o que impede "Quinta
+     do Crasto" de casar com "Quinta do Crasto Reserva" (sobra o "reserva");
+   - com o produtor escrito dos dois lados, têm de partilhar uma palavra —
+     senão o Touriga Nacional do Esporão casava com o do Vallado;
+   - com a cor escrita dos dois lados, tem de ser a mesma.
+   O ANO não entra: quer-se "o Barca Velha" e compra-se o de 2011. */
+const DESEJO_VAZIAS=new Set(['de','do','da','dos','das','e','d','the','o','a']);
+function palavrasDesejo(s){
+  return chave(s).replace(/[^a-z0-9]+/g,' ').trim().split(/\s+/).filter(t=>t&&!DESEJO_VAZIAS.has(t));
+}
+function mesmoDesejo(a,b){
+  const na=palavrasDesejo(a.nome), nb=palavrasDesejo(b.nome);
+  if(!na.length||!nb.length)return false;
+  const pa=palavrasDesejo(a.produtor), pb=palavrasDesejo(b.produtor);
+  const ta=new Set(na.concat(pa)), tb=new Set(nb.concat(pb));
+  if(!na.every(t=>tb.has(t))||!nb.every(t=>ta.has(t)))return false;
+  if(pa.length&&pb.length&&!pa.some(t=>pb.includes(t)))return false;
+  if(a.tipo&&b.tipo&&a.tipo!==b.tipo)return false;
+  return true;
+}
+async function oferecerRetirarDesejos(novos){
+  if(!TEM_DESEJO||isReadOnly)return;
+  const vistos=new Set();
+  for(const v of (novos||[]).filter(Boolean)){
+    for(const d of desejos()){
+      if(d.id===v.id||vistos.has(d.id)||!mesmoDesejo(v,d))continue;
+      vistos.add(d.id);
+      const nomeD=`${d.nome}${d.ano?' '+d.ano:''}${d.produtor?' ('+d.produtor+')':''}`;
+      if(confirm(`⭐ "${nomeD}" estava na tua wishlist.\n\n`+
+                 `Acabaste de pôr "${v.nome}${v.ano?' '+v.ano:''}" na garrafeira — é o mesmo vinho? `+
+                 `Se for, retira-se da wishlist.`))
+        await retirarDesejo(d.id,true);
+    }
+  }
+}
+
+/* A wishlist em PDF, para mandar a quem nos queira oferecer um vinho. A
+   mesma folha do "Exportar PDF" (`pdfPreAbrir`, ver lá porquê o iframe),
+   com as colunas que servem a quem vai à LOJA: o que é, de quem, de onde,
+   quanto custa mais ou menos e onde o ver. Nada do que é da casa — as
+   minhas notas ficam de fora (são minhas, e o PDF é para enviar). */
+function exportarWishlistPDF(){
+  const ds=desejos();
+  if(!ds.length){toast('A wishlist está vazia',1);return;}
+  const cols=['Vinho','Ano','Produtor','Tipo','Região','Castas','Menção','Preço','Vivino'];
+  const linhas=ds.map(v=>`<tr>
+      <td class="pnome">${esc(v.nome)}</td>
+      <td class="pc">${v.ano||''}</td>
+      <td>${esc(v.produtor)}</td>
+      <td>${esc([v.tipo,v.estilo].filter(Boolean).join(' · '))}</td>
+      <td>${esc([v.regiao,v.sub_regiao].filter(Boolean).join(' · '))}</td>
+      <td>${esc((v.castas||[]).join(', '))}</td>
+      <td>${esc([v.mencao,v.classificacao].filter(Boolean).join(' · '))}</td>
+      <td class="pc">${precoPDF(v)}</td>
+      <td class="pc">${v.vivino_nota?'★ '+Number(v.vivino_nota).toFixed(1):''}${v.vivino_url
+        ?`${v.vivino_nota?' · ':''}<a href="${esc(v.vivino_url)}">ver</a>`:''}</td>
+    </tr>`).join('');
+  const sub=[nomeGarrafeira(),`${ds.length} vinho${ds.length===1?'':'s'} que gostava de ter`].filter(Boolean).join(' · ');
+  pdfPreAbrir(`
+    <div class="pcab">
+      <div><h1>Wishlist de vinhos</h1><div class="psub">${esc(sub)}</div></div>
+      <div class="pdata">${esc(dataPT(hoje()))}</div>
+    </div>
+    <div class="pwrap">
+      <table>
+        <thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>`,'Wishlist');
+}
+
 /* ── MODAL EDITAR / NOVO VINHO ─────────────────────────────────────
    O mesmo formulário serve para criar e para editar (id=0 é criar). Ao
    criar, pede também onde vai a primeira garrafa — um vinho sem garrafa
@@ -3650,16 +3950,31 @@ function fabAcao(tipo){
   if(tipo==='novo')abrirNovoVinho();
   if(tipo==='lote')loteAbrir();
   if(tipo==='importar')importarAbrir();
+  if(tipo==='desejo')novoDesejo();
 }
 
 function abrirNovoVinho(){
   if(roGuard())return;
   abrirEditarVinho(0);
 }
-function abrirEditarVinho(id){
+/* `modo` (a WISHLIST, migração 15) — o MESMO formulário serve três portas
+   a mais, em vez de três formulários parecidos a divergirem:
+   - 'desejo' (id=0): um vinho novo para a wishlist. Igual ao "Novo vinho",
+     com a procura da IA e tudo, mas sem "Primeira garrafa" — ainda não há
+     garrafa nenhuma;
+   - 'converter' (id de um desejo): passá-lo para a garrafeira. A ficha
+     que já lá está, editável (o ano, o preço…), MAIS a "Primeira garrafa"
+     (onde fica, quantas, o preço de compra). Gravar desliga a marca e
+     cria as garrafas — a ficha não se copia para lado nenhum. */
+function abrirEditarVinho(id,modo){
   if(roGuard())return;
   const v=id?IDXV[id]:null;
   if(id&&!v)return;
+  const conv=!!id&&modo==='converter';
+  const paraDesejo=!id&&modo==='desejo';
+  const comGarrafa=(!id&&!paraDesejo)||conv;
+  const titulo=conv?'Passar para a garrafeira':id?'Editar vinho':paraDesejo?'Novo vinho na wishlist':'Novo vinho';
+  const rotulo=conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
   _iaExtraNovo=null;   // o que a procura trouxe é de UM formulário, não fica de um para o outro
   const o=(k,d)=>v?(v[k]==null?'':v[k]):(d==null?'':d);
   const opts=(arr,sel)=>arr.map(x=>`<option value="${esc(x)}"${String(sel)===String(x)?' selected':''}>${esc(x||'—')}</option>`).join('');
@@ -3674,13 +3989,13 @@ function abrirEditarVinho(id){
   const formatoAtual=id?(garrafasDe(id,true)[0]||{}).formato||'0,75 L':'0,75 L';
 
   document.getElementById('modal-edit-in').innerHTML=`
-    <div class="mtop"><h3>${id?'Editar vinho':'Novo vinho'}</h3>
+    <div class="mtop"><h3>${titulo}</h3>
       <button class="mx" onclick="fecharModal('modal-edit')">✕</button></div>
 
     <label>Nome</label>
     <input type="text" id="e-nome" value="${esc(o('nome'))}" placeholder="Quinta do Vallado Touriga Nacional">
     <div class="mrow">
-      <div><label>Ano</label><input type="number" id="e-ano" inputmode="numeric" value="${esc(o('ano'))}" placeholder="2021"></div>
+      <div><label>Ano</label><input type="number" id="e-ano" inputmode="numeric" value="${esc(o('ano'))}" placeholder="2021" oninput="janelaSincronizarForm()"></div>
       <div>${id
         ?`<label>Produtor</label><input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado">`
         // Num vinho novo quase ninguém sabe o produtor de cabeça — é a
@@ -3691,17 +4006,18 @@ function abrirEditarVinho(id){
       }</div>
     </div>
 
-    ${id?`<div class="mrow">
+    ${conv?`<div class="aviso">Revê a ficha (o ano, sobretudo — o que se quer e o que se comprou nem sempre são a mesma colheita) e diz onde fica a garrafa. Sai da wishlist e entra na garrafeira.</div>`:''}
+    ${id&&!conv?`<div class="mrow">
       <div><label>Formato da garrafa</label><select id="e-formato-edit">${FORMATOS.map(x=>
         `<option value="${esc(x)}"${formatoAtual===x?' selected':''}>${esc(x)}</option>`).join('')}</select></div>
     </div>
     <div class="note">Aplica-se a todas as garrafas deste vinho ainda na garrafeira.</div>`:''}
 
-    ${id?'':podeUsarIA()?`<div class="aviso">Escreve o nome (e o ano, se souberes) e escolhe a cor, e carrega em <b>Procurar informação</b>: a pesquisa preenche o resto — produtor, castas, região, nota do Vivino, preço médio e quando beber. Confirmas antes de gravar.</div>
-      ${iaContextoHTML('e-ia')}
-      <button class="btn prim full" id="e-btn-ia" onclick="iaProcurarNovo()">🔎 Procurar informação</button>
-      ${isAdmin()?`<button class="btn ghost full" style="margin-top:8px" onclick="iaManualNovoAbrir()">✍️ Pesquisa manual</button>`:''}
-      <div id="e-ia-estado"></div>`:'<div class="note">A pesquisa por IA não está incluída no teu acesso. Pede ao admin para te atribuir um modo com IA.</div>'}
+    ${id?'':`<div class="aviso">Escreve o nome (e o ano, só se o souberes) e escolhe a cor, e carrega em <b>Procurar informação</b>: primeiro vê-se o que o catálogo partilhado já sabe deste vinho, sem custo${podeUsarIA()?', e depois podes completar o resto com a IA, se quiseres':''}. Confirmas antes de gravar.</div>
+      ${podeUsarIA()?iaContextoHTML('e-ia'):''}
+      <button class="btn prim full" id="e-btn-cat" onclick="catalogoNovoProcurar()">🔎 Procurar informação</button>
+      ${podeUsarIA()&&isAdmin()?`<button class="btn ghost full" style="margin-top:8px" onclick="iaManualNovoAbrir()">✍️ Pesquisa manual</button>`:''}
+      <div id="e-ia-estado"></div>`}
 
     <div class="mrow">
       <div>${id
@@ -3730,12 +4046,14 @@ function abrirEditarVinho(id){
     <label>Estágio (descrição)</label>
     <input type="text" id="e-estagio-txt" value="${esc(o('estagio_texto'))}" placeholder="18 meses em barrica de carvalho francês">
 
-    <div class="mrow">
+    <div class="note" id="e-jan-nota" style="display:none">Sem ano não há <b>janela de consumo</b>:
+      os anos dela seriam os de uma colheita qualquer.</div>
+    <div class="mrow" id="e-jan">
       <div><label>Beber a partir de</label><input type="number" id="e-beber-de" inputmode="numeric" value="${esc(o('beber_de'))}" placeholder="2026"></div>
       <div><label>Beber até</label><input type="number" id="e-beber-ate" inputmode="numeric" value="${esc(o('beber_ate'))}" placeholder="2034"></div>
     </div>
     <div class="mrow">
-      <div><label>Preço médio (€)</label><input type="text" id="e-preco" inputmode="decimal" value="${esc(o('preco_medio'))}" placeholder="18.50"></div>
+      <div><label>Preço de referência (€)</label><input type="text" id="e-preco" inputmode="decimal" value="${esc(o('preco_medio'))}" placeholder="18.50"></div>
       <div><label>Nota Vivino</label><input type="text" id="e-vivino" inputmode="decimal" value="${esc(o('vivino_nota'))}" placeholder="4.1"></div>
     </div>
     <label>Link do Vivino</label>
@@ -3751,7 +4069,7 @@ function abrirEditarVinho(id){
     <label>As minhas notas</label>
     <textarea id="e-notas" placeholder="Onde comprei, para que ocasião guardei, o que achei…">${esc(o('notas'))}</textarea>
 
-    ${id?'':`
+    ${!comGarrafa?'':`
       <div class="msec">Primeira garrafa</div>
       <div class="mrow">
         <div><label>Local</label><select id="e-local">${locOpts||'<option value="">(cria um local primeiro)</option>'}</select></div>
@@ -3768,13 +4086,15 @@ function abrirEditarVinho(id){
       </div>
       <label>Comprada em</label>
       <input type="date" id="e-comprado">`}
+    ${paraDesejo?'<div class="note" style="margin-top:10px">Fica na <b>Wishlist</b>, sem garrafas. Quando o comprares (ou to oferecerem), passa-o para a garrafeira na página do vinho.</div>':''}
 
     <div class="macoes">
-      <button class="btn prim" id="e-guardar" onclick="guardarVinho(${id})">${id?'Guardar':'Adicionar à garrafeira'}</button>
+      <button class="btn prim" id="e-guardar" onclick="guardarVinho(${id},'${modo||''}')">${rotulo}</button>
       <button class="btn ghost" onclick="fecharModal('modal-edit')">Cancelar</button>
     </div>`;
   abrirModal('modal-edit');
-  if(!id){
+  janelaSincronizarForm();
+  if(comGarrafa){
     const loc=document.getElementById('e-local');
     if(loc)loc.onchange=()=>renderPickerPosicoes('e',0);
     renderPickerPosicoes('e',0);
@@ -3797,8 +4117,10 @@ function lerFormVinho(){
     estagio_meses:inteiro(g('e-estagio')),
     estagio_texto:g('e-estagio-txt'),
     teor:num(g('e-teor')),
-    beber_de:inteiro(g('e-beber-de')),
-    beber_ate:inteiro(g('e-beber-ate')),
+    // Sem ano, a janela não se grava (a BD também a recusa: trigger
+    // `vinhos_sem_colheita`).
+    beber_de:inteiro(g('e-ano'))==null?null:inteiro(g('e-beber-de')),
+    beber_ate:inteiro(g('e-ano'))==null?null:inteiro(g('e-beber-ate')),
     preco_medio:num(g('e-preco')),
     vivino_nota:num(g('e-vivino')),
     vivino_url:g('e-vivino-url'),
@@ -3811,14 +4133,18 @@ function lerFormVinho(){
   return f;
 }
 
-async function guardarVinho(id){
+async function guardarVinho(id,modo){
   if(roGuard())return;
+  const conv=!!id&&modo==='converter';
+  const paraDesejo=!id&&modo==='desejo'&&TEM_DESEJO;
+  const comGarrafa=(!id&&!paraDesejo)||conv;
+  const rotulo=conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
   const f=lerFormVinho();
   if(!f.nome){toast('Falta o nome do vinho',1);return;}
   if(!id&&!GA_ID){toast('Não há nenhuma garrafeira aberta',1);return;}
   if(f.ano!=null&&(f.ano<1900||f.ano>2100)){toast('Ano fora do razoável',1);return;}
   let primeiraGarrafa=null;
-  if(!id){
+  if(comGarrafa){
     const localSel=document.getElementById('e-local');
     primeiraGarrafa={
       local_id:localSel&&localSel.value?parseInt(localSel.value,10):null,
@@ -3836,7 +4162,7 @@ async function guardarVinho(id){
     if(erroPos){toast(erroPos,1);return;}
   }
   const castas=f._castas;delete f._castas;
-  // O formulário não tem campos para o resumo/notas de prova/link do Vivino:
+  // O formulário não tem campos para o resumo/notas de prova/avaliações:
   // a procura da IA deixou-os em `_iaExtraNovo` e é aqui que se juntam. Só na
   // CRIAÇÃO — a editar, quem manda nesses campos é o painel de confirmação.
   if(!id&&_iaExtraNovo)Object.assign(f,_iaExtraNovo);
@@ -3844,6 +4170,10 @@ async function guardarVinho(id){
   // que só muda ao aceitar-se uma pesquisa. Só entra se a coluna existir
   // (ver `detetarAtualizado`).
   if(TEM_ATUALIZADO)f.atualizado_em=new Date().toISOString();
+  // A wishlist é só esta marca: ligada ao nascer um desejo, desligada ao
+  // passá-lo para a garrafeira (as garrafas vêm logo a seguir, mais abaixo).
+  if(paraDesejo)f.desejado=true;
+  if(conv&&TEM_DESEJO)f.desejado=false;
 
   const btn=document.getElementById('e-guardar');
   btn.disabled=true;btn.textContent='A guardar…';
@@ -3852,8 +4182,9 @@ async function guardarVinho(id){
     if(id){
       await sbReq('PATCH',`vinhos?id=eq.${id}`,f);
       Object.assign(IDXV[id],f);
-      const novoFormato=document.getElementById('e-formato-edit').value;
-      const ativas=garrafasDe(id,true).filter(g=>g.formato!==novoFormato);
+      const feEl=document.getElementById('e-formato-edit');   // não existe ao passar um desejo
+      const novoFormato=feEl?feEl.value:'';
+      const ativas=feEl?garrafasDe(id,true).filter(g=>g.formato!==novoFormato):[];
       if(ativas.length){
         await sbReq('PATCH',`garrafas?vinho_id=eq.${id}&estado=eq.na_garrafeira`,{formato:novoFormato});
         ativas.forEach(g=>g.formato=novoFormato);
@@ -3872,7 +4203,7 @@ async function guardarVinho(id){
     IDXV[vinhoId].castas=castas.slice().sort((a,b)=>a.localeCompare(b,'pt'));
     await recarregarCastas();
 
-    if(!id){
+    if(comGarrafa){
       const qtd=Math.max(1,Math.min(60,inteiro(document.getElementById('e-qtd').value)||1));
       const base=Object.assign({vinho_id:vinhoId},primeiraGarrafa);
       // Várias garrafas iguais: só a primeira fica com o lugar escrito. Duas
@@ -3887,10 +4218,13 @@ async function guardarVinho(id){
     _iaExtraNovo=null;
     fecharModal('modal-edit');renderLista();refrescarVinhoAberto();
     if(tabAtiva==='locais')renderMapa();
-    toast(id?'Guardado ✓':'Vinho adicionado ✓');
+    toast(conv?'Na garrafeira ✓':id?'Guardado ✓':paraDesejo?'Na wishlist ⭐':'Vinho adicionado ✓');
+    // Quem comprou um vinho da wishlist e o pôs pelo "Novo vinho" (em vez
+    // de o passar a partir da wishlist) fica com o desejo lá esquecido.
+    if(!id&&!paraDesejo)await oferecerRetirarDesejos([IDXV[vinhoId]]);
   }catch(e){
     toast('Não foi possível guardar: '+e.message,1);
-    btn.disabled=false;btn.textContent=id?'Guardar':'Adicionar à garrafeira';
+    btn.disabled=false;btn.textContent=rotulo;
   }
 }
 // A lista de castas cresce quando se grava um vinho com uma casta nova — é
@@ -4198,6 +4532,14 @@ async function guardarGarrafa(gid,vinhoId){
       for(let i=0;i<qtd;i++)linhas.push(Object.assign({vinho_id:vinhoId},dados,i?{lugar:''}:{}));
       const r=await sbReq('POST','garrafas',linhas,{'Prefer':'return=representation'});
       (r||[]).forEach(g=>db.garrafas.push(g));
+      // Um vinho com garrafas já não é um desejo. A página de um desejo não
+      // mostra este botão (tem o "Passar para a garrafeira"), mas uma
+      // garrafa que chegue por outro caminho não pode deixar a marca ligada.
+      const vd=IDXV[vinhoId];
+      if(desejado(vd)){
+        await sbReq('PATCH',`vinhos?id=eq.${vinhoId}`,{desejado:false});
+        vd.desejado=false;
+      }
     }
     reindexar();fecharModal('modal-garrafa');renderLista();refrescarVinhoAberto();
     if(tabAtiva==='locais')renderMapa();
@@ -4222,7 +4564,7 @@ function abrirSubstituirGarrafa(gid){
   if(roGuard())return;
   const g=db.garrafas.find(x=>x.id===gid&&naGarrafeira(x));if(!g)return;
   const atual=IDXV[g.vinho_id]||{nome:'?'};
-  const opts=[...db.vinhos].sort((a,b)=>
+  const opts=db.vinhos.filter(v=>!desejado(v)).sort((a,b)=>
     String(a.nome||'').localeCompare(String(b.nome||''),'pt',{numeric:true,sensitivity:'base'})||
     String(a.ano||'').localeCompare(String(b.ano||''),'pt',{numeric:true})
   ).map(v=>`<option value="${v.id}"${v.id===g.vinho_id?' selected':''}>${esc(v.nome)}${v.ano?` · ${esc(v.ano)}`:''}${v.regiao?` · ${esc(v.regiao)}`:''}</option>`).join('');
@@ -4411,14 +4753,30 @@ function iaContextoLer(pref){
   pref=pref||'ia';
   const notas=(document.getElementById(`${pref}-notas`)?.value||'').trim().slice(0,300);
   const sites=(document.getElementById(`${pref}-sites`)?.value||'')
-    .split(/[,\n]/).map(s=>s.trim().replace(/^https?:\/\//i,'').replace(/\/.*$/,'')).filter(Boolean).slice(0,5);
+    .split(/[,\n]/).map(s=>s.trim()).filter(Boolean).slice(0,5);
+  // Inteiros, e não só o domínio: um link do Vivino de UM vinho colado aqui
+  // é a resposta (a `vinho-info` e a manual usam-no como vivino_url). O
+  // corte ao domínio, para o prompt e a pesquisa, faz-se na função.
   return {notas,sites};
+}
+/* O link do Vivino só no formato que o Vivino usa: `/<nome>/w/<nº>`, limpo
+   de país, língua e ?year=. `/Wines/<nome>`, `/pt-pt/<nome>` sem número e
+   afins são o que um modelo escreve de memória — nunca existiram, e
+   entravam na ficha a partir ao abrir. `/wines/<nº>` é de UMA colheita.
+   A MESMA regra do `vivinoLink` da `vinho-info.ts`. */
+function vivinoLink(u){
+  try{
+    const url=new URL(String(u??'').trim());
+    if(!/(^|\.)vivino\.com$/i.test(url.hostname))return '';
+    const m=url.pathname.match(/\/([a-z0-9-]+)\/w\/(\d+)/i);
+    return m?`https://www.vivino.com/${m[1].toLowerCase()}/w/${m[2]}`:'';
+  }catch(_){return '';}
 }
 function iaEscolher(vinhoId){
   if(roGuard())return;
   if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
   const v=IDXV[vinhoId];if(!v)return;
-  const linhas=IA_CAMPOS.map(c=>{
+  const linhas=iaCamposPara(v).map(c=>{
     const tem=!!iaValorAtual(v,c.k);
     return `<label class="ia-esc">
       <input type="checkbox" class="ia-esc-c" value="${esc(c.k)}"${tem?'':' checked'}>
@@ -4662,6 +5020,94 @@ async function iaSegundaOpiniao(){
   }
   iaMostrarResultado(IA_RES,IA_VINHO);
 }
+/* ── VINHO NOVO: PRIMEIRO O CATÁLOGO, A IA SÓ SE SE PEDIR ──
+   "Procurar informação" no formulário de vinho novo (e da wishlist) já não
+   vai direto à IA: pergunta primeiro ao catálogo partilhado
+   (`winecatalog.comparar`, aberta a quem tem sessão, grátis), preenche os
+   campos vazios com o que lá está e só DEPOIS oferece completar o resto com
+   a IA — um botão, nunca automático. Antes, a `vinho-info` juntava as duas
+   coisas numa chamada só: o catálogo respondia ao que sabia, a IA era paga
+   pelo resto, e quem procurava via só "preenchido pela IA" (26/09/2026, o
+   Sidónio de Sousa na wishlist do Barrona).
+
+   O ANO É DE QUEM ESCREVE. Vai ao catálogo só se estiver no formulário, e
+   nunca volta de lá: sem ano, a `comparar` (a `achar` sem exigir colheita)
+   dá a linha do vinho com MAIS informação e, em empate, a mais recente.
+   Com ano e o catálogo a responder com outra colheita, só servem os factos
+   estáveis — a nota, o preço, a imagem e a janela são DAQUELA colheita
+   (`winecatalog.da_colheita`, que aqui se repete à mão por ser uma lista
+   de seis nomes; se ela mudar, muda esta). */
+const CAT_DA_COLHEITA=['vivino_nota','vivino_avaliacoes','vivino_url','preco_medio','imagem_url','precos','beber_de','beber_ate'];
+async function catalogoNovoProcurar(){
+  const nome=document.getElementById('e-nome').value.trim();
+  if(!nome){toast('Escreve primeiro o nome do vinho',1);document.getElementById('e-nome').focus();return;}
+  // A cor antes de procurar (ver `iaCorGuard`): o catálogo ainda não a tem
+  // na chave, e é ela que separa o tinto do branco do mesmo nome.
+  const elTipo=document.getElementById('e-tipo');
+  if(elTipo&&!elTipo.value){toast('Escolhe primeiro a cor do vinho',1);elTipo.focus();return;}
+  const ano=inteiro(document.getElementById('e-ano').value);
+  const produtor=document.getElementById('e-produtor').value.trim();
+  const btn=document.getElementById('e-btn-cat');
+  const est=document.getElementById('e-ia-estado');
+  const botaoIA=(txt)=>podeUsarIA()
+    ?`<button class="btn full" id="e-btn-ia" style="margin-top:8px" onclick="iaProcurarNovo()">${txt}</button>`:'';
+  if(btn){btn.disabled=true;btn.textContent='🔎 A ver o catálogo…';}
+  est.innerHTML='';
+  let r=null;
+  try{
+    r=await sbReq('POST','rpc/comparar',{p_nome:nome,p_produtor:produtor,p_ano:ano,p_ficha:{}},
+      {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
+  }catch(e){
+    // O catálogo é uma poupança, nunca uma dependência: se falhar, fica a IA.
+    est.innerHTML=`<div class="note" style="margin-top:8px">Não consegui perguntar ao catálogo (${esc(e.message)}).</div>`+
+      botaoIA('✨ Procurar com a IA');
+    if(btn){btn.disabled=false;btn.textContent='🔎 Procurar informação';}
+    return;
+  }
+  if(btn){btn.disabled=false;btn.textContent='🔎 Procurar informação';}
+  if(!r||!r.encontrado){
+    est.innerHTML=`<div class="note" style="margin-top:8px">O catálogo ainda não conhece este vinho.</div>`+
+      botaoIA('✨ Procurar com a IA');
+    return;
+  }
+  const outraColheita=ano!==null&&r.mesmaColheita===false;
+  const res={};
+  (r.campos||[]).forEach(c=>{
+    if(!c||!c.soCatalogo)return;              // com p_ficha vazio, é tudo "só do catálogo"
+    const k=c.campo;
+    if(k==='ano')return;                      // o ano nunca vem do catálogo
+    if(outraColheita&&CAT_DA_COLHEITA.includes(k))return;
+    res[k]=c.catalogo;
+  });
+  if(r.produtor&&!res.produtor)res.produtor=r.produtor;
+  // Um link fora do formato do Vivino (`/wines/<nº>`, `/Wines/<nome>`) não
+  // se copia — abre uma colheita, ou nada. Diz-se, para não parecer esquecido.
+  let vivinoMau='';
+  if(res.vivino_url){
+    const bom=vivinoLink(res.vivino_url);
+    if(!bom){vivinoMau=String(res.vivino_url);delete res.vivino_url;}
+    else res.vivino_url=bom;
+  }
+  // Outra cor = outro vinho (o "Papa Figos" tinto não é o branco): não se
+  // copia nada, e diz-se porquê — o mesmo que as Prendas de Anos fazem.
+  if(elTipo&&res.tipo&&res.tipo!==elTipo.value){
+    est.innerHTML=`<div class="note" style="margin-top:8px">O catálogo tem um <b>${esc(r.nome)}</b> mas ${esc(String(res.tipo).toLowerCase())}, não ${esc(elTipo.value.toLowerCase())} — não copiei nada.</div>`+
+      botaoIA('✨ Procurar com a IA');
+    return;
+  }
+  delete res.tipo;
+  _iaAuto=[];
+  iaPreencherForm({...res,modelo:'catálogo partilhado'},false);
+  const n=Object.keys(res).length;
+  const faltam=IA_CAMPOS.filter(c=>c.k!=='ano'&&c.k!=='tipo'&&!(c.k in res)
+    &&(ano!==null||(c.k!=='beber_de'&&c.k!=='beber_ate'))).map(c=>c.rot);
+  const colheita=r.ano?` (colheita ${esc(r.ano)}${outraColheita?' — outra colheita: sem nota, preço nem imagem':''})`:'';
+  est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">📚 Preenchido com o que o catálogo já sabia: <b>${n}</b> ${n===1?'campo':'campos'}${colheita}. Confere antes de gravar.</div>`+
+    (vivinoMau?`<div class="note" style="margin-top:6px">O link do Vivino que o catálogo tem não está no formato do Vivino (<code>${esc(vivinoMau)}</code>) — não o copiei.</div>`:'')+
+    (faltam.length?`<div class="note" style="margin-top:6px">Falta: ${esc(faltam.join(', '))}.</div>`+
+      botaoIA('✨ Completar o que falta com a IA'):'');
+}
+
 // Do formulário de "novo vinho": preenche os campos em vez de gravar.
 async function iaProcurarNovo(motor,profunda){
   if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
@@ -4682,7 +5128,7 @@ async function iaProcurarNovo(motor,profunda){
   const m=profunda?'premium':motor&&temPremium()?motor:motorDoPlano();
   const outro=motorOposto(m);
   if(!motor)_iaAuto=[];
-  btn.disabled=true;btn.textContent='🔎 A procurar…';
+  if(btn){btn.disabled=true;btn.textContent='🔎 A procurar…';}
   est.innerHTML=`<div class="note" style="margin-top:8px">A ${esc(rotuloMotor(m))} está a procurar na net. Pode levar até dois minutos — podes ir fazendo o resto.</div>`;
   const botaoOutro=!motor&&temPremium()
     ? `<button class="mini${outro==='premium'?' o':''}" style="margin-top:8px" onclick="iaProcurarNovo('${outro}')">✨ Tentar com a ${esc(rotuloMotor(outro))}</button>`:'';
@@ -4694,14 +5140,19 @@ async function iaProcurarNovo(motor,profunda){
   try{
     const res=await iaPedir(pedido,null,m);
     iaPreencherForm(res,!!motor||!!profunda);
-    est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">✓ Preenchido pela ${esc(rotuloMotor(m))}${res.fontes&&res.fontes.length?' ('+res.fontes.length+' fontes)':''}. Confere antes de gravar.</div>`+
+    // Quanto veio do catálogo e quanto da IA: sem isto, "preenchido pela IA"
+    // escondia que parte da ficha já se sabia e não custou nada.
+    const nCat=res.origem==='catalogo'?-1:Array.isArray(res.catalogoCampos)?res.catalogoCampos.length:0;
+    const deOnde=nCat<0?'pelo catálogo partilhado (a IA não foi precisa)'
+      :`pela ${esc(rotuloMotor(m))}${nCat?` (${nCat} ${nCat===1?'campo já vinha':'campos já vinham'} do catálogo)`:''}`;
+    est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">✓ Preenchido ${deOnde}${res.fontes&&res.fontes.length?' · '+res.fontes.length+' fontes':''}. Confere antes de gravar.</div>`+
       iaMemoriaHTML(res,"iaProcurarNovo('premium',true)")+(profunda?'':botaoOutro);
   }catch(e){
     // Mesma ideia do `iaMostrarErro`: o motor do plano falhou, mas quem é
     // premium tem o outro para onde ir.
     est.innerHTML=`<div class="erro">${esc(e.message)}</div>`+botaoOutro;
   }
-  btn.disabled=false;btn.textContent='🔎 Procurar informação';
+  if(btn){btn.disabled=false;btn.textContent='🔎 Procurar informação';}
 }
 
 /* ── PESQUISA MANUAL NO VINHO NOVO (só admin) ──
@@ -4767,6 +5218,23 @@ function iaManualNovoPreencher(){
 
 /* Campos que a IA pode trazer, na ordem em que fazem sentido a ler.
    `rot` é o rótulo; `fmt` só existe onde o valor cru não se lê bem. */
+/* A JANELA DE CONSUMO SÓ EXISTE COM COLHEITA. "Beber entre 2026 e 2034" são
+   anos de UMA colheita; num vinho sem ano (é o normal na wishlist) seriam os
+   de uma colheita qualquer, e no ano em que sair a seguinte continuavam a
+   dizer o mesmo. Por isso não se pede, não se propõe nem se grava sem ano —
+   e a BD garante-o (trigger `vinhos_sem_colheita`, migração 16), tal como o
+   catálogo (`winecatalog.da_colheita`). */
+const IA_JANELA=['beber_de','beber_ate'];
+function iaCamposPara(v){
+  return (v&&v.ano)?IA_CAMPOS:IA_CAMPOS.filter(c=>!IA_JANELA.includes(c.k));
+}
+function janelaSincronizarForm(){
+  const a=document.getElementById('e-ano');
+  const sem=!a||inteiro(a.value)==null;
+  const j=document.getElementById('e-jan'), n=document.getElementById('e-jan-nota');
+  if(j)j.style.display=sem?'none':'';
+  if(n)n.style.display=sem?'':'none';
+}
 const IA_CAMPOS=[
   {k:'produtor',rot:'Produtor'},
   {k:'ano',rot:'Ano'},
@@ -4782,7 +5250,7 @@ const IA_CAMPOS=[
   {k:'estagio_texto',rot:'Estágio'},
   {k:'vivino_nota',rot:'Nota Vivino'},
   {k:'vivino_avaliacoes',rot:'Avaliações Vivino'},
-  {k:'preco_medio',rot:'Preço médio (€)'},
+  {k:'preco_medio',rot:'Preço de referência (€)'},
   {k:'beber_de',rot:'Beber a partir de'},
   {k:'beber_ate',rot:'Beber até'},
   {k:'notas_prova',rot:'Notas de prova'},
@@ -4871,11 +5339,12 @@ function iaOrigemHTML(res){
    Com o grounding ligado, o Gemini decide sozinho se pesquisa no Google — e
    muitas vezes responde com o que aprendeu no treino (`pesquisaWeb:false`,
    ver o `vinho-info.ts`). Para toda a gente fica como está; ao admin
-   diz-se, e oferece-se a PESQUISA PROFUNDA: a mesma pergunta, a exigir a
-   pesquisa, sem cache nem catálogo. A função volta a confirmar o admin. */
+   diz-se, e oferece-se a PESQUISA PROFUNDA: a mesma pergunta, sem cache nem
+   catálogo, com a pesquisa feita pela Edge Function (Serper) e o Gemini só
+   a ler os resultados — garantida, ao contrário do grounding. A função
+   volta a confirmar o admin. */
 function iaMemoriaHTML(res,acao){
   if(!isAdmin()||!res||res.pesquisaWeb!==false)return '';
-  if(res.profunda)return `<div class="aviso">🧠 Mesmo obrigado, o Gemini não pesquisou no Google — isto veio de memória. A pesquisa manual (colar num assistente) é a alternativa.</div>`;
   return `<div class="ia-prbar"><span>🧠 O Gemini respondeu <b>de memória</b>, sem pesquisa Google. Costuma acertar em vinhos conhecidos, mas pode estar desatualizado.</span>
     <button class="mini o" onclick="${acao}">🔬 Pesquisa profunda</button></div>`;
 }
@@ -4902,7 +5371,9 @@ function iaMostrarResultado(res,vinhoId){
   const mini1=IA_MOTOR==='premium'?' o':'', mini2=IA_MOTOR2==='premium'?' o':'';
   const atual=k=>k==='castas'?(v.castas||[]).join(', '):(v[k]==null?'':String(v[k]));
 
+  const comAno=v.ano||IA_RES.ano||(IA_RES2&&IA_RES2.ano);
   const linhas=IA_CAMPOS.map(c=>{
+    if(!comAno&&IA_JANELA.includes(c.k))return '';          // sem colheita não há janela
     const ant=atual(c.k), g=iaTxt(c,IA_RES), p=cmp?iaTxt(c,IA_RES2):'';
     const novoG=g&&chave(g)!==chave(ant), novoP=p&&chave(p)!==chave(ant);
     if(!novoG&&!novoP)return '';                              // já lá está igual
@@ -5031,6 +5502,7 @@ async function iaAplicar(){
     if(c.k==='castas'){castasNovas=Array.isArray(val)?val:String(val).split(',').map(s=>s.trim()).filter(Boolean);return;}
     patch[c.k]=val;
   });
+  if(('ano' in patch?patch.ano:v.ano)==null)IA_JANELA.forEach(k=>delete patch[k]);
   if(!Object.keys(patch).length&&!castasNovas){toast('Não escolheste nada');return;}
 
   // Carimbo da procura: fica sempre, mesmo que só se tenha aceitado um
@@ -5087,7 +5559,9 @@ function iaPreencherForm(res,substituir){
     e.value=txt;
     if(!_iaAuto.includes(id))_iaAuto.push(id);
   };
-  por('e-produtor',res.produtor);por('e-ano',res.ano);
+  // O ANO NÃO: é de quem escreve. Uma procura sem ano que devolvesse um
+  // (o do catálogo, ou o que a IA achou) era inventar a colheita da garrafa.
+  por('e-produtor',res.produtor);
   por('e-tipo',res.tipo);por('e-estilo',res.estilo);
   por('e-regiao',res.regiao);por('e-subregiao',res.sub_regiao);
   por('e-mencao',res.mencao);por('e-classificacao',res.classificacao);
@@ -5095,15 +5569,23 @@ function iaPreencherForm(res,substituir){
   por('e-estagio',res.estagio_meses);por('e-estagio-txt',res.estagio_texto);
   por('e-teor',res.teor);
   por('e-beber-de',res.beber_de);por('e-beber-ate',res.beber_ate);
+  janelaSincronizarForm();
   por('e-preco',res.preco_medio);por('e-vivino',res.vivino_nota);
+  // O link do Vivino TEM campo no formulário: vai para lá, à vista. Ia só
+  // para o `_iaExtraNovo` — o campo ficava em branco e, ao gravar, o que lá
+  // estivesse escrito à mão era tapado pelo da procura (ou por nada).
+  por('e-vivino-url',res.vivino_url?vivinoLink(res.vivino_url):'');
   por('e-imagem',res.imagem_url);por('e-harmonizacao',res.harmonizacao);
   // O resumo e as notas de prova só entram quando o vinho for gravado (o
   // formulário não tem campos para eles) — ficam aqui à espera disso.
+  // Por cima do que já lá estava (o catálogo antes da IA): uma volta que
+  // não traga as notas de prova não apaga as que a anterior trouxe.
+  const ant=_iaExtraNovo||{};
   _iaExtraNovo={
-    notas_prova:res.notas_prova||'',
-    ai_resumo:res.ai_resumo||'',vivino_url:res.vivino_url||'',
-    vivino_avaliacoes:res.vivino_avaliacoes||null,
-    ai_fontes:res.fontes||null,ai_modelo:res.modelo||'',
+    notas_prova:res.notas_prova||ant.notas_prova||'',
+    ai_resumo:res.ai_resumo||ant.ai_resumo||'',
+    vivino_avaliacoes:res.vivino_avaliacoes||ant.vivino_avaliacoes||null,
+    ai_fontes:res.fontes||ant.ai_fontes||null,ai_modelo:res.modelo||ant.ai_modelo||'',
     ai_atualizado_em:new Date().toISOString()
   };
 }
@@ -5166,11 +5648,12 @@ async function iaCaminhoCatalogo(vinhoId){
 // comparação final saber a que se pediu (os mesmos `campos` que a Edge
 // Function usaria para cortar a resposta).
 let IA_MANUAL_CAMPOS=null;
+let IA_MANUAL_VIVINO=''; // o link do Vivino colado nos sites de confiança
 
 function iaManualEscolher(vinhoId){
   if(roGuard())return;
   const v=IDXV[vinhoId];if(!v)return;
-  const linhas=IA_CAMPOS.map(c=>{
+  const linhas=iaCamposPara(v).map(c=>{
     const tem=!!iaValorAtual(v,c.k);
     return `<label class="ia-esc">
       <input type="checkbox" class="ia-esc-c" value="${esc(c.k)}"${tem?'':' checked'}>
@@ -5279,7 +5762,7 @@ REGRAS, e são a sério:
 4. Se houver dúvida entre dois vinhos parecidos, escolhe o que bate certo com o ano e a região indicados, e escreve a hesitação em "aviso".
 5. O preço é o de UMA garrafa de 0,75L, em euros, em Portugal.
 6. As castas vão SEPARADAS, uma a uma, com o nome português corrente ("Touriga Nacional", "Alicante Bouschet"). Nunca "blend"/"lote"/"várias castas".
-7. "beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que o vinho está no ponto.
+7. ${v.ano?'"beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que ESTA colheita está no ponto.':'Este vinho não tem ano: sem colheita NÃO há janela de consumo — deixa "beberDe"/"beberAte" de fora.'}
 8. "imagemUrl" é o link DIRETO de uma fotografia (acaba em .jpg/.jpeg/.png/.webp/.avif), nunca o link da página. Sem certeza, deixa vazio.
 
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código \`\`\`:
@@ -5302,9 +5785,9 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código \`\`\`:
   "vivinoUrl": "",
   "imagemUrl": "",
   "precoMedio": 18.5,
-  "beberDe": 2026,
+${v.ano?`  "beberDe": 2026,
   "beberAte": 2034,
-  "notasProva": "duas ou três frases sobre aroma, boca e final",
+`:''}  "notasProva": "duas ou três frases sobre aroma, boca e final",
   "harmonizacao": "com que pratos",
   "resumo": "duas ou três frases sobre o vinho e o produtor",
   "aviso": "vazio, ou o que ficou por confirmar"
@@ -5323,6 +5806,7 @@ async function iaManualGerarPrompt(vinhoId){
   const colheitaEspecifica=!!document.getElementById('ia-colheita-esp')?.checked;
   const ctx=iaContextoLer();
   IA_MANUAL_CAMPOS=campos;
+  IA_MANUAL_VIVINO=ctx.sites.map(vivinoLink).find(Boolean)||'';
   const txt=iaManualPrompt(v,campos,colheitaEspecifica,ctx.notas,ctx.sites);
   document.getElementById('modal-ia-in').innerHTML=`
     <div class="mtop"><div><h3>✍️ Pesquisa manual</h3>
@@ -5436,7 +5920,7 @@ function iaManualNormalizar(raw,anoPedido,campos){
     estagio_texto:iaManualTxt(raw.estagioTexto,160),
     vivino_nota:iaManualNum(raw.vivinoNota,1,5,2),
     vivino_avaliacoes:(()=>{const n=iaManualNum(raw.vivinoAvaliacoes,0,10000000,0);return n===null?null:Math.round(n);})(),
-    vivino_url:/^https?:\/\/([a-z0-9-]+\.)*vivino\.com\//i.test(String(raw.vivinoUrl||'').trim())?iaManualTxt(raw.vivinoUrl,300):'',
+    vivino_url:vivinoLink(raw.vivinoUrl),
     imagem_url:/^https?:\/\/\S+\.(jpe?g|png|webp|avif)(\?\S*)?$/i.test(String(raw.imagemUrl||'').trim())?iaManualTxt(raw.imagemUrl,400):'',
     preco_medio:iaManualNum(raw.precoMedio,0.5,100000,2),
     beber_de:beberDe,beber_ate:beberAte,
@@ -5478,6 +5962,8 @@ async function iaManualColar(vinhoId){
     if(erroEl)erroEl.textContent='O JSON leu-se, mas não trouxe nenhum campo válido — confere se respeitou o formato pedido.';
     return;
   }
+  // O link que quem pesquisa colou e abriu ganha ao que a resposta trouxe.
+  if(IA_MANUAL_VIVINO&&(!IA_MANUAL_CAMPOS||IA_MANUAL_CAMPOS.includes('vivino_url')))ficha.vivino_url=IA_MANUAL_VIVINO;
   if(erroEl)erroEl.textContent='';
   // Não se assume qual foi o modelo (o utilizador procura onde quiser) — só
   // se marca que foi uma pesquisa a sério, colada à mão. `iaUltimaProcura`
@@ -5756,7 +6242,8 @@ function loteManualRegras(campos){
   if(campos.includes('imagem_url'))r.push('"imagemUrl" é o link DIRETO de uma fotografia (acaba em '+
     '.jpg/.jpeg/.png/.webp/.avif), nunca o link da página.');
   if(campos.includes('preco_medio'))r.push('"precoMedio" é o preço de UMA garrafa de 0,75L, em euros, em Portugal.');
-  if(campos.includes('beber_de')||campos.includes('beber_ate'))r.push('"beberDe"/"beberAte" são anos.');
+  if(campos.includes('beber_de')||campos.includes('beber_ate'))r.push('"beberDe"/"beberAte" são anos, a janela da '+
+    'colheita indicada. Um vinho SEM ano na lista não tem janela de consumo: deixa "beberDe"/"beberAte" de fora do objeto dele.');
   r.push('O "id" de cada resultado tem de ser EXATAMENTE o "id" da lista de entrada — é assim que sei a que '+
     'vinho corresponde cada objeto, nunca pela posição na lista.');
   r.push('Se não conseguires identificar um vinho de todo, o objeto dele fica só '+
@@ -6939,7 +7426,7 @@ function exportarPDF(){
   };
 
   const cols=['Vinho','Ano','Produtor','Tipo','Região','Castas','Menção / Class.',
-              '% Álc.','Preço méd.','Beber','Onde está','Gar.'];
+              '% Álc.','Preço','Beber','Onde está','Gar.'];
   const linhas=grupos.map(g=>`
     <tr class="pgrupo"><td colspan="${cols.length}">${esc(g.titulo)} — ${g.vinhos.length} vinho${g.vinhos.length===1?'':'s'}</td></tr>
     ${g.vinhos.map(v=>`<tr>
@@ -6951,7 +7438,7 @@ function exportarPDF(){
       <td>${esc((v.castas||[]).join(', '))}</td>
       <td>${esc([v.mencao,v.classificacao].filter(Boolean).join(' · '))}</td>
       <td class="pc">${v.teor!=null&&v.teor!==''?esc(v.teor):''}</td>
-      <td class="pc">${v.preco_medio!=null?eur(v.preco_medio):''}</td>
+      <td class="pc">${precoPDF(v)}</td>
       <td class="pc">${janela(v)}</td>
       <td>${esc(onde(v))}</td>
       <td class="pc">${stockDe(v.id)}</td>
@@ -7047,6 +7534,7 @@ const PDF_CSS=`
   td{padding:4px 5px;border-bottom:1px solid #ccc;vertical-align:top}
   .pnome{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:600;font-size:12px}
   .pc{text-align:center;white-space:nowrap}
+  .pfonte{display:block;font-size:8px;color:#8a7d78}
   .pgrupo td{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:600;font-size:12.5px;
     color:#7b1f3d;background:#f6f1ea;padding-top:8px;border-bottom:1px solid #7b1f3d}
   /* No iOS a "Orientação" do ecrã de impressão é do próprio sistema e o
@@ -7389,7 +7877,7 @@ async function importarGuardar(){
   const selecionados=Array.from(document.querySelectorAll('.imp-sel:checked')).map(e=>parseInt(e.dataset.i,10)).filter(Number.isInteger);
   if(!selecionados.length){toast('Seleciona pelo menos um vinho',1);return;}
   const btn=document.getElementById('imp-guardar');btn.disabled=true;btn.textContent='A adicionar…';
-  let feitos=0;
+  let feitos=0;const novos=[];
   try{
     for(const i of selecionados){
       const origem=IMPORT_RESULTADO[i]||{},nome=importarValor('imp-nome',i);
@@ -7404,10 +7892,11 @@ async function importarGuardar(){
       const qtd=Math.max(1,Math.min(60,inteiro(importarValor('imp-qtd',i))||1));
       const formato=importarValor('imp-formato',i)||'0,75 L';
       await sbReq('POST','garrafas',Array.from({length:qtd},()=>({vinho_id:vinhoId,formato:formato})),{'Prefer':'return=minimal'});
-      feitos++;
+      feitos++;novos.push(vinhoId);
     }
     await carregarGarrafeira();await recarregarCastas();renderLista();fecharModal('modal-ia');
     toast(feitos+' vinho(s) e respetivas garrafas adicionados ✓');
+    await oferecerRetirarDesejos(novos.map(id=>IDXV[id]));
   }catch(e){
     toast('A importação parou: '+e.message+'. O que já entrou ficou guardado.',1);
     btn.disabled=false;btn.textContent='Tentar guardar restantes';
@@ -7483,7 +7972,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='93';
+const APP_BUILD='105';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

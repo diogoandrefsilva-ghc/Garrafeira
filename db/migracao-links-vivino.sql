@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════
--- Migração 15 — o batch do admin corrige links do Vivino nas garrafeiras
+-- Migração 18 — o batch do admin corrige links do Vivino nas garrafeiras
 -- ════════════════════════════════════════════════════════════════════
 -- A WineCatalog tem um script no PC do admin (batch/vivino-verificar.mjs +
 -- painel.mjs) que abre as páginas do Vivino e corrige os links do CATÁLOGO.

@@ -364,6 +364,9 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .bdg.reg{background:var(--vhp);color:var(--vh);border-color:#f0dbe2}
 .bdg.qtd{background:var(--vh);color:#fff;border-color:var(--vh);font-weight:600}
 .bdg.jan{background:#fff;border-color:var(--bo2)}
+/* O preço leva a fonte em pequeno quando não é o preço médio (ver
+   `precoPrincipal`): o número manda, a loja é uma nota. */
+.bdg.preco small{font-size:9px;color:var(--mu);opacity:.85;margin-left:1px}
 .bdg.jan.ponto{background:var(--vdp);color:var(--vd);border-color:#cfe3d8}
 .bdg.jan.cedo{background:var(--bg2);color:var(--mu)}
 .bdg.jan.passou{background:var(--dgp);color:var(--dg);border-color:#f2cdcb}
@@ -1045,6 +1048,24 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 /* A posição na prateleira é a SEGUNDA linha: o sítio primeiro, depois o
    nível e o lugar. Numa linha só, o nome do local partia-se a meio. */
 .mgar .g-onde .g-pos{display:block;font-size:12px;color:var(--tx);margin-top:1px}
+/* PREÇOS NAS LOJAS (página do vinho): uma linha por loja, o preço em serifa
+   à direita. A que CONTA leva a marca em bordô (é a app a dizer "é este que
+   uso"), não dourado — o dourado é a distinção do vinho. As de outra
+   colheita ficam mais apagadas: são informação, não o preço deste vinho. */
+.mprecos{margin-top:8px}
+.mpreco{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bo);font-size:13px}
+.mpreco:last-child{border-bottom:none}
+.mpreco .mp-l{flex:1;min-width:0}
+.mpreco .mp-l a{color:var(--in);font-weight:600;text-decoration:none}
+.mpreco .mp-l i{display:block;font-style:normal;font-size:11px;color:var(--mu);margin-top:1px}
+.mpreco .mp-v{font-family:var(--fd);font-weight:600;font-size:15px;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.mpreco .mp-v span{font-family:var(--ff);font-size:9px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;
+  color:var(--vh);background:var(--vhp);border:1px solid #f0dbe2;border-radius:99px;padding:1px 7px}
+.mpreco.outra:not(.conta) .mp-v{color:var(--mu)}
+.mpreco.duvidoso .mp-v{color:var(--mu);text-decoration:line-through;font-weight:400}
+.mpreco.duvidoso .mp-l i{color:var(--dg)}
+.mp-nota{font-size:11px;margin-top:6px}
+.mp-de{color:var(--mu);font-size:12px}
 /* Links do vinho: pequenos, seguidos por vírgula, numa linha só (em vez
    de uma caixa `.mgar` por link) — o ✕ de remover cola-se ao nome, não
    fica num botão à parte. */
@@ -1706,3 +1727,16 @@ body:not(.readonly) .msdot.emcima.vazia:hover{opacity:1}
    garrafa. */
 .ml.procurando .msdot.vazia{opacity:.4}
 body:not(.readonly) .ml.procurando .msdot.vazia:hover{opacity:1}
+
+/* ── WISHLIST (migração 15) ─────────────────────────────────────────
+   Tudo o que é da wishlist some enquanto a coluna `vinhos.desejado` não
+   existir (`detetarDesejo` liga `body.sem-desejo`) — o separador, a opção
+   do FAB. Os cartões são os `.vcard` de sempre: um desejo é um vinho. */
+body.sem-desejo .desejo-only{display:none!important}
+/* Os botões da barra da wishlist são mais baixos do que os `.btn` de um
+   formulário: vivem na mesma linha que a contagem, como o ⇅ do Detalhe. */
+.dbar .dbar-btn{margin-top:0;padding:7px 13px;font-size:12px}
+/* Na página de um desejo, a secção "Wishlist" toma o lugar do "Onde está".
+   Tracejada de propósito: é o sítio de uma garrafa que ainda não chegou. */
+.desejo-faixa{background:var(--bg);border:1px dashed var(--bo2);border-radius:11px;padding:10px 12px;margin-top:8px}
+.desejo-faixa .macoes{margin-top:10px}
