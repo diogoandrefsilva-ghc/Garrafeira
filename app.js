@@ -2900,9 +2900,18 @@ function refrescarVinhoAberto(){
 let CAT_CMP={};        // vinho_id -> resposta da comparação
 let CAT_ACARREGAR={};  // vinho_id -> true enquanto vai a caminho
 
-/* Os campos do catálogo pelo nome que têm no ecrã. O que não estiver aqui
-   aparece com a chave crua — um campo novo do outro lado não pode
-   desaparecer só porque ninguém veio cá acrescentá-lo. */
+/* Os campos do catálogo pelo nome que têm no ecrã — e, ao mesmo tempo, os
+   ÚNICOS que se comparam. São exatamente os que a `ficha_catalogo` manda e
+   o `aplicar_do_catalogo` sabe gravar. O catálogo guarda mais do que isso
+   (`ano`, `produtor`, `precos`, escritos por outros scripts), e mostrá-los
+   aqui era pior do que inútil: do nosso lado nunca estão na ficha, por isso
+   apareciam SEMPRE como "o catálogo sabe e tu não" — o produtor igual ao
+   meu, o ano de uma colheita que não é a minha, `precos` como
+   [object Object] — e "Usar a do catálogo" dizia "3 campos trazidos ✓" sem
+   mudar nada. O ano e o produtor são a IDENTIDADE do vinho (é por eles que
+   se acha a linha do catálogo), não factos para trazer de lá. Um campo novo
+   do outro lado entra aqui no dia em que a `ficha_catalogo` o souber
+   escrever. */
 const CAT_NOMES={
   tipo:'Tipo',estilo:'Estilo',mencao:'Menção',classificacao:'Classificação',
   castas:'Castas',regiao:'Região',sub_regiao:'Sub-região',pais:'País',
@@ -2958,7 +2967,8 @@ async function catComparar(id,forcar){
 function catDados(id){return CAT_CMP[id]||null;}
 function catCampos(id){
   const d=catDados(id);
-  return (d&&d.encontrado&&Array.isArray(d.campos))?d.campos:[];
+  return (d&&d.encontrado&&Array.isArray(d.campos))
+    ?d.campos.filter(c=>c&&Object.prototype.hasOwnProperty.call(CAT_NOMES,c.campo)):[];
 }
 function catDiferentes(id){return catCampos(id).filter(c=>c.difere);}
 function catSoCatalogo(id){return catCampos(id).filter(c=>c.soCatalogo);}
@@ -7827,7 +7837,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='100';
+const APP_BUILD='101';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
