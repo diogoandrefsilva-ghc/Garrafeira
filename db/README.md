@@ -384,6 +384,18 @@ o campo em branco) dava erro. Agora chama a `winecatalog.normalizar_regiao`
 (a regra vive só lá) e uma região vazia fica `''`; a cópia
 `garrafeira.normalizar_regiao` foi apagada. Aplicada a 26/09/2026.
 
+### Migração 22 — a nota do Vivino de todas as colheitas (já aplicada)
+
+`db/migracao-vivino-global.sql`. Duas colunas em `vinhos`,
+`vivino_nota_global` e `vivino_avaliacoes_global`: a nota do vinho TODO (o
+Vivino sem `?year=`), ao lado da da colheita (`vivino_nota`/
+`vivino_avaliacoes`). Enche-as o script do Vivino no catálogo, e chegam cá
+pela `ficha_catalogo`/`escrever_do_catalogo` — por isso, numa base
+existente, a seguir a esta corre o `catalogo-partilhado.sql` e o
+`migracao-fichas-catalogo.sql`. Os valores que já havia não se mexeram. A
+que se mostra decide-a a app (`notaVivino`: a da colheita a partir de 100
+avaliações). Aplicada a 26/09/2026.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -429,6 +441,9 @@ Numa base de dados limpa:
    depois do `db/nomes.sql` do WineCatalog (usa a `winecatalog.nome_proprio`).
 9. **`migracao-regiao.sql`** — a região normalizada pela
    `winecatalog.normalizar_regiao` (migração 21).
+
+(Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
+`schema.sql`; só é precisa numa base que venha de antes.)
 
 Todos são idempotentes: podem ser corridos outra vez sem estragar nada.
 

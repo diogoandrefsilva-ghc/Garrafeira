@@ -97,6 +97,10 @@ BEGIN
     'castas',            CASE WHEN cardinality(v_cast) > 0 THEN to_jsonb(v_cast) ELSE NULL END,
     'vivino_nota',       v.vivino_nota,
     'vivino_avaliacoes', v.vivino_avaliacoes,
+    -- A de todas as colheitas (migração 22): um campo novo do catálogo entra
+    -- AQUI e na `escrever_do_catalogo`, senão atravessa só num sentido.
+    'vivino_nota_global',       v.vivino_nota_global,
+    'vivino_avaliacoes_global', v.vivino_avaliacoes_global,
     'vivino_url',        NULLIF(COALESCE(v.vivino_url, ''), ''),
     'imagem_url',        NULLIF(COALESCE(v.imagem_url, ''), ''),
     'preco_medio',       v.preco_medio,
@@ -141,6 +145,7 @@ BEGIN
   v_curado := v.ai_atualizado_em IS NOT NULL
               OR v_castas > 0
               OR v.vivino_nota IS NOT NULL
+              OR v.vivino_nota_global IS NOT NULL
               OR v.preco_medio IS NOT NULL
               OR (COALESCE(v.regiao,'') <> '' AND COALESCE(v.produtor,'') <> '');
 
@@ -278,6 +283,8 @@ BEGIN
     estagio_texto = COALESCE(p_cat ->> 'estagio_texto', estagio_texto),
     vivino_nota   = COALESCE((p_cat ->> 'vivino_nota')::numeric,      vivino_nota),
     vivino_avaliacoes = COALESCE((p_cat ->> 'vivino_avaliacoes')::integer, vivino_avaliacoes),
+    vivino_nota_global       = COALESCE((p_cat ->> 'vivino_nota_global')::numeric,       vivino_nota_global),
+    vivino_avaliacoes_global = COALESCE((p_cat ->> 'vivino_avaliacoes_global')::integer, vivino_avaliacoes_global),
     vivino_url    = COALESCE(p_cat ->> 'vivino_url',    vivino_url),
     imagem_url    = COALESCE(p_cat ->> 'imagem_url',    imagem_url),
     preco_medio   = COALESCE((p_cat ->> 'preco_medio')::numeric,      preco_medio),

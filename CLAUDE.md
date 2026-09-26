@@ -51,6 +51,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-regiao.sql` é a 21: o trigger que normaliza a região ("DOURO"
   → "Douro"), com a regra do catálogo — esteve no Supabase sem estar aqui,
   e a devolver NULL numa coluna NOT NULL (um vinho sem região não gravava).
+  `migracao-vivino-global.sql` é a 22: a nota do Vivino de todas as
+  colheitas, ao lado da da colheita (ver "A nota do Vivino: duas").
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
@@ -1337,6 +1339,29 @@ esta app, essa loja não o tem.
 `ano`, `produtor` e `precos` também existem na ficha do catálogo e **não**
 entram na comparação do "≠ catálogo" (`catCampos` filtra por `CAT_NOMES`):
 os dois primeiros são a identidade do vinho, o terceiro vive aqui.
+
+## A nota do Vivino: duas, e a da colheita só com 100 avaliações (migração 22)
+Um vinho tem a nota da **colheita** (`vivino_nota`/`vivino_avaliacoes` — o
+Vivino com `?year=`) e a de **todas as colheitas** (`vivino_nota_global`/
+`vivino_avaliacoes_global`, a página sem ano). Um 4,5 com 40 avaliações de
+2019 diz menos do que o 4,2 de 5000 do vinho todo. Quem enche a global é o
+script do Vivino da WineCatalog, no catálogo; chega cá pela
+`ficha_catalogo`/`escrever_do_catalogo` como os outros campos. Os valores que
+já existiam não se mexeram (decisão do dono).
+
+A nota que CONTA — no crachá do cartão e da grelha, na página do vinho, na
+ordenação dentro dos grupos, no filtro por Vivino, no "A completar" e na PDF
+da wishlist — é **uma só**, e sai sempre de `notaVivino(v)`/`notaVivinoNum(v)`;
+nunca `v.vivino_nota` à mão nesses sítios (a mesma disciplina do
+`precoPrincipal`):
+1. a da colheita, se tiver **pelo menos 100 avaliações** (`VIVINO_MIN_AVAL`);
+2. senão, a que tiver **mais avaliações** — quase sempre a global — e em
+   empate a global. É o caso de nenhuma chegar às 100.
+Sem contagem conta zero; havendo só uma, é essa. Nunca uma média das duas.
+O crachá diz "todas" quando é a global; na página do vinho, havendo as duas,
+vêm as duas, cada uma dita pelo nome. A regra é a MESMA do `wcNotaVivino` da
+WineCatalog (ver o `CLAUDE.md` de lá, "A nota do Vivino são duas") — mexer
+numa é mexer na outra, no mesmo dia.
 
 ## Monocasta / várias castas é CALCULADO, não guardado
 `castaLabel(v)` conta as linhas de `vinho_castas`: 1 → "Monocasta", 2+ →
