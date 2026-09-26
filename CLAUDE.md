@@ -1461,7 +1461,42 @@ app a outra pessoa; por isso ficam atrás de `.dono-hide`
 "Utilizadores" mas não estas duas.
 
 ## A procura da IA (`vinho-info`)
-Botão em cada vinho e no formulário de vinho novo. Quem procura é a Edge
+Botão em cada vinho e no formulário de vinho novo.
+
+**O ecrã é uma conversa POR ETAPAS, sempre a mesma** (26/09/2026, secção
+"PROCURAR INFORMAÇÃO, POR ETAPAS" no app.js, `pq*`). Era um labirinto: ao
+admin uma escolha de três caminhos antes de saber o que faltava, cada
+caminho com o seu ecrã de revisão (caixas, rádios da segunda opinião, o
+painel "o teu / no catálogo") e, no vinho novo, uma pilha de botões que
+apareciam e desapareciam — o dono deixou de saber o que tinha feito e o que
+estava a correr. Agora, no MESMO `modal-ia`:
+1. **Catálogo** — corre sozinho ao abrir (grátis, e para toda a gente,
+   `sem_ia` incluído). "O vinho já existe no Catálogo e a informação foi
+   importada: N campos" / "não existe". Pergunta: IA ou à mão?
+2. **IA** — o motor do direito (`motorDoPlano`). "A pesquisa com IA
+   terminou e preencheu mais N campos." A resposta de memória diz-se a
+   todos, não só ao admin. Pergunta: pesquisa avançada?
+3. **Pesquisa avançada** — com **sites de referência** e notas, que só se
+   pedem aqui. Ao admin é a profunda (`profunda:true`; a função recusa-a aos
+   outros com 403); aos outros é o motor `gratis` (que já é Serper), e quem
+   só tem esse tem de dar pelo menos um site — sem isso era a mesma pergunta
+   e a cache respondia igual.
+A **resposta colada** (admin, grátis) é uma fonte como as outras, nas
+etapas 2 e 3. Em cima fica a fila das etapas (o que se fez, o que corre);
+por baixo, UMA lista do que se encontrou: cada campo com o valor de agora e
+as propostas de cada fonte (as iguais juntam-se), escolhidas com um toque
+(`.ia-op`). **"Importada" é posta na lista, não gravada**: nada entra sem
+"Guardar" (ou "Pôr no formulário" no vinho novo). Vem escolhido o de agora
+se o campo tem valor; senão a fonte mais forte (`PQ_FORCA`: avançada >
+colada > catálogo > IA). O ano e a cor nunca se propõem (`pqChaves`). O que
+veio do catálogo grava-se pela `aplicar_do_catalogo`; o resto por PATCH,
+com o carimbo `ai_*`. "Preencher à mão" guarda o que já se escolheu e abre
+o Editar. Fechar a meio não perde nada: `PQ` fica, e o mesmo botão retoma.
+A **atualização massiva** continua com o ecrã dela (`iaMostrarResultado`/
+`iaAplicar`, onde vivem ainda a segunda opinião e os rádios descritos mais
+abaixo) — é outra pergunta, vinho a vinho em fila.
+
+Quem procura é a Edge
 Function `vinho-info.ts`, com DOIS MOTORES desacoplados — não dois níveis do
 mesmo motor, dois caminhos diferentes até ao JSON:
 - **`premium`** ("IA com pesquisa web (Grounding Search)" na UI) — Gemini com
@@ -1531,7 +1566,7 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   cada direito mostra (botões escondidos em `sem_ia`, "sem pesquisa web" em
   `gratis`) sem precisar de outra conta; guarda-se em `localStorage`
   (`gf_ia_teste`) e nunca se aplica a quem não é admin.
-- **Quem é premium pode pedir uma SEGUNDA OPINIÃO ao outro motor**
+- **Na atualização massiva, quem é premium pode pedir uma SEGUNDA OPINIÃO ao outro motor**
   (`iaSegundaOpiniao()`, o botão "Tentar com a…"): a mesma pergunta feita ao
   motor que não é o do direito (ou o do `IA_TESTE`, ver acima), para se ver
   campo a campo em que é que diferem. Serve também de saída quando o motor do
@@ -1561,13 +1596,13 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   a app faz polling (`iaEsperar`). É preciso porque a pesquisa demora mais
   do que um pedido HTTP aguenta (o browser/iOS corta perto dos 60s) e, no
   telemóvel, bloquear o ecrã a meio matava a chamada.
-- **Escolhe-se o que procurar antes de procurar** (`iaEscolher`): a lista
+- **Escolhe-se o que procurar antes de procurar** ("O que pedir", `pqCamposHTML`): a lista
   dos campos, com os VAZIOS já marcados. Vai no pedido como `campos`, e a
   função usa-a para (a) dizer ao modelo em que se concentrar e (b) cortar da
   resposta o que não foi pedido. Pedir os 22 campos de uma vez faz o modelo
   andar atrás de tudo e voltar com meia dúzia de coisas mornas.
 - **Não se procura duas vezes o mesmo sem perguntar** (`iaUltimaProcura`,
-  `iaConfirmarRepetir`, `IA_AVISO_DIAS=30`). Cada procura é uma chamada paga
+  perguntado em `pqIA`, `IA_AVISO_DIAS=30`). Cada procura é uma chamada paga
   ao Gemini com pesquisa Google, e a ficha de um vinho não muda de semana
   para semana. Ao carregar em "Procurar" vê-se quando é que este vinho foi
   procurado pela última vez; se foi há menos de 30 dias, a janela passa a
@@ -1585,7 +1620,7 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   um soluço de rede não pode impedir alguém de procurar. No formulário de
   **vinho novo** não há aviso nenhum — ainda não há vinho para ter história.
 - **No vinho novo (e na wishlist), primeiro o CATÁLOGO, a IA só se se
-  pedir** (26/09/2026, `catalogoNovoProcurar`). "Procurar informação"
+  pedir** (26/09/2026; hoje é a etapa 1 do `pqAbrirNovo`). "Procurar informação"
   pergunta à `winecatalog.comparar` (grátis, aberta a quem tem sessão),
   preenche os campos vazios com o que lá está e diz quantos vieram e o que
   falta; completar com a IA é um botão à parte, nunca automático. Antes ia
@@ -1607,8 +1642,8 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   partilhado — um branco que ninguém corrigiu ia procurar (e gravar) com a
   chave do tinto. A BD não consegue distinguir um 'Tinto' escolhido de um
   'Tinto' por defeito, por isso a resposta é PERGUNTAR, uma vez, onde se
-  carrega em Procurar: no seletor de campos (`iaEscolher`) há uma linha
-  **Cor** no topo, já com a do vinho, e mudá-la ali grava-a no vinho; no
+  carrega em Procurar: na etapa da IA (`pqCorHTML`) há uma linha
+  **Cor**, já com a do vinho, e mudá-la ali grava-a no vinho; no
   formulário de **vinho novo** o seletor nasce vazio ("— escolhe a cor —") e
   o botão de procurar recusa sem ela, tal como já recusava sem o nome.
   Gravar continua a aceitar o defeito — o que passou a ser obrigatório é
@@ -1668,7 +1703,7 @@ Como funciona, dos dois lados:
   (`emFalta`). Se não sobrar nada, **não há chamada nenhuma** — nem ao
   Gemini nem à pesquisa externa. Se sobrar, a IA é chamada **só por esses
   campos**: um pedido mais estreito é mais barato e melhor respondido, que
-  é a mesma razão por que a app já deixa escolher os campos (`iaEscolher`);
+  é a mesma razão por que a app já deixa escolher os campos ("O que pedir");
 - **a escrever**: o que a IA acabou de descobrir volta ao catálogo, e o
   trigger `vinhos_catalogo` leva para lá cada vinho que alguém guarda. As
   castas não vivem na linha do vinho, por isso o trigger não as vê mudar —

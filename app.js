@@ -3528,9 +3528,7 @@ function vinhoDetalheHTML(v){
     </div>
 
     <div class="macoes ro-hide">
-      ${podeUsarIA()
-        ? `<button class="btn prim" onclick="iaAbrirProcura(${v.id})">🔎 Procurar informação</button>`
-        : '<span class="note">A pesquisa por IA não está incluída no teu acesso.</span>'}
+      <button class="btn prim" onclick="iaAbrirProcura(${v.id})">🔎 Procurar informação</button>
       <button class="btn ghost" onclick="abrirEditarVinho(${v.id})">✏️ Editar</button>
     </div>
     ${catTiraHTML(v)}
@@ -4100,10 +4098,8 @@ function abrirEditarVinho(id,modo){
     </div>
     <div class="note">Aplica-se a todas as garrafas deste vinho ainda na garrafeira.</div>`:''}
 
-    ${id?'':`<div class="aviso">Escreve o nome (e o ano, só se o souberes) e escolhe a cor, e carrega em <b>Procurar informação</b>: primeiro vê-se o que o catálogo partilhado já sabe deste vinho, sem custo${podeUsarIA()?', e depois podes completar o resto com a IA, se quiseres':''}. Confirmas antes de gravar.</div>
-      ${podeUsarIA()?iaContextoHTML('e-ia'):''}
-      <button class="btn prim full" id="e-btn-cat" onclick="catalogoNovoProcurar()">🔎 Procurar informação</button>
-      ${podeUsarIA()&&isAdmin()?`<button class="btn ghost full" style="margin-top:8px" onclick="iaManualNovoAbrir()">✍️ Pesquisa manual</button>`:''}
+    ${id?'':`<div class="aviso">Escreve o nome (e o ano, só se o souberes) e escolhe a cor, e carrega em <b>Procurar informação</b>: primeiro vê-se o que o catálogo partilhado já sabe deste vinho, sem custo${podeUsarIA()?', e depois podes pesquisar o resto com a IA, se quiseres':''}. Escolhes o que entra antes de gravar.</div>
+      <button class="btn prim full" id="e-btn-cat" onclick="pqAbrirNovo()">🔎 Procurar informação</button>
       <div id="e-ia-estado"></div>`}
 
     <div class="mrow">
@@ -4718,7 +4714,7 @@ async function guardarSubstituirGarrafa(gid){
 
    E nada é procurado DUAS vezes sem confirmação: se já se procurou este
    vinho nos últimos 30 dias, pergunta-se antes de gastar outra chamada
-   (`iaUltimaProcura`/`iaConfirmarRepetir`). */
+   (`iaUltimaProcura`, perguntado em `pqIA`). */
 
 const IA_TIMEOUT_MS=150000;   // desistir de esperar (a função tem 110s de orçamento)
 const IA_INTERVALO_MS=2500;
@@ -4825,38 +4821,6 @@ function iaValorAtual(v,k){
   return v[k]==null||v[k]===''?'':String(v[k]);
 }
 
-/* CONTEXTO LIVRE: duas caixas de texto em vez de campos fechados — mais
-   flexível para o que ajuda a desambiguar ("grande reserva", "edição
-   limitada", um produtor parecido com outro) do que um conjunto fixo de
-   checkboxes alguma vez cobre. Nenhuma das duas é pedida de volta à IA —
-   servem só de contexto no prompt (ver `iaArrancar`/`iaManualPrompt`). */
-// `pref` deixa o mesmo par de caixas viver em dois formulários ao mesmo
-// tempo no DOM (o modal-ia dos vinhos já gravados e o modal-edit do vinho
-// novo) sem ids repetidos — dois elementos com o mesmo id é HTML inválido
-// e `getElementById` ficava a ler o primeiro que encontrasse, do sítio
-// errado.
-function iaContextoHTML(pref){
-  pref=pref||'ia';
-  return `<label>Notas para ajudar a identificar o vinho (opcional)</label>
-    <textarea id="${pref}-notas" rows="2" maxlength="300"
-      placeholder="ex.: vinho tinto, grande reserva, da casa Ferreirinha, edição limitada"></textarea>
-    <div class="note" style="margin-bottom:10px">Não é pedido à IA — é só contexto para não
-      confundir este vinho com um homónimo.</div>
-    <label>Sites de confiança (opcional)</label>
-    <textarea id="${pref}-sites" rows="1" placeholder="ex.: vivino.com, wine-searcher.com"></textarea>
-    <div class="note" style="margin-bottom:10px">Um ou mais, separados por vírgula — a pesquisa dá
-      prioridade a estes.</div>`;
-}
-function iaContextoLer(pref){
-  pref=pref||'ia';
-  const notas=(document.getElementById(`${pref}-notas`)?.value||'').trim().slice(0,300);
-  const sites=(document.getElementById(`${pref}-sites`)?.value||'')
-    .split(/[,\n]/).map(s=>s.trim()).filter(Boolean).slice(0,5);
-  // Inteiros, e não só o domínio: um link do Vivino de UM vinho colado aqui
-  // é a resposta (a `vinho-info` e a manual usam-no como vivino_url). O
-  // corte ao domínio, para o prompt e a pesquisa, faz-se na função.
-  return {notas,sites};
-}
 /* O link do Vivino só no formato que o Vivino usa: `/<nome>/w/<nº>`, limpo
    de país, língua e ?year=. `/Wines/<nome>`, `/pt-pt/<nome>` sem número e
    afins são o que um modelo escreve de memória — nunca existiram, e
@@ -4869,74 +4833,6 @@ function vivinoLink(u){
     const m=url.pathname.match(/\/([a-z0-9-]+)\/w\/(\d+)/i);
     return m?`https://www.vivino.com/${m[1].toLowerCase()}/w/${m[2]}`:'';
   }catch(_){return '';}
-}
-function iaEscolher(vinhoId){
-  if(roGuard())return;
-  if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
-  const v=IDXV[vinhoId];if(!v)return;
-  const linhas=iaCamposPara(v).map(c=>{
-    const tem=!!iaValorAtual(v,c.k);
-    return `<label class="ia-esc">
-      <input type="checkbox" class="ia-esc-c" value="${esc(c.k)}"${tem?'':' checked'}>
-      <span>${esc(c.rot)}${tem?'<i>já tem</i>':''}</span>
-    </label>`;
-  }).join('');
-  const optsCor=['<option value="">— escolhe a cor —</option>'].concat(
-    TIPOS.map(x=>`<option value="${esc(x)}"${v.tipo===x?' selected':''}>${esc(x)}</option>`)
-  ).join('');
-  document.getElementById('modal-ia-in').innerHTML=`
-    <div class="mtop"><div><h3>🔎 Procurar informação</h3>
-      <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
-      <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
-
-    <label>Cor</label>
-    <select id="ia-cor-sel">${optsCor}</select>
-    <div class="note" style="margin-bottom:10px">A cor é parte da identidade do vinho no catálogo
-      partilhado — um Papa Figos branco não é o tinto. Confirma-a antes de procurar; se a mudares
-      aqui, fica gravada no vinho.</div>
-
-    ${iaContextoHTML()}
-
-    <label class="ia-esc" style="margin-bottom:2px">
-      <input type="checkbox" id="ia-colheita-esp">
-      <span>Tem de ser exatamente a colheita de ${v.ano||'este ano'}</span>
-    </label>
-    <div class="note" style="margin-bottom:10px">Por omissão a pesquisa é sobre o vinho em geral — a
-      nota do Vivino, por exemplo, é uma média entre colheitas e não muda com isto. Liga só se
-      precisares mesmo dos factos desta colheita específica (raramente faz diferença, exceto nalgumas
-      notas de prova).</div>
-
-    <div class="aviso">Escolhe o que queres procurar. <b>Quanto menos pedires, melhor a procura</b> —
-      o modelo concentra-se nisso em vez de andar atrás de tudo. Já vêm marcados os campos vazios.
-      ${temPremium()?'Procura-se com a <b>IA com pesquisa web</b>; no fim podes repetir sem pesquisa web e comparar as duas.':''}</div>
-
-    <div class="ia-escbar">
-      <button class="mini" onclick="iaEscTodos(true)">Marcar tudo</button>
-      <button class="mini" onclick="iaEscTodos(false)">Desmarcar</button>
-      <span class="note" id="ia-esc-n"></span>
-    </div>
-    <div class="ia-escs" onchange="iaEscContar()">${linhas}</div>
-
-    <div class="macoes">
-      <button class="btn prim" id="ia-esc-btn" onclick="iaProcurar(${vinhoId})">Procurar</button>
-      <button class="btn ghost" onclick="fecharModal('modal-ia')">Cancelar</button>
-    </div>`;
-  abrirModal('modal-ia');
-  iaEscContar();
-}
-function iaEscTodos(marcar){
-  document.querySelectorAll('.ia-esc-c').forEach(e=>e.checked=marcar);
-  iaEscContar();
-}
-function iaEscSelecionados(){
-  return [...document.querySelectorAll('.ia-esc-c:checked')].map(e=>e.value);
-}
-function iaEscContar(){
-  const n=iaEscSelecionados().length, tot=IA_CAMPOS.length;
-  const et=document.getElementById('ia-esc-n');
-  if(et)et.textContent=n===tot?'todos os campos':`${n} de ${tot} campos`;
-  const b=document.getElementById('ia-esc-btn');
-  if(b){b.disabled=!n;b.textContent=n?`🔎 Procurar ${n===tot?'tudo':n+(n===1?' campo':' campos')}`:'Escolhe pelo menos um';}
 }
 
 /* ── JÁ SE PROCUROU ISTO HÁ POUCO? ─────────────────────────────────
@@ -4987,36 +4883,6 @@ async function iaUltimaProcura(vinhoId){
   return dias<IA_AVISO_DIAS?u:null;
 }
 
-function iaConfirmarRepetir(vinhoId,ult){
-  const v=IDXV[vinhoId]||{};
-  document.getElementById('modal-ia-in').innerHTML=`
-    <div class="mtop"><div><h3>Já se procurou este vinho</h3>
-      <div class="note" style="margin-top:3px">${esc(v.nome||'')} ${v.ano||''}</div></div>
-      <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
-
-    <div class="aviso">${ult.minha
-      ? 'Utilizaste a pesquisa para este vinho pela última vez em'
-      : 'A pesquisa para este vinho foi utilizada pela última vez em'}
-      <b>${esc(dataHoraLocal(ult.quando))}</b>. Pretendes fazer novamente a pesquisa?</div>
-    <div class="note" style="margin-top:8px">A ficha de um vinho raramente muda de um mês para o
-      outro — se foi há pouco, é provável que volte o mesmo.</div>
-
-    <div class="macoes">
-      <button class="btn prim" onclick="iaArrancar(${vinhoId})">Procurar à mesma</button>
-      <button class="btn ghost" onclick="fecharModal('modal-ia')">Cancelar</button>
-    </div>`;
-  abrirModal('modal-ia');
-}
-
-// Os campos escolhidos no seletor, guardados enquanto se responde ao aviso:
-// nessa altura o seletor já não está no ecrã para se lhe perguntar outra vez.
-let IA_ESC=null;
-// Idem para o contexto livre (notas + sites) escrito no seletor.
-let IA_CONTEXTO=null;
-// Idem para o interruptor "tem de ser esta colheita" — por omissão a
-// pesquisa é sobre o vinho em geral (ver a regra do Vivino em
-// `vinho-info.ts`); só fica estrita quando a pessoa liga isto de propósito.
-let IA_COLHEITA_ESP=false;
 
 // A COR ANTES DA PROCURA
 //
@@ -5044,53 +4910,7 @@ async function iaCorGuard(v){
   return cor;
 }
 
-async function iaProcurar(vinhoId){
-  if(roGuard())return;
-  const v=IDXV[vinhoId];if(!v)return;
-  if(!await iaCorGuard(v))return;
-  // Se o seletor está aberto, é dele que vem a lista; se alguém chamar isto
-  // de outro sítio, procura-se tudo (que era o comportamento de sempre).
-  const escolhidos=iaEscSelecionados();
-  IA_ESC=escolhidos.length&&escolhidos.length<IA_CAMPOS.length?escolhidos:null;
-  IA_COLHEITA_ESP=!!document.getElementById('ia-colheita-esp')?.checked;
-  IA_CONTEXTO=iaContextoLer();
-  const btn=document.getElementById('ia-esc-btn');
-  if(btn){btn.disabled=true;btn.textContent='A ver…';}
-  const ult=await iaUltimaProcura(vinhoId);
-  if(ult){iaConfirmarRepetir(vinhoId,ult);return;}
-  iaArrancar(vinhoId);
-}
 
-// A procura em si. Separada do botão porque pelo meio pode entrar o aviso
-// de "já se procurou isto há pouco" — e é daí que ela volta a arrancar.
-async function iaArrancar(vinhoId){
-  if(roGuard())return;
-  const v=IDXV[vinhoId];if(!v)return;
-  // `tipo` vai sempre (foi confirmado pelo `iaCorGuard` antes de chegar
-  // aqui). O resto do contexto é livre — `IA_CONTEXTO` nulo (chamado de
-  // fora do seletor) cai em "sem notas, sem sites".
-  const ctx=IA_CONTEXTO||{notas:'',sites:[]};
-  const pedido={nome:v.nome,tipo:v.tipo};
-  if(v.ano)pedido.ano=v.ano;
-  if(v.produtor)pedido.produtor=v.produtor;
-  if(v.regiao)pedido.regiao=v.regiao;
-  if(ctx.notas)pedido.notas=ctx.notas;
-  if(ctx.sites.length)pedido.sites=ctx.sites;
-  if(IA_ESC)pedido.campos=IA_ESC;
-  pedido.colheitaEspecifica=IA_COLHEITA_ESP;
-  // O pedido fica guardado tal e qual: a segunda volta tem de ser a MESMA
-  // pergunta, senão não se está a comparar motores, está-se a comparar duas
-  // perguntas diferentes.
-  // O vinho fica marcado JÁ, e não só quando o resultado chega: se a primeira
-  // volta falhar, o botão da segunda opinião precisa de saber de que vinho
-  // estamos a falar — sem isto ia buscar o do resultado anterior.
-  IA_PEDIDO=pedido;IA_VINHO=vinhoId;IA_RES=null;IA_RES2=null;IA_ERRO2='';
-  IA_MOTOR=motorDoPlano();IA_MOTOR2='';
-  iaMostrarEspera(v.nome+(v.ano?' '+v.ano:''),IA_MOTOR);
-  try{
-    iaMostrarResultado(await iaPedir(pedido,vinhoId,IA_MOTOR),vinhoId);
-  }catch(e){iaMostrarErro(e.message);}
-}
 
 /* A SEGUNDA OPINIÃO: a mesma pergunta feita ao OUTRO motor, para se ver campo
    a campo em que é que eles diferem. Só faz sentido a quem é premium — é o
@@ -5118,215 +4938,14 @@ async function iaSegundaOpiniao(){
   }
   iaMostrarResultado(IA_RES,IA_VINHO);
 }
-/* ── VINHO NOVO: PRIMEIRO O CATÁLOGO, A IA SÓ SE SE PEDIR ──
-   "Procurar informação" no formulário de vinho novo (e da wishlist) já não
-   vai direto à IA: pergunta primeiro ao catálogo partilhado
-   (`winecatalog.comparar`, aberta a quem tem sessão, grátis), preenche os
-   campos vazios com o que lá está e só DEPOIS oferece completar o resto com
-   a IA — um botão, nunca automático. Antes, a `vinho-info` juntava as duas
-   coisas numa chamada só: o catálogo respondia ao que sabia, a IA era paga
-   pelo resto, e quem procurava via só "preenchido pela IA" (26/09/2026, o
-   Sidónio de Sousa na wishlist do Barrona).
-
-   O ANO É DE QUEM ESCREVE. Vai ao catálogo só se estiver no formulário, e
-   nunca volta de lá: sem ano, a `comparar` (a `achar` sem exigir colheita)
-   dá a linha do vinho com MAIS informação e, em empate, a mais recente.
-   Com ano e o catálogo a responder com outra colheita, só servem os factos
-   estáveis — a nota, o preço, a imagem e a janela são DAQUELA colheita
-   (`winecatalog.da_colheita`, que aqui se repete à mão por ser uma lista
-   de seis nomes; se ela mudar, muda esta). A nota de TODAS as colheitas
-   (`vivino_nota_global`) não está aqui de propósito: é do vinho, não de um
-   ano, e serve a qualquer colheita. */
+/* O catálogo com outra colheita: só servem os factos estáveis — a nota, o
+   preço, a imagem e a janela são DAQUELA colheita (`winecatalog.da_colheita`,
+   que aqui se repete à mão por ser uma lista curta; se ela mudar, muda esta).
+   A nota de TODAS as colheitas (`vivino_nota_global`) não está aqui de
+   propósito: é do vinho, não de um ano, e serve a qualquer colheita. O ANO
+   nunca vem do catálogo nem da IA — é de quem escreve (ver `pqChaves`). */
 const CAT_DA_COLHEITA=['vivino_nota','vivino_avaliacoes','vivino_url','preco_medio','imagem_url','precos','beber_de','beber_ate'];
-async function catalogoNovoProcurar(){
-  const nome=document.getElementById('e-nome').value.trim();
-  if(!nome){toast('Escreve primeiro o nome do vinho',1);document.getElementById('e-nome').focus();return;}
-  // A cor antes de procurar (ver `iaCorGuard`): o catálogo ainda não a tem
-  // na chave, e é ela que separa o tinto do branco do mesmo nome.
-  const elTipo=document.getElementById('e-tipo');
-  if(elTipo&&!elTipo.value){toast('Escolhe primeiro a cor do vinho',1);elTipo.focus();return;}
-  const ano=inteiro(document.getElementById('e-ano').value);
-  const produtor=document.getElementById('e-produtor').value.trim();
-  const btn=document.getElementById('e-btn-cat');
-  const est=document.getElementById('e-ia-estado');
-  const botaoIA=(txt)=>podeUsarIA()
-    ?`<button class="btn full" id="e-btn-ia" style="margin-top:8px" onclick="iaProcurarNovo()">${txt}</button>`:'';
-  if(btn){btn.disabled=true;btn.textContent='🔎 A ver o catálogo…';}
-  est.innerHTML='';
-  let r=null;
-  try{
-    r=await sbReq('POST','rpc/comparar',{p_nome:nome,p_produtor:produtor,p_ano:ano,p_ficha:{}},
-      {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
-  }catch(e){
-    // O catálogo é uma poupança, nunca uma dependência: se falhar, fica a IA.
-    est.innerHTML=`<div class="note" style="margin-top:8px">Não consegui perguntar ao catálogo (${esc(e.message)}).</div>`+
-      botaoIA('✨ Procurar com a IA');
-    if(btn){btn.disabled=false;btn.textContent='🔎 Procurar informação';}
-    return;
-  }
-  if(btn){btn.disabled=false;btn.textContent='🔎 Procurar informação';}
-  if(!r||!r.encontrado){
-    est.innerHTML=`<div class="note" style="margin-top:8px">O catálogo ainda não conhece este vinho.</div>`+
-      botaoIA('✨ Procurar com a IA');
-    return;
-  }
-  const outraColheita=ano!==null&&r.mesmaColheita===false;
-  const res={};
-  (r.campos||[]).forEach(c=>{
-    if(!c||!c.soCatalogo)return;              // com p_ficha vazio, é tudo "só do catálogo"
-    const k=c.campo;
-    if(k==='ano')return;                      // o ano nunca vem do catálogo
-    if(outraColheita&&CAT_DA_COLHEITA.includes(k))return;
-    res[k]=c.catalogo;
-  });
-  // Os preços das LOJAS não são um campo do formulário: o vinho lê-os do
-  // catálogo sempre que a app carrega (`precos_lojas`) e uma cópia ficava
-  // velha. Mas diz-se aqui que existem e de que loja são — sem isto o preço
-  // de referência aparecia sozinho, sem se saber que era o da Garrafeira
-  // Nacional. Nem contam como campo preenchido: não preenchem nenhum.
-  const lojas=Object.entries(res.precos&&typeof res.precos==='object'?res.precos:{})
-    .filter(([,p])=>p&&typeof p==='object'&&!p.retirado&&Number(p.preco)>0)
-    .sort((a,b)=>lojaOrdem(a[0])-lojaOrdem(b[0]));
-  delete res.precos;
-  if(r.produtor&&!res.produtor)res.produtor=r.produtor;
-  // Um link fora do formato do Vivino (`/wines/<nº>`, `/Wines/<nome>`) não
-  // se copia — abre uma colheita, ou nada. Diz-se, para não parecer esquecido.
-  let vivinoMau='';
-  if(res.vivino_url){
-    const bom=vivinoLink(res.vivino_url);
-    if(!bom){vivinoMau=String(res.vivino_url);delete res.vivino_url;}
-    else res.vivino_url=bom;
-  }
-  // Outra cor = outro vinho (o "Papa Figos" tinto não é o branco): não se
-  // copia nada, e diz-se porquê — o mesmo que as Prendas de Anos fazem.
-  if(elTipo&&res.tipo&&res.tipo!==elTipo.value){
-    est.innerHTML=`<div class="note" style="margin-top:8px">O catálogo tem um <b>${esc(r.nome)}</b> mas ${esc(String(res.tipo).toLowerCase())}, não ${esc(elTipo.value.toLowerCase())} — não copiei nada.</div>`+
-      botaoIA('✨ Procurar com a IA');
-    return;
-  }
-  delete res.tipo;
-  _iaAuto=[];
-  iaPreencherForm({...res,modelo:'catálogo partilhado'},false);
-  const n=Object.keys(res).length;
-  const faltam=IA_CAMPOS.filter(c=>c.k!=='ano'&&c.k!=='tipo'&&!(c.k in res)
-    &&(ano!==null||(c.k!=='beber_de'&&c.k!=='beber_ate'))).map(c=>c.rot);
-  const colheita=r.ano?` (colheita ${esc(r.ano)}${outraColheita?' — outra colheita: sem nota, preço nem imagem':''})`:'';
-  est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">📚 Preenchido com o que o catálogo já sabia: <b>${n}</b> ${n===1?'campo':'campos'}${colheita}. Confere antes de gravar.</div>`+
-    (lojas.length?`<div class="note" style="margin-top:6px">💶 Nas lojas: ${lojas.map(([k,p])=>
-      `<b>${esc(lojaInfo(k).nome)}</b> ${esc(eur(p.preco))}${p.colheita?' ('+esc(p.colheita)+')':''}`).join(' · ')}
-      — não se copiam: o vinho lê-os do catálogo, sempre atualizados.</div>`:'')+
-    (vivinoMau?`<div class="note" style="margin-top:6px">O link do Vivino que o catálogo tem não está no formato do Vivino (<code>${esc(vivinoMau)}</code>) — não o copiei.</div>`:'')+
-    (faltam.length?`<div class="note" style="margin-top:6px">Falta: ${esc(faltam.join(', '))}.</div>`+
-      botaoIA('✨ Completar o que falta com a IA'):'');
-}
 
-// Do formulário de "novo vinho": preenche os campos em vez de gravar.
-async function iaProcurarNovo(motor,profunda){
-  if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
-  const nome=document.getElementById('e-nome').value.trim();
-  if(!nome){toast('Escreve primeiro o nome do vinho',1);document.getElementById('e-nome').focus();return;}
-  // A COR TEM DE SER DITA ANTES DE SE PROCURAR — ver `iaCorGuard`.
-  const elTipo=document.getElementById('e-tipo');
-  if(elTipo&&!elTipo.value){
-    toast('Escolhe primeiro a cor do vinho',1);elTipo.focus();return;
-  }
-  const ano=inteiro(document.getElementById('e-ano').value);
-  const btn=document.getElementById('e-btn-ia');
-  const est=document.getElementById('e-ia-estado');
-  /* Aqui não há ecrã de confirmação onde comparar as duas (o formulário é ele
-     próprio a confirmação), por isso a segunda volta REESCREVE o que a
-     primeira encheu — e só isso, ver `iaPreencherForm`. Por omissão vale o
-     motor do PLANO; `motor` só vem preenchido pelo botão da segunda opinião. */
-  const m=profunda?'premium':motor&&temPremium()?motor:motorDoPlano();
-  const outro=motorOposto(m);
-  if(!motor)_iaAuto=[];
-  if(btn){btn.disabled=true;btn.textContent='🔎 A procurar…';}
-  est.innerHTML=`<div class="note" style="margin-top:8px">A ${esc(rotuloMotor(m))} está a procurar na net. Pode levar até dois minutos — podes ir fazendo o resto.</div>`;
-  const botaoOutro=!motor&&temPremium()
-    ? `<button class="mini${outro==='premium'?' o':''}" style="margin-top:8px" onclick="iaProcurarNovo('${outro}')">✨ Tentar com a ${esc(rotuloMotor(outro))}</button>`:'';
-  const ctx=iaContextoLer('e-ia');
-  const pedido={nome,ano,tipo:elTipo?elTipo.value:'',produtor:document.getElementById('e-produtor').value.trim()};
-  if(ctx.notas)pedido.notas=ctx.notas;
-  if(ctx.sites.length)pedido.sites=ctx.sites;
-  if(profunda)pedido.profunda=true;
-  try{
-    const res=await iaPedir(pedido,null,m);
-    iaPreencherForm(res,!!motor||!!profunda);
-    // Quanto veio do catálogo e quanto da IA: sem isto, "preenchido pela IA"
-    // escondia que parte da ficha já se sabia e não custou nada.
-    const nCat=res.origem==='catalogo'?-1:Array.isArray(res.catalogoCampos)?res.catalogoCampos.length:0;
-    const deOnde=nCat<0?'pelo catálogo partilhado (a IA não foi precisa)'
-      :`pela ${esc(rotuloMotor(m))}${nCat?` (${nCat} ${nCat===1?'campo já vinha':'campos já vinham'} do catálogo)`:''}`;
-    est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">✓ Preenchido ${deOnde}${res.fontes&&res.fontes.length?' · '+res.fontes.length+' fontes':''}. Confere antes de gravar.</div>`+
-      iaMemoriaHTML(res,"iaProcurarNovo('premium',true)")+(profunda?'':botaoOutro);
-  }catch(e){
-    // Mesma ideia do `iaMostrarErro`: o motor do plano falhou, mas quem é
-    // premium tem o outro para onde ir.
-    est.innerHTML=`<div class="erro">${esc(e.message)}</div>`+botaoOutro;
-  }
-  if(btn){btn.disabled=false;btn.textContent='🔎 Procurar informação';}
-}
-
-/* ── PESQUISA MANUAL NO VINHO NOVO (só admin) ──
-   Espelho pequeno do caminho manual dos vinhos já gravados
-   (`iaManualEscolher`/`iaManualGerarPrompt`/`iaManualColar`), mas sem ecrã
-   de comparação: aqui não há um `vinho_id` nem um "atual" contra que
-   comparar, o formulário É a confirmação — por isso o resultado colado
-   entra pelo MESMO `iaPreencherForm` que a pesquisa automática já usa, só
-   preenchendo o que está vazio. Reaproveita `iaManualPrompt`,
-   `iaManualExtrairJson` e `iaManualNormalizar` tal como estão: o prompt e o
-   parser têm de continuar a ser o mesmo espelho do `vinho-info.ts`, para um
-   vinho novo ou para um já gravado. */
-function iaManualNovoAbrir(){
-  if(!isAdmin())return;
-  const nome=document.getElementById('e-nome').value.trim();
-  if(!nome){toast('Escreve primeiro o nome do vinho',1);document.getElementById('e-nome').focus();return;}
-  const elTipo=document.getElementById('e-tipo');
-  if(elTipo&&!elTipo.value){toast('Escolhe primeiro a cor do vinho',1);elTipo.focus();return;}
-  const v={
-    nome,ano:inteiro(document.getElementById('e-ano').value),
-    produtor:document.getElementById('e-produtor').value.trim(),
-    regiao:'',tipo:elTipo?elTipo.value:''
-  };
-  const ctx=iaContextoLer('e-ia');
-  const txt=iaManualPrompt(v,null,false,ctx.notas,ctx.sites);
-  const est=document.getElementById('e-ia-estado');
-  est.innerHTML=`
-    <div class="aviso" style="margin-top:10px">1. Copia o prompt. 2. Cola-o no assistente de IA que
-      preferires (Gemini, ChatGPT, Claude…). 3. Copia a resposta toda (o JSON) e cola-a na caixa de
-      baixo. 4. Carrega em Preencher.</div>
-    <label>Prompt a copiar</label>
-    <textarea id="e-ia-manual-prompt" readonly rows="6" onclick="this.select()">${esc(txt)}</textarea>
-    <button class="btn ghost full" style="margin-top:8px" onclick="iaManualNovoCopiar()">📋 Copiar prompt</button>
-    <label style="margin-top:12px">Resposta (cola aqui)</label>
-    <textarea id="e-ia-manual-resposta" rows="8" placeholder="Cola aqui o JSON que o modelo devolveu…"></textarea>
-    <div class="note" id="e-ia-manual-erro" style="margin-top:6px;color:var(--dg)"></div>
-    <button class="btn prim full" style="margin-top:8px" onclick="iaManualNovoPreencher()">Preencher o formulário</button>`;
-}
-async function iaManualNovoCopiar(){
-  const ta=document.getElementById('e-ia-manual-prompt');
-  if(!ta)return;
-  try{
-    await navigator.clipboard.writeText(ta.value);
-    toast('Prompt copiado ✓');
-  }catch(e){
-    ta.focus();ta.select();
-    toast('Não deu para copiar sozinho — o texto já está selecionado, usa Ctrl/Cmd+C',1);
-  }
-}
-function iaManualNovoPreencher(){
-  const txt=document.getElementById('e-ia-manual-resposta').value;
-  const erroEl=document.getElementById('e-ia-manual-erro');
-  const raw=iaManualExtrairJson(txt);
-  if(!raw){erroEl.textContent='Não consegui ler isto como JSON. Confirma que colaste a resposta toda, incluindo as chavetas { }.';return;}
-  if(raw.encontrado===false){erroEl.textContent='O modelo disse que não encontrou o vinho'+(raw.aviso?': '+raw.aviso:'.');return;}
-  const ano=inteiro(document.getElementById('e-ano').value);
-  const ficha=iaManualNormalizar(raw,ano||null,null);
-  if(!ficha){erroEl.textContent='O JSON leu-se, mas não trouxe nenhum campo válido — confere se respeitou o formato pedido.';return;}
-  erroEl.textContent='';
-  iaPreencherForm(ficha,false);
-  toast('Formulário preenchido ✓ — confere antes de gravar.');
-}
 
 /* Campos que a IA pode trazer, na ordem em que fazem sentido a ler.
    `rot` é o rótulo; `fmt` só existe onde o valor cru não se lê bem. */
@@ -5705,121 +5324,584 @@ function iaPreencherForm(res,substituir){
   };
 }
 
-/* ── PROCURA MANUAL (grátis) — copiar prompt, colar resposta ──
-   Só o ADMIN vê esta escolha (é quem decide gastar ou não): ao carregar em
-   "Procurar informação" ele escolhe entre TRÊS caminhos —
-     · ver o que o CATÁLOGO já sabe (grátis, instantâneo, o painel de
-       sempre — `catAbrirPainel`);
-     · a PESQUISA AUTOMÁTICA de sempre (paga, `iaEscolher`);
-     · esta: um prompt pronto a colar no assistente de IA que se preferir
-       (Gemini, ChatGPT, Claude — quanto mais capaz, melhor), e a resposta
-       colada de volta aqui — comparada como se fosse uma segunda opinião,
-       com o ATUAL e, no fim, também com o CATÁLOGO partilhado, sem gastar
-       nada.
-   Os outros editores não veem esta escolha: vão direto à automática, como
-   sempre foi (`iaAbrirProcura`).
+/* ── PROCURAR INFORMAÇÃO, POR ETAPAS ──────────────────────────────────
+   Era um labirinto: ao admin, uma escolha de três caminhos (catálogo,
+   automática, manual) antes de saber o que faltava; a cada caminho o seu
+   ecrã de revisão (caixas, rádios da segunda opinião, o painel "o teu / no
+   catálogo"); e no vinho novo uma pilha de notas e botões que apareciam e
+   desapareciam conforme o resultado. Às tantas já não se sabia o que tinha
+   sido feito nem o que estava a correr (26/09/2026, o dono das apps).
 
-   O prompt e o parser são um ESPELHO do que o `vinho-info.ts` já faz
-   (`promptComGrounding`, `extrairJson`, `normalizar`) — mesmo vocabulário
-   fechado (TIPOS/ESTILOS/MENCOES/CLASSIF), mesmos limites. Uma resposta
-   colada à mão merece a MESMA desconfiança que uma que veio da net sozinha
-   — se mudares um lado, muda o outro no mesmo commit. */
+   Agora é uma conversa por etapas, sempre pela mesma ordem e no MESMO ecrã
+   (`modal-ia`), por cima de uma única lista do que se encontrou:
+     1. CATÁLOGO — corre sozinho ao abrir, é grátis. "O vinho já existe no
+        Catálogo e a informação foi importada" / "não existe". Pergunta:
+        pesquisar com IA ou preencher à mão?
+     2. IA — o motor do direito de cada um. "A pesquisa com IA terminou e
+        preencheu mais X campos." Pergunta: pesquisa avançada?
+     3. PESQUISA AVANÇADA — a pesquisa feita por nós (Serper) e a IA só a
+        ler os resultados, com SITES DE REFERÊNCIA dados por quem procura.
+        Ao admin é a "profunda" (`profunda:true`, a função só a dá a ele);
+        aos outros é o motor sem grounding (que também é Serper), e sem
+        sites a quem já procurou com esse motor não há nada de novo a pedir.
+   A resposta colada de outro assistente (só o admin, grátis) é uma fonte
+   como as outras, oferecida nas etapas 2 e 3.
 
+   "Importada" quer dizer "posta na lista": NADA é gravado sem se carregar
+   em Guardar (ou "Pôr no formulário", no vinho novo). Cada fonte só
+   acrescenta PROPOSTAS (`PQ.hist[campo][fonte]`); cada campo mostra o
+   valor de agora e o que cada fonte trouxe, e escolhe-se com um toque.
+   Vem escolhido: o de agora, se o campo tem valor (trocar o que alguém
+   escreveu à mão é sempre um toque consciente); senão a fonte mais forte
+   que respondeu (`PQ_FORCA`).
+
+   Fechar a janela a meio não perde nada: `PQ` fica, e voltar a carregar
+   em "Procurar informação" no mesmo vinho retoma onde se ia — com a
+   pesquisa ainda a correr, ou já acabada e por rever.
+
+   A atualização massiva (lote) continua com o seu ecrã
+   (`iaMostrarResultado`/`iaAplicar`): é outra pergunta, vinho a vinho em
+   fila, e não passa por aqui. */
+const PQ_NOMES={cat:'Catálogo',ia:'IA',av:'Pesquisa avançada',man:'Resposta colada'};
+// Num campo vazio, qual das propostas vem escolhida: a que teve mais
+// garantias de ter olhado para uma página a sério.
+const PQ_FORCA=['av','man','cat','ia'];
+// O formulário de vinho novo: que campo do ecrã recebe cada chave. As
+// restantes que ele sabe guardar vão pelo `_iaExtraNovo` (ver
+// `iaPreencherForm`); o que não está em nenhum dos dois não se propõe.
+const PQ_FORM={produtor:'e-produtor',estilo:'e-estilo',regiao:'e-regiao',sub_regiao:'e-subregiao',
+  mencao:'e-mencao',classificacao:'e-classificacao',castas:'e-castas',estagio_meses:'e-estagio',
+  estagio_texto:'e-estagio-txt',teor:'e-teor',beber_de:'e-beber-de',beber_ate:'e-beber-ate',
+  preco_medio:'e-preco',vivino_nota:'e-vivino',vivino_nota_global:'e-vivino-g',
+  vivino_url:'e-vivino-url',imagem_url:'e-imagem',harmonizacao:'e-harmonizacao'};
+const PQ_FORM_EXTRA=['notas_prova','ai_resumo','vivino_avaliacoes','vivino_avaliacoes_global'];
+let PQ=null;
+
+function pqVazio(x){return x==null||x===''||(Array.isArray(x)&&!x.length);}
+function pqTxt(x){return pqVazio(x)?'':Array.isArray(x)?x.join(', '):String(x);}
+function pqRot(k){const c=IA_CAMPOS.find(c=>c.k===k);return c?c.rot:catNome(k);}
+/* Os campos que se podem propor. Nunca o ANO (é de quem escreve) nem a
+   COR (confirma-se antes de procurar; uma cor diferente é outro vinho). */
+function pqChaves(P){
+  const ks=[...IA_CAMPOS.map(c=>c.k),...Object.keys(CAT_NOMES)]
+    .filter((k,i,a)=>a.indexOf(k)===i&&k!=='ano'&&k!=='tipo');
+  return ks.filter(k=>{
+    if(!P.id.ano&&IA_JANELA.includes(k))return false;          // sem colheita não há janela
+    if(P.novo)return k in PQ_FORM||PQ_FORM_EXTRA.includes(k);
+    return true;
+  });
+}
+// Os que se podem PEDIR à IA (o catálogo sabe mais do que ela pergunta).
+function pqChavesIA(P){return pqChaves(P).filter(k=>IA_CAMPOS.some(c=>c.k===k));}
+
+function pqAtualVinho(v){
+  const a={};
+  Object.keys(CAT_NOMES).concat(IA_CAMPOS.map(c=>c.k)).forEach(k=>{a[k]=k==='castas'?(v.castas||[]):v[k];});
+  return a;
+}
+function pqAtualForm(){
+  const a={};
+  Object.entries(PQ_FORM).forEach(([k,id])=>{const e=document.getElementById(id);a[k]=e?e.value.trim():'';});
+  const x=_iaExtraNovo||{};
+  PQ_FORM_EXTRA.forEach(k=>{a[k]=x[k]||'';});
+  return a;
+}
+function pqNovoEstado(novo,id,atual){
+  return {novo,vid:novo?null:id.vid,id,atual,hist:{},iguais:new Set(),esc:{},et:{},res:{},
+    fase:'cat',corre:'',repetir:null,manual:null,sites:[],notas:'',colheitaEsp:false,pedidoCampos:null,ultima:''};
+}
+// Ainda há alguma coisa a fazer com esta procura (a correr, ou por rever)?
+function pqPendente(P){return !!P&&(!!P.corre||Object.keys(P.hist).length>0);}
+
+/* Vinho já gravado: o botão "Procurar informação" da página do vinho. */
 function iaAbrirProcura(vinhoId){
   if(roGuard())return;
+  const v=IDXV[vinhoId];if(!v)return;
+  if(PQ&&!PQ.novo&&PQ.vid===vinhoId&&pqPendente(PQ)){abrirModal('modal-ia');pqPintar();return;}
+  PQ=pqNovoEstado(false,{vid:vinhoId,nome:v.nome,ano:v.ano||null,produtor:v.produtor||'',
+    regiao:v.regiao||'',tipo:v.tipo||''},pqAtualVinho(v));
+  abrirModal('modal-ia');
+  pqCatalogo();
+}
+/* Vinho novo (e wishlist): o mesmo ecrã por cima do formulário, a acabar
+   em "Pôr no formulário" — o formulário continua a ser a confirmação final. */
+function pqAbrirNovo(){
+  const nome=document.getElementById('e-nome').value.trim();
+  if(!nome){toast('Escreve primeiro o nome do vinho',1);document.getElementById('e-nome').focus();return;}
+  // A cor antes de procurar (ver `iaCorGuard`): é ela que separa o tinto do
+  // branco do mesmo nome, e o catálogo ainda não a tem na chave.
+  const elTipo=document.getElementById('e-tipo');
+  if(elTipo&&!elTipo.value){toast('Escolhe primeiro a cor do vinho',1);elTipo.focus();return;}
+  const id={vid:null,nome,ano:inteiro(document.getElementById('e-ano').value),
+    produtor:document.getElementById('e-produtor').value.trim(),regiao:'',tipo:elTipo?elTipo.value:''};
+  if(PQ&&PQ.novo&&PQ.corre&&PQ.id.nome===nome){abrirModal('modal-ia');pqPintar();return;}
+  PQ=pqNovoEstado(true,id,pqAtualForm());
+  abrirModal('modal-ia');
+  pqCatalogo();
+}
+
+/* Acrescenta as propostas de uma fonte. Devolve quantos campos ela
+   PREENCHEU de novo (vazios agora e sem proposta de ninguém antes) e em
+   quantos sugere outra coisa — é o que as mensagens contam. */
+function pqJuntar(P,fonte,res){
+  let novos=0,dif=0,outro=0;
+  pqChaves(P).forEach(k=>{
+    const val=res[k];
+    if(pqVazio(val))return;
+    if(k==='vivino_url'&&!vivinoLink(val))return;
+    const agora=P.atual[k];
+    if(!pqVazio(agora)&&chave(pqTxt(val))===chave(pqTxt(agora))){P.iguais.add(k);return;}
+    const h=P.hist[k]||(P.hist[k]={});
+    const antes=Object.values(h);
+    h[fonte]=k==='vivino_url'?vivinoLink(val):val;
+    if(!pqVazio(agora))dif++;
+    else if(!antes.length)novos++;
+    else if(!antes.some(x=>chave(pqTxt(x))===chave(pqTxt(val))))outro++;
+  });
+  return {novos,dif,outro};
+}
+
+/* ── Etapa 1: o catálogo ── */
+async function pqCatalogo(){
+  const P=PQ;
+  P.corre='cat';pqPintar();
+  let r=null,erro='';
+  try{
+    if(P.novo){
+      r=await sbReq('POST','rpc/comparar',{p_nome:P.id.nome,p_produtor:P.id.produtor,p_ano:P.id.ano,p_ficha:{}},
+        {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
+    }else{
+      await catComparar(P.vid,true);
+      r=catDados(P.vid);
+      if(r&&r.semCatalogo){erro='o catálogo não respondeu';r=null;}
+    }
+  }catch(e){erro=e.message;}
+  if(PQ!==P)return;
+  P.corre='';P.fase='ia';
+  // O catálogo é uma poupança, nunca uma dependência: se falhar, segue-se.
+  if(erro||!r){P.et.cat={estado:'erro',msg:erro||'sem resposta'};pqPintar();return;}
+  if(!r.encontrado){P.et.cat={estado:'nada'};pqPintar();return;}
+  const val={};
+  (r.campos||[]).forEach(c=>{if(c&&!pqVazio(c.catalogo))val[c.campo]=c.catalogo;});
+  // Outra cor = outro vinho (o "Papa Figos" tinto não é o branco): não se
+  // traz nada, e diz-se porquê.
+  if(val.tipo&&P.id.tipo&&chave(val.tipo)!==chave(P.id.tipo)){
+    P.et.cat={estado:'cor',nome:r.nome||P.id.nome,cor:String(val.tipo)};pqPintar();return;
+  }
+  // Com ano e outra colheita no catálogo, só servem os factos estáveis.
+  const outraColheita=P.id.ano!=null&&r.mesmaColheita===false;
+  if(outraColheita)CAT_DA_COLHEITA.forEach(k=>delete val[k]);
+  // Os preços das LOJAS não são um campo: a app lê-os do catálogo sempre que
+  // carrega (`precos_lojas`). No vinho novo diz-se que existem.
+  const lojas=Object.entries(val.precos&&typeof val.precos==='object'?val.precos:{})
+    .filter(([,p])=>p&&typeof p==='object'&&!p.retirado&&Number(p.preco)>0)
+    .sort((a,b)=>lojaOrdem(a[0])-lojaOrdem(b[0]));
+  delete val.precos;
+  // O produtor é identidade: num vinho gravado não vem de lá (é por ele que
+  // se acha a linha); num vinho novo sem produtor, sim.
+  if(P.novo&&!P.id.produtor&&r.produtor)val.produtor=r.produtor;
+  // Um link fora do formato do Vivino não se traz — e diz-se.
+  const vivinoMau=val.vivino_url&&!vivinoLink(val.vivino_url)?String(val.vivino_url):'';
+  const n=pqJuntar(P,'cat',val);
+  P.et.cat={estado:'feito',n:n.novos,dif:n.dif,ano:r.ano,outraColheita,vivinoMau,lojas:P.novo?lojas:[]};
+  P.ultima='cat';
+  pqPintar();
+}
+
+/* Os campos escolhidos na lista "Campos a pedir" (a de agora no ecrã). */
+function pqCamposLidos(){
+  return [...document.querySelectorAll('#modal-ia-in .pq-campo:checked')].map(e=>e.value);
+}
+function pqSitesLidos(){
+  const sites=(document.getElementById('pq-sites')?.value||'').split(/[,\n]/).map(s=>s.trim()).filter(Boolean).slice(0,5);
+  const notas=(document.getElementById('pq-notas')?.value||'').trim().slice(0,300);
+  return {sites,notas};
+}
+
+/* ── Etapa 2: a IA ── */
+async function pqIA(repetir){
+  const P=PQ;if(!P)return;
   if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
-  if(!isAdmin())return iaEscolher(vinhoId);
-  iaEscolherCaminho(vinhoId);
+  if(!repetir){
+    const campos=pqCamposLidos();
+    if(!campos.length){toast('Escolhe pelo menos um campo',1);return;}
+    P.pedidoCampos=campos;
+    P.colheitaEsp=!!document.getElementById('pq-colheita')?.checked;
+    if(!P.novo){
+      // A cor confirma-se aqui (e grava-se no vinho, se mudou).
+      const v=IDXV[P.vid];if(!v)return;
+      const cor=await iaCorGuard(v);
+      if(!cor||PQ!==P)return;
+      P.id.tipo=cor;
+      // Cada procura custa dinheiro, e a ficha de um vinho não muda de uma
+      // semana para a outra: se foi há pouco, pergunta-se (`iaUltimaProcura`).
+      const ult=await iaUltimaProcura(P.vid);
+      if(PQ!==P)return;
+      if(ult){P.repetir=ult;pqPintar();return;}
+    }
+  }
+  P.repetir=null;
+  await pqCorrer('ia',{motor:motorDoPlano()});
 }
 
-function iaEscolherCaminho(vinhoId){
-  const v=IDXV[vinhoId];if(!v)return;
-  document.getElementById('modal-ia-in').innerHTML=`
-    <div class="mtop"><div><h3>🔎 Procurar informação</h3>
-      <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
-      <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
-    <div class="note" style="margin-bottom:12px">Só tu vês esta escolha — os outros editores vão
-      direto à pesquisa automática.</div>
-    <div style="display:flex;flex-direction:column;gap:14px">
-      <div><button class="btn ghost full" onclick="iaCaminhoCatalogo(${vinhoId})">🗃️ Ver o que o Catálogo diz</button>
-        <div class="note" style="margin-top:5px">Grátis e instantâneo — o que a Garrafeira e a WineSelection já sabem deste vinho.</div></div>
-      <div><button class="btn ghost full" onclick="fecharModal('modal-ia');iaEscolher(${vinhoId})">🔎 Pesquisa automática</button>
-        <div class="note" style="margin-top:5px">Paga — a ${esc(rotuloMotor(motorDoPlano()))}, como sempre.</div></div>
-      <div><button class="btn prim full" onclick="iaManualEscolher(${vinhoId})">✍️ Pesquisa manual</button>
-        <div class="note" style="margin-top:5px">Grátis — copias um prompt para o assistente de IA que preferires e colas a resposta aqui; no fim compara-se também com o Catálogo.</div></div>
+/* ── Etapa 3: a pesquisa avançada ── */
+async function pqAvancada(){
+  const P=PQ;if(!P)return;
+  const campos=pqCamposLidos();
+  if(!campos.length){toast('Escolhe pelo menos um campo',1);return;}
+  const {sites,notas}=pqSitesLidos();
+  // Sem ser admin, a avançada é o motor sem grounding; quem já procurou com
+  // ele e não dá sites nem notas estava a pedir exatamente a mesma coisa
+  // (e a cache respondia igual).
+  if(!isAdmin()&&motorDoPlano()==='gratis'&&P.et.ia&&!sites.length&&!notas){
+    toast('Indica pelo menos um site de referência — sem isso a pesquisa repetia a anterior',1);
+    document.getElementById('pq-sites')?.focus();return;
+  }
+  P.pedidoCampos=campos;P.sites=sites;P.notas=notas;
+  P.colheitaEsp=!!document.getElementById('pq-colheita')?.checked;
+  await pqCorrer('av',{motor:isAdmin()?'premium':'gratis',profunda:isAdmin()});
+}
+
+async function pqCorrer(fonte,{motor,profunda}){
+  const P=PQ;
+  const pedido={nome:P.id.nome,tipo:P.id.tipo};
+  if(P.id.ano)pedido.ano=P.id.ano;
+  if(P.id.produtor)pedido.produtor=P.id.produtor;
+  if(P.id.regiao)pedido.regiao=P.id.regiao;
+  const todos=pqChavesIA(P);
+  if(P.pedidoCampos&&P.pedidoCampos.length<todos.length)pedido.campos=P.pedidoCampos;
+  pedido.colheitaEspecifica=P.colheitaEsp;
+  if(fonte==='av'){
+    if(P.notas)pedido.notas=P.notas;
+    if(P.sites.length)pedido.sites=P.sites;
+    if(profunda)pedido.profunda=true;
+  }
+  P.corre=fonte;P.et[fonte]={estado:'corre'};
+  pqPintar();
+  try{
+    const res=await iaPedir(pedido,P.vid,motor);
+    if(PQ!==P)return;
+    P.res[fonte]=res;
+    const n=pqJuntar(P,fonte,res);
+    P.et[fonte]={estado:'feito',n:n.novos,dif:n.dif,outro:n.outro,memoria:res.pesquisaWeb===false,
+      fontes:Array.isArray(res.fontes)?res.fontes:[],aviso:res.aviso||''};
+    P.ultima=fonte;
+    P.fase=fonte==='ia'?'av':'fim';
+  }catch(e){
+    if(PQ!==P)return;
+    P.et[fonte]={estado:'erro',msg:e.message};
+  }
+  P.corre='';
+  if(!document.getElementById('modal-ia').classList.contains('on'))
+    toast('A procura terminou — abre “Procurar informação” para rever o que encontrou');
+  pqPintar();
+}
+
+/* ── A resposta colada (só o admin, grátis) ── */
+function pqManualAbrir(){
+  const P=PQ;if(!P||!isAdmin())return;
+  const campos=pqCamposLidos();
+  if(!campos.length){toast('Escolhe pelo menos um campo',1);return;}
+  const ctx=document.getElementById('pq-sites')?pqSitesLidos():{sites:P.sites,notas:P.notas};
+  const colheitaEsp=!!document.getElementById('pq-colheita')?.checked;
+  const todos=pqChavesIA(P);
+  const pedidos=campos.length<todos.length?campos:null;
+  P.manual={campos:pedidos,vivino:ctx.sites.map(vivinoLink).find(Boolean)||'',
+    prompt:iaManualPrompt(P.id,pedidos,colheitaEsp,ctx.notas,ctx.sites)};
+  pqPintar();
+}
+function pqManualLer(){
+  const P=PQ;if(!P||!P.manual)return;
+  const txt=document.getElementById('ia-manual-resposta').value;
+  const erro=m=>{const el=document.getElementById('pq-manual-erro');if(el)el.textContent=m;};
+  const raw=iaManualExtrairJson(txt);
+  if(!raw)return erro('Não consegui ler isto como JSON. Confirma que colaste a resposta toda, incluindo as chavetas { }.');
+  if(raw.encontrado===false)return erro('O modelo disse que não encontrou o vinho'+(raw.aviso?': '+raw.aviso:'.'));
+  const ficha=iaManualNormalizar(raw,P.id.ano||null,P.manual.campos);
+  if(!ficha)return erro('O JSON leu-se, mas não trouxe nenhum campo válido — confere se respeitou o formato pedido.');
+  // O link que quem pesquisa colou e abriu ganha ao que a resposta trouxe.
+  if(P.manual.vivino&&(!P.manual.campos||P.manual.campos.includes('vivino_url')))ficha.vivino_url=P.manual.vivino;
+  ficha.modelo=IA_MANUAL_MARCA;ficha.pesquisa=true;
+  P.res.man=ficha;
+  const n=pqJuntar(P,'man',ficha);
+  P.et.man={estado:'feito',n:n.novos,dif:n.dif,outro:n.outro,fontes:[],aviso:raw.aviso||''};
+  P.ultima='man';P.manual=null;
+  if(P.fase==='ia')P.fase='av';
+  pqPintar();
+}
+
+/* ── O ecrã ── */
+function pqPassoHTML(k,P){
+  const e=P.et[k]||{};
+  const st=P.corre===k?'a procurar…'
+    :e.estado==='feito'?(k==='cat'?`✓ ${e.n} ${e.n===1?'campo':'campos'}`:`✓ +${e.n}`)
+    :e.estado==='nada'?'não conhece'
+    :e.estado==='cor'?'outra cor'
+    :e.estado==='erro'?'não deu'
+    :'—';
+  const cls=P.corre===k?'corre':e.estado==='feito'?'feito':e.estado==='erro'?'erro':e.estado?'nada':'';
+  return `<div class="pq-passo ${cls}"><b>${esc(PQ_NOMES[k])}</b><span>${esc(st)}</span></div>`;
+}
+function pqQtd(n,um,varios){return `<b>${n}</b> ${n===1?um:varios}`;}
+function pqFontesHTML(fontes){
+  return fontes&&fontes.length?`<div class="ia-fontes">Fontes: ${fontes.map(f=>
+    `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo||f.url)}</a>`).join(' · ')}</div>`:'';
+}
+/* O que a última etapa fez, numa ou duas frases. */
+function pqRelatoHTML(P){
+  const out=[];
+  const c=P.et.cat;
+  if(c&&(P.ultima==='cat'||!P.ultima)){
+    if(c.estado==='feito'){
+      out.push(c.n
+        ?`O vinho já existe no Catálogo e a informação foi importada: ${pqQtd(c.n,'campo','campos')}.`
+        :'O vinho já existe no Catálogo, mas não tinha nada que falte a esta ficha.');
+      if(c.dif)out.push(`Tem também outro valor em ${pqQtd(c.dif,'campo que já estava preenchido','campos que já estavam preenchidos')}.`);
+      if(c.outraColheita)out.push(`<span class="note">A linha do Catálogo é da colheita ${esc(String(c.ano||'sem ano'))}: vieram só os factos do vinho, sem nota, preço nem imagem.</span>`);
+      if(c.vivinoMau)out.push(`<span class="note">O link do Vivino que o Catálogo tem não está no formato do Vivino — não o trouxe.</span>`);
+      if(c.lojas&&c.lojas.length)out.push(`<span class="note">💶 Nas lojas: ${c.lojas.map(([k,p])=>
+        `<b>${esc(lojaInfo(k).nome)}</b> ${esc(eur(p.preco))}${p.colheita?' ('+esc(p.colheita)+')':''}`).join(' · ')}. Não se copiam: o vinho lê-os do Catálogo, sempre atualizados.</span>`);
+    }else if(c.estado==='nada')out.push('O vinho não existe no Catálogo.');
+    else if(c.estado==='cor')out.push(`O Catálogo tem um <b>${esc(c.nome)}</b>, mas ${esc(c.cor.toLowerCase())} — deve ser outro vinho, não importei nada.`);
+    else if(c.estado==='erro')out.push(`Não consegui perguntar ao Catálogo (${esc(c.msg)}).`);
+  }
+  const f=P.ultima&&P.ultima!=='cat'?P.et[P.ultima]:null;
+  if(f&&f.estado==='feito'){
+    const quem=P.ultima==='ia'?'A pesquisa com IA':P.ultima==='av'?'A pesquisa avançada':'A resposta colada';
+    out.push(f.n?`${quem} terminou e preencheu mais ${pqQtd(f.n,'campo','campos')}.`
+               :`${quem} terminou, mas não preencheu nada de novo.`);
+    if(f.outro)out.push(`Encontrou outro valor em ${pqQtd(f.outro,'campo','campos')} que já tinham resposta de outra fonte — escolhe em baixo.`);
+    if(f.dif)out.push(`Sugere outro valor em ${pqQtd(f.dif,'campo que já estava preenchido','campos que já estavam preenchidos')}.`);
+    if(f.memoria)out.push('<span class="note">🧠 A IA respondeu <b>de memória</b>, sem pesquisar na net. Costuma acertar em vinhos conhecidos, mas confere antes de guardar.</span>');
+    if(f.aviso)out.push(`<span class="note">⚠️ ${esc(f.aviso)}</span>`);
+  }
+  return out.map(t=>`<p>${t}</p>`).join('')+(f?pqFontesHTML(f.fontes):'');
+}
+function pqCamposHTML(P,titulo){
+  const ks=pqChavesIA(P);
+  const falta=k=>pqVazio(P.atual[k])&&!P.hist[k];
+  const marcados=ks.filter(falta);
+  const n=marcados.length;
+  return `<details class="pq-campos"><summary>${esc(titulo)}: ${n?`${n} ${n===1?'campo':'campos'} (os que faltam)`:'nenhum — já não falta nada; escolhe o que queres confirmar'}</summary>
+    <div class="ia-escs">${ks.map(k=>`<label class="ia-esc">
+      <input type="checkbox" class="pq-campo" value="${esc(k)}"${marcados.includes(k)?' checked':''}>
+      <span>${esc(pqRot(k))}${pqVazio(P.atual[k])?'':'<i>já tem</i>'}${P.hist[k]?'<i>já encontrado</i>':''}</span></label>`).join('')}</div>
+    <label class="ia-esc" style="margin-top:6px"><input type="checkbox" id="pq-colheita"${P.colheitaEsp?' checked':''}>
+      <span>Tem de ser exatamente a colheita de ${esc(String(P.id.ano||'este ano'))}<i>raramente faz falta: a nota do Vivino é do vinho, não da colheita</i></span></label>
+  </details>`;
+}
+function pqCorHTML(P){
+  if(P.novo)return '';
+  const opts=['<option value="">— escolhe a cor —</option>'].concat(
+    TIPOS.map(x=>`<option value="${esc(x)}"${P.id.tipo===x?' selected':''}>${esc(x)}</option>`)).join('');
+  return `<div class="pq-cor"><label for="ia-cor-sel">Cor</label><select id="ia-cor-sel">${opts}</select>
+    <span class="note">Confirma-a antes de pesquisar: um branco não é o tinto do mesmo nome.</span></div>`;
+}
+function pqManualLinkHTML(){
+  return isAdmin()?`<button class="pq-link" onclick="pqManualAbrir()">✍️ Ou copiar o prompt para outro assistente e colar a resposta (grátis)</button>`:'';
+}
+/* A pergunta da etapa em que se está, com os botões dela. */
+function pqPerguntaHTML(P){
+  if(P.corre){
+    const t=P.corre==='cat'?'A ver o que o Catálogo já sabe…'
+      :P.corre==='ia'?'A pesquisar com IA. Pode levar até dois minutos.'
+      :'A fazer a pesquisa avançada. Pode levar até dois minutos.';
+    return `<div class="pq-espera"><div class="gl-spin"></div><div>${t}${P.corre!=='cat'
+      ?'<div class="note">Podes fechar esta janela: a pesquisa continua, e ao voltares a “Procurar informação” está aqui à tua espera.</div>':''}</div></div>`;
+  }
+  if(P.repetir){
+    return `<div class="aviso">${P.repetir.minha?'Pesquisaste este vinho':'Este vinho foi pesquisado'} pela última vez em
+      <b>${esc(dataHoraLocal(P.repetir.quando))}</b>. A ficha raramente muda de um mês para o outro. Pesquisar à mesma?</div>
+      <div class="macoes"><button class="btn prim" onclick="pqIA(true)">Pesquisar à mesma</button>
+        <button class="btn ghost" onclick="PQ.repetir=null;pqPintar()">Não</button></div>`;
+  }
+  if(P.manual){
+    return `<div class="aviso">1. Copia o prompt. 2. Cola-o no assistente de IA que preferires (Gemini, ChatGPT, Claude…).
+      3. Copia a resposta toda (o JSON) e cola-a aqui por baixo.</div>
+      <textarea id="ia-manual-prompt" readonly rows="5" onclick="this.select()">${esc(P.manual.prompt)}</textarea>
+      <button class="btn ghost full" style="margin-top:8px" onclick="iaManualCopiar()">📋 Copiar prompt</button>
+      <label style="margin-top:12px" for="ia-manual-resposta">Resposta</label>
+      <textarea id="ia-manual-resposta" rows="6" placeholder="Cola aqui o JSON que o assistente devolveu…"></textarea>
+      <div class="note" id="pq-manual-erro" style="margin-top:6px;color:var(--dg)"></div>
+      <div class="macoes"><button class="btn prim" onclick="pqManualLer()">Ler a resposta</button>
+        <button class="btn ghost" onclick="PQ.manual=null;pqPintar()">‹ Voltar</button></div>`;
+  }
+  const aMao=`<button class="btn ghost" onclick="pqAMao()">✏️ Preencher à mão</button>`;
+  const e=P.et[P.fase==='ia'?'ia':'av'];
+  const erro=e&&e.estado==='erro'?`<div class="erro">${P.fase==='ia'?'A pesquisa com IA':'A pesquisa avançada'} não deu: ${esc(e.msg)}</div>`:'';
+  if(P.fase==='ia'){
+    if(!podeUsarIA())return `<p>Podes preencher à mão o que faltar.</p><div class="macoes">${aMao}</div>`;
+    const c=P.et.cat;
+    const q=c&&c.estado==='feito'&&c.n?'Queres usar a IA para complementar a pesquisa, ou preencher à mão?'
+      :'Queres fazer a pesquisa com IA, ou preencher à mão?';
+    return `${erro}<p class="pq-q">${q}</p>${pqCorHTML(P)}${pqCamposHTML(P,'O que pedir à IA')}
+      <div class="macoes"><button class="btn prim" onclick="pqIA()">🔎 ${e&&e.estado==='erro'?'Tentar outra vez':'Pesquisar com IA'}</button>${aMao}
+        ${e&&e.estado==='erro'?`<button class="btn ghost" onclick="PQ.fase='av';pqPintar()">Passar à pesquisa avançada</button>`:''}</div>
+      ${pqManualLinkHTML()}`;
+  }
+  if(P.fase==='av'){
+    return `${erro}<p class="pq-q">Pretendes fazer a pesquisa avançada?</p>
+      <p class="note">Pesquisa mesmo no Google (o Vivino incluído) e a IA só lê o que se encontrou. Se conheces sites com
+        informação deste vinho, indica-os: a pesquisa dá-lhes prioridade. Um link do Vivino do vinho certo é usado tal e qual.</p>
+      <label for="pq-sites">Sites de referência (opcional)</label>
+      <textarea id="pq-sites" rows="2" placeholder="ex.: garrafeiranacional.com, vivino.com/…/w/123456">${esc(P.sites.join(', '))}</textarea>
+      <label for="pq-notas">Notas para identificar o vinho (opcional)</label>
+      <textarea id="pq-notas" rows="2" maxlength="300" placeholder="ex.: edição limitada, da casa Ferreirinha">${esc(P.notas)}</textarea>
+      ${pqCamposHTML(P,'O que pedir')}
+      <div class="macoes"><button class="btn prim" onclick="pqAvancada()">🔬 ${e&&e.estado==='erro'?'Tentar outra vez':'Pesquisa avançada'}</button>
+        <button class="btn ghost" onclick="PQ.fase='fim';pqPintar()">Não, chega</button></div>
+      ${pqManualLinkHTML()}`;
+  }
+  return '';
+}
+function pqDefeito(P,k){
+  if(P.esc[k])return P.esc[k];
+  if(!pqVazio(P.atual[k]))return 'atual';
+  return PQ_FORCA.find(f=>f in P.hist[k])||'atual';
+}
+function pqLinhasHTML(P){
+  return pqChaves(P).filter(k=>P.hist[k]).map(k=>{
+    const h=P.hist[k], def=pqDefeito(P,k), agora=pqTxt(P.atual[k]);
+    // As fontes que trouxeram o MESMO valor são uma opção só.
+    const grupos=[];
+    PQ_FORCA.filter(f=>f in h).forEach(f=>{
+      const t=pqTxt(h[f]);
+      const g=grupos.find(x=>chave(x.t)===chave(t));
+      g?g.fs.push(f):grupos.push({t,fs:[f]});
+    });
+    const op=(val,rot,txt,cls)=>`<label class="ia-op${cls}">
+      <input type="radio" name="pq-${k}" value="${val}"${def===val?' checked':''} onchange="pqEscolher('${k}',this.value)">
+      <span><i>${esc(rot)}</i>${escLink(txt)}</span></label>`;
+    return `<div class="ia-cmp"><b class="ia-cmp-t">${esc(pqRot(k))}</b>
+      ${op('atual','agora',agora||'(vazio — deixar assim)',' at')}
+      ${grupos.map(g=>op(g.fs[0],g.fs.map(f=>PQ_NOMES[f]).join(' · '),g.t,g.fs[0]==='av'?' pr':g.fs[0]==='cat'?' ct':'')).join('')}
     </div>`;
-  abrirModal('modal-ia');
-}
-
-async function iaCaminhoCatalogo(vinhoId){
-  fecharModal('modal-ia');
-  await catComparar(vinhoId,true);
-  const d=catDados(vinhoId);
-  if(!d||!d.encontrado){toast('Este vinho ainda não está no catálogo partilhado',1);return;}
-  catAbrirPainel(vinhoId);
-}
-
-// Guardados enquanto se passa do seletor de campos ao prompt, para a
-// comparação final saber a que se pediu (os mesmos `campos` que a Edge
-// Function usaria para cortar a resposta).
-let IA_MANUAL_CAMPOS=null;
-let IA_MANUAL_VIVINO=''; // o link do Vivino colado nos sites de confiança
-
-function iaManualEscolher(vinhoId){
-  if(roGuard())return;
-  const v=IDXV[vinhoId];if(!v)return;
-  const linhas=iaCamposPara(v).map(c=>{
-    const tem=!!iaValorAtual(v,c.k);
-    return `<label class="ia-esc">
-      <input type="checkbox" class="ia-esc-c" value="${esc(c.k)}"${tem?'':' checked'}>
-      <span>${esc(c.rot)}${tem?'<i>já tem</i>':''}</span>
-    </label>`;
   }).join('');
-  const optsCor=['<option value="">— escolhe a cor —</option>'].concat(
-    TIPOS.map(x=>`<option value="${esc(x)}"${v.tipo===x?' selected':''}>${esc(x)}</option>`)
-  ).join('');
-  document.getElementById('modal-ia-in').innerHTML=`
-    <div class="mtop"><div><h3>✍️ Pesquisa manual</h3>
-      <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
-      <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
-
-    <label>Cor</label>
-    <select id="ia-cor-sel">${optsCor}</select>
-    <div class="note" style="margin-bottom:10px">A cor é parte da identidade do vinho no catálogo
-      partilhado. Confirma-a antes de gerar o prompt; se a mudares aqui, fica gravada no vinho.</div>
-
-    ${iaContextoHTML()}
-
-    <label class="ia-esc" style="margin-bottom:2px">
-      <input type="checkbox" id="ia-colheita-esp">
-      <span>Tem de ser exatamente a colheita de ${v.ano||'este ano'}</span>
-    </label>
-    <div class="note" style="margin-bottom:10px">Por omissão o prompt pergunta pelo vinho em geral — a
-      nota do Vivino, por exemplo, é uma média entre colheitas. Liga só se precisares mesmo dos factos
-      desta colheita específica.</div>
-
-    <div class="aviso">Escolhe o que queres perguntar. Já vêm marcados os campos vazios.</div>
-
-    <div class="ia-escbar">
-      <button class="mini" onclick="iaEscTodos(true)">Marcar tudo</button>
-      <button class="mini" onclick="iaEscTodos(false)">Desmarcar</button>
-      <span class="note" id="ia-esc-n"></span>
-    </div>
-    <div class="ia-escs" onchange="iaManualEscContar()">${linhas}</div>
-
-    <div class="macoes">
-      <button class="btn prim" id="ia-esc-btn" onclick="iaManualGerarPrompt(${vinhoId})">Gerar prompt</button>
-      <button class="btn ghost" onclick="iaEscolherCaminho(${vinhoId})">‹ Voltar</button>
-    </div>`;
-  abrirModal('modal-ia');
-  iaManualEscContar();
 }
-function iaManualEscContar(){
-  const n=iaEscSelecionados().length, tot=IA_CAMPOS.length;
-  const et=document.getElementById('ia-esc-n');
-  if(et)et.textContent=n===tot?'todos os campos':`${n} de ${tot} campos`;
-  const b=document.getElementById('ia-esc-btn');
-  if(b){b.disabled=!n;b.textContent=n?`Gerar prompt (${n===tot?'tudo':n+(n===1?' campo':' campos')})`:'Escolhe pelo menos um';}
+function pqEscolher(k,val){if(PQ){PQ.esc[k]=val;pqContar();}}
+function pqEscolhas(P){
+  return pqChaves(P).filter(k=>P.hist[k]).map(k=>({k,fonte:pqDefeito(P,k)}))
+    .filter(e=>e.fonte!=='atual').map(e=>({...e,val:P.hist[e.k][e.fonte]}));
+}
+function pqContar(){
+  const P=PQ,b=document.getElementById('pq-guardar');
+  if(!P||!b)return;
+  const n=pqEscolhas(P).length;
+  b.disabled=!n||!!P.corre;
+  b.textContent=n?`${P.novo?'Pôr no formulário':'Guardar'} ${n} ${n===1?'campo':'campos'}`:'Nada escolhido';
+}
+function pqPintar(){
+  const P=PQ;if(!P)return;
+  const box=document.getElementById('modal-ia-in');
+  const linhas=pqLinhasHTML(P);
+  const iguais=[...P.iguais].filter(k=>!P.hist[k]);
+  box.innerHTML=`
+    <div class="mtop"><div><h3>🔎 Procurar informação</h3>
+      <div class="note" style="margin-top:3px">${esc(P.id.nome)} ${P.id.ano||''}</div></div>
+      <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
+    <div class="pq-passos">${(podeUsarIA()?['cat','ia','av']:['cat']).map(k=>pqPassoHTML(k,P)).join('<span class="pq-seta">›</span>')}
+      ${P.et.man?pqPassoHTML('man',P):''}</div>
+    <div class="pq-conversa">${pqRelatoHTML(P)}${pqPerguntaHTML(P)}</div>
+    ${linhas?`<div class="msec">O que se encontrou</div>
+      <div class="note">Nada está gravado ainda. ${P.novo?'Toca no que queres pôr no formulário.':'Toca no que queres guardar.'}
+        Nos campos que já tinham valor fica o de agora, a não ser que escolhas outro.</div>
+      <div class="pq-linhas">${linhas}</div>`:''}
+    ${iguais.length?`<div class="note" style="margin-top:8px">${iguais.length===1?'1 campo veio':iguais.length+' campos vieram'} igual ao que já está (${esc(iguais.map(pqRot).join(', '))}).</div>`:''}
+    <div class="macoes pq-fim">
+      ${linhas?`<button class="btn prim" id="pq-guardar" onclick="pqGuardar()"></button>`:''}
+      <button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button>
+    </div>`;
+  pqContar();
+}
+
+/* ── Guardar ── */
+async function pqGuardar(){
+  const P=PQ;if(!P)return false;
+  const escs=pqEscolhas(P);
+  if(!escs.length){toast('Não escolheste nada');return false;}
+  if(P.novo){pqPorNoForm(P,escs);return true;}
+  if(roGuard())return false;
+  const v=IDXV[P.vid];if(!v)return false;
+  // O que se trouxe do catálogo grava-se pela MESMA porta do painel do
+  // catálogo (`aplicar_do_catalogo`); o resto como qualquer procura.
+  const doCat=escs.filter(e=>e.fonte==='cat').map(e=>e.k);
+  const outros=escs.filter(e=>e.fonte!=='cat');
+  const patch={};let castas=null;
+  outros.forEach(e=>{
+    if(e.k==='castas'){castas=Array.isArray(e.val)?e.val:String(e.val).split(',').map(s=>s.trim()).filter(Boolean);return;}
+    patch[e.k]=e.val;
+  });
+  if(!v.ano)IA_JANELA.forEach(k=>delete patch[k]);
+  if(outros.length){
+    // O carimbo da procura: de onde veio, para daqui a um ano se saber.
+    const usados=[...new Set(outros.map(e=>e.fonte))].map(f=>P.res[f]).filter(Boolean);
+    patch.ai_atualizado_em=new Date().toISOString();
+    const modelos=[...new Set(usados.map(r=>r.modelo).filter(Boolean))];
+    if(modelos.length)patch.ai_modelo=modelos.join(' + ');
+    const fontes=[];
+    usados.forEach(r=>(r.fontes||[]).forEach(f=>{if(!fontes.some(x=>x.url===f.url))fontes.push(f);}));
+    if(fontes.length)patch.ai_fontes=fontes.slice(0,8);
+  }
+  const b=document.getElementById('pq-guardar');
+  if(b){b.disabled=true;b.textContent='A guardar…';}
+  try{
+    if(Object.keys(patch).length){
+      const r=await sbReq('PATCH',`vinhos?id=eq.${P.vid}`,patch,{'Prefer':'return=representation'});
+      Object.assign(v,patch,(r&&r[0])||{});
+    }
+    if(castas){
+      await sbRpc('definir_castas',{p_vinho_id:P.vid,p_nomes:castas});
+      v.castas=castas.slice().sort((a,b)=>a.localeCompare(b,'pt'));
+      await recarregarCastas();
+    }
+    if(doCat.length){
+      await sbRpc('aplicar_do_catalogo',{p_vinho_id:P.vid,p_campos:doCat});
+      await carregarGarrafeira();
+    }
+    PQ=null;
+    fecharModal('modal-ia');
+    renderLista();refrescarVinhoAberto();
+    catComparar(P.vid,true);
+    toast(`${escs.length} ${escs.length===1?'campo guardado':'campos guardados'} ✓`);
+    return true;
+  }catch(e){
+    toast('Não foi possível guardar: '+e.message,1);
+    pqContar();
+    return false;
+  }
+}
+function pqPorNoForm(P,escs){
+  const res={};
+  escs.forEach(e=>{res[e.k]=e.val;});
+  // O `iaPreencherForm` só escreve em campos vazios: o que se escolheu por
+  // cima de um valor do formulário limpa-se primeiro.
+  escs.forEach(e=>{const id=PQ_FORM[e.k];const el=id&&document.getElementById(id);if(el)el.value='';});
+  const usados=[...new Set(escs.map(e=>e.fonte))].map(f=>f==='cat'?{modelo:'catálogo partilhado'}:P.res[f]).filter(Boolean);
+  res.modelo=[...new Set(usados.map(r=>r.modelo).filter(Boolean))].join(' + ');
+  res.fontes=usados.flatMap(r=>r.fontes||[]).slice(0,8);
+  iaPreencherForm(res,false);
+  const est=document.getElementById('e-ia-estado');
+  const por=PQ_FORCA.concat().filter(f=>escs.some(e=>e.fonte===f))
+    .map(f=>`${PQ_NOMES[f]} ${escs.filter(e=>e.fonte===f).length}`).join(' · ');
+  if(est)est.innerHTML=`<div class="note" style="margin-top:8px;color:var(--vd)">✓ ${escs.length} ${escs.length===1?'campo preenchido':'campos preenchidos'} (${esc(por)}). Confere antes de gravar.</div>`;
+  PQ=null;
+  fecharModal('modal-ia');
+  toast('Formulário preenchido ✓ — confere antes de gravar');
+}
+/* "Preencher à mão": o que já se escolheu não se perde — guarda-se (ou vai
+   para o formulário) e abre-se o sítio onde se escreve. */
+async function pqAMao(){
+  const P=PQ;if(!P)return;
+  const temEsc=pqEscolhas(P).length>0;
+  if(P.novo){
+    if(temEsc)pqPorNoForm(P,pqEscolhas(P));
+    else{PQ=null;fecharModal('modal-ia');}
+    document.getElementById('e-produtor')?.focus();
+    return;
+  }
+  if(temEsc&&!await pqGuardar())return;
+  if(!temEsc){PQ=null;fecharModal('modal-ia');}
+  abrirEditarVinho(P.vid);
 }
 
 // Nome do campo no JSON que se pede ao Gemini — a mesma tabela do `CAMPOS`
@@ -5911,42 +5993,6 @@ ${v.ano?`  "beberDe": 2026,
 Se não conseguires identificar o vinho de todo, responde {"encontrado": false, "aviso": "porquê"}.`;
 }
 
-async function iaManualGerarPrompt(vinhoId){
-  if(roGuard())return;
-  const v=IDXV[vinhoId];if(!v)return;
-  const cor=await iaCorGuard(v);
-  if(!cor)return;
-  const escolhidos=iaEscSelecionados();
-  const campos=escolhidos.length&&escolhidos.length<IA_CAMPOS.length?escolhidos:null;
-  const colheitaEspecifica=!!document.getElementById('ia-colheita-esp')?.checked;
-  const ctx=iaContextoLer();
-  IA_MANUAL_CAMPOS=campos;
-  IA_MANUAL_VIVINO=ctx.sites.map(vivinoLink).find(Boolean)||'';
-  const txt=iaManualPrompt(v,campos,colheitaEspecifica,ctx.notas,ctx.sites);
-  document.getElementById('modal-ia-in').innerHTML=`
-    <div class="mtop"><div><h3>✍️ Pesquisa manual</h3>
-      <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
-      <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
-
-    <div class="aviso">1. Copia o prompt abaixo. 2. Cola-o no assistente de IA que preferires
-      (quanto mais capaz o modelo, melhor costuma ser o resultado — Gemini, ChatGPT, Claude, o que
-      tiveres à mão). 3. Copia a resposta toda (o JSON) e cola-a na caixa de baixo. 4. Carrega em
-      Comparar.</div>
-
-    <label>Prompt a copiar</label>
-    <textarea id="ia-manual-prompt" readonly rows="6" onclick="this.select()">${esc(txt)}</textarea>
-    <button class="btn ghost full" style="margin-top:8px" onclick="iaManualCopiar()">📋 Copiar prompt</button>
-
-    <label style="margin-top:16px">Resposta (cola aqui)</label>
-    <textarea id="ia-manual-resposta" rows="10" placeholder="Cola aqui o JSON que o modelo devolveu…"></textarea>
-    <div class="note" id="ia-manual-erro" style="margin-top:6px;color:var(--dg)"></div>
-
-    <div class="macoes">
-      <button class="btn prim" onclick="iaManualColar(${vinhoId})">Comparar</button>
-      <button class="btn ghost" onclick="iaManualEscolher(${vinhoId})">‹ Voltar</button>
-    </div>`;
-  abrirModal('modal-ia');
-}
 
 async function iaManualCopiar(){
   const ta=document.getElementById('ia-manual-prompt');
@@ -6059,45 +6105,6 @@ function iaManualNormalizar(raw,anoPedido,campos){
    CATÁLOGO partilhado, se ele souber alguma coisa deste vinho: é grátis,
    é só ler o que já lá está (`catComparar`), e reaproveita o mesmíssimo
    mecanismo de "duas leituras, escolhe uma" que a segunda opinião já usa. */
-async function iaManualColar(vinhoId){
-  const v=IDXV[vinhoId];if(!v)return;
-  const txt=document.getElementById('ia-manual-resposta').value;
-  const erroEl=document.getElementById('ia-manual-erro');
-  const raw=iaManualExtrairJson(txt);
-  if(!raw){
-    if(erroEl)erroEl.textContent='Não consegui ler isto como JSON. Confirma que colaste a resposta toda, incluindo as chavetas { }.';
-    return;
-  }
-  if(raw.encontrado===false){
-    if(erroEl)erroEl.textContent='O modelo disse que não encontrou o vinho'+(raw.aviso?': '+raw.aviso:'.');
-    return;
-  }
-  const ficha=iaManualNormalizar(raw,v.ano||null,IA_MANUAL_CAMPOS);
-  if(!ficha){
-    if(erroEl)erroEl.textContent='O JSON leu-se, mas não trouxe nenhum campo válido — confere se respeitou o formato pedido.';
-    return;
-  }
-  // O link que quem pesquisa colou e abriu ganha ao que a resposta trouxe.
-  if(IA_MANUAL_VIVINO&&(!IA_MANUAL_CAMPOS||IA_MANUAL_CAMPOS.includes('vivino_url')))ficha.vivino_url=IA_MANUAL_VIVINO;
-  if(erroEl)erroEl.textContent='';
-  // Não se assume qual foi o modelo (o utilizador procura onde quiser) — só
-  // se marca que foi uma pesquisa a sério, colada à mão. `iaUltimaProcura`
-  // reconhece este prefixo para continuar a avisar sobre repetições.
-  ficha.modelo=IA_MANUAL_MARCA;
-  ficha.pesquisa=true;
-  IA_PEDIDO={nome:v.nome,ano:v.ano,produtor:v.produtor,regiao:v.regiao};
-  IA_VINHO=vinhoId;IA_MOTOR='manual';IA_ERRO2='';
-  await catComparar(vinhoId,true);
-  const doCatalogo=catCampos(vinhoId);
-  if(doCatalogo.length){
-    IA_RES2={modelo:'catálogo partilhado'};
-    doCatalogo.forEach(c=>{if(c.catalogo!=null&&c.catalogo!=='')IA_RES2[c.campo]=c.catalogo;});
-    IA_MOTOR2='catalogo';
-  }else{
-    IA_RES2=null;IA_MOTOR2='';
-  }
-  iaMostrarResultado(ficha,vinhoId);
-}
 
 /* ── ATUALIZAÇÃO MASSIVA (lote) ──────────────────────────────────────
    Nasceu de uma pergunta simples: em vez de abrir vinho a vinho para
@@ -8087,7 +8094,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='109';
+const APP_BUILD='110';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
