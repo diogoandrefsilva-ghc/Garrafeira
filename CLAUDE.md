@@ -1278,8 +1278,16 @@ sítios. A ordem, decidida pelo dono da app:
 Uma loja vende a colheita que tem AGORA, raramente a minha — por isso a
 colheita pesa antes da loja. Num vinho sem ano qualquer colheita é a
 minha. O cartão diz sempre de onde veio o preço quando não é o médio
-("63 € · G. Nacional · 2016"), e a página do vinho lista **todas** as
-lojas (`precosLojaHTML`) com a que conta marcada.
+("63 € · G. Nacional · 2016"; o Vivino sem colheita é "Vivino · média",
+que é o que ele mostra sem ano — nunca "colheita ?"), e a página do vinho
+lista **todas** as lojas (`precosLojaHTML`) com a que conta marcada.
+
+**Um preço desalinhado não conta** (`duvidoso`, em `precosLojaDe`): abaixo
+de metade ou acima do dobro da mediana dos OUTROS preços do vinho (as
+outras lojas e o `preco_medio`). Quando o script das lojas falha é na
+página, não na colheita — o Casa de Saima Garrafeira veio a 8,49 € do
+Vivino com as lojas a 63 € e 69 €. Aparece riscado no detalhe e nunca é o
+principal; sem outro preço com que comparar, conta.
 
 `ano`, `produtor` e `precos` também existem na ficha do catálogo e **não**
 entram na comparação do "≠ catálogo" (`catCampos` filtra por `CAT_NOMES`):

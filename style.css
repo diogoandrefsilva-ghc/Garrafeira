@@ -1062,6 +1062,8 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .mpreco .mp-v span{font-family:var(--ff);font-size:9px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;
   color:var(--vh);background:var(--vhp);border:1px solid #f0dbe2;border-radius:99px;padding:1px 7px}
 .mpreco.outra:not(.conta) .mp-v{color:var(--mu)}
+.mpreco.duvidoso .mp-v{color:var(--mu);text-decoration:line-through;font-weight:400}
+.mpreco.duvidoso .mp-l i{color:var(--dg)}
 .mp-nota{font-size:11px;margin-top:6px}
 .mp-de{color:var(--mu);font-size:12px}
 /* Links do vinho: pequenos, seguidos por vírgula, numa linha só (em vez

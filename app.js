@@ -1277,15 +1277,33 @@ function colheitaPreco(p){
   const m=/[?&]year=(\d{4})\b/.exec(p.url||'');
   return m?Number(m[1]):null;
 }
+/* UM PREÇO DESALINHADO NÃO CONTA. O script que recolhe os preços acerta
+   quase sempre, mas quando falha é na PÁGINA (outro vinho da mesma casa,
+   meia garrafa): o Casa de Saima Garrafeira apareceu a 8,49 € no Vivino com
+   as duas lojas a pedirem 63 € e 69 €. Uma colheita diferente mexe no preço
+   uns 10–20%, não o divide por sete. Por isso um preço que fique abaixo de
+   metade ou acima do dobro da MEDIANA dos outros (as outras lojas e o
+   preço médio da ficha) é marcado `duvidoso`: aparece no detalhe, riscado,
+   e nunca é o que conta. Sem mais nenhum preço com que comparar não há
+   como saber, e conta. */
+function mediana(xs){
+  const a=[...xs].sort((x,y)=>x-y), n=a.length;
+  return n?(n%2?a[(n-1)/2]:(a[n/2-1]+a[n/2])/2):null;
+}
 function precosLojaDe(v){
-  const ps=(v&&PRECOS_LOJA[v.id])||[];
-  return ps.filter(p=>p&&Number(p.preco)>0)
+  const ps=((v&&PRECOS_LOJA[v.id])||[]).filter(p=>p&&Number(p.preco)>0)
     .map(p=>({...p,preco:Number(p.preco),colheita:colheitaPreco(p)}))
     .sort((a,b)=>lojaOrdem(a.loja)-lojaOrdem(b.loja)||(b.colheita||0)-(a.colheita||0));
+  ps.forEach((p,i)=>{
+    const ref=mediana(ps.filter((_,j)=>j!==i).map(q=>q.preco)
+      .concat(v.preco_medio!=null?[Number(v.preco_medio)]:[]));
+    p.duvidoso=ref!=null&&(p.preco<ref/2||p.preco>ref*2);
+  });
+  return ps;
 }
 function precoPrincipal(v){
   if(!v)return null;
-  const ps=precosLojaDe(v).filter(p=>lojaOrdem(p.loja)<99);
+  const ps=precosLojaDe(v).filter(p=>lojaOrdem(p.loja)<99&&!p.duvidoso);
   const minha=p=>v.ano==null||(p.colheita!=null&&p.colheita===Number(v.ano));
   const loja=p=>p.loja!=='vivino', viv=p=>p.loja==='vivino';
   const p=ps.find(p=>loja(p)&&minha(p))||ps.find(p=>viv(p)&&minha(p))
@@ -1295,12 +1313,13 @@ function precoPrincipal(v){
 }
 function precoVinho(v){const p=precoPrincipal(v);return p?p.preco:null;}
 // De onde veio, em poucas palavras: "Granvine", "Granvine · 2019" (outra
-// colheita), "Vivino · colheita ?" (não se sabe de qual), "preço médio".
+// colheita), "Vivino · média" (sem colheita, o Vivino dá a média das
+// colheitas), "preço médio".
 function precoFonteTxt(p,curto){
   if(!p)return '';
   if(!p.loja)return 'preço médio';
   const l=lojaInfo(p.loja);
-  return (curto?l.curto:l.nome)+(p.outra?(p.colheita?' · '+p.colheita:' · colheita ?'):'');
+  return (curto?l.curto:l.nome)+(p.outra?(p.colheita?' · '+p.colheita:(curto?' · média':' · média das colheitas')):'');
 }
 
 // O crachá do cartão: o preço e, em pequeno, de onde veio — só quando não
@@ -1327,10 +1346,12 @@ function precosLojaHTML(v){
     <div class="mprecos">${ps.map(p=>{
       const conta=pp&&pp.loja===p.loja&&pp.preco===p.preco&&pp.colheita===p.colheita&&pp.url===p.url;
       const outra=v.ano!=null&&p.colheita!=null&&p.colheita!==Number(v.ano);
-      const meta=[p.colheita?(outra?'colheita '+p.colheita:'a tua colheita'):'colheita não indicada',
-                  p.em?'visto a '+dataPT(p.em):''].filter(Boolean).join(' · ');
+      const meta=p.duvidoso?'muito diferente dos outros — provavelmente não é deste vinho'
+        :[p.colheita?(outra?'colheita '+p.colheita:'a tua colheita')
+                    :(p.loja==='vivino'?'média das colheitas':''),
+          p.em?'visto a '+dataPT(p.em):''].filter(Boolean).join(' · ');
       const nome=esc(lojaInfo(p.loja).nome);
-      return `<div class="mpreco${conta?' conta':''}${outra?' outra':''}">
+      return `<div class="mpreco${conta?' conta':''}${outra?' outra':''}${p.duvidoso?' duvidoso':''}">
         <div class="mp-l">${p.url?`<a href="${esc(p.url)}" target="_blank" rel="noopener">${nome}</a>`:nome}
           <i>${esc(meta)}</i></div>
         <div class="mp-v">${esc(eur(p.preco))}${conta?'<span>conta</span>':''}</div>
@@ -7947,7 +7968,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='102';
+const APP_BUILD='103';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
