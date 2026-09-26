@@ -347,6 +347,17 @@ Só a `service_role` a executa (o `REVOKE`/`GRANT` estão no fim, com a
 consulta de confirmação). Precisa do `winecatalog` já montado (usa a
 `winecatalog.achar` e a `vivino_verificacoes`). Aplicada a 26/09/2026.
 
+### Migração 19 — o batch do admin acerta as fichas pelo catálogo (já aplicada)
+
+`db/migracao-fichas-catalogo.sql`. A `garrafeira.fichas_catalogo_rever`, a
+irmã da 18 para o resto da ficha: só da mesma colheita, o que está vazio e
+o que é diferente mas mais recente no catálogo. As regras estão no
+cabeçalho do ficheiro. Escreve pela `garrafeira.escrever_do_catalogo`, que
+saiu da `aplicar_do_catalogo` (em `catalogo-partilhado.sql`) para as duas
+usarem o mesmo UPDATE — por isso, numa base existente, corre primeiro o
+`catalogo-partilhado.sql` e só depois este. Só a `service_role` a executa;
+a `escrever_do_catalogo` não se dá a ninguém. Aplicada a 26/09/2026.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -387,6 +398,7 @@ Numa base de dados limpa:
    `definir_admin()` exige que o novo dono já esteja na lista.
 6. **`migracao-links-vivino.sql`** — a função do batch do admin para os
    links do Vivino (migração 18). Só depois do `winecatalog`.
+7. **`migracao-fichas-catalogo.sql`** — a do resto da ficha (migração 19).
 
 Todos são idempotentes: podem ser corridos outra vez sem estragar nada.
 

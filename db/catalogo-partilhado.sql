@@ -243,6 +243,63 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------
+-- ESCREVER o que veio do catálogo: o UPDATE de um sítio só
+--
+-- Quem decide QUE campos entram é quem chama: a `aplicar_do_catalogo` (o
+-- botão da app, campo a campo, com `pode_mexer`) e a
+-- `fichas_catalogo_rever` (o batch do admin, `migracao-fichas-catalogo.sql`).
+-- Esta só escreve — e é por isso que não se dá a ninguém: sem o portão de
+-- quem a chama, era uma porta para escrever em qualquer garrafeira.
+-- `p_carimbar` marca `atualizado_em` ("última atualização manual"): a app
+-- sim, que foi a pessoa a carregar no botão; o batch não.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION garrafeira.escrever_do_catalogo(
+  p_vinho_id bigint, p_cat jsonb, p_carimbar boolean DEFAULT true)
+  RETURNS void
+  LANGUAGE plpgsql SECURITY DEFINER
+  SET search_path TO 'garrafeira', 'winecatalog', 'public'
+AS $$
+DECLARE
+  v_cast text[];
+BEGIN
+  IF p_cat IS NULL OR p_cat = '{}'::jsonb THEN RETURN; END IF;
+  -- O COALESCE por campo é o que faz "só os pedidos": o que não vier em
+  -- `p_cat` fica exatamente como estava.
+  UPDATE garrafeira.vinhos SET
+    tipo          = COALESCE(p_cat ->> 'tipo',          tipo),
+    estilo        = COALESCE(p_cat ->> 'estilo',        estilo),
+    mencao        = COALESCE(p_cat ->> 'mencao',        mencao),
+    classificacao = COALESCE(p_cat ->> 'classificacao', classificacao),
+    regiao        = COALESCE(p_cat ->> 'regiao',        regiao),
+    sub_regiao    = COALESCE(p_cat ->> 'sub_regiao',    sub_regiao),
+    pais          = COALESCE(p_cat ->> 'pais',          pais),
+    teor          = COALESCE((p_cat ->> 'teor')::numeric,             teor),
+    estagio_meses = COALESCE((p_cat ->> 'estagio_meses')::integer,    estagio_meses),
+    estagio_texto = COALESCE(p_cat ->> 'estagio_texto', estagio_texto),
+    vivino_nota   = COALESCE((p_cat ->> 'vivino_nota')::numeric,      vivino_nota),
+    vivino_avaliacoes = COALESCE((p_cat ->> 'vivino_avaliacoes')::integer, vivino_avaliacoes),
+    vivino_url    = COALESCE(p_cat ->> 'vivino_url',    vivino_url),
+    imagem_url    = COALESCE(p_cat ->> 'imagem_url',    imagem_url),
+    preco_medio   = COALESCE((p_cat ->> 'preco_medio')::numeric,      preco_medio),
+    beber_de      = COALESCE((p_cat ->> 'beber_de')::integer,         beber_de),
+    beber_ate     = COALESCE((p_cat ->> 'beber_ate')::integer,        beber_ate),
+    notas_prova   = COALESCE(p_cat ->> 'notas_prova',   notas_prova),
+    harmonizacao  = COALESCE(p_cat ->> 'harmonizacao',  harmonizacao),
+    ai_resumo     = COALESCE(p_cat ->> 'ai_resumo',     ai_resumo),
+    atualizado_em = CASE WHEN p_carimbar THEN now() ELSE atualizado_em END
+  WHERE id = p_vinho_id;
+
+  -- As castas não vivem na linha (ver `definir_castas`), por isso vão à
+  -- parte — e por isso é que este ramo existe.
+  IF p_cat ? 'castas' AND jsonb_typeof(p_cat -> 'castas') = 'array' THEN
+    SELECT COALESCE(array_agg(x #>> '{}'), ARRAY[]::text[]) INTO v_cast
+      FROM jsonb_array_elements(p_cat -> 'castas') x;
+    PERFORM garrafeira.definir_castas(p_vinho_id, v_cast);
+  END IF;
+END;
+$$;
+
+-- ---------------------------------------------------------------------
 -- APLICAR: trazer para a minha garrafeira o que o catálogo diz
 --
 -- Campo a campo e só os que forem pedidos — nunca "sincroniza tudo". A
@@ -305,39 +362,7 @@ BEGIN
   END LOOP;
   IF v_n = 0 THEN RETURN jsonb_build_object('ok', true, 'campos', 0); END IF;
 
-  -- O COALESCE por campo é o que faz "só os pedidos": o que não vier em
-  -- `v_cat` fica exatamente como estava.
-  UPDATE garrafeira.vinhos SET
-    tipo          = COALESCE(v_cat ->> 'tipo',          tipo),
-    estilo        = COALESCE(v_cat ->> 'estilo',        estilo),
-    mencao        = COALESCE(v_cat ->> 'mencao',        mencao),
-    classificacao = COALESCE(v_cat ->> 'classificacao', classificacao),
-    regiao        = COALESCE(v_cat ->> 'regiao',        regiao),
-    sub_regiao    = COALESCE(v_cat ->> 'sub_regiao',    sub_regiao),
-    pais          = COALESCE(v_cat ->> 'pais',          pais),
-    teor          = COALESCE((v_cat ->> 'teor')::numeric,             teor),
-    estagio_meses = COALESCE((v_cat ->> 'estagio_meses')::integer,    estagio_meses),
-    estagio_texto = COALESCE(v_cat ->> 'estagio_texto', estagio_texto),
-    vivino_nota   = COALESCE((v_cat ->> 'vivino_nota')::numeric,      vivino_nota),
-    vivino_avaliacoes = COALESCE((v_cat ->> 'vivino_avaliacoes')::integer, vivino_avaliacoes),
-    vivino_url    = COALESCE(v_cat ->> 'vivino_url',    vivino_url),
-    imagem_url    = COALESCE(v_cat ->> 'imagem_url',    imagem_url),
-    preco_medio   = COALESCE((v_cat ->> 'preco_medio')::numeric,      preco_medio),
-    beber_de      = COALESCE((v_cat ->> 'beber_de')::integer,         beber_de),
-    beber_ate     = COALESCE((v_cat ->> 'beber_ate')::integer,        beber_ate),
-    notas_prova   = COALESCE(v_cat ->> 'notas_prova',   notas_prova),
-    harmonizacao  = COALESCE(v_cat ->> 'harmonizacao',  harmonizacao),
-    ai_resumo     = COALESCE(v_cat ->> 'ai_resumo',     ai_resumo),
-    atualizado_em = now()
-  WHERE id = v.id;
-
-  -- As castas não vivem na linha (ver `definir_castas`), por isso vão à
-  -- parte — e por isso é que este ramo existe.
-  IF v_cat ? 'castas' AND jsonb_typeof(v_cat -> 'castas') = 'array' THEN
-    SELECT COALESCE(array_agg(x #>> '{}'), ARRAY[]::text[]) INTO v_cast
-      FROM jsonb_array_elements(v_cat -> 'castas') x;
-    PERFORM garrafeira.definir_castas(v.id, v_cast);
-  END IF;
+  PERFORM garrafeira.escrever_do_catalogo(v.id, v_cat, true);
 
   RETURN jsonb_build_object('ok', true, 'campos', v_n);
 END;
@@ -395,6 +420,7 @@ $$;
 -- de quem está a gravar, por isso precisa do `authenticated`; a
 -- `vinhos_catalogo` é um trigger e não se chama de fora.
 -- ---------------------------------------------------------------------
+REVOKE ALL ON FUNCTION garrafeira.escrever_do_catalogo(bigint, jsonb, boolean) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION garrafeira.vinhos_catalogo()        FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION garrafeira.catalogar_vinho(bigint)  FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION garrafeira.catalogar_vinho(bigint) TO authenticated, service_role;

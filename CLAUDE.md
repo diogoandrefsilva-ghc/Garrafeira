@@ -45,6 +45,7 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-links-vivino.sql` é a 18: a função do batch do admin que
   corrige os links do Vivino nas garrafeiras (ver "Cada um vê a sua
   garrafeira").
+  `migracao-fichas-catalogo.sql` é a 19: a irmã, para o resto da ficha.
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
@@ -1151,6 +1152,16 @@ fica como a pessoa o pôs. O admin vê de quem é cada vinho: "não há segredos
 numa correção que melhora a informação" (o dono das apps). Cada troca fica
 no `sync_log` (origem `winecatalog-batch`). Não é uma porta na app: é uma
 função que só a `service_role` executa.
+**E o resto da ficha** (a 19, `garrafeira.fichas_catalogo_rever`): só da
+MESMA colheita, o que está vazio aqui e o catálogo tem, e o que é diferente
+quando o do catálogo é mais recente do que a última gravação do vinho pelo
+dono. Nunca a cor (um vinho com cor diferente fica todo de fora), nunca a
+imagem de quem tem fotografia sua (`imagem_path`). Escreve pela
+`escrever_do_catalogo` — o UPDATE que era da `aplicar_do_catalogo` (o botão
+"≠ catálogo"), agora partilhado pelas duas; a do batch não carimba
+`atualizado_em`, porque não foi o dono a mexer. **Um campo novo em
+`vinhos` que venha do catálogo entra na `ficha_catalogo` E na
+`escrever_do_catalogo`**, senão atravessa num sentido e não no outro.
 
 Mesmo com `'edicao'`, o admin mexe nas GARRAFAS e não na fechadura: renomear,
 partilhar, passar e mudar o próprio `admin_acesso` continuam a ser só do
