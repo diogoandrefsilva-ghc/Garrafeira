@@ -1296,7 +1296,9 @@ colheita pesa antes da loja. Num vinho sem ano qualquer colheita é a
 minha. O cartão diz sempre de onde veio o preço quando não é o médio
 ("63 € · G. Nacional · 2016"; o Vivino sem colheita é "Vivino · média",
 que é o que ele mostra sem ano — nunca "colheita ?"), e a página do vinho
-lista **todas** as lojas (`precosLojaHTML`) com a que conta marcada.
+lista **todas** as lojas (`precosLojaHTML`); a que conta leva à frente
+do nome uma nota pequena, "(preço de referência)" — sem pastilha nem
+parágrafo a explicar a regra, que ninguém precisa de ler.
 
 **Um preço desalinhado não conta** (`duvidoso`, em `precosLojaDe`): abaixo
 de metade ou acima do dobro da mediana dos OUTROS preços do vinho (as

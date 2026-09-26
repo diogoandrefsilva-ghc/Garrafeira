@@ -1337,7 +1337,9 @@ function precoPDF(v){
 }
 /* A lista das lojas na página do vinho: TODAS, com o link, a colheita e a
    data da recolha — as de outra colheita também, que é informação, só não
-   é o preço deste vinho. A que conta leva a marca. */
+   é o preço deste vinho. A que conta leva, à frente do nome, uma nota
+   pequena "(preço de referência)" — e mais nada: a regra de qual conta
+   (`precoPrincipal`) não se explica aqui, ninguém precisa de a ler. */
 function precosLojaHTML(v){
   const ps=precosLojaDe(v);
   if(!ps.length)return '';
@@ -1352,13 +1354,11 @@ function precosLojaHTML(v){
           p.em?'visto a '+dataPT(p.em):''].filter(Boolean).join(' · ');
       const nome=esc(lojaInfo(p.loja).nome);
       return `<div class="mpreco${conta?' conta':''}${outra?' outra':''}${p.duvidoso?' duvidoso':''}">
-        <div class="mp-l">${p.url?`<a href="${esc(p.url)}" target="_blank" rel="noopener">${nome}</a>`:nome}
+        <div class="mp-l">${p.url?`<a href="${esc(p.url)}" target="_blank" rel="noopener">${nome}</a>`:nome}${conta?' <span class="mp-ref">(preço de referência)</span>':''}
           <i>${esc(meta)}</i></div>
-        <div class="mp-v">${esc(eur(p.preco))}${conta?'<span>conta</span>':''}</div>
+        <div class="mp-v">${esc(eur(p.preco))}</div>
       </div>`;}).join('')}
-    </div>
-    <div class="note mp-nota">Conta a primeira loja da tua colheita (Garrafeira Nacional, Granvine, Vinha, Vivino);
-      sem nenhuma, a de outra colheita${v.preco_medio!=null?'; sem loja nenhuma, o preço de referência':''}.</div>`;
+    </div>`;
 }
 
 /* O VALOR da garrafeira é uma ESTIMATIVA e diz-se isso: vale o que se
@@ -7972,7 +7972,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='105';
+const APP_BUILD='106';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
