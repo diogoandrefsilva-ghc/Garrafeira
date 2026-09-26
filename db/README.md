@@ -361,6 +361,18 @@ usarem o mesmo UPDATE — por isso, numa base existente, corre primeiro o
 `catalogo-partilhado.sql` e só depois este. Só a `service_role` a executa;
 a `escrever_do_catalogo` não se dá a ninguém. Aplicada a 26/09/2026.
 
+### Migração 20 — os nomes sem CAPS LOCK (já aplicada)
+
+`db/migracao-nomes.sql`. Um trigger em `vinhos` (`vinhos_nomes`) que arruma
+o nome e o produtor a cada escrita — "HERDADE DO SOBROSO" → "Herdade do
+Sobroso", "Quinta Do Crasto" → "Quinta do Crasto" — pela
+`winecatalog.nome_proprio`, a MESMA função do catálogo (`db/nomes.sql` do
+repo WineCatalog, que corre antes deste). A regra não tem cópia aqui. As
+siglas ("CARM — …", "JCA", "DOC") ficam como estão; as regras estão no
+`nomes.sql` de lá. Corrigiu os 9 vinhos que havia (em três garrafeiras) com
+o `vinhos_catalogo` desligado — não foi o dono a gravar — e cada um ficou
+no `sync_log` (`nome_capitalizado`). Aplicada a 26/09/2026.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -402,6 +414,8 @@ Numa base de dados limpa:
 6. **`migracao-links-vivino.sql`** — a função do batch do admin para os
    links do Vivino (migração 18). Só depois do `winecatalog`.
 7. **`migracao-fichas-catalogo.sql`** — a do resto da ficha (migração 19).
+8. **`migracao-nomes.sql`** — os nomes sem CAPS LOCK (migração 20). Só
+   depois do `db/nomes.sql` do WineCatalog (usa a `winecatalog.nome_proprio`).
 
 Todos são idempotentes: podem ser corridos outra vez sem estragar nada.
 
