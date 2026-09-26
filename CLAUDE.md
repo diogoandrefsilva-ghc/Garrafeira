@@ -1281,6 +1281,13 @@ Granvine, Vinha, Vivino — com link, colheita e data da recolha. Estes
 **não se copiam para `vinhos`**: lê-os a `precos_lojas` (migração 17) ao
 carregar, para `PRECOS_LOJA`. Uma cópia ficava velha no dia a seguir, e o
 que uma loja pede hoje não é um dado da garrafeira.
+**E relêem-se depois de gravar um vinho** novo (ou com o nome/produtor
+mudados — são a chave com que se acha a linha do catálogo):
+`recarregarPrecosLoja`. Sem isso o vinho acabado de pôr na wishlist ficava
+só com o preço de referência, sem dizer que era o da Garrafeira Nacional,
+até alguém recarregar a app. Pela mesma razão, o "Procurar informação" do
+vinho novo diz que lojas o catálogo tem (não as copia — não há campo para
+elas).
 
 O preço que CONTA — no crachá do cartão, no valor da garrafeira, no filtro
 por preço, no "A completar" e nos dois PDFs — é **um só**, e sai sempre de
