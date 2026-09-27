@@ -46,7 +46,7 @@ const GAPI = "https://generativelanguage.googleapis.com/v1beta";
 const MODELO_BARATO = Deno.env.get("GEMINI_CHEAP_MODEL") || "gemini-flash-lite-latest";
 const MODELO_ESCALADO = Deno.env.get("GEMINI_FALLBACK_MODEL") || Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
 const CACHE_TTL_HORAS = Math.max(1, Math.min(24 * 90, Number(Deno.env.get("VINHO_CACHE_TTL_HOURS") ?? 24 * 30) || 24 * 30));
-const CACHE_VERSAO = "v2";
+const CACHE_VERSAO = "v3"; // v3 (27/09/2026): o pacote completo passou a Serper + grounding
 const SEARCH_RESULTADOS = 5;
 
 const TIMEOUT_MS = 55_000;        // modo síncrono, preso ao browser
@@ -963,6 +963,10 @@ function fezPesquisa(body: any): boolean {
     Number(body?.usageMetadata?.toolUsePromptTokenCount ?? 0) > 0;
 }
 
+// Um campo que a IA não trouxe: nulo, texto vazio ou lista vazia.
+function vazioCampo(x: unknown): boolean {
+  return x == null || x === "" || (Array.isArray(x) && !x.length);
+}
 function fontesGrounding(body: any): Fonte[] {
   const chunks = body?.candidates?.[0]?.groundingMetadata?.groundingChunks;
   if (!Array.isArray(chunks)) return [];
@@ -1044,8 +1048,6 @@ async function produzirFicha(
   tipo: string = "", notas: string = "", sites: string[] = [], profunda: boolean = false,
 ): Promise<Res> {
   if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
-  if (modoIA === "gratis" && !SEARCH_API_KEY)
-    return { ok: false, status: 503, erro: "a IA sem pesquisa web ainda não está configurada (falta SEARCH_API_KEY)" };
   const inicio = Date.now();
   const chave = chaveCache(modoIA, nome, ano, produtor, regiao, tipo, notas, sites, campos, colheitaEspecifica);
   // A profunda existe para refazer o que veio de memória: nem a cache nem o
@@ -1118,88 +1120,109 @@ async function produzirFicha(
   const siteQuery = sites.length ? ` (${sites.map((s) => `site:${s}`).join(" OR ")})` : "";
   const query = [nome, ano || "", produtor, regiao, notas, "vivino garrafeira nacional vinho portugal"]
     .filter(Boolean).join(" ") + siteQuery;
-  /* A PROFUNDA É O "MODO GRÁTIS" (25/09/2026): a pesquisa é NOSSA (Serper)
-     e o Gemini só lê os resultados, sem `google_search`. É a única forma de
-     a pesquisa ser garantida — ver `PESQUISA PROFUNDA`, mais acima. Faz
-     uma consulta a mais, ao Vivino, que a consulta geral nem sempre traz. */
-  const usarSerper = modoIA === "gratis" || profunda;
+  /* OS DOIS PACOTES (27/09/2026, o dono das apps):
+     · COMPLETO (`premium`): primeiro a pesquisa NOSSA (Serper, geral + uma
+       consulta ao Vivino, e o Gemini só a ler os resultados) e depois, SÓ
+       para os campos que ela não trouxe, o grounding. Tudo de seguida, uma
+       procura só aos olhos de quem procura. O Serper é o que garante que se
+       pesquisou mesmo; o grounding tapa o que os resultados não tinham.
+     · INTERMÉDIO (`gratis`): só o grounding. O Serper gasta créditos que um
+       dia se pagam; o grounding, com o modelo a responder quase sempre de
+       memória, custa pouco (ver "De memória ou pesquisado").
+     A "profunda" deixou de ser um caminho à parte: é o pacote completo. */
+  const usarSerper = (modoIA === "premium" || profunda) && !!SEARCH_API_KEY;
   let pesquisa: PesquisaWeb = { texto: "", fontes: [], status: "grounding:google_search" };
   let serperConsultas = 0;
+  let serperFalhou = false;
   if (usarSerper) {
     try {
-      if (profunda) {
-        const qVivino = `"${nome.replace(/"/g, "")}" ${produtor} site:vivino.com`.replace(/\s+/g, " ");
-        const rs = await Promise.allSettled([obterResultadosPesquisa(query, signal), obterResultadosPesquisa(qVivino, signal)]);
-        serperConsultas = 2;
-        const boas = rs.filter((r) => r.status === "fulfilled").map((r) => (r as PromiseFulfilledResult<PesquisaWeb>).value);
-        if (!boas.length) throw (rs[0] as PromiseRejectedResult).reason;
-        const fontes = boas.flatMap((b) => b.fontes).filter((f, i, a) => a.findIndex((x) => x.url === f.url) === i);
-        pesquisa = { texto: boas.map((b) => b.texto).join("\n\n").slice(0, 9000), fontes, status: boas[0].status };
-      } else {
-        serperConsultas = 1;
-        pesquisa = await obterResultadosPesquisa(query, signal);
-      }
+      const qVivino = `"${nome.replace(/"/g, "")}" ${produtor} site:vivino.com`.replace(/\s+/g, " ");
+      const rs = await Promise.allSettled([obterResultadosPesquisa(query, signal), obterResultadosPesquisa(qVivino, signal)]);
+      serperConsultas = 2;
+      const boas = rs.filter((r) => r.status === "fulfilled").map((r) => (r as PromiseFulfilledResult<PesquisaWeb>).value)
+        .filter((b) => b.texto);
+      if (!boas.length) throw (rs.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined)?.reason ?? new Error("sem resultados");
+      const fontes = boas.flatMap((b) => b.fontes).filter((f, i, a) => a.findIndex((x) => x.url === f.url) === i);
+      pesquisa = { texto: boas.map((b) => b.texto).join("\n\n").slice(0, 9000), fontes, status: boas[0].status };
     } catch (e) {
-      await registar("erro", { passo: "search-api", ...(profunda ? { profunda: true } : {}), erro: String((e as Error).message || "").slice(0, 300) }, quem);
-      return { ok: false, status: 503, erro: "não consegui obter resultados de pesquisa agora — tenta outra vez daqui a pouco" };
+      // Sem os resultados do Serper não se desiste: segue-se só com o
+      // grounding, que é o que o pacote intermédio faz sempre.
+      serperFalhou = true;
+      await registar("erro", { passo: "search-api", erro: String((e as Error).message || "").slice(0, 300) }, quem);
     }
   }
 
-  const texto0 = usarSerper
-    ? prompt(nome, ano, produtor, regiao, tipo, notas, new Date().toISOString().slice(0, 10), campos_ia, pesquisa.texto, colheitaEspecifica)
-    : promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, new Date().toISOString().slice(0, 10), campos_ia, colheitaEspecifica);
   const tentativas: { modelo: string; modo: string; estado: number | string; usageMetadata?: UsageMetadata }[] = [];
   let usageTotal: UsageMetadata | null = null;
-  let fontesGround: Fonte[] = [];
-  const run = async (modelo: string, modo: string, maxTokens: number, semThinking: boolean) => {
-    const ms = Math.max(8_000, Math.min(GEMINI_TIMEOUT_MS, budgetMs - (Date.now() - inicio) - 2_000));
-    if (ms < 2_000) return null;
-    const { signal: sp, limpar } = comLimiteProprio(signal, ms);
-    try {
-      const g = await chamarGemini(modelo, texto0, sp, maxTokens, semThinking, !usarSerper);
-      limpar();
-      usageTotal = somarUsage(usageTotal, g.usage ?? null);
-      tentativas.push({ modelo, modo, estado: g.ok ? 200 : g.status, ...(g.usage ? { usageMetadata: g.usage } : {}) });
-      if (g.ok && g.fontes?.length) fontesGround = g.fontes;
-      return g;
-    } catch (e) {
-      limpar();
-      if (signal.aborted) throw e;
-      tentativas.push({ modelo, modo, estado: "presa" });
-      return null;
+  const hoje = new Date().toISOString().slice(0, 10);
+  // Uma fase = uma pergunta ao Gemini (o barato, e o maior só se o barato
+  // falhar tecnicamente). `comSerper`: lê os resultados do Serper, sem tool;
+  // senão, grounding.
+  const fase = async (comSerper: boolean, camposFase: string[] | null) => {
+    const texto = comSerper
+      ? prompt(nome, ano, produtor, regiao, tipo, notas, hoje, camposFase, pesquisa.texto, colheitaEspecifica)
+      : promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, hoje, camposFase, colheitaEspecifica);
+    let fontesG: Fonte[] = [];
+    const run = async (modelo: string, modo: string, maxTokens: number, semThinking: boolean) => {
+      const ms = Math.max(8_000, Math.min(GEMINI_TIMEOUT_MS, budgetMs - (Date.now() - inicio) - 2_000));
+      if (ms < 2_000) return null;
+      const { signal: sp, limpar } = comLimiteProprio(signal, ms);
+      try {
+        const g = await chamarGemini(modelo, texto, sp, maxTokens, semThinking, !comSerper);
+        limpar();
+        usageTotal = somarUsage(usageTotal, g.usage ?? null);
+        tentativas.push({ modelo, modo: (comSerper ? "serper-" : "grounding-") + modo, estado: g.ok ? 200 : g.status, ...(g.usage ? { usageMetadata: g.usage } : {}) });
+        if (g.ok && g.fontes?.length) fontesG = g.fontes;
+        return g;
+      } catch (e) {
+        limpar();
+        if (signal.aborted) throw e;
+        tentativas.push({ modelo, modo, estado: "presa" });
+        return null;
+      }
+    };
+    const primeira = await run(MODELO_BARATO, "barato", 1800, true);
+    let modelo = MODELO_BARATO, modo = "barato";
+    let parsed: any = primeira && primeira.ok ? primeira.parsed : null;
+    let erro = primeira && !primeira.ok ? primeira.erro : "";
+    let pesquisouF: boolean | null = primeira && primeira.ok ? primeira.pesquisou : null;
+    // Só escala em falha TÉCNICA do barato — nunca por "poucos campos": um
+    // modelo maior não inventa o que a pesquisa não encontrou.
+    if ((!primeira || !primeira.ok) && MODELO_ESCALADO !== MODELO_BARATO) {
+      const segunda = await run(MODELO_ESCALADO, "escalado", 2800, false);
+      if (segunda && segunda.ok) {
+        modelo = MODELO_ESCALADO; modo = "escalado";
+        parsed = segunda.parsed; pesquisouF = segunda.pesquisou;
+      } else if (segunda && !segunda.ok) erro = segunda.erro;
     }
+    // Com o Serper a pesquisa foi nossa: houve pesquisa, garantida.
+    if (comSerper && parsed) pesquisouF = true;
+    return {
+      ficha: parsed ? normalizar(parsed, ano, camposFase) : null,
+      pesquisou: pesquisouF, erro, modelo, modo,
+      fontes: comSerper ? pesquisa.fontes : (pesquisouF ? fontesG : []),
+    };
   };
 
-  const primeira = await run(MODELO_BARATO, "barato", 1800, true);
-  let usadoModelo = MODELO_BARATO;
-  let usadoModo = "barato";
-  let parsed: any = primeira && primeira.ok ? primeira.parsed : null;
-  let erroUltimo = primeira && !primeira.ok ? primeira.erro : "";
-  let pesquisou: boolean | null = primeira && primeira.ok ? primeira.pesquisou : null;
-
-  let ficha = parsed ? normalizar(parsed, ano, campos_ia) : null;
-  if (!pesquisou) fontesGround = [];
-  // Só escala em falha TÉCNICA do barato (erro HTTP, timeout, resposta
-  // ilegível) — nunca só porque o conteúdo (já respondido com sucesso) ficou
-  // com poucos campos. Um modelo maior não inventa o que a pesquisa não
-  // encontrou; no modo premium (grounding) escalar por "qualidade" pagava a
-  // pesquisa Google a DOBRAR por um ganho que quase nunca existe.
-  const falhouTecnicamente = !primeira || !primeira.ok;
-  if (falhouTecnicamente && MODELO_ESCALADO !== MODELO_BARATO) {
-    const segunda = await run(MODELO_ESCALADO, "escalado", 2800, false);
-    if (segunda && segunda.ok) {
-      usadoModelo = MODELO_ESCALADO;
-      usadoModo = "escalado";
-      parsed = segunda.parsed;
-      pesquisou = segunda.pesquisou;
-      ficha = normalizar(parsed, ano, campos_ia);
-    } else if (segunda && !segunda.ok) {
-      erroUltimo = segunda.erro;
+  const f1 = await fase(usarSerper && !serperFalhou, campos_ia);
+  let ficha = f1.ficha;
+  let pesquisou = f1.pesquisou;
+  let usadoModelo = f1.modelo, usadoModo = f1.modo, erroUltimo = f1.erro;
+  let fontesIA: Fonte[] = f1.fontes;
+  // Pacote completo: o grounding só pelo que o Serper não trouxe, logo a seguir.
+  if (usarSerper && !serperFalhou) {
+    const quis = (campos_ia && campos_ia.length ? campos_ia : pedidos);
+    const faltam = quis.filter((k) => !(ficha && !vazioCampo((ficha as any)[k])) && !(k in doCatalogo));
+    if (faltam.length && budgetMs - (Date.now() - inicio) > 15_000) {
+      const f2 = await fase(false, faltam);
+      if (f2.ficha) {
+        ficha = { ...f2.ficha, ...(ficha ?? {}) };
+        fontesIA = [...fontesIA, ...f2.fontes];
+        usadoModelo = f1.ficha ? `${f1.modelo} + ${f2.modelo}` : f2.modelo;
+        if (!f1.ficha) pesquisou = f2.pesquisou;
+      } else if (!ficha) erroUltimo = f2.erro || erroUltimo;
     }
   }
-
-  // Na profunda a pesquisa foi nossa (Serper): houve pesquisa, garantida.
-  if (profunda) pesquisou = true;
 
   if (!ficha && !Object.keys(doCatalogo).length) {
     await registar("erro", {
@@ -1218,7 +1241,7 @@ async function produzirFicha(
     const { aviso: _aviso, ...factos } = ficha as Record<string, unknown>;
     await catalogoJuntar(
       nome, produtor, ano, factos, `vinho-info-${modoIA}`,
-      (usarSerper ? pesquisa.fontes : fontesGround), signal,
+      fontesIA, signal,
     );
   }
 
@@ -1233,7 +1256,7 @@ async function produzirFicha(
     // `pesquisaWeb` vai com a cache para o botão da profunda não se perder
     // quando a mesma procura volta a sair daqui.
     { ...ficha, ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}) },
-    (usarSerper ? pesquisa.fontes : fontesGround),
+    fontesIA,
     usadoModelo,
     usadoModo,
     signal,
@@ -1257,7 +1280,7 @@ async function produzirFicha(
     corpo: {
       ...ficha,
       fontes: [
-        ...(usarSerper ? pesquisa.fontes : fontesGround),
+        ...fontesIA,
         ...(Object.keys(doCatalogo).length ? (conhecido?.fontes ?? []) : []),
       ].filter((f, i, a) => a.findIndex((x) => x.url === f.url) === i).slice(0, 8),
       ...(Object.keys(doCatalogo).length
@@ -1288,8 +1311,6 @@ async function produzirFichaLote(
   quem: string | null, signal: AbortSignal, budgetMs: number,
 ): Promise<Res> {
   if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
-  if (modoIA === "gratis" && !SEARCH_API_KEY)
-    return { ok: false, status: 503, erro: "a IA sem pesquisa web ainda não está configurada (falta SEARCH_API_KEY)" };
   const inicio = Date.now();
 
   type Item = { v: VinhoLote; conhecido: Conhecido | null; doCatalogo: Record<string, unknown>; emFalta: string[] };

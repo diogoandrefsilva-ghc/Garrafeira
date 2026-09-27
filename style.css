@@ -1223,6 +1223,7 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .pq-colheitas{display:grid;gap:6px;margin-top:6px}
 .pq-colh{display:grid;grid-template-columns:auto 1fr;gap:0 12px;align-items:baseline;text-align:left;width:100%;padding:9px 12px;border:1px solid var(--bo);border-radius:11px;background:var(--card);font:inherit;color:var(--tx);cursor:pointer}
 .pq-colh:hover,.pq-colh:focus-visible{border-color:var(--vh)}
+.pq-colh.igual{border-color:var(--vh);background:var(--vhp)}
 .pq-colh b{grid-row:span 2;font-family:var(--fd);font-size:20px;font-weight:600;color:var(--vh)}
 .pq-colh span{font-size:13px;min-width:0}
 .pq-colh i{font-style:normal;font-size:11.5px;color:var(--mu)}

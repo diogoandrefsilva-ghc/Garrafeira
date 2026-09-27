@@ -1463,47 +1463,47 @@ app a outra pessoa; por isso ficam atrás de `.dono-hide`
 ## A procura da IA (`vinho-info`)
 Botão em cada vinho e no formulário de vinho novo.
 
-**O ecrã é uma conversa POR ETAPAS, sempre a mesma** (26/09/2026, secção
-"PROCURAR INFORMAÇÃO, POR ETAPAS" no app.js, `pq*`). Era um labirinto: ao
-admin uma escolha de três caminhos antes de saber o que faltava, cada
-caminho com o seu ecrã de revisão (caixas, rádios da segunda opinião, o
-painel "o teu / no catálogo") e, no vinho novo, uma pilha de botões que
-apareciam e desapareciam — o dono deixou de saber o que tinha feito e o que
-estava a correr. Agora, no MESMO `modal-ia`:
-1. **Catálogo** — corre sozinho ao abrir (grátis, e para toda a gente,
-   `sem_ia` incluído). "O vinho já existe no Catálogo e a informação foi
-   importada: N campos" / "não existe". Pergunta: IA ou à mão?
-   Pergunta primeiro que COLHEITAS o catálogo tem
-   (`winecatalog.colheitas`, 27/09/2026) e só depois a ficha de UMA delas
-   (`comparar` com o nome e o ano dessa linha). A `colheitas` tira a cor dos
-   dois lados e casa só com a mesma cor — "Morais Rocha Reserva Tinto" acha
-   o "Morais Rocha Reserva" (tinto) sem mexer na chave. Sem ano e com várias
-   colheitas, **pergunta-se qual é** (uma por botão), ou escreve-se OUTRA
-   (vêm só os factos estáveis, e a IA procura já para essa colheita), ou
-   "Não sei a colheita" (a mais completa). A escolha vai para o ano do
-   formulário no vinho novo, e num vinho gravado sem ano grava-se com o
-   resto (`PQ.anoEscolhido`). O que vem do catálogo grava-se por PATCH, com
-   o valor que se viu — a `aplicar_do_catalogo` voltava a procurar a linha
-   pelo nome, que é justamente o que pode não casar.
-2. **IA** — o motor do direito (`motorDoPlano`). "A pesquisa com IA
-   terminou e preencheu mais N campos." A resposta de memória diz-se a
-   todos, não só ao admin. Pergunta: pesquisa avançada?
-3. **Pesquisa avançada** — com **sites de referência** e notas, que só se
-   pedem aqui. Ao admin é a profunda (`profunda:true`; a função recusa-a aos
-   outros com 403); aos outros é o motor `gratis` (que já é Serper), e quem
-   só tem esse tem de dar pelo menos um site — sem isso era a mesma pergunta
-   e a cache respondia igual.
-A **resposta colada** (admin, grátis) é uma fonte como as outras, nas
-etapas 2 e 3. Em cima fica a fila das etapas (o que se fez, o que corre);
-por baixo, UMA lista do que se encontrou: cada campo com o valor de agora e
-as propostas de cada fonte (as iguais juntam-se), escolhidas com um toque
-(`.ia-op`). **"Importada" é posta na lista, não gravada**: nada entra sem
-"Guardar" (ou "Pôr no formulário" no vinho novo). Vem escolhido o de agora
-se o campo tem valor; senão a fonte mais forte (`PQ_FORCA`: avançada >
-colada > catálogo > IA). O ano e a cor nunca se propõem (`pqChaves`) — o ano só
-entra pela escolha da colheita. Tudo se grava por PATCH, com o carimbo
-`ai_*` quando houve IA. "Preencher à mão" guarda o que já se escolheu e abre
-o Editar. Fechar a meio não perde nada: `PQ` fica, e o mesmo botão retoma.
+**O ecrã é uma conversa POR ETAPAS, sempre a mesma** (26/09/2026, revista a
+27/09 com o dono; secção "PROCURAR INFORMAÇÃO, POR ETAPAS" no app.js, `pq*`).
+Era um labirinto: ao admin uma escolha de três caminhos antes de saber o que
+faltava, cada caminho com o seu ecrã de revisão e, no vinho novo, uma pilha
+de botões que apareciam e desapareciam. Agora:
+- **O vinho novo (e a wishlist) abre COMPACTO**: nome, ano, cor e o produtor
+  (opcional — ajuda o catálogo, e o candidato escolhido preenche-o). Por
+  baixo, dois botões: **Procurar informação** ou **Preencher à mão**. O resto
+  do formulário (`#e-resto`) só aparece depois de uma delas
+  (`formMostrarResto`).
+- **1. Catálogo** — corre sozinho ao abrir (grátis, `sem_ia` incluído) e
+  mostra SEMPRE os candidatos em lista (`winecatalog.colheitas`: todas as
+  colheitas, a cor tirada dos dois lados, o produtor como um "contém"), com
+  nome, ano, produtor, castas e região; o do ano escrito vem destacado.
+  Escolhe-se um, ou "Nenhum destes". Sem ano escrito, a colheita do
+  escolhido passa a ser a do vinho (no formulário, ou `PQ.anoEscolhido`
+  num vinho gravado); com outra colheita, só vêm os factos estáveis
+  (`CAT_DA_COLHEITA`). A ficha pede-se depois à `comparar` com o nome e o
+  ano DA LINHA escolhida.
+- **2. IA** — UMA procura. O pacote completo (`premium`) faz na Edge
+  Function, de seguida, o Serper e depois o grounding pelo que ele não
+  trouxe; o intermédio (`gratis`) faz só o grounding — o Serper gasta
+  créditos que se pagam, o grounding responde quase sempre de memória e
+  custa pouco (decisão do dono, 27/09/2026). Os **sites de referência** e as
+  notas pedem-se aqui. A resposta de memória diz-se a todos.
+- **No vinho novo o formulário é a confirmação**: o catálogo e a IA enchem
+  os campos VAZIOS à medida que respondem (`pqPorNoForm`; o que a pessoa
+  escreveu nunca se toca) e no fim abre-se o formulário inteiro, já cheio.
+- **Num vinho gravado** há valores a proteger: cada fonte acrescenta
+  PROPOSTAS a UMA lista (valor de agora + o que cada fonte trouxe, as
+  iguais juntas, escolhidas com um toque, `.ia-op`). Nada entra sem Guardar;
+  vem escolhido o de agora se o campo tem valor, senão o catálogo, senão a
+  IA (`PQ_FORCA`). Tudo por PATCH (a `aplicar_do_catalogo` voltava a
+  procurar a linha pelo nome, que é o que pode não casar). "Preencher à mão"
+  guarda o que já se escolheu e abre o Editar.
+- **A resposta colada de outro assistente vive no Editar** (e no "Preencher
+  à mão" do vinho novo): `formManualAbrir`, para toda a gente que edita — é
+  grátis. Preenche só os campos VAZIOS do formulário aberto e diz quantos
+  ficaram como estavam.
+- O ano e a cor nunca se propõem (`pqChaves`). Fechar a meio não perde nada:
+  `PQ` fica, e o mesmo botão retoma.
 A **atualização massiva** continua com o ecrã dela (`iaMostrarResultado`/
 `iaAplicar`, onde vivem ainda a segunda opinião e os rádios descritos mais
 abaixo) — é outra pergunta, vinho a vinho em fila.
@@ -1511,6 +1511,10 @@ abaixo) — é outra pergunta, vinho a vinho em fila.
 Quem procura é a Edge
 Function `vinho-info.ts`, com DOIS MOTORES desacoplados — não dois níveis do
 mesmo motor, dois caminhos diferentes até ao JSON:
+- **DESDE 27/09/2026 OS MOTORES TROCARAM DE PAPEL** (ver acima): o
+  `premium` é Serper primeiro e grounding pelo que falta, na mesma chamada
+  (`fase` em `produzirFicha`); o `gratis` é só grounding; a "profunda" deixou
+  de ser um caminho à parte. Os dois pontos seguintes contam como era antes.
 - **`premium`** ("IA com pesquisa web (Grounding Search)" na UI) — Gemini com
   **grounding search** (`tools:[{google_search:{}}]`), a pesquisar e escrever
   a ficha na mesma chamada. Sem isso o modelo inventa notas do Vivino e preços
