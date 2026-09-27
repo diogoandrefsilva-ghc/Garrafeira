@@ -273,21 +273,25 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
    o float (senão, com um nome curto, o float podia sair por baixo do
    cartão) sem cortar nada, ao contrário de `overflow:hidden`. */
 .vc-main{flex:1;min-width:0;display:flow-root}
-.vc-anofloat{float:right;display:flex;flex-direction:column;align-items:flex-end;gap:3px;margin-left:10px}
+.vc-anofloat{float:right;display:flex;flex-direction:column;align-items:flex-end;gap:3px;margin-left:10px;margin-top:2px}
 .vc-anofloat .bdg{font-size:9px;padding:2px 8px}
 .vc-nome{font-family:var(--fd);font-weight:600;font-size:16px;line-height:1.3;letter-spacing:.1px;color:var(--tx)}
-.vc-ano{font-family:var(--fd);font-weight:400;font-size:19px;color:var(--vh);line-height:1;
-  font-variant-numeric:lining-nums;opacity:.9}
-.vc-sub{font-size:11.5px;color:var(--mu);margin-top:3px;line-height:1.45}
-.vc-sub:empty{display:none}
+/* [cor] [região] [ano] ao lado do nome (lista) ou por baixo dele (grelha)
+   — `vinhoMetaHTML`. Cada pedaço é `nowrap`: a linha quebra entre eles. */
+.vc-meta{font-family:var(--fd);font-weight:400;font-size:12.5px;color:var(--mu);letter-spacing:0}
+.vc-meta>span{white-space:nowrap}
+.vm-ano{color:var(--vh);font-variant-numeric:lining-nums}
+.vm-sep{opacity:.6}
+.vc-meta .vc-cor{font-size:inherit}
 /* O NOME É O VINHO; a cor e o produtor são campos à parte (fase 4 dos
    nomes) e dizem-se como tal: a cor em itálico logo a seguir ao nome, o
    produtor em itálico por baixo, os dois mais pequenos e em tom de papel. */
-.vc-cor,.vg-cor,.mhero-cor{font-family:var(--fd);font-style:italic;font-weight:400;letter-spacing:0}
+.vc-cor,.mhero-cor{font-family:var(--fd);font-style:italic;font-weight:400;letter-spacing:0}
 .vc-cor{font-size:12.5px;color:var(--mu);white-space:nowrap}
 .vc-prod{font-family:var(--fd);font-style:italic;font-size:12.5px;color:var(--mu);margin-top:1px;line-height:1.35}
-.vg-cor{font-size:11.5px;color:var(--mu);margin-top:1px}
-.vg-prod{font-family:var(--fd);font-style:italic}
+.vg-prod{font-family:var(--fd);font-style:italic;font-size:11px;color:var(--mu);margin-top:2px;line-height:1.35;
+  overflow-wrap:anywhere}
+.vg-sub .vc-meta{font-size:11.5px}
 .mhero-cor{font-size:14px;color:rgba(255,255,255,.75)}
 .mhero-p{font-family:var(--fd);font-style:italic}
 .mdl-sub{display:block;font-size:11.5px;color:var(--mu);font-style:italic;margin-top:1px}

@@ -1004,10 +1004,14 @@ parava à altura do ecrã com a ficha a continuar por cima do papel.
 ## O nome, a cor e o produtor (fase 4 dos nomes, 27/09/2026)
 O nome é o que distingue o vinho; a cor e o produtor são campos à parte e
 dizem-se como tal — decisão do dono das apps, igual na WineCatalog. No
-cartão da lista: o **nome** em Fraunces, a **cor** em itálico logo a seguir
-e mais pequena (`.vc-cor`), o **produtor** em itálico por baixo
-(`.vc-prod`), e a linha de baixo só com o estilo e a região. Na grelha, a
-cor por baixo do nome (`.vg-cor`) e o produtor em itálico na linha do ano.
+cartão da lista (revisto a 27/09/2026, pedido do dono): em cima o **nome**
+em Fraunces seguido de **[cor] · [região] · [ano]** (`vinhoMetaHTML`, a cor
+em itálico), na mesma linha e a quebrar com ele quando o nome é comprido —
+cada pedaço em `nowrap`, a quebra cai entre eles; por baixo só o
+**produtor** em itálico (`.vc-prod`). O ano saiu do float da direita, que
+ficou só com a nota do Vivino; o estilo saiu do cartão. Na grelha: o nome;
+por baixo cor · região · ano; mais abaixo o produtor (`.vg-prod`). O mesmo
+desenho no Catálogo da WineCatalog (`wcMetaHTML`).
 Na página do vinho, a cor em itálico a seguir ao nome (`.mhero-cor`) e o
 produtor em itálico na linha da origem (`.mhero-p`); por isso a cor saiu do
 pré-título (`.mhero-k`). **A cor é obrigatória ao gravar** um vinho (o

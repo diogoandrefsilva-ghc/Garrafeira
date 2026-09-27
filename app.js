@@ -2216,6 +2216,21 @@ function sitiosDe(gs){
   });
   return sitios;
 }
+/* A linha de quem é o vinho, nos dois cartões: [cor] [região] [ano], por
+   esta ordem (pedido do dono das apps, 27/09/2026; igual no Catálogo da
+   WineCatalog). Na LISTA vai colada ao nome, na mesma linha, e quebra com
+   ele quando o nome é comprido — cada pedaço em `nowrap`, para a quebra
+   cair ENTRE eles e nunca a meio de "Península de Setúbal". Na GRELHA é a
+   linha de baixo do nome. O produtor fica sempre numa linha só dele.
+   `ano` vem de fora porque cada cartão decide o que diz sem ele ('s/a' ou
+   nada, na wishlist). */
+function vinhoMetaHTML(v,ano){
+  const p=[];
+  if(v.tipo)p.push(`<span class="vc-cor">${esc(v.tipo)}</span>`);
+  if(v.regiao)p.push(`<span class="vm-reg">${esc(v.regiao)}</span>`);
+  if(ano)p.push(`<span class="vm-ano">${esc(String(ano))}</span>`);
+  return p.length?`<span class="vc-meta">${p.join('<span class="vm-sep"> · </span>')}</span>`:'';
+}
 function vinhoCardHTML(v,termos,loteSel){
   const gs=garrafasDe(v.id,true);
   const cl=castaLabel(v);
@@ -2236,13 +2251,9 @@ function vinhoCardHTML(v,termos,loteSel){
     <div class="vc-top">
       ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
       <div class="vc-main">
-        ${semAno&&!notaVivino(v)?'':`<div class="vc-anofloat">
-          ${semAno?'':`<div class="vc-ano">${v.ano||'s/a'}</div>`}
-          ${notaVivinoBadge(v)}
-        </div>`}
-        <div class="vc-nome">${esc(v.nome)}${v.tipo?` <span class="vc-cor">${esc(v.tipo)}</span>`:''}</div>
+        ${notaVivino(v)?`<div class="vc-anofloat">${notaVivinoBadge(v)}</div>`:''}
+        <div class="vc-nome">${esc(v.nome)} ${vinhoMetaHTML(v,semAno?'':(v.ano||'s/a'))}</div>
         ${v.produtor?`<div class="vc-prod">${esc(v.produtor)}</div>`:''}
-        <div class="vc-sub">${esc([v.estilo,v.regiao].filter(Boolean).join(' · '))}</div>
         <div class="vc-badges">
           ${castasTxt?`<span class="bdg cas">🍇 ${esc(castasTxt)}</span>`:''}
           ${cl?`<span class="bdg mono">${esc(cl)}</span>`:''}
@@ -2291,8 +2302,8 @@ function vinhoGrelhaHTML(v,termos,loteSel){
   return `<article class="vgcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}" onclick="${clique}">
     ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
     <div class="vg-nome">${esc(v.nome)}</div>
-    ${v.tipo?`<div class="vg-cor">${esc(v.tipo)}</div>`:''}
-    <div class="vg-sub">${[esc(v.ano||'s/a'),v.produtor?`<span class="vg-prod">${esc(v.produtor)}</span>`:'',esc(v.regiao||'')].filter(Boolean).join(' · ')}</div>
+    <div class="vg-sub">${vinhoMetaHTML(v,desejado(v)&&!v.ano?'':(v.ano||'s/a'))}</div>
+    ${v.produtor?`<div class="vg-prod">${esc(v.produtor)}</div>`:''}
     <div class="vg-foot">
       ${notaVivinoBadge(v)}
     </div>
@@ -8166,7 +8177,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='115';
+const APP_BUILD='116';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
