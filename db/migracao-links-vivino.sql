@@ -44,6 +44,14 @@
 -- visto é a confirmação que faltava. Só vale a aplicar, só para ids que
 -- também vão em `p_ids`, e só com o link do catálogo num formato de vinho.
 -- O registo diz `confirmado_por: admin`.
+--
+-- NA APP TAMBÉM (27/09/2026, pedido do dono: "o que é só comparação e
+-- análise de dados, podemos ter na app"). O admin do CATÁLOGO chega aqui pela
+-- `winecatalog.garrafeiras_links_rever` (`db/garrafeiras-rever.sql` no repo
+-- WineCatalog), que confirma o `sou_admin()` e chama esta. O GRANT continua só
+-- da `service_role`: quem tem login não a chama diretamente — é o invólucro de
+-- lá, e o portão de cá volta a confirmar. O `quem` do `sync_log` passa a ser o
+-- email do admin quando vem da app.
 -- ════════════════════════════════════════════════════════════════════
 
 -- A assinatura ganhou o `p_forcar`: a antiga sai, senão ficavam as duas.
@@ -63,8 +71,9 @@ DECLARE
   v_feitos int := 0;
   v_forcado boolean;
 BEGIN
-  IF COALESCE(auth.role(), '') <> 'service_role' THEN
-    RAISE EXCEPTION 'Só o batch (service_role) chama isto.';
+  -- o batch do PC, ou o admin do catálogo pela app (ver o cabeçalho)
+  IF NOT (COALESCE(auth.role(), '') = 'service_role' OR winecatalog.sou_admin()) THEN
+    RAISE EXCEPTION 'Só o batch (service_role) ou o admin do catálogo chamam isto.';
   END IF;
   IF p_aplicar AND p_ids IS NULL THEN
     RAISE EXCEPTION 'Aplicar só aos vinhos escolhidos (p_ids).';
@@ -149,7 +158,7 @@ BEGIN
       IF FOUND THEN
         v_feitos := v_feitos + 1;
         INSERT INTO garrafeira.sync_log (origem, acao, estado, quem, detalhe)
-        VALUES ('winecatalog-batch', 'link_vivino_corrigido', 'ok', 'script no PC (admin)',
+        VALUES ('winecatalog-batch', 'link_vivino_corrigido', 'ok', COALESCE(NULLIF(auth.email(), ''), 'script no PC (admin)'),
                 jsonb_build_object('vinho_id', r.id, 'garrafeira_id', r.garrafeira_id,
                                    'antes', r.url, 'depois', r.cat_url, 'caso', r.caso,
                                    'catalogo_id', r.cid,
@@ -166,6 +175,7 @@ $$;
 REVOKE ALL ON FUNCTION garrafeira.links_vivino_rever(bigint[], boolean, bigint[]) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION garrafeira.links_vivino_rever(bigint[], boolean, bigint[]) TO service_role;
 
--- Confirmar (tem de dar só service_role e o dono):
+-- Confirmar (tem de dar só service_role e o dono — a app chega cá pela
+-- `winecatalog.garrafeiras_links_rever`, não por um GRANT a `authenticated`):
 -- select grantee, privilege_type from information_schema.routine_privileges
 --  where routine_schema = 'garrafeira' and routine_name = 'links_vivino_rever';
