@@ -1385,15 +1385,19 @@ function notaVivinoTitulo(x,ano){
   return x.de==='global'?`Nota do Vivino de todas as colheitas${q}`
     :`Nota do Vivino${ano?' da colheita '+ano:''}${q}`;
 }
-/* O crachá: a estrela e, quando é a de todas as colheitas, a palavra
-   "todas". A da colheita não leva nada — até 26/09/2026 era a única, e
-   muita veio de pesquisas que não sabiam a colheita; chamar-lhe "da
-   colheita" no cartão era dizer o que não se sabe. */
+/* O crachá: a estrela e, quando é a de todas as colheitas MAS há também
+   uma da colheita (só perdeu por não chegar às 100 avaliações), a palavra
+   "todas" — é o que distingue as duas. Sem nota de colheita nenhuma, "todas"
+   não diz nada a ninguém: só há uma nota, e é essa. A da colheita não leva
+   nada — até 26/09/2026 era a única, e muita veio de pesquisas que não
+   sabiam a colheita; chamar-lhe "da colheita" no cartão era dizer o que não
+   se sabe. */
 function notaVivinoBadge(v){
   const x=notaVivino(v);
   if(!x)return '';
+  const mostraTodas=x.de==='global'&&v.vivino_nota!=null&&v.vivino_nota!=='';
   return `<span class="bdg viv" title="${esc(notaVivinoTitulo(x,v.ano))}">★ ${x.nota.toFixed(1)}${
-    x.de==='global'?' <small class="viv-de">todas</small>':''}</span>`;
+    mostraTodas?' <small class="viv-de">todas</small>':''}</span>`;
 }
 // De onde veio, em poucas palavras: "Granvine", "Granvine · 2019" (outra
 // colheita), "Vivino · média" (sem colheita, o Vivino dá a média das
@@ -8162,7 +8166,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='114';
+const APP_BUILD='115';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
