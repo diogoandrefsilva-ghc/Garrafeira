@@ -290,6 +290,7 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
 .vg-prod{font-family:var(--fd);font-style:italic}
 .mhero-cor{font-size:14px;color:rgba(255,255,255,.75)}
 .mhero-p{font-family:var(--fd);font-style:italic}
+.mdl-sub{display:block;font-size:11.5px;color:var(--mu);font-style:italic;margin-top:1px}
 .vc-badges:empty{display:none}
 .vc-badges{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;align-items:center}
 .vc-foot{display:flex;flex-wrap:wrap;gap:5px 10px;align-items:center;margin-top:9px;padding-top:8px;border-top:1px dashed var(--bo)}

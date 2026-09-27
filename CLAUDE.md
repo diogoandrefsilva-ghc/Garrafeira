@@ -1010,7 +1010,11 @@ produtor em itálico na linha da origem (`.mhero-p`); por isso a cor saiu do
 pré-título (`.mhero-k`). **A cor é obrigatória ao gravar** um vinho (o
 `guardarVinho` recusa sem ela; o `Tinto` de omissão já não passa): é parte
 da chave do catálogo. E o vinho novo que vem de um candidato do catálogo
-fica com o NOME do catálogo (`pqCatalogoUsar`).
+fica com o NOME do catálogo (`pqCatalogoUsar`). Na linha "Produtor" da ficha
+aparece, por baixo e em itálico, o **nome completo** do produtor oficial
+quando o catálogo o tem (`PROD_COMPLETO`, lido com a
+`winecatalog.produtores_completos` no `carregarGarrafeira`; "Quinta Nova" →
+"Quinta Nova de Nossa Senhora do Carmo").
 
 ## A linguagem visual (o "charme")
 Duas famílias e uma regra de cor. **Fraunces** (serifa) para o que se lê

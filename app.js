@@ -346,8 +346,12 @@ async function carregarGarrafeira(){
     // Os preços das lojas vêm do CATÁLOGO, não da garrafeira (ver
     // "O PREÇO QUE CONTA"). Uma poupança e não uma dependência: se falhar,
     // cada vinho fica com o preço médio de sempre.
-    sbRpc('precos_lojas',{p_garrafeira_id:GA_ID}).catch(()=>null)
-  ]);
+    sbRpc('precos_lojas',{p_garrafeira_id:GA_ID}).catch(()=>null),
+    // O nome por extenso dos produtores oficiais ("Quinta Nova" → "Quinta
+    // Nova de Nossa Senhora do Carmo"), do catálogo: só se lê na ficha do
+    // vinho. Se falhar, a ficha fica sem ele.
+    sbReq('POST','rpc/produtores_completos',{},{'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'}).catch(()=>null)
+  ]).then(r=>{PROD_COMPLETO=(r[6]&&typeof r[6]==='object')?r[6]:{};return r;});
   db.locais=locais||[];db.vinhos=vinhos||[];db.garrafas=garrafas||[];
   PRECOS_LOJA=(pl&&typeof pl==='object')?pl:{};
 
@@ -1263,6 +1267,7 @@ function resumoPainel(id,titulo,rows,filtroFn,listaBase,notaTop){
    que se sabe de que ano é. Lojas que não estejam em `LOJAS` aparecem no
    detalhe mas nunca contam. */
 let PRECOS_LOJA={};   // vinho_id -> [{loja,preco,url,nome,colheita,em}]
+let PROD_COMPLETO={}; // produtor oficial -> nome por extenso (catálogo)
 const LOJAS=[
   {k:'garrafeira_nacional',nome:'Garrafeira Nacional',curto:'G. Nacional'},
   {k:'granvine',nome:'Granvine',curto:'Granvine'},
@@ -3564,7 +3569,7 @@ function vinhoDetalheHTML(v){
 
     <div class="msec">Ficha</div>
     <div class="mdet">
-      ${linha('Produtor',esc(v.produtor))}
+      ${linha('Produtor',esc(v.produtor)+(PROD_COMPLETO[v.produtor]?`<small class="mdl-sub">${esc(PROD_COMPLETO[v.produtor])}</small>`:''))}
       ${linha('Ano',v.ano||'')}
       ${linha('Tipo',esc([v.tipo,v.estilo].filter(Boolean).join(' · ')),v.id,['tipo','estilo'])}
       ${linha('Região',esc([v.regiao,v.sub_regiao].filter(Boolean).join(' · ')),v.id,['regiao','sub_regiao'])}
@@ -8157,7 +8162,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='113';
+const APP_BUILD='114';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
