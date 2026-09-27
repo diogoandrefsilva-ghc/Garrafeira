@@ -1198,9 +1198,16 @@ confirmado do catálogo — `garrafeira.links_vivino_rever`, em
 `db/migracao-links-vivino.sql`. Um link para uma colheita do mesmo vinho
 fica como a pessoa o pôs. O admin vê de quem é cada vinho: "não há segredos
 numa correção que melhora a informação" (o dono das apps). Cada troca fica
-no `sync_log` (origem `winecatalog-batch`). Não é uma porta na app: é uma
-função que só a `service_role` executa.
-**E o resto da ficha** (a 19, `garrafeira.fichas_catalogo_rever`): só da
+no `sync_log` (origem `winecatalog-batch`). Não é uma porta nesta app: é uma
+função que só a `service_role` executa — e, desde 27/09/2026, o admin do
+CATÁLOGO na app WineCatalog (Alertas › "As garrafeiras × o catálogo"), por um
+invólucro de lá (`winecatalog.garrafeiras_links_rever`) que confirma o
+`sou_admin()`; o GRANT daqui continua só da `service_role`, e o portão aceita
+as duas. O `quem` do `sync_log` é o email do admin quando vem da app. A
+decisão é do dono das apps: "o que é só comparação e análise de dados, podemos
+ter na app" — a mesma pessoa, a ver o mesmo que já via no PC.
+**E o resto da ficha** (a 19, `garrafeira.fichas_catalogo_rever`, também na
+app WineCatalog pela `winecatalog.garrafeiras_fichas_rever`): só da
 MESMA colheita, o que está vazio aqui e o catálogo tem, e o que é diferente
 quando o do catálogo é mais recente do que a última gravação do vinho pelo
 dono. Nunca a cor (um vinho com cor diferente fica todo de fora), nunca a

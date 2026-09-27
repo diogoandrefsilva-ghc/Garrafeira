@@ -32,6 +32,12 @@
 -- voltam a correr no momento: o que deixou de se aplicar não se aplica.
 -- Cada vinho corrigido fica em `garrafeira.sync_log` (origem
 -- `winecatalog-batch`, com o antes e o depois de cada campo).
+--
+-- NA APP TAMBÉM (27/09/2026, pedido do dono — a mesma decisão da 18): o
+-- admin do CATÁLOGO chega aqui pela `winecatalog.garrafeiras_fichas_rever`
+-- (`db/garrafeiras-rever.sql` no repo WineCatalog). O GRANT continua só da
+-- `service_role`; o portão de cá aceita também o `winecatalog.sou_admin()`,
+-- e o `quem` do `sync_log` é o email do admin quando vem da app.
 -- ════════════════════════════════════════════════════════════════════
 
 CREATE OR REPLACE FUNCTION garrafeira.fichas_catalogo_rever(
@@ -61,8 +67,9 @@ DECLARE
   v_vinhos int := 0;
   v_erros  jsonb := '[]';
 BEGIN
-  IF COALESCE(auth.role(), '') <> 'service_role' THEN
-    RAISE EXCEPTION 'Só o batch (service_role) chama isto.';
+  -- o batch do PC, ou o admin do catálogo pela app (ver o cabeçalho)
+  IF NOT (COALESCE(auth.role(), '') = 'service_role' OR winecatalog.sou_admin()) THEN
+    RAISE EXCEPTION 'Só o batch (service_role) ou o admin do catálogo chamam isto.';
   END IF;
   IF p_aplicar AND (p_itens IS NULL OR jsonb_typeof(p_itens) <> 'array') THEN
     RAISE EXCEPTION 'Aplicar só aos campos escolhidos (p_itens).';
@@ -122,7 +129,8 @@ BEGIN
       END IF;
       CONTINUE WHEN p_aplicar AND NOT k = ANY (v_pedidos);
       v_campos := v_campos || jsonb_build_object('campo', k, 'antes', e -> 'meu',
-        'depois', e -> 'catalogo', 'caso', v_caso, 'origem', e ->> 'origem', 'em', e ->> 'em');
+        'depois', e -> 'catalogo', 'caso', v_caso, 'origem', e ->> 'origem',
+        'forca', e -> 'forca', 'em', e ->> 'em');
       v_cat := v_cat || jsonb_build_object(k, e -> 'catalogo');
     END LOOP;
     CONTINUE WHEN jsonb_array_length(v_campos) = 0;
@@ -140,7 +148,7 @@ BEGIN
         v_feitos := v_feitos + jsonb_array_length(v_campos);
         v_vinhos := v_vinhos + 1;
         INSERT INTO garrafeira.sync_log (origem, acao, estado, quem, detalhe)
-        VALUES ('winecatalog-batch', 'ficha_do_catalogo', 'ok', 'script no PC (admin)',
+        VALUES ('winecatalog-batch', 'ficha_do_catalogo', 'ok', COALESCE(NULLIF(auth.email(), ''), 'script no PC (admin)'),
                 jsonb_build_object('vinho_id', r.id, 'garrafeira_id', r.garrafeira_id,
                                    'catalogo_id', v_cmp -> 'id', 'campos', v_campos));
       EXCEPTION WHEN OTHERS THEN
@@ -159,7 +167,7 @@ REVOKE ALL ON FUNCTION garrafeira.fichas_catalogo_rever(jsonb, boolean) FROM PUB
 GRANT EXECUTE ON FUNCTION garrafeira.fichas_catalogo_rever(jsonb, boolean) TO service_role;
 
 -- Confirmar (tem de dar só service_role e o dono; e a escrever_do_catalogo
--- só o dono):
+-- só o dono — a app chega cá pela `winecatalog.garrafeiras_fichas_rever`):
 -- select routine_name, grantee from information_schema.routine_privileges
 --  where routine_schema = 'garrafeira'
 --    and routine_name in ('fichas_catalogo_rever', 'escrever_do_catalogo');

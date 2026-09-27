@@ -349,6 +349,10 @@ saiu com um `DROP`).
 Só a `service_role` a executa (o `REVOKE`/`GRANT` estão no fim, com a
 consulta de confirmação). Precisa do `winecatalog` já montado (usa a
 `winecatalog.achar` e a `vivino_verificacoes`). Aplicada a 26/09/2026.
+Desde 27/09/2026 o portão aceita também o admin do catálogo
+(`winecatalog.sou_admin()`): a app WineCatalog chega-lhe pela
+`winecatalog.garrafeiras_links_rever` (`db/garrafeiras-rever.sql` de lá), e o
+GRANT continua só da `service_role`.
 
 ### Migração 19 — o batch do admin acerta as fichas pelo catálogo (já aplicada)
 
@@ -359,7 +363,9 @@ cabeçalho do ficheiro. Escreve pela `garrafeira.escrever_do_catalogo`, que
 saiu da `aplicar_do_catalogo` (em `catalogo-partilhado.sql`) para as duas
 usarem o mesmo UPDATE — por isso, numa base existente, corre primeiro o
 `catalogo-partilhado.sql` e só depois este. Só a `service_role` a executa;
-a `escrever_do_catalogo` não se dá a ninguém. Aplicada a 26/09/2026.
+a `escrever_do_catalogo` não se dá a ninguém. Aplicada a 26/09/2026. Desde
+27/09/2026 aceita também o admin do catálogo, pela
+`winecatalog.garrafeiras_fichas_rever` da app WineCatalog (como a 18).
 
 ### Migração 20 — os nomes sem CAPS LOCK (já aplicada)
 
