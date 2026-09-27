@@ -65,7 +65,10 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   INTEIRA do catálogo (`winecatalog.identidade`) quando o nome é escrito —
   um vinho novo ou o nome mudado: "Papa Figos Tinto 2021" fica "Papa
   Figos", colheita 2021; "Casa Ferreirinha Quinta da Leda" fica "Quinta da
-  Leda"; "Cartuxa Colheita" fica, porque se chama pelo produtor. Mudar só o
+  Leda"; "Cartuxa Colheita" fica, porque se chama pelo produtor. Os nomes
+  que o admin escolheu manter ("Companhia das Lezírias 1836 Grande
+  Reserva") nunca perdem o produtor da frente — a lista é do catálogo
+  (`winecatalog.nomes_manter`, `db/nomes-manter.sql` da WineCatalog). Mudar só o
   produtor troca-o pelo oficial e não mexe no nome (os nomes antigos
   arrumam-se pela simulação do painel do admin). Ver "O nome, a cor e o
   produtor".
