@@ -75,7 +75,7 @@ BEGIN
       SELECT v.id, v.nome, v.produtor, v.ano, v.tipo, v.garrafeira_id,
              gf.nome AS garrafeira, gf.dono,
              COALESCE(v.vivino_url, '') AS url,
-             winecatalog.achar(v.nome, COALESCE(v.produtor, ''), v.ano, false) AS cid
+             winecatalog.achar(v.nome, COALESCE(v.produtor, ''), v.ano, false, NULL, v.tipo) AS cid
         FROM garrafeira.vinhos v
         JOIN garrafeira.garrafeiras gf ON gf.id = v.garrafeira_id
        WHERE p_ids IS NULL OR v.id = ANY (p_ids)

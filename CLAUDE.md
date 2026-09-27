@@ -60,6 +60,15 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   admin confirma um produtor (vale para todas as garrafeiras, com uma
   linha no `sync_log` por vinho, origem `winecatalog-batch`); o mesmo para
   o nome normalizado (acao `nome_normalizado`).
+  `migracao-cor-na-chave.sql` é a 24 (fase 4 dos nomes, depois do
+  `cor-na-chave.sql` da WineCatalog): o trigger dos nomes aplica a regra
+  INTEIRA do catálogo (`winecatalog.identidade`) quando o nome é escrito —
+  um vinho novo ou o nome mudado: "Papa Figos Tinto 2021" fica "Papa
+  Figos", colheita 2021; "Casa Ferreirinha Quinta da Leda" fica "Quinta da
+  Leda"; "Cartuxa Colheita" fica, porque se chama pelo produtor. Mudar só o
+  produtor troca-o pelo oficial e não mexe no nome (os nomes antigos
+  arrumam-se pela simulação do painel do admin). Ver "O nome, a cor e o
+  produtor".
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
@@ -989,6 +998,20 @@ ninguém espera sair por tocar ao lado. E `.modal.pagina.on` é `display:block`
 e não `flex` — um item de flex não cresce com o que tem dentro, e a folha
 parava à altura do ecrã com a ficha a continuar por cima do papel.
 
+## O nome, a cor e o produtor (fase 4 dos nomes, 27/09/2026)
+O nome é o que distingue o vinho; a cor e o produtor são campos à parte e
+dizem-se como tal — decisão do dono das apps, igual na WineCatalog. No
+cartão da lista: o **nome** em Fraunces, a **cor** em itálico logo a seguir
+e mais pequena (`.vc-cor`), o **produtor** em itálico por baixo
+(`.vc-prod`), e a linha de baixo só com o estilo e a região. Na grelha, a
+cor por baixo do nome (`.vg-cor`) e o produtor em itálico na linha do ano.
+Na página do vinho, a cor em itálico a seguir ao nome (`.mhero-cor`) e o
+produtor em itálico na linha da origem (`.mhero-p`); por isso a cor saiu do
+pré-título (`.mhero-k`). **A cor é obrigatória ao gravar** um vinho (o
+`guardarVinho` recusa sem ela; o `Tinto` de omissão já não passa): é parte
+da chave do catálogo. E o vinho novo que vem de um candidato do catálogo
+fica com o NOME do catálogo (`pqCatalogoUsar`).
+
 ## A linguagem visual (o "charme")
 Duas famílias e uma regra de cor. **Fraunces** (serifa) para o que se lê
 devagar — nomes de vinhos, anos, números, títulos; **Inter** para a
@@ -1669,8 +1692,8 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   **Cor**, já com a do vinho, e mudá-la ali grava-a no vinho; no
   formulário de **vinho novo** o seletor nasce vazio ("— escolhe a cor —") e
   o botão de procurar recusa sem ela, tal como já recusava sem o nome.
-  Gravar continua a aceitar o defeito — o que passou a ser obrigatório é
-  procurar, não guardar.
+  Desde a fase 4 dos nomes (27/09/2026) gravar também exige a cor: é parte
+  da chave do catálogo (ver "O nome, a cor e o produtor").
 - **Nada é gravado sem confirmação.** O resultado abre campo a campo
   (`iaMostrarResultado`), com o que está agora ao lado do que a IA propõe.
   Vêm marcados **só os campos vazios**: substituir o que alguém escreveu à

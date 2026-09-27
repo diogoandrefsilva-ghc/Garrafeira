@@ -216,12 +216,14 @@ async function catalogoRpc(fn: string, corpo: Record<string, unknown>, signal: A
 }
 
 async function catalogoProcurar(
-  nome: string, produtor: string, ano: number | null, signal: AbortSignal,
+  nome: string, produtor: string, ano: number | null, signal: AbortSignal, tipo = "",
 ): Promise<Conhecido | null> {
   try {
+    // A cor é parte da identidade (fase 4 dos nomes): o branco nunca
+    // responde pelo tinto. Sem ela, é o coringa do catálogo.
     const d = await catalogoRpc("procurar", {
       p_nome: nome, p_produtor: produtor || "", p_ano: ano,
-      p_idade_dias: CATALOGO_IDADE_DIAS,
+      p_idade_dias: CATALOGO_IDADE_DIAS, p_cor: tipo || null,
     }, signal);
     if (!d || typeof d !== "object" || !d.ficha) return null;
     return {
@@ -1076,7 +1078,7 @@ async function produzirFicha(
   // Nem o ano, que sem ano no pedido não se procura (ver `normalizar`).
   const pedidos = (campos && campos.length ? campos : Object.keys(CAMPOS))
     .filter((k) => ano !== null || (k !== "beber_de" && k !== "beber_ate" && k !== "ano"));
-  const conhecido = profunda ? null : await catalogoProcurar(nome, produtor, ano, signal);
+  const conhecido = profunda ? null : await catalogoProcurar(nome, produtor, ano, signal, tipo);
   const doCatalogo = conhecido ? catalogoResponde(conhecido, pedidos) : {};
   const emFalta = pedidos.filter((k) => !(k in doCatalogo));
 
@@ -1318,7 +1320,7 @@ async function produzirFichaLote(
   for (const v of vinhos) {
     // Sem colheita, a janela de consumo não se pede (ver `produzirFicha`).
     const pedidosV = campos.filter((k) => v.ano !== null || (k !== "beber_de" && k !== "beber_ate"));
-    const conhecido = await catalogoProcurar(v.nome, v.produtor, v.ano, signal);
+    const conhecido = await catalogoProcurar(v.nome, v.produtor, v.ano, signal, v.tipo);
     const doCatalogo = conhecido ? catalogoResponde(conhecido, pedidosV) : {};
     const emFalta = pedidosV.filter((k) => !(k in doCatalogo));
     itens.push({ v, conhecido, doCatalogo, emFalta });

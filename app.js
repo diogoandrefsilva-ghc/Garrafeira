@@ -2231,8 +2231,9 @@ function vinhoCardHTML(v,termos,loteSel){
           ${semAno?'':`<div class="vc-ano">${v.ano||'s/a'}</div>`}
           ${notaVivinoBadge(v)}
         </div>`}
-        <div class="vc-nome">${esc(v.nome)}</div>
-        <div class="vc-sub">${esc([v.produtor,[v.tipo,v.estilo].filter(Boolean).join(' '),v.regiao].filter(Boolean).join(' · '))}</div>
+        <div class="vc-nome">${esc(v.nome)}${v.tipo?` <span class="vc-cor">${esc(v.tipo)}</span>`:''}</div>
+        ${v.produtor?`<div class="vc-prod">${esc(v.produtor)}</div>`:''}
+        <div class="vc-sub">${esc([v.estilo,v.regiao].filter(Boolean).join(' · '))}</div>
         <div class="vc-badges">
           ${castasTxt?`<span class="bdg cas">🍇 ${esc(castasTxt)}</span>`:''}
           ${cl?`<span class="bdg mono">${esc(cl)}</span>`:''}
@@ -2281,7 +2282,8 @@ function vinhoGrelhaHTML(v,termos,loteSel){
   return `<article class="vgcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}" onclick="${clique}">
     ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
     <div class="vg-nome">${esc(v.nome)}</div>
-    <div class="vg-sub">${esc([v.ano||'s/a',v.produtor,v.regiao].filter(Boolean).join(' · '))}</div>
+    ${v.tipo?`<div class="vg-cor">${esc(v.tipo)}</div>`:''}
+    <div class="vg-sub">${[esc(v.ano||'s/a'),v.produtor?`<span class="vg-prod">${esc(v.produtor)}</span>`:'',esc(v.regiao||'')].filter(Boolean).join(' · ')}</div>
     <div class="vg-foot">
       ${notaVivinoBadge(v)}
     </div>
@@ -3492,7 +3494,9 @@ function vinhoDetalheHTML(v){
   const idadeInfo=v.beber_de||v.beber_ate
     ? `${v.beber_de||'?'} – ${v.beber_ate||'?'}  ${janelaBadge(v,jan,true)}` : '';
   const img=imagemDe(v);
-  const origem=[v.produtor,v.regiao,v.sub_regiao].filter(Boolean).map(esc).join(' · ');
+  // O produtor em itálico, por baixo do nome: o nome é o que distingue o
+  // vinho, o produtor e a cor são campos à parte (fase 4 dos nomes).
+  const origem=[v.produtor?`<i class="mhero-p">${esc(v.produtor)}</i>`:'',esc(v.regiao||''),esc(v.sub_regiao||'')].filter(Boolean).join(' · ');
 
   // Links pequenos, seguidos por vírgula: o Vivino primeiro (se houver),
   // depois os do utilizador, cada um com o seu ✕ para remover colado a
@@ -3511,8 +3515,8 @@ function vinhoDetalheHTML(v){
           <span class="mhero-lupa">⤢</span>
         </button>
         <div class="mhero-tx">
-          <div class="mhero-k">${desejado(v)?'⭐ Wishlist · ':''}${esc([v.tipo,v.estilo,v.classificacao].filter(Boolean).join(' · '))||(desejado(v)?'':'&nbsp;')}</div>
-          <h3>${esc(v.nome)}</h3>
+          <div class="mhero-k">${desejado(v)?'⭐ Wishlist · ':''}${esc([v.estilo,v.classificacao].filter(Boolean).join(' · '))||(desejado(v)?'':'&nbsp;')}</div>
+          <h3>${esc(v.nome)}${v.tipo?` <span class="mhero-cor">${esc(v.tipo)}</span>`:''}</h3>
           <div class="mhero-s"><span class="mhero-o">${origem}${origem&&v.ano?' · ':''}</span>${v.ano?`<b>${v.ano}</b>`:''}</div>
           ${v.ano?`<div class="mhero-ab">${v.ano}</div>`:''}
           ${notaVivinoHeroHTML(v)}
@@ -4231,6 +4235,10 @@ async function guardarVinho(id,modo){
   const rotulo=conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
   const f=lerFormVinho();
   if(!f.nome){toast('Falta o nome do vinho',1);return;}
+  // A cor é parte da identidade do vinho (a chave do catálogo, fase 4 dos
+  // nomes): um vinho novo não se grava com o 'Tinto' de omissão.
+  const elCor=document.getElementById('e-tipo');
+  if(elCor&&!elCor.value){toast('Escolhe a cor do vinho',1);elCor.focus();return;}
   if(!id&&!GA_ID){toast('Não há nenhuma garrafeira aberta',1);return;}
   if(f.ano!=null&&(f.ano<1900||f.ano>2100)){toast('Ano fora do razoável',1);return;}
   let primeiraGarrafa=null;
@@ -5516,7 +5524,7 @@ async function pqCatalogoUsar(c){
   try{
     // O nome, o produtor e o ano DA LINHA escolhida: é assim que a
     // `comparar` devolve essa e não outra (a mesma colheita ganha).
-    r=await sbReq('POST','rpc/comparar',{p_nome:c.nome,p_produtor:c.produtor||'',p_ano:c.ano??null,p_ficha:{}},
+    r=await sbReq('POST','rpc/comparar',{p_nome:c.nome,p_produtor:c.produtor||'',p_ano:c.ano??null,p_ficha:c.tipo?{tipo:c.tipo}:{}},
       {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
   }catch(e){erro=e.message;}
   if(PQ!==P)return;
@@ -5539,6 +5547,16 @@ async function pqCatalogoUsar(c){
   // compacto o pode deixar em branco.
   delete val.produtor;
   if(P.novo&&!P.id.produtor&&r.produtor)val.produtor=r.produtor;
+  // O vinho novo que veio de um candidato fica com o NOME do catálogo (fase
+  // 4 dos nomes): é o nome arrumado — sem produtor à frente, sem cor, sem
+  // ano — e é o que faz as garrafeiras e o catálogo escreverem o mesmo
+  // vinho da mesma maneira. O produtor também, se o escrito for outra grafia.
+  if(P.novo&&r.nome){
+    const en=document.getElementById('e-nome');if(en)en.value=r.nome;
+    P.id.nome=r.nome;
+    const ep=document.getElementById('e-produtor');
+    if(ep&&r.produtor&&ep.value.trim()&&chave(ep.value)!==chave(r.produtor)&&chave(r.produtor).includes(chave(ep.value)))ep.value=r.produtor;
+  }
   // Um link fora do formato do Vivino não se traz — e diz-se.
   const vivinoMau=val.vivino_url&&!vivinoLink(val.vivino_url)?String(val.vivino_url):'';
   const n=pqJuntar(P,'cat',val);
@@ -8139,7 +8157,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='112';
+const APP_BUILD='113';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
