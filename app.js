@@ -4997,6 +4997,19 @@ const IA_JANELA=['beber_de','beber_ate'];
 function iaCamposPara(v){
   return (v&&v.ano)?IA_CAMPOS:IA_CAMPOS.filter(c=>!IA_JANELA.includes(c.k));
 }
+/* Pedir a nota do Vivino da colheita traz também a de todas (vêm da mesma
+   página); sem colheita só existe a de todas. Espelho do `camposComGlobal`
+   da vinho-info.ts. `ano` undefined (o lote) fica com as duas. */
+const IA_PAR_VIVINO={vivino_nota:'vivino_nota_global',vivino_avaliacoes:'vivino_avaliacoes_global'};
+function iaCamposComGlobal(campos,ano){
+  if(!campos)return campos;
+  const out=new Set();
+  campos.forEach(k=>{
+    if(k in IA_PAR_VIVINO){out.add(IA_PAR_VIVINO[k]);if(ano!==null)out.add(k);}
+    else out.add(k);
+  });
+  return [...out];
+}
 function janelaSincronizarForm(){
   const a=document.getElementById('e-ano');
   const sem=!a||inteiro(a.value)==null;
@@ -5017,8 +5030,12 @@ const IA_CAMPOS=[
   {k:'teor',rot:'Álcool (%)'},
   {k:'estagio_meses',rot:'Estágio (meses)'},
   {k:'estagio_texto',rot:'Estágio'},
-  {k:'vivino_nota',rot:'Nota Vivino'},
-  {k:'vivino_avaliacoes',rot:'Avaliações Vivino'},
+  {k:'vivino_nota',rot:'Nota Vivino (colheita)'},
+  {k:'vivino_avaliacoes',rot:'Avaliações Vivino (colheita)'},
+  // A de TODAS as colheitas: desde 27/09/2026 a pesquisa também a pede (ver
+  // `regraVivino` na vinho-info.ts); até aí ia parar à da colheita.
+  {k:'vivino_nota_global',rot:'Nota Vivino (todas as colheitas)'},
+  {k:'vivino_avaliacoes_global',rot:'Avaliações Vivino (todas as colheitas)'},
   {k:'preco_medio',rot:'Preço de referência (€)'},
   {k:'beber_de',rot:'Beber a partir de'},
   {k:'beber_ate',rot:'Beber até'},
@@ -5424,7 +5441,8 @@ function pqChaves(P){
   });
 }
 // Os que se podem PEDIR à IA (o catálogo sabe mais do que ela pergunta).
-function pqChavesIA(P){return pqChaves(P).filter(k=>IA_CAMPOS.some(c=>c.k===k));}
+// Sem colheita, a nota do Vivino da colheita não se pede: só a de todas.
+function pqChavesIA(P){return pqChaves(P).filter(k=>IA_CAMPOS.some(c=>c.k===k)&&(P.id.ano||!(k in IA_PAR_VIVINO)));}
 
 function pqAtualVinho(v){
   const a={};
@@ -5639,6 +5657,7 @@ async function pqIA(repetir){
     P.res.ia=res;
     const n=pqJuntar(P,'ia',res);
     P.et.ia={estado:'feito',n:n.novos,dif:n.dif,outro:n.outro,memoria:res.pesquisaWeb===false,
+      sites:Array.isArray(res.sites)?res.sites:[],confianca:res.confianca||null,
       fontes:Array.isArray(res.fontes)?res.fontes:[],aviso:res.aviso||''};
     P.ultima='ia';P.fase='fim';
   }catch(e){
@@ -5667,6 +5686,23 @@ function pqPassoHTML(k,P){
   return `<div class="pq-passo ${cls}"><b>${esc(PQ_NOMES[k])}</b><span>${esc(st)}</span></div>`;
 }
 function pqQtd(n,um,varios){return `<b>${n}</b> ${n===1?um:varios}`;}
+/* O QUE SE FEZ COM OS SITES DE CONFIANÇA (27/09/2026). A vinho-info faz
+   uma procura só neles (no pacote completo, que é o que tem Serper) e conta
+   quantos resultados vieram de cada um (`confianca`); sem essa contagem
+   foram só uma frase no pedido à IA, e diz-se isso — era o que não se sabia. */
+function pqSitesHTML(f){
+  const sites=f&&Array.isArray(f.sites)?f.sites:[];
+  if(!sites.length)return '';
+  const c=f.confianca&&typeof f.confianca==='object'?f.confianca:null;
+  if(!c)return `<div class="ia-fontes">Sites de referência (${esc(sites.join(', '))}): foram só no texto do pedido
+    à IA — sem a pesquisa Google do pacote completo, não há como confirmar se os usou.</div>`;
+  const partes=sites.map(s=>s in c
+    ?`${esc(s)}: <b>${Number(c[s])||0}</b> resultado${Number(c[s])===1?'':'s'}`
+    :`${esc(s)}: não é um domínio — só no texto do pedido`);
+  const nada=Object.values(c).every(n=>!Number(n));
+  return `<div class="ia-fontes">Sites de referência — ${partes.join(' · ')}.${nada
+    ?' Nenhum resultado deles: o que veio é de outras fontes.':' Foram os primeiros a ser lidos.'}</div>`;
+}
 function pqFontesHTML(fontes){
   return fontes&&fontes.length?`<div class="ia-fontes">Fontes: ${fontes.map(f=>
     `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo||f.url)}</a>`).join(' · ')}</div>`:'';
@@ -5702,7 +5738,7 @@ function pqRelatoHTML(P){
     if(f.memoria)out.push('<span class="note">🧠 A IA respondeu <b>de memória</b>, sem pesquisar na net. Costuma acertar em vinhos conhecidos, mas confere antes de guardar.</span>');
     if(f.aviso)out.push(`<span class="note">⚠️ ${esc(f.aviso)}</span>`);
   }
-  return out.map(t=>`<p>${t}</p>`).join('')+(f?pqFontesHTML(f.fontes):'');
+  return out.map(t=>`<p>${t}</p>`).join('')+(f?pqFontesHTML(f.fontes)+pqSitesHTML(f):'');
 }
 function pqCamposHTML(P){
   const ks=pqChavesIA(P);
@@ -5714,7 +5750,7 @@ function pqCamposHTML(P){
       <input type="checkbox" class="pq-campo" value="${esc(k)}"${marcados.includes(k)?' checked':''}>
       <span>${esc(pqRot(k))}${pqVazio(P.atual[k])?'':'<i>já tem</i>'}${P.hist[k]||P.preenchidos[k]?'<i>já encontrado</i>':''}</span></label>`).join('')}</div>
     <label class="ia-esc" style="margin-top:6px"><input type="checkbox" id="pq-colheita"${P.colheitaEsp?' checked':''}>
-      <span>Tem de ser exatamente a colheita de ${esc(String(P.id.ano||'este ano'))}<i>raramente faz falta: a nota do Vivino é do vinho, não da colheita</i></span></label>
+      <span>Tem de ser exatamente a colheita de ${esc(String(P.id.ano||'este ano'))}<i>para o teor, o estágio, o preço e as notas de prova — a nota do Vivino vem sempre às duas (a da colheita e a de todas)</i></span></label>
   </details>`;
 }
 function pqCorHTML(P){
@@ -5761,7 +5797,8 @@ function pqPerguntaHTML(P){
   return `${erro}<p class="pq-q">${q}</p>${pqCorHTML(P)}
     <label for="pq-sites">Sites de referência (opcional)</label>
     <textarea id="pq-sites" rows="2" placeholder="ex.: garrafeiranacional.com, vivino.com/…/w/123456">${esc(P.sites.join(', '))}</textarea>
-    <div class="note">A pesquisa dá-lhes prioridade. Um link do Vivino do vinho certo é usado tal e qual.</div>
+    <div class="note">Domínios, separados por vírgula. A pesquisa faz uma procura só nestes e põe os resultados deles à
+      frente; no fim diz quantos vieram de cada um. Um link do Vivino do vinho certo é usado tal e qual.</div>
     <label for="pq-notas">Notas para identificar o vinho (opcional)</label>
     <textarea id="pq-notas" rows="2" maxlength="300" placeholder="ex.: edição limitada, da casa Ferreirinha">${esc(P.notas)}</textarea>
     ${pqCamposHTML(P)}
@@ -5994,20 +6031,28 @@ const IA_CAMPOS_JSON={
   sub_regiao:'subRegiao',mencao:'mencao',classificacao:'classificacao',
   castas:'castas',teor:'teor',estagio_meses:'estagioMeses',
   estagio_texto:'estagioTexto',vivino_nota:'vivinoNota',
-  vivino_avaliacoes:'vivinoAvaliacoes',vivino_url:'vivinoUrl',
+  vivino_avaliacoes:'vivinoAvaliacoes',vivino_nota_global:'vivinoNotaGlobal',
+  vivino_avaliacoes_global:'vivinoAvaliacoesGlobal',vivino_url:'vivinoUrl',
   imagem_url:'imagemUrl',preco_medio:'precoMedio',beber_de:'beberDe',
   beber_ate:'beberAte',notas_prova:'notasProva',harmonizacao:'harmonizacao',
   ai_resumo:'resumo'
 };
 
-/* Espelho das duas versões da regra do Vivino em `vinho-info.ts`
-   (`regraVivino`) — ver o comentário grande lá para o porquê. A ESTRITA
-   exige o ano; a RELAXADA (o novo default) não, porque a página do Vivino
-   é do vinho e não da colheita. */
-function iaManualRegraVivino(colheitaEspecifica){
-  return colheitaEspecifica
-    ? 'A nota do Vivino, o nº de avaliações e o "vivinoUrl" têm de vir da MESMA página do Vivino, e tens de confirmar que é DESTE vinho exato (produtor, ano e região a bater certo) — há homónimos de produtores diferentes. Em dúvida, deixa os três vazios.'
-    : 'A página do Vivino é do VINHO, não de uma colheita específica: o ANO NÃO faz parte da identidade da página, e a nota que lá aparece é uma média entre colheitas. Para confirmares que é a página certa, basta o nome (já desambiguado na regra anterior) e o produtor baterem certo — não deixes a nota, as avaliações nem o link vazios só por causa do ano. A nota é o número entre 1.0 e 5.0 ao lado das estrelas; as avaliações vêm logo a seguir, entre parêntesis — não uses números de outra zona da página. Mesmo sem confirmares a nota, mantém o link se tiveres a certeza da página.';
+/* Espelho da regra do Vivino de `vinho-info.ts` (`regraVivino`) — ver o
+   comentário grande lá. A página é do VINHO; as NOTAS são duas (a de todas
+   as colheitas e a de uma). `ano` undefined é o LOTE, onde cada vinho traz
+   (ou não) o seu ano na lista. */
+function iaManualRegraVivino(ano){
+  const col=ano===undefined
+    ?'"vivinoNota"/"vivinoAvaliacoes" — SÓ a da colheita indicada na lista (a página com "?year=<ano>", ou a dessa colheita na lista de colheitas); um vinho SEM ano na lista não as tem, fica só com a de todas. Se só vires a de todas as colheitas, deixa estas duas vazias — nunca copies a de todas para aqui.'
+    :ano
+    ?`"vivinoNota"/"vivinoAvaliacoes" — SÓ a da colheita ${ano}: a da página com "?year=${ano}", ou a dessa colheita na lista de colheitas. Se só vires a de todas as colheitas, deixa estas duas vazias — nunca copies a de todas para aqui.`
+    :'"vivinoNota"/"vivinoAvaliacoes" ficam de fora: este vinho não tem colheita, e a única nota que serve é a de todas as colheitas.';
+  return 'O Vivino tem DUAS notas, e não se misturam: "vivinoNotaGlobal"/"vivinoAvaliacoesGlobal" — a de TODAS as colheitas: a que a página do vinho mostra sem ano escolhido (…/w/<nº>, sem "?year="); '+col+' A nota é o número entre 1.0 e 5.0 ao lado das estrelas; as avaliações vêm logo a seguir, entre parêntesis — não uses números de outra zona da página. Uma colheita nunca tem mais avaliações do que o vinho todo. "vivinoUrl" é a página do VINHO (…/<nome>/w/<nº>), a mesma para todas as colheitas: o ano não faz parte da identidade dela — basta o nome e o produtor baterem certo. Mantém o link se tiveres a certeza da página, mesmo sem nota.';
+}
+/* "Tem de ser exatamente a colheita X" — espelho da `regraColheita`. */
+function iaManualRegraColheita(ano){
+  return `O que responderes tem de ser da colheita ${ano}: teor, estágio, preço, notas de prova e janela de uma colheita diferente ficam fora do JSON.`;
 }
 /* A pesquisa manual é grátis (é a conta do admin num assistente), por isso
    pede-se SEMPRE a pesquisa a sério — o equivalente à "pesquisa profunda"
@@ -6038,13 +6083,13 @@ ${sitesTxt}${so}
 REGRAS, e são a sério:
 1. NÃO INVENTES. Um campo que não consigas confirmar por pesquisa fica FORA do JSON (ou a null) — uma ficha com metade dos campos certos vale mais do que uma cheia com metade inventada.
 2. ${IA_MANUAL_REGRA_CUVEE}
-3. ${iaManualRegraVivino(colheitaEspecifica)}
+3. ${iaManualRegraVivino(v.ano||null)}
 4. Se houver dúvida entre dois vinhos parecidos, escolhe o que bate certo com o ano e a região indicados, e escreve a hesitação em "aviso".
 5. O preço é o de UMA garrafa de 0,75L, em euros, em Portugal.
 6. As castas vão SEPARADAS, uma a uma, com o nome português corrente ("Touriga Nacional", "Alicante Bouschet"). Nunca "blend"/"lote"/"várias castas".
 7. ${v.ano?'"beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que ESTA colheita está no ponto.':'Este vinho não tem ano: sem colheita NÃO há janela de consumo — deixa "beberDe"/"beberAte" de fora.'}
 8. "imagemUrl" é o link DIRETO de uma fotografia (acaba em .jpg/.jpeg/.png/.webp/.avif), nunca o link da página. Sem certeza, deixa vazio.
-
+${colheitaEspecifica&&v.ano?`9. ${iaManualRegraColheita(v.ano)}\n`:''}
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código \`\`\`:
 {
   "encontrado": true,
@@ -6060,8 +6105,10 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código \`\`\`:
   "teor": 14.5,
   "estagioMeses": 18,
   "estagioTexto": "18 meses em barrica de carvalho francês",
-  "vivinoNota": 4.1,
-  "vivinoAvaliacoes": 1234,
+${v.ano?`  "vivinoNota": 4.2,
+  "vivinoAvaliacoes": 312,
+`:''}  "vivinoNotaGlobal": 4.1,
+  "vivinoAvaliacoesGlobal": 5234,
   "vivinoUrl": "",
   "imagemUrl": "",
   "precoMedio": 18.5,
@@ -6164,6 +6211,8 @@ function iaManualNormalizar(raw,anoPedido,campos){
     estagio_texto:iaManualTxt(raw.estagioTexto,160),
     vivino_nota:iaManualNum(raw.vivinoNota,1,5,2),
     vivino_avaliacoes:(()=>{const n=iaManualNum(raw.vivinoAvaliacoes,0,10000000,0);return n===null?null:Math.round(n);})(),
+    vivino_nota_global:iaManualNum(raw.vivinoNotaGlobal,1,5,2),
+    vivino_avaliacoes_global:(()=>{const n=iaManualNum(raw.vivinoAvaliacoesGlobal,0,10000000,0);return n===null?null:Math.round(n);})(),
     vivino_url:vivinoLink(raw.vivinoUrl),
     imagem_url:/^https?:\/\/\S+\.(jpe?g|png|webp|avif)(\?\S*)?$/i.test(String(raw.imagemUrl||'').trim())?iaManualTxt(raw.imagemUrl,400):'',
     preco_medio:iaManualNum(raw.precoMedio,0.5,100000,2),
@@ -6177,8 +6226,35 @@ function iaManualNormalizar(raw,anoPedido,campos){
     const v=out[k];
     if(v===null||v===''||(Array.isArray(v)&&!v.length))delete out[k];
   });
+  iaVivinoDuas(out,out.ano==null?null:out.ano);
+  campos=iaCamposComGlobal(campos,out.ano==null?null:out.ano);
   if(campos&&campos.length)Object.keys(out).forEach(k=>{if(k!=='aviso'&&!campos.includes(k))delete out[k];});
   return Object.keys(out).length?out:null;
+}
+
+/* As duas notas do Vivino, arrumadas depois de lidas — espelho do
+   `vivinoDuas` da vinho-info.ts: sem colheita a "da colheita" passa a ser a
+   de todas; as duas iguais (nota e avaliações) é cópia, fica só a de todas;
+   uma colheita com mais avaliações do que o vinho todo deita a de todas fora. */
+function iaVivinoDuas(out,ano){
+  const tem=k=>out[k]!==undefined;
+  if(ano===null){
+    if(tem('vivino_nota')&&!tem('vivino_nota_global')){
+      out.vivino_nota_global=out.vivino_nota;
+      if(tem('vivino_avaliacoes')&&!tem('vivino_avaliacoes_global'))out.vivino_avaliacoes_global=out.vivino_avaliacoes;
+    }
+    delete out.vivino_nota;delete out.vivino_avaliacoes;
+    return;
+  }
+  if(tem('vivino_nota')&&tem('vivino_nota_global')&&out.vivino_nota===out.vivino_nota_global&&
+     (out.vivino_avaliacoes??null)===(out.vivino_avaliacoes_global??null)){
+    delete out.vivino_nota;delete out.vivino_avaliacoes;
+    return;
+  }
+  if(tem('vivino_avaliacoes')&&tem('vivino_avaliacoes_global')&&
+     Number(out.vivino_avaliacoes)>Number(out.vivino_avaliacoes_global)){
+    delete out.vivino_nota_global;delete out.vivino_avaliacoes_global;
+  }
 }
 
 /* Cola-se a resposta, valida-se, e entra-se no MESMO ecrã de comparação da
@@ -6431,7 +6507,8 @@ function loteManualCampoExemplo(k){
     classificacao:`"vazio, ou um de: ${CLASSIF.filter(Boolean).join(' | ')}"`,
     castas:'["Touriga Nacional", "Touriga Franca"]',
     teor:'14.5', estagio_meses:'18', estagio_texto:'"18 meses em barrica de carvalho francês"',
-    vivino_nota:'4.1', vivino_avaliacoes:'1234', vivino_url:'""', imagem_url:'""',
+    vivino_nota:'4.2', vivino_avaliacoes:'312',
+    vivino_nota_global:'4.1', vivino_avaliacoes_global:'5234', vivino_url:'""', imagem_url:'""',
     preco_medio:'18.5', beber_de:'2026', beber_ate:'2034',
     notas_prova:'"duas ou três frases sobre aroma, boca e final"',
     harmonizacao:'"com que pratos"', ai_resumo:'"duas ou três frases sobre o vinho e o produtor"',
@@ -6442,7 +6519,7 @@ function loteManualRegras(campos){
   const r=['NÃO INVENTES. Um campo que não confirmes por pesquisa fica FORA do objeto desse vinho (ou null) — '+
       'uma ficha com metade dos campos certos vale mais do que uma cheia com metade inventada.',
     IA_MANUAL_REGRA_CUVEE];
-  if(campos.some(k=>k.startsWith('vivino_')))r.push(iaManualRegraVivino(false));
+  if(campos.some(k=>k.startsWith('vivino_')))r.push(iaManualRegraVivino(undefined));
   if(campos.includes('castas'))r.push('Castas separadas por nome (nunca "blend"/"lote"/"várias castas").');
   if(campos.includes('imagem_url'))r.push('"imagemUrl" é o link DIRETO de uma fotografia (acaba em '+
     '.jpg/.jpeg/.png/.webp/.avif), nunca o link da página.');
@@ -6456,6 +6533,9 @@ function loteManualRegras(campos){
   return r;
 }
 function loteManualPrompt(vinhos,campos){
+  // A nota da colheita traz a de todas (no lote ficam as duas: cada vinho
+  // tem ou não o seu ano).
+  campos=iaCamposComGlobal(campos,undefined);
   const hoje=new Date().toISOString().slice(0,10);
   const nomesCampos=campos.map(k=>IA_CAMPOS_JSON[k]||k);
   const linhas=vinhos.map(v=>

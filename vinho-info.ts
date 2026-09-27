@@ -46,7 +46,7 @@ const GAPI = "https://generativelanguage.googleapis.com/v1beta";
 const MODELO_BARATO = Deno.env.get("GEMINI_CHEAP_MODEL") || "gemini-flash-lite-latest";
 const MODELO_ESCALADO = Deno.env.get("GEMINI_FALLBACK_MODEL") || Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
 const CACHE_TTL_HORAS = Math.max(1, Math.min(24 * 90, Number(Deno.env.get("VINHO_CACHE_TTL_HOURS") ?? 24 * 30) || 24 * 30));
-const CACHE_VERSAO = "v3"; // v3 (27/09/2026): o pacote completo passou a Serper + grounding
+const CACHE_VERSAO = "v4"; // v4 (27/09/2026): as duas notas do Vivino (colheita e todas) · v3: o pacote completo passou a Serper + grounding
 const SEARCH_RESULTADOS = 5;
 
 const TIMEOUT_MS = 55_000;        // modo síncrono, preso ao browser
@@ -254,7 +254,42 @@ async function catalogoJuntar(
 function extrairHost(url: string) {
   try { return new URL(url).hostname; } catch (_) { return ""; }
 }
-async function obterResultadosPesquisa(query: string, signal: AbortSignal): Promise<PesquisaWeb> {
+/* OS SITES DE CONFIANÇA (27/09/2026). Até aqui entravam como
+   ` (site:a OR site:b)` colados à consulta GERAL — o que não dava
+   prioridade nenhuma: RESTRINGIA a consulta a eles (se não tivessem o
+   vinho, a consulta geral voltava vazia), e um nome escrito sem domínio
+   ("Garrafeira Nacional") partia a consulta toda. E nada dizia, no fim, se
+   algum resultado tinha vindo deles. Agora: a consulta geral é sempre
+   livre; os domínios a sério (sem o Vivino, que tem a consulta própria)
+   têm uma consulta SÓ deles, a mais; os resultados deles vão à frente,
+   marcados, na base de evidência; e o resultado diz quantos vieram de cada
+   um (`confianca`). Um nome sem domínio fica só no texto do prompt. A
+   MESMA regra da `catalogo-info` (WineCatalog). */
+function dominioDe(s: string): string {
+  const d = s.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/[/?#].*$/, "").replace(/^www\./, "");
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d) ? d : "";
+}
+function doSite(url: string, dominio: string): boolean {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return h === dominio || h.endsWith("." + dominio);
+  } catch { return false; }
+}
+/* De que colheita são os números de um resultado do Vivino: sem `year=`
+   no endereço são os de TODAS as colheitas; com o nosso ano, os da
+   colheita; com outro ano, não servem. A regra do motor Serper do script. */
+function vivinoDeQue(url: string, ano: number | null): string {
+  try {
+    const u = new URL(url);
+    if (!/(^|\.)vivino\.com$/i.test(u.hostname)) return "";
+    const y = Number(u.searchParams.get("year"));
+    if (!y) return "página do Vivino SEM ano escolhido: a nota e as avaliações são as de TODAS as colheitas (vivinoNotaGlobal/vivinoAvaliacoesGlobal)";
+    if (ano !== null && y === ano) return `página do Vivino da colheita ${y}: a nota e as avaliações são as DESTA colheita (vivinoNota/vivinoAvaliacoes)`;
+    return `página do Vivino da colheita ${y}, que NÃO é a nossa: não uses a nota nem as avaliações daqui`;
+  } catch { return ""; }
+}
+async function obterResultadosPesquisa(query: string, signal: AbortSignal,
+  ano: number | null = null, dominios: string[] = []): Promise<PesquisaWeb> {
   if (!SEARCH_API_KEY) throw new Error("a pesquisa externa não está configurada: falta SEARCH_API_KEY");
   const { signal: ss, limpar } = comLimiteProprio(signal, 12_000);
   try {
@@ -277,7 +312,9 @@ async function obterResultadosPesquisa(query: string, signal: AbortSignal): Prom
       const title = String(x?.title || "").trim();
       const snip = String(x?.snippet || "").replace(/\s+/g, " ").trim();
       const link = String(x?.link || "").trim();
-      return `[${i + 1}] ${title}\nURL: ${link}\nResumo: ${snip}` + (x?.rating != null ? `\nEstrelas no Google: ${x.rating}${x.ratingCount != null ? ` (${x.ratingCount} avaliações)` : ""}` : "");
+      const conf = dominios.some((d) => doSite(link, d)) ? " ★ FONTE DE CONFIANÇA" : "";
+      const viv = vivinoDeQue(link, ano);
+      return `[${i + 1}]${conf} ${title}\nURL: ${link}\n` + (viv ? `(${viv})\n` : "") + `Resumo: ${snip}` + (x?.rating != null ? `\nEstrelas no Google: ${x.rating}${x.ratingCount != null ? ` (${x.ratingCount} avaliações)` : ""}` : "");
     }).join("\n\n");
     const estado = `search-api:${extrairHost(SEARCH_API_URL) || "externa"}`;
     return { texto: texto.slice(0, 6000), fontes, status: estado };
@@ -310,45 +347,77 @@ const CAMPOS: Record<string, string> = {
   classificacao: "classificacao", castas: "castas", teor: "teor",
   estagio_meses: "estagioMeses", estagio_texto: "estagioTexto",
   vivino_nota: "vivinoNota", vivino_avaliacoes: "vivinoAvaliacoes",
+  // A nota de TODAS as colheitas (26/09/2026, migração vivino-global): até
+  // 27/09/2026 a pesquisa não a conhecia, e a média que o Vivino mostra sem
+  // ano ia parar à `vivino_nota`, que é a da COLHEITA (ver `regraVivino`).
+  vivino_nota_global: "vivinoNotaGlobal", vivino_avaliacoes_global: "vivinoAvaliacoesGlobal",
   vivino_url: "vivinoUrl", imagem_url: "imagemUrl", preco_medio: "precoMedio",
   beber_de: "beberDe", beber_ate: "beberAte", notas_prova: "notasProva",
   harmonizacao: "harmonizacao", ai_resumo: "resumo",
 };
 
-/* ── A REGRA DO VIVINO, e porque tem DUAS versões ──
-   O Vivino é do VINHO, não da colheita: a página não muda de identidade
-   com o ano, e a nota que mostra por omissão é uma média entre colheitas
-   (a colheita é só um filtro dentro da própria página). Exigir "produtor,
-   ano e região a bater certo" para aceitar essa página — o que esta regra
-   fazia até aqui — tinha o modelo a encontrar a página certa e a recusá-la
-   na mesma, só porque a pesquisa pedia um ano que a identidade da página
-   nunca teve. Testado com o Villa Platanus 2022: com a exigência do ano,
-   nota/avaliações/link vinham sempre vazios; sem ela, vieram certos e
-   estáveis em três tentativas seguidas.
+/* Pedir a nota da colheita é pedir também a de todas: vêm da mesma página,
+   e é quase sempre a única que o modelo vê. Sem colheita, a da colheita não
+   existe — pede-se só a de todas. A MESMA regra da `catalogo-info`
+   (WineCatalog) e do script do Vivino. */
+const PAR_VIVINO: Record<string, string> = {
+  vivino_nota: "vivino_nota_global", vivino_avaliacoes: "vivino_avaliacoes_global",
+};
+function camposComGlobal(campos: string[] | null, ano: number | null): string[] | null {
+  if (!campos) return campos;
+  const out = new Set<string>();
+  for (const k of campos) {
+    if (k in PAR_VIVINO) {
+      out.add(PAR_VIVINO[k]);
+      if (ano !== null) out.add(k);
+    } else out.add(k);
+  }
+  return [...out];
+}
 
-   Por isso há DUAS versões, e quem escolhe é `colheitaEspecifica` (vem do
-   ecrã de escolha de campos — `iaEscolher`/`iaManualEscolher` — nunca por
-   omissão): a ESTRITA exige o ano, para quando a pergunta é mesmo sobre
-   ESTA colheita e nenhuma outra; a RELAXADA (o novo default) não exige,
-   e diz ao modelo onde ler cada número para não confundir com outro sítio
-   da página. */
-const regraVivino = (colheitaEspecifica: boolean) => colheitaEspecifica
-  ? `A nota do Vivino, o número de avaliações e o "vivinoUrl" têm de vir da
-   MESMA página do Vivino, que tenhas mesmo visto. Confirma que essa página é
-   DESTE vinho exato (mesmo produtor, ano e região) e não a de um homónimo —
-   há vários vinhos com nomes parecidos, de produtores diferentes, e uma
-   pesquisa por texto pode trazer a página errada. Se tiveres qualquer dúvida
-   de que é o mesmo vinho, deixa "vivinoUrl" e "vivinoNota" vazios em vez de
-   arriscar.`
-  : `A página do Vivino é do VINHO, não de uma colheita específica: o ANO NÃO
-   faz parte da identidade da página, e a nota que lá aparece é uma média
-   entre colheitas. Para confirmares que é a página certa, basta o nome (já
-   desambiguado na regra anterior) e o produtor baterem certo — não deixes a
-   nota, as avaliações nem o link vazios só por causa do ano. A nota é o
-   número entre 1.0 e 5.0 ao lado das estrelas; as avaliações vêm logo a
-   seguir, entre parêntesis — não uses números de outra zona da página.
-   Mesmo sem confirmares a nota, mantém o link se tiveres a certeza da
-   página.`;
+/* ── A REGRA DO VIVINO: a página é do vinho, as notas são DUAS ──
+   A página do Vivino é do VINHO, não da colheita: não muda de identidade
+   com o ano. Exigir "produtor, ano e região a bater certo" para a aceitar
+   tinha o modelo a encontrar a página certa e a recusá-la na mesma
+   (Villa Platanus 2022: com a exigência do ano, nota/avaliações/link vinham
+   sempre vazios; sem ela, vieram certos em três tentativas seguidas).
+
+   Mas as NOTAS são duas desde 26/09/2026 (`migracao-vivino-global.sql`): a
+   de todas as colheitas (a página sem ano) e a de UMA (`?year=`). Até
+   27/09/2026 esta regra dizia ao modelo que "a nota que lá aparece é uma
+   média entre colheitas" e pedia-a na `vivinoNota` — que é a da COLHEITA.
+   O visto "tem de ser esta colheita" (`colheitaEspecifica`) deixou de ser
+   sobre o Vivino (as duas notas já vêm separadas) e passou a ser sobre o
+   resto da ficha (`regraColheita`).
+
+   `ano` undefined é o LOTE, onde cada vinho traz (ou não) o seu ano na
+   lista. A MESMA regra está na `catalogo-info` (WineCatalog) e no `app.js`
+   (`iaManualRegraVivino`, para os prompts manuais) — mexer numa é mexer
+   nas outras. */
+const regraVivino = (ano: number | null | undefined) => `O Vivino tem DUAS notas, e não se misturam:
+   · "vivinoNotaGlobal"/"vivinoAvaliacoesGlobal" — a de TODAS as colheitas: a
+     que a página do vinho mostra sem ano escolhido (…/w/<nº>, sem "?year=").
+${ano === undefined
+  ? `   · "vivinoNota"/"vivinoAvaliacoes" — SÓ a da colheita indicada na lista (a
+     página com "?year=<ano>", ou a dessa colheita na lista de colheitas); um
+     vinho SEM ano na lista não as tem, fica só com a de todas. Se só vires a de
+     todas as colheitas, deixa estas duas vazias — nunca copies a de todas para aqui.`
+  : ano
+  ? `   · "vivinoNota"/"vivinoAvaliacoes" — SÓ a da colheita ${ano}: a da página com
+     "?year=${ano}", ou a dessa colheita na lista de colheitas. Se só vires a de
+     todas as colheitas, deixa estas duas vazias — nunca copies a de todas para aqui.`
+  : `   · "vivinoNota"/"vivinoAvaliacoes" ficam de fora: este vinho não tem colheita, e
+     a única nota que serve é a de todas as colheitas.`}
+   A nota é o número entre 1.0 e 5.0 ao lado das estrelas; as avaliações vêm logo
+   a seguir, entre parêntesis — não uses números de outra zona da página. Uma
+   colheita nunca tem mais avaliações do que o vinho todo.
+   "vivinoUrl" é a página do VINHO (…/<nome>/w/<nº>), a mesma para todas as
+   colheitas: o ano não faz parte da identidade dela — basta o nome (já
+   desambiguado na regra anterior) e o produtor baterem certo. Mantém o link se
+   tiveres a certeza da página, mesmo sem nota.`;
+/* "Tem de ser exatamente a colheita X" (o visto no ecrã). */
+const regraColheita = (ano: number) => `O que responderes tem de ser da colheita ${ano}: teor, estágio, preço, notas de
+   prova e janela de uma colheita diferente ficam fora do JSON.`;
 /* Villa Platanus voltou a mostrar isto nos testes: o mesmo produtor tinha
    "Reserva" e "Terroir Blend" — o modelo tem de saber que "escolher a
    cuvée errada" é um erro tão real como "não encontrar nada". */
@@ -361,7 +430,7 @@ const regraCuvee = `Se o produtor tiver mais do que um vinho com este nome
 
 const prompt = (
   nome: string, ano: number | null, produtor: string, regiao: string, tipo: string, notas: string, hoje: string,
-  campos: string[] | null, textosPesquisa: string, colheitaEspecifica: boolean,
+  campos: string[] | null, textosPesquisa: string, colheitaEspecifica: boolean, sites: string[] = [],
 ) => `
 És um enólogo a preencher a ficha de um vinho para a garrafeira de uma casa particular.
 
@@ -375,7 +444,9 @@ Concentra a pesquisa NELES. Os outros campos do JSON deixa-os fora da
 resposta — não vale a pena gastar procura com o que já está preenchido do
 lado de cá.
 ` : ""}
-
+${sites.length ? `
+FONTES DE CONFIANÇA: dá prioridade a informação vinda de ${sites.join(", ")}. Só uses outra fonte se estas não tiverem a resposta. Na base de evidência, os resultados destes sites vêm primeiro, marcados com ★ FONTE DE CONFIANÇA.
+` : ""}
 BASE DE EVIDÊNCIA (trechos de pesquisa web já recolhidos):
 ${textosPesquisa}
 
@@ -385,7 +456,7 @@ REGRAS, e são a sério:
    null). Uma ficha com metade dos campos certos vale mais do que uma cheia
    com metade inventada — quem lê isto vai decidir o que abre ao jantar.
 3. ${regraCuvee}
-4. ${regraVivino(colheitaEspecifica)}
+4. ${regraVivino(ano)}
 5. Se houver DÚVIDA entre dois vinhos com nome parecido, escolhe o que bate
    certo com o ano e a região dados, e diz a hesitação no campo "aviso".
 6. O preço é o de UMA garrafa de 0,75 L, em EUROS, em Portugal.
@@ -400,7 +471,8 @@ REGRAS, e são a sério:
    site do produtor ou de uma loja. Não é o link da página, é o da imagem. Se
    não tiveres a certeza, deixa vazio: uma imagem errada é pior do que nenhuma,
    porque quem olha para a ficha fica a pensar que é aquele o vinho.
-
+${colheitaEspecifica && ano ? `10. ${regraColheita(ano)}
+` : ""}
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
 {
   "encontrado": true,
@@ -416,8 +488,10 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
   "teor": 14.5,
   "estagioMeses": 18,
   "estagioTexto": "18 meses em barrica de carvalho francês",
-  "vivinoNota": 4.1,
-  "vivinoAvaliacoes": 1234,
+${ano ? `  "vivinoNota": 4.2,
+  "vivinoAvaliacoes": 312,
+` : ""}  "vivinoNotaGlobal": 4.1,
+  "vivinoAvaliacoesGlobal": 5234,
   "vivinoUrl": "",
   "imagemUrl": "",
   "precoMedio": 18.5,
@@ -453,12 +527,13 @@ FONTES DE CONFIANÇA: dá prioridade a informação vinda de ${sites.join(", ")}
 REGRAS:
 1. NÃO INVENTES. Campo sem confirmação fica fora do JSON (ou null).
 2. ${regraCuvee}
-3. ${regraVivino(colheitaEspecifica)}
+3. ${regraVivino(ano)}
 4. "imagemUrl" tem de ser link DIRETO de imagem (.jpg/.jpeg/.png/.webp/.avif), não link de página.
 5. Se houver dúvida de homónimo, prioriza ano + produtor + região e explica no "aviso".
 6. Castas separadas por nome (nunca "blend"/"lote"/"várias castas").
 7. ${ano ? `"beberDe"/"beberAte" são anos (a janela DESTA colheita).` : `Este vinho não tem ano: sem colheita NÃO há janela de consumo — deixa "beberDe"/"beberAte" de fora.`}
-
+${colheitaEspecifica && ano ? `8. ${regraColheita(ano)}
+` : ""}
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
 {
   "encontrado": true,
@@ -474,8 +549,10 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
   "teor": 14.5,
   "estagioMeses": 18,
   "estagioTexto": "18 meses em barrica de carvalho francês",
-  "vivinoNota": 4.1,
-  "vivinoAvaliacoes": 1234,
+${ano ? `  "vivinoNota": 4.2,
+  "vivinoAvaliacoes": 312,
+` : ""}  "vivinoNotaGlobal": 4.1,
+  "vivinoAvaliacoesGlobal": 5234,
   "vivinoUrl": "",
   "imagemUrl": "",
   "precoMedio": 18.5,
@@ -518,7 +595,8 @@ const CAMPO_EXEMPLO: Record<string, string> = {
   classificacao: `"vazio, ou um de: ${CLASSIF.filter(Boolean).join(" | ")}"`,
   castas: '["Touriga Nacional", "Touriga Franca"]',
   teor: "14.5", estagio_meses: "18", estagio_texto: '"18 meses em barrica de carvalho francês"',
-  vivino_nota: "4.1", vivino_avaliacoes: "1234", vivino_url: '""', imagem_url: '""',
+  vivino_nota: "4.2", vivino_avaliacoes: "312",
+  vivino_nota_global: "4.1", vivino_avaliacoes_global: "5234", vivino_url: '""', imagem_url: '""',
   preco_medio: "18.5", beber_de: "2026", beber_ate: "2034",
   notas_prova: '"duas ou três frases sobre aroma, boca e final"',
   harmonizacao: '"com que pratos"', ai_resumo: '"duas ou três frases sobre o vinho e o produtor"',
@@ -539,7 +617,7 @@ ${vinhos.map((v) =>
 REGRAS, e são a sério:
 1. NÃO INVENTES. Um campo que não confirmes por pesquisa fica FORA do objeto desse vinho (ou null).
 2. ${regraCuvee}
-3. ${regraVivino(false)}
+3. ${regraVivino(undefined)}
 4. "imagemUrl" tem de ser link DIRETO de imagem (.jpg/.jpeg/.png/.webp/.avif), nunca o link da página.
 5. Se houver dúvida de homónimo, prioriza produtor + ano + região e explica no "aviso".
 6. Castas separadas por nome (nunca "blend"/"lote"/"várias castas").
@@ -580,7 +658,7 @@ REGRAS, e são a sério:
 1. RESPONDE APENAS COM BASE NA BASE DE EVIDÊNCIA de cada vinho. Não procures na net.
 2. NÃO INVENTES. Um campo que não consigas confirmar fica FORA do objeto desse vinho (ou null).
 3. ${regraCuvee}
-4. ${regraVivino(false)}
+4. ${regraVivino(undefined)}
 5. Castas separadas por nome (nunca "blend"/"lote"/"várias castas").
 6. "beberDe"/"beberAte" são anos, a janela da colheita indicada. Um vinho SEM ano não tem janela de consumo: deixa "beberDe"/"beberAte" de fora do objeto dele.
 7. O "id" de cada resultado tem de ser EXATAMENTE o "id" indicado acima — é assim que se sabe a que vinho corresponde cada objeto, nunca pela posição na lista.
@@ -718,6 +796,8 @@ function normalizar(raw: any, anoPedido: number | null, campos: string[] | null 
     estagio_texto: texto(raw.estagioTexto, 160),
     vivino_nota: numero(raw.vivinoNota, 1, 5, 2),
     vivino_avaliacoes: (() => { const n = numero(raw.vivinoAvaliacoes, 0, 10_000_000, 0); return n === null ? null : Math.round(n); })(),
+    vivino_nota_global: numero(raw.vivinoNotaGlobal, 1, 5, 2),
+    vivino_avaliacoes_global: (() => { const n = numero(raw.vivinoAvaliacoesGlobal, 0, 10_000_000, 0); return n === null ? null : Math.round(n); })(),
     // Só `/<nome>/w/<nº>` (ver `vivinoLink`). Não chega para apanhar um
     // link de um vinho HOMÓNIMO — isso é a regra 2, no prompt — mas apanha
     // os inventados.
@@ -746,6 +826,7 @@ function normalizar(raw: any, anoPedido: number | null, campos: string[] | null 
     const v = out[k];
     if (v === null || v === "" || (Array.isArray(v) && !v.length)) delete out[k];
   });
+  vivinoDuas(out, (out.ano as number | undefined) ?? null);
   /* Pediram só alguns campos: o resto sai daqui, mesmo que o modelo o tenha
      mandado à mesma. Sem isto, o ecrã de confirmação da app voltava a
      encher-se de campos que ninguém pediu — e um deles, aceite por
@@ -755,6 +836,36 @@ function normalizar(raw: any, anoPedido: number | null, campos: string[] | null 
     Object.keys(out).forEach((k) => { if (k !== "aviso" && !campos.includes(k)) delete out[k]; });
   }
   return Object.keys(out).length ? out : null;
+}
+
+/* AS DUAS NOTAS DO VIVINO, arrumadas depois de lidas (27/09/2026) — a
+   mesma função da `catalogo-info` (WineCatalog):
+   · sem colheita, a nota "da colheita" é a de todas — passa para lá (se lá
+     não houver outra) e sai;
+   · a mesma nota com as mesmas avaliações nas duas é o modelo a copiar a
+     média de todas as colheitas para a da colheita — fica só a de todas;
+   · uma colheita com MAIS avaliações do que o vinho todo não existe: a de
+     todas fica de fora (a regra do `lerGlobal` do script do Vivino). */
+function vivinoDuas(out: Record<string, unknown>, ano: number | null): void {
+  const tem = (k: string) => out[k] !== undefined;
+  if (ano === null) {
+    if (tem("vivino_nota") && !tem("vivino_nota_global")) {
+      out.vivino_nota_global = out.vivino_nota;
+      if (tem("vivino_avaliacoes") && !tem("vivino_avaliacoes_global")) out.vivino_avaliacoes_global = out.vivino_avaliacoes;
+    }
+    delete out.vivino_nota; delete out.vivino_avaliacoes;
+    return;
+  }
+  if (tem("vivino_nota") && tem("vivino_nota_global") &&
+      out.vivino_nota === out.vivino_nota_global &&
+      (out.vivino_avaliacoes ?? null) === (out.vivino_avaliacoes_global ?? null)) {
+    delete out.vivino_nota; delete out.vivino_avaliacoes;
+    return;
+  }
+  if (tem("vivino_avaliacoes") && tem("vivino_avaliacoes_global") &&
+      Number(out.vivino_avaliacoes) > Number(out.vivino_avaliacoes_global)) {
+    delete out.vivino_nota_global; delete out.vivino_avaliacoes_global;
+  }
 }
 
 /* O que é que o catálogo consegue responder, dos campos que se pediram.
@@ -1052,6 +1163,8 @@ async function produzirFicha(
 ): Promise<Res> {
   if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
   const inicio = Date.now();
+  // A nota da colheita traz a de todas; sem colheita, só a de todas.
+  campos = camposComGlobal(campos, ano);
   const chave = chaveCache(modoIA, nome, ano, produtor, regiao, tipo, notas, sites, campos, colheitaEspecifica);
   // A profunda existe para refazer o que veio de memória: nem a cache nem o
   // catálogo (onde essa resposta de memória foi parar) respondem por ela.
@@ -1078,7 +1191,7 @@ async function produzirFicha(
   // responderia com a de uma colheita qualquer) nem à IA.
   // Nem o ano, que sem ano no pedido não se procura (ver `normalizar`).
   const pedidos = (campos && campos.length ? campos : Object.keys(CAMPOS))
-    .filter((k) => ano !== null || (k !== "beber_de" && k !== "beber_ate" && k !== "ano"));
+    .filter((k) => ano !== null || (k !== "beber_de" && k !== "beber_ate" && k !== "ano" && !(k in PAR_VIVINO)));
   const conhecido = profunda ? null : await catalogoProcurar(nome, produtor, ano, signal, tipo);
   const doCatalogo = conhecido ? catalogoResponde(conhecido, pedidos) : {};
   const emFalta = pedidos.filter((k) => !(k in doCatalogo));
@@ -1116,13 +1229,14 @@ async function produzirFicha(
   const campos_ia = Object.keys(doCatalogo).length ? emFalta
     : (campos && ano === null ? campos.filter((k) => k !== "beber_de" && k !== "beber_ate") : campos);
 
-  // Os `sites` de confiança viram operadores `site:` na pesquisa externa —
-  // é a única das duas formas de os aplicar que restringe a sério (o
-  // `google_search` do grounding não tem esse parâmetro na API pública, daí
-  // só entrar como pedido no texto do `promptComGrounding`).
-  const siteQuery = sites.length ? ` (${sites.map((s) => `site:${s}`).join(" OR ")})` : "";
+  // Os `sites` de confiança: os que são domínios ganham uma consulta só
+  // deles no Serper (ver `dominioDe`); no grounding só podem ir como pedido
+  // no texto (o `google_search` não tem esse parâmetro na API pública).
+  const dominios = [...new Set(sites.map(dominioDe).filter(Boolean))];
   const query = [nome, ano || "", produtor, regiao, notas, "vivino garrafeira nacional vinho portugal"]
-    .filter(Boolean).join(" ") + siteQuery;
+    .filter(Boolean).join(" ");
+  let confianca: Record<string, number> | null = null;
+  let consultasFeitas: string[] = [];
   /* OS DOIS PACOTES (27/09/2026, o dono das apps):
      · COMPLETO (`premium`): primeiro a pesquisa NOSSA (Serper, geral + uma
        consulta ao Vivino, e o Gemini só a ler os resultados) e depois, SÓ
@@ -1140,13 +1254,22 @@ async function produzirFicha(
   if (usarSerper) {
     try {
       const qVivino = `"${nome.replace(/"/g, "")}" ${produtor} site:vivino.com`.replace(/\s+/g, " ");
-      const rs = await Promise.allSettled([obterResultadosPesquisa(query, signal), obterResultadosPesquisa(qVivino, signal)]);
-      serperConsultas = 2;
+      // O Vivino já tem a sua consulta; os outros sites de confiança têm
+      // uma só deles — e vai À FRENTE, para caber no corte do texto.
+      const outros = dominios.filter((d) => !doSite(`https://${d}/`, "vivino.com"));
+      const qSites = outros.length
+        ? `${[nome, ano || "", produtor].filter(Boolean).join(" ")} (${outros.map((d) => `site:${d}`).join(" OR ")})` : "";
+      const consultas = [...(qSites ? [qSites] : []), query, qVivino];
+      const rs = await Promise.allSettled(consultas.map((q) => obterResultadosPesquisa(q, signal, ano, dominios)));
+      serperConsultas = consultas.length;
+      consultasFeitas = consultas;
       const boas = rs.filter((r) => r.status === "fulfilled").map((r) => (r as PromiseFulfilledResult<PesquisaWeb>).value)
         .filter((b) => b.texto);
       if (!boas.length) throw (rs.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined)?.reason ?? new Error("sem resultados");
       const fontes = boas.flatMap((b) => b.fontes).filter((f, i, a) => a.findIndex((x) => x.url === f.url) === i);
-      pesquisa = { texto: boas.map((b) => b.texto).join("\n\n").slice(0, 9000), fontes, status: boas[0].status };
+      // Quantos resultados vieram de cada site de confiança (sem repetir URL).
+      confianca = Object.fromEntries(dominios.map((d) => [d, fontes.filter((f) => doSite(f.url, d)).length]));
+      pesquisa = { texto: boas.map((b) => b.texto).join("\n\n").slice(0, 10000), fontes, status: boas[0].status };
     } catch (e) {
       // Sem os resultados do Serper não se desiste: segue-se só com o
       // grounding, que é o que o pacote intermédio faz sempre.
@@ -1163,7 +1286,7 @@ async function produzirFicha(
   // senão, grounding.
   const fase = async (comSerper: boolean, camposFase: string[] | null) => {
     const texto = comSerper
-      ? prompt(nome, ano, produtor, regiao, tipo, notas, hoje, camposFase, pesquisa.texto, colheitaEspecifica)
+      ? prompt(nome, ano, produtor, regiao, tipo, notas, hoje, camposFase, pesquisa.texto, colheitaEspecifica, sites)
       : promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, hoje, camposFase, colheitaEspecifica);
     let fontesG: Fonte[] = [];
     const run = async (modelo: string, modo: string, maxTokens: number, semThinking: boolean) => {
@@ -1295,7 +1418,10 @@ async function produzirFicha(
     // O vinho novo com um nome que o catálogo não conhece: vai quando for gravado.
     ...(catalogoAdiado ? { catalogo: "adiado" } : {}),
     ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}), ...(profunda ? { profunda: true } : {}),
-    ...(serperConsultas ? { serper_consultas: serperConsultas } : {}),
+    ...(serperConsultas ? { serper_consultas: serperConsultas, consultas: consultasFeitas } : {}),
+    // O que se fez com os sites de confiança: sem isto não havia maneira de
+    // saber se tinham servido para alguma coisa.
+    ...(sites.length ? { sites, ...(confianca ? { confianca } : {}) } : {}),
     ms: dur, tentativas, custo_estimado_eur: custoEstimado,
     ...(usageTotal ? { usageMetadata: usageTotal } : {}),
   }, quem);
@@ -1314,6 +1440,7 @@ async function produzirFicha(
       plano: modoIA,
       ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}),
       ...(profunda ? { profunda: true } : {}),
+      ...(sites.length ? { sites, confianca } : {}),
       modelo: usadoModelo,
       modo: usadoModo,
       custoEstimadoEur: custoEstimado,
@@ -1341,7 +1468,8 @@ async function produzirFichaLote(
   const itens: Item[] = [];
   for (const v of vinhos) {
     // Sem colheita, a janela de consumo não se pede (ver `produzirFicha`).
-    const pedidosV = campos.filter((k) => v.ano !== null || (k !== "beber_de" && k !== "beber_ate"));
+    const pedidosV = (camposComGlobal(campos, v.ano) ?? campos)
+      .filter((k) => v.ano !== null || (k !== "beber_de" && k !== "beber_ate" && !(k in PAR_VIVINO)));
     const conhecido = await catalogoProcurar(v.nome, v.produtor, v.ano, signal, v.tipo);
     const doCatalogo = conhecido ? catalogoResponde(conhecido, pedidosV) : {};
     const emFalta = pedidosV.filter((k) => !(k in doCatalogo));
@@ -1380,7 +1508,7 @@ async function produzirFichaLote(
       const query = [it.v.nome, it.v.ano || "", it.v.produtor, it.v.regiao, "vivino garrafeira nacional vinho portugal"]
         .filter(Boolean).join(" ");
       try {
-        pesquisasPorVinho.set(it.v.id, await obterResultadosPesquisa(query, signal));
+        pesquisasPorVinho.set(it.v.id, await obterResultadosPesquisa(query, signal, it.v.ano));
       } catch (_) {
         // Um vinho sem resultados não deita o lote todo abaixo — fica sem
         // evidência, e o prompt já sabe responder "não encontrei" para ele.

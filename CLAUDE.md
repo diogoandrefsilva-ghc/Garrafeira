@@ -1399,6 +1399,33 @@ script do Vivino da WineCatalog, no catálogo; chega cá pela
 `ficha_catalogo`/`escrever_do_catalogo` como os outros campos. Os valores que
 já existiam não se mexeram (decisão do dono).
 
+**A pesquisa com IA também pede as duas, desde 27/09/2026** (`vinho-info`:
+`vivinoNotaGlobal`/`vivinoAvaliacoesGlobal`; e os prompts manuais, de um
+vinho e do lote). Até aí não conhecia a global, e a regra do Vivino dizia ao
+modelo que "a nota que lá aparece é uma média entre colheitas" — e pedia-a
+na `vivinoNota`, que é a da COLHEITA. Agora: pedir a da colheita traz também
+a de todas (`camposComGlobal`/`iaCamposComGlobal`); sem colheita só se pede a
+de todas; depois de lidas (`vivinoDuas`/`iaVivinoDuas`), as duas iguais ficam
+só como a de todas e uma colheita com mais avaliações do que o vinho todo
+deita a de todas fora; no Serper cada resultado do Vivino diz de que
+colheita são os números. O visto "Tem de ser exatamente a colheita" deixou de
+ser sobre o Vivino e passou a ser sobre o resto da ficha (`regraColheita`).
+A regra (`regraVivino` na função, `iaManualRegraVivino` no `app.js`) é a
+MESMA da `catalogo-info` da WineCatalog — mexer numa é mexer nas outras.
+A cache da `vinho-info` subiu para `v4` por causa disto.
+
+**Os sites de referência** (a caixa da "Procurar informação", 27/09/2026)
+iam como ` (site:a OR site:b)` colados à consulta GERAL do Serper — o que não
+dava prioridade, RESTRINGIA (sem o vinho nesses sites, a consulta voltava
+vazia), e um nome sem domínio partia a consulta toda. Agora a consulta geral
+é livre; os domínios (sem o Vivino, que tem a sua) têm uma consulta SÓ deles,
+à frente das outras (uma consulta Serper a mais quando há sites); os
+resultados deles vêm marcados "★ FONTE DE CONFIANÇA" no que o Gemini lê (o
+prompt do Serper não os levava de todo); e o resultado (`sites`,
+`confianca`, e `consultas` no log) diz quantos vieram de cada um — é o que o
+ecrã mostra (`pqSitesHTML`). Só o pacote completo tem Serper: no intermédio,
+no grounding e na resposta colada vão só no texto do pedido, e o ecrã di-lo.
+
 A nota que CONTA — no crachá do cartão e da grelha, na página do vinho, na
 ordenação dentro dos grupos, no filtro por Vivino, no "A completar" e na PDF
 da wishlist — é **uma só**, e sai sempre de `notaVivino(v)`/`notaVivinoNum(v)`;
