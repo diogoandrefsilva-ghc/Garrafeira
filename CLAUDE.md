@@ -53,6 +53,13 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   e a devolver NULL numa coluna NOT NULL (um vinho sem região não gravava).
   `migracao-vivino-global.sql` é a 22: a nota do Vivino de todas as
   colheitas, ao lado da da colheita (ver "A nota do Vivino: duas").
+  `migracao-produtores.sql` é a 23: o trigger dos nomes passa a trocar a
+  grafia do produtor pela OFICIAL (`winecatalog.produtor_oficial`) — ver o
+  `CLAUDE.md` da WineCatalog, "Os produtores oficiais e o nome
+  normalizado". O que já estava escrito corrige-se do lado de lá, quando o
+  admin confirma um produtor (vale para todas as garrafeiras, com uma
+  linha no `sync_log` por vinho, origem `winecatalog-batch`); o mesmo para
+  o nome normalizado (acao `nome_normalizado`).
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
