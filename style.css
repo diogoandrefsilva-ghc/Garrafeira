@@ -1801,3 +1801,56 @@ body.sem-desejo .desejo-only{display:none!important}
    Tracejada de propósito: é o sítio de uma garrafa que ainda não chegou. */
 .desejo-faixa{background:var(--bg);border:1px dashed var(--bo2);border-radius:11px;padding:10px 12px;margin-top:8px}
 .desejo-faixa .macoes{margin-top:10px}
+
+/* ── ECRÃ LARGO (PC) ────────────────────────────────────────────────
+   A partir dos 1100px de LARGURA DA JANELA — não do aparelho: estreitar a
+   janela no PC devolve o desenho do telemóvel na hora. O número é o mesmo
+   do `GF_LARGO` no app.js, e têm de andar juntos.
+   Três coisas, e o telemóvel não sente nenhuma:
+     · a coluna da app alarga (1040px → 1440px);
+     · em Detalhe e Locais os filtros viram uma COLUNA FIXA à esquerda,
+       sempre aberta, com os campos em lista e os valores do campo tocado
+       logo por baixo dele (o `.fdom-lado` que o `renderFiltros` põe lá);
+     · a página do vinho abre num PAINEL à direita (`body.ficha-lado`) em
+       vez de tapar a lista: a app encolhe para a esquerda e continua viva,
+       e tocar noutro vinho troca o painel. */
+@media (min-width:1100px){
+  :root{--pane:clamp(440px,36vw,600px);--lado:272px}
+  .hdr,.wrap{max-width:1440px}
+  .wrap{padding-left:24px;padding-right:24px}
+
+  #s-detalhe.on,#s-locais.on{display:grid;grid-template-columns:var(--lado) minmax(0,1fr);
+    column-gap:22px;align-items:start}
+  #s-detalhe>*,#s-locais>*{grid-column:2}
+  #s-detalhe>#filtros,#s-locais>#filtros{grid-column:1;grid-row:1/span 20;margin:0;
+    position:sticky;top:calc(var(--topo,110px) + 10px);
+    max-height:calc(100vh - var(--topo,110px) - 22px);overflow-y:auto;overscroll-behavior:contain;
+    scrollbar-width:thin}
+  /* Sempre aberto: o botão não tem nada para fazer aqui. */
+  .filtros .ftoggle{display:none}
+  .filtros .fdom:not(.fdom-lado){display:none!important}
+  /* Os campos em LISTA, um por linha; o campo aberto leva os valores
+     logo por baixo, com o filete a dizer de quem são. */
+  .filtros.aberto .fcampos{display:flex;flex-direction:column;align-items:stretch;overflow:visible;gap:4px;animation:none}
+  .fcampo{justify-content:flex-start;border-radius:10px;padding:8px 11px;background:transparent;border-color:transparent}
+  .fcampo:hover{background:var(--bg2);border-color:transparent}
+  .fcampo .fcn{margin-left:auto}
+  .fcampo.ativo{background:var(--vhp);border-color:transparent}
+  .fcampo.aberto{background:var(--vh);color:#fff}
+  .fdom-lado{display:block;margin:2px 0 8px;padding:8px 0 4px 10px;border-left:2px solid var(--vhp)}
+  .fdom-lado .fops{grid-template-columns:minmax(0,1fr)}
+  .fdom-lado .fop{padding:7px 10px}
+  .fbar.on{margin-top:10px}
+
+  /* ── A página do vinho num painel à direita ── */
+  body.ficha-lado{padding-right:var(--pane)}
+  body.ficha-lado .fab-wrap{right:calc(var(--pane) + 18px)}
+  .modal.pagina{left:auto;right:0;width:var(--pane);overflow-y:auto;
+    border-left:1px solid var(--bo);box-shadow:-18px 0 40px -28px rgba(30,8,16,.45);z-index:150}
+  .modal.pagina .mbox{max-width:none;box-shadow:none}
+  .modal.pagina .mhero{left:auto;right:var(--sbw,0px);transform:none;
+    width:calc(var(--pane) - var(--sbw,0px));max-width:none}
+  /* O cartão que está aberto no painel. */
+  body.ficha-lado .vcard.aberto,body.ficha-lado .vgcard.aberto{
+    border-color:var(--vh);box-shadow:0 0 0 2px var(--vh),var(--sh)}
+}

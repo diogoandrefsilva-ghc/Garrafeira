@@ -1085,11 +1085,12 @@ function toast(msg,erro){
   t.textContent=msg;t.classList.toggle('err',!!erro);t.classList.add('on');
   clearTimeout(_toastT);_toastT=setTimeout(()=>t.classList.remove('on'),erro?4200:2600);
 }
-function abrirModal(id){document.getElementById(id).classList.add('on');fabFechar();}
+function abrirModal(id){document.getElementById(id).classList.add('on');fabFechar();if(id==='modal-vinho')largoFicha();}
 function fecharModal(id){
   const el=document.getElementById(id);
   if(!el)return;
   el.classList.remove('on');
+  if(id==='modal-vinho')largoFicha();
   // A página do vinho tem um passo próprio na história do browser (é o que
   // faz o "voltar" do telemóvel fechá-la em vez de sair da app). Sair por
   // aqui tem de o gastar, senão ficava um voltar que não fazia nada.
@@ -1654,6 +1655,9 @@ function filtroLigado(k){const v=F[k];return Array.isArray(v)?v.length>0:!!v;}
    de um campo só em vez dos onze. O que custa é um toque a mais para trocar
    de campo — e é um toque que se dá poucas vezes, porque quem filtra por
    região raramente filtra por teor a seguir. */
+// O ecrã largo (PC, tablet deitado): a mesma app, outro arranjo — ver
+// "ECRÃ LARGO" no fim do ficheiro. O número TEM de ser o do `style.css`.
+const GF_LARGO=window.matchMedia?matchMedia('(min-width:1100px)'):{matches:false,addEventListener(){}};
 let FILTROS_ABERTO=false;
 let FILTRO_CAMPO=null;   // que campo tem os valores abertos, ou nenhum
 try{FILTROS_ABERTO=localStorage.getItem('gf_filtros_aberto')==='1';}catch(e){}
@@ -1834,28 +1838,11 @@ function castasRegrasHTML(){
   </div>`;
 }
 
-function renderFiltros(){
-  document.getElementById('filtros').classList.toggle('aberto',FILTROS_ABERTO);
-
-  /* A FITA. Cada campo diz-se pelo nome, e leva o número dos valores que
-     tem ligados — é o que permite ver, sem abrir nenhum, onde é que está o
-     filtro que está a cortar a lista. */
-  document.getElementById('f-campos').innerHTML=F_CAMPOS.map(([k,ico,nome])=>{
-    const n=ligados(k).length;
-    return `<button class="fcampo${n?' ativo':''}${FILTRO_CAMPO===k?' aberto':''}"
-      onclick="abrirCampo('${escJs(k)}')">${ico} ${esc(nome)}${
-      n?`<i class="fcn">${n}</i>`:''}</button>`;
-  }).join('');
-
-  /* OS VALORES do campo aberto. Grelha de duas colunas e não um
-     `flex-wrap`, pela mesma pedra da WineCatalog: com três por linha
-     "Península de Setúbal" e "Cabernet Sauvignon" chegam ao ecrã cortadas
-     a meio, e um filtro que não se lê não se escolhe; com `flex-grow`, o
-     último cartão de uma linha ímpar estica-se sozinho de ponta a ponta. */
-  const dom=document.getElementById('f-dominio');
-  if(FILTROS_ABERTO&&FILTRO_CAMPO){
-    const k=FILTRO_CAMPO,ops=opcoesCampo(k);
-    dom.innerHTML=(k==='casta'?castasRegrasHTML():'')+(ops.length
+// Os valores de UM campo — no painel do telemóvel por baixo da fita, no
+// ecrã largo logo por baixo do próprio campo.
+function dominioHTML(k){
+  const ops=opcoesCampo(k);
+  return (k==='casta'?castasRegrasHTML():'')+(ops.length
       ? `<div class="fops">${ops.map(([v,r,n])=>{
           const on=ligados(k).includes(v);
           const cor=k==='tipo'?(VIDRO[v]||null):null;
@@ -1865,7 +1852,34 @@ function renderFiltros(){
           </button>`;
         }).join('')}</div>`
       : `<p class="fvazio">Nada a escolher aqui com os filtros que estão ligados.</p>`);
-  }else dom.innerHTML='';
+}
+function renderFiltros(){
+  // No ecrã largo os filtros são uma coluna fixa, sempre aberta, e os
+  // valores do campo abrem LOGO POR BAIXO dele (um acordeão) — ver "ECRÃ
+  // LARGO" no fim do app.js. `FILTROS_ABERTO` (a preferência do telemóvel)
+  // não se toca: estreitar a janela devolve o painel como estava.
+  const lateral=GF_LARGO.matches;
+  const aberto=FILTROS_ABERTO||lateral;
+  document.getElementById('filtros').classList.toggle('aberto',aberto);
+
+  /* A FITA. Cada campo diz-se pelo nome, e leva o número dos valores que
+     tem ligados — é o que permite ver, sem abrir nenhum, onde é que está o
+     filtro que está a cortar a lista. */
+  document.getElementById('f-campos').innerHTML=F_CAMPOS.map(([k,ico,nome])=>{
+    const n=ligados(k).length;
+    return `<button class="fcampo${n?' ativo':''}${FILTRO_CAMPO===k?' aberto':''}"
+      onclick="abrirCampo('${escJs(k)}')">${ico} ${esc(nome)}${
+      n?`<i class="fcn">${n}</i>`:''}</button>${
+      lateral&&FILTRO_CAMPO===k?`<div class="fdom fdom-lado">${dominioHTML(k)}</div>`:''}`;
+  }).join('');
+
+  /* OS VALORES do campo aberto. Grelha de duas colunas e não um
+     `flex-wrap`, pela mesma pedra da WineCatalog: com três por linha
+     "Península de Setúbal" e "Cabernet Sauvignon" chegam ao ecrã cortadas
+     a meio, e um filtro que não se lê não se escolhe; com `flex-grow`, o
+     último cartão de uma linha ímpar estica-se sozinho de ponta a ponta. */
+  const dom=document.getElementById('f-dominio');
+  dom.innerHTML=(FILTROS_ABERTO&&FILTRO_CAMPO&&!lateral)?dominioHTML(FILTRO_CAMPO):'';
 
   /* AS PASTILHAS DIZEM O QUE NÃO SE VÊ DAQUI. É a regra toda: o campo que
      está aberto já se lê nos cartões acesos, e repeti-lo por baixo era
@@ -1876,11 +1890,11 @@ function renderFiltros(){
   const pastilhas=[];
   // O monocasta não é valor de campo nenhum, mas corta a lista como um: com
   // as castas fechadas, esta pastilha é a única coisa a dizê-lo.
-  if(CASTAS_MONO&&!(FILTROS_ABERTO&&FILTRO_CAMPO==='casta'))
+  if(CASTAS_MONO&&!(aberto&&FILTRO_CAMPO==='casta'))
     pastilhas.push(`<span class="fpill">🍇 Só monocasta
       <button onclick="castasMono()" title="Tirar este filtro">✕</button></span>`);
   F_CAMPOS.forEach(([k,ico])=>{
-    if(FILTROS_ABERTO&&FILTRO_CAMPO===k)return;
+    if(aberto&&FILTRO_CAMPO===k)return;
     ligados(k).forEach((v,i)=>{
       if(i&&k==='casta'&&CASTAS_TODAS)pastilhas.push('<span class="fjunta">+</span>');
       pastilhas.push(`<span class="fpill">${ico} ${esc(rotuloFiltro(k,v))}
@@ -2247,7 +2261,7 @@ function vinhoCardHTML(v,termos,loteSel){
   // "s/a" lia-se como um dado em branco. Cala-se, e a nota do Vivino sobe
   // para o lugar dele. Um desejo COM ano (uma colheita em concreto) mostra-o.
   const semAno=!v.ano&&desejado(v);
-  return `<article class="vcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}" onclick="${clique}">
+  return `<article class="vcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${VINHO_ABERTO===v.id&&!loteSel?' aberto':''}" data-vid="${v.id}" onclick="${clique}">
     <div class="vc-top">
       ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
       <div class="vc-main">
@@ -2299,7 +2313,7 @@ function vinhoGrelhaHTML(v,termos,loteSel){
   const on=loteSel&&loteSelTem(v.id);
   const cheio=loteSel&&!on&&loteSelCheio();
   const clique=loteSel?`loteSelToggle(${v.id})`:`verVinho(${v.id})`;
-  return `<article class="vgcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}" onclick="${clique}">
+  return `<article class="vgcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${VINHO_ABERTO===v.id&&!loteSel?' aberto':''}" data-vid="${v.id}" onclick="${clique}">
     ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
     <div class="vg-nome">${esc(v.nome)}</div>
     <div class="vg-sub">${vinhoMetaHTML(v,desejado(v)&&!v.ano?'':(v.ano||'s/a'))}</div>
@@ -3079,6 +3093,7 @@ function verVinho(id){
   VINHO_ABERTO=id;
   document.getElementById('modal-vinho-in').innerHTML=vinhoDetalheHTML(v);
   abrirModal('modal-vinho');
+  largoMarcarCartao();
   const p=pgVinho();
   p.scrollTop=0;              // é uma página nova, começa em cima
   pgMedirEncolhe();           // e com o cabeçalho por inteiro
@@ -8177,7 +8192,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='116';
+const APP_BUILD='117';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
@@ -8240,7 +8255,11 @@ async function sbInit(){
 // tamanho — por isso mede-se.
 function ajustarSticky(){
   const h=document.querySelector('body>header');
-  if(h)document.querySelector('.itabs').style.top=h.offsetHeight+'px';
+  const it=document.querySelector('.itabs');
+  if(h)it.style.top=h.offsetHeight+'px';
+  // Até onde chega o que está colado ao topo — é daí para baixo que a
+  // coluna dos filtros do ecrã largo se cola (style.css, "ECRÃ LARGO").
+  if(h)document.documentElement.style.setProperty('--topo',(h.offsetHeight+it.offsetHeight)+'px');
 }
 window.addEventListener('resize',ajustarSticky);
 window.addEventListener('resize',()=>{if(MAPA_POP_LOCAL&&MAPA_POP_ANCHOR)mapaPopupPos(MAPA_POP_ANCHOR);});
@@ -8265,6 +8284,60 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape')document.querySelectorAll('.modal.on').forEach(m=>fecharModal(m.id));
 });
 
+/* ── ECRÃ LARGO (PC) ────────────────────────────────────────────────
+   Não é outra app: é esta, arrumada de outra maneira a partir dos 1100px
+   de LARGURA DA JANELA (não do aparelho — estreitar a janela no PC volta
+   ao desenho do telemóvel na hora). O que muda está quase todo no
+   `style.css` ("ECRÃ LARGO"); aqui ficam as três coisas que o CSS não sabe:
+     · os filtros viram uma coluna fixa à esquerda, sempre aberta
+       (`renderFiltros`, `lateral`);
+     · a página do vinho abre num PAINEL à direita em vez de tapar a lista
+       — `body.ficha-lado` empurra a app para a esquerda, e o cartão do
+       vinho aberto fica marcado (`.aberto`);
+     · ↑/↓ (ou j/k) passam ao vinho anterior/seguinte da lista à vista.
+   A página continua a ser o MESMO `#modal-vinho`, com a mesma história do
+   browser, o mesmo Escape e o mesmo ✕ — só a moldura muda. */
+function largoFicha(){
+  const on=GF_LARGO.matches&&document.getElementById('modal-vinho').classList.contains('on');
+  document.body.classList.toggle('ficha-lado',on);
+  if(!on){largoMarcarCartao();return;}
+  // O cabeçalho da página é `fixed` e mede-se ao painel, não à janela: a
+  // barra de scroll do painel fica-lhe à direita e não pode ser tapada.
+  const p=pgVinho();
+  p.style.setProperty('--sbw',(p.offsetWidth-p.clientWidth)+'px');
+}
+function largoMarcarCartao(){
+  const id=document.body.classList.contains('ficha-lado')?VINHO_ABERTO:null;
+  document.querySelectorAll('.vcard.aberto,.vgcard.aberto').forEach(c=>c.classList.remove('aberto'));
+  if(id==null)return;
+  document.querySelectorAll(`.sec.on [data-vid="${id}"]`).forEach(c=>c.classList.add('aberto'));
+}
+function largoVizinho(passo){
+  const cs=[...document.querySelectorAll('.sec.on article[data-vid]')];
+  if(!cs.length)return;
+  let i=cs.findIndex(c=>+c.dataset.vid===VINHO_ABERTO);
+  i=i<0?0:Math.min(cs.length-1,Math.max(0,i+passo));
+  const c=cs[i];
+  verVinho(+c.dataset.vid);
+  c.scrollIntoView({block:'nearest'});
+}
+GF_LARGO.addEventListener('change',()=>{
+  renderFiltros();
+  largoFicha();
+  if(document.getElementById('modal-vinho').classList.contains('on'))pgMedirEncolhe();
+});
+document.addEventListener('keydown',e=>{
+  if(!document.body.classList.contains('ficha-lado'))return;
+  if(e.altKey||e.ctrlKey||e.metaKey)return;
+  if(e.target.closest&&e.target.closest('input,textarea,select,[contenteditable]'))return;
+  // Só com a página do vinho por cima de tudo: com o Editar aberto, as
+  // setas são do formulário.
+  const abertos=[...document.querySelectorAll('.modal.on')];
+  if(abertos.length!==1||abertos[0].id!=='modal-vinho')return;
+  if(e.key==='ArrowDown'||e.key==='j'){e.preventDefault();largoVizinho(1);}
+  else if(e.key==='ArrowUp'||e.key==='k'){e.preventDefault();largoVizinho(-1);}
+});
+
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
@@ -8276,7 +8349,7 @@ detVistaBotoes();
 // O andar guardado tem de chegar ao DOM antes de o `carregar()` responder:
 // o HTML nasce fechado, e quem tinha deixado a barra aberta no andar 3 via-a
 // a fechar-se e a abrir-se outra vez assim que os dados chegavam.
-document.getElementById('filtros').classList.toggle('aberto',FILTROS_ABERTO);
+document.getElementById('filtros').classList.toggle('aberto',FILTROS_ABERTO||GF_LARGO.matches);
 ajustarSticky();
 pgSwipe();
 sbInit();
