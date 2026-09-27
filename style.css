@@ -1801,3 +1801,7 @@ body.sem-desejo .desejo-only{display:none!important}
    Tracejada de propósito: é o sítio de uma garrafa que ainda não chegou. */
 .desejo-faixa{background:var(--bg);border:1px dashed var(--bo2);border-radius:11px;padding:10px 12px;margin-top:8px}
 .desejo-faixa .macoes{margin-top:10px}
+
+/* A foto carregou: a garrafa desenhada sai de trás. As fotos das lojas são
+   PNG com fundo transparente e o desenho via-se pelos buracos. */
+.com-foto>svg,.com-foto>.foto-svg{visibility:hidden}

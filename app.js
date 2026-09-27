@@ -580,7 +580,7 @@ async function assinarImagens(){
 function vinhoThumb(v,qtd){
   const img=imagemDe(v);
   return `<div class="vc-thumb">${garrafaSVG(v)}
-    ${img?`<img src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()">`:''}
+    ${img?`<img src="${esc(img)}" alt="" loading="lazy" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}
     ${qtd>1?`<span class="vc-qtd">\u00d7${qtd}</span>`:''}</div>`;
 }
 // "Nível 2" tem de vir antes de "Nível 10" — a ordenação alfabética punha o
@@ -2889,7 +2889,7 @@ function mapaPopupItemHTML(g,total){
   return `<div class="mspot-item">
     <div class="mspot-top">
       <div class="mspot-thumb">${garrafaSVG(v)}
-        ${img?`<img src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()">`:''}
+        ${img?`<img src="${esc(img)}" alt="" loading="lazy" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}
       </div>
       <div class="mspot-tx">
         <div class="mspot-nome">${esc(v.nome)}</div>
@@ -3531,7 +3531,7 @@ function vinhoDetalheHTML(v){
       <button class="mx" onclick="fecharModal('modal-vinho')">✕</button>
       <div class="mhero-in">
         <button class="mhero-g" onclick="abrirFoto(${v.id})" title="Ver a imagem em grande">
-          ${garrafaSVG(v)}${img?`<img src="${esc(img)}" alt="" onerror="this.remove()">`:''}
+          ${garrafaSVG(v)}${img?`<img src="${esc(img)}" alt="" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}
           <span class="mhero-lupa">⤢</span>
         </button>
         <div class="mhero-tx">
@@ -3684,7 +3684,7 @@ function abrirFoto(vinhoId){
 
     <div class="foto-palco">
       <div class="foto-svg">${garrafaSVG(v)}</div>
-      ${img?`<img src="${esc(img)}" alt="" onerror="this.remove()">`:''}
+      ${img?`<img src="${esc(img)}" alt="" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}
     </div>
 
     <div class="note" id="foto-estado"></div>
@@ -4379,7 +4379,7 @@ function abrirConsumir(vinhoId,garrafaId){
       <button class="mx" onclick="fecharModal('modal-consumir')">✕</button>
       <div class="mhero-in">
         <div class="mhero-g">${garrafaSVG(v)}${imagemDe(v)
-          ?`<img src="${esc(imagemDe(v))}" alt="" onerror="this.remove()">`:''}</div>
+          ?`<img src="${esc(imagemDe(v))}" alt="" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}</div>
         <div class="mhero-tx">
           <div class="mhero-k">Dar saída</div>
           <h3>${esc(v.nome)}</h3>
@@ -4496,7 +4496,7 @@ function editarConsumo(gid){
       <button class="mx" onclick="fecharModal('modal-consumir')">✕</button>
       <div class="mhero-in">
         <div class="mhero-g">${garrafaSVG(v)}${imagemDe(v)
-          ?`<img src="${esc(imagemDe(v))}" alt="" onerror="this.remove()">`:''}</div>
+          ?`<img src="${esc(imagemDe(v))}" alt="" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}</div>
         <div class="mhero-tx">
           <div class="mhero-k">Editar consumo</div>
           <h3>${esc(v.nome)}</h3>
@@ -8177,7 +8177,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='116';
+const APP_BUILD='117';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
