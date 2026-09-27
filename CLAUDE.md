@@ -1473,6 +1473,18 @@ estava a correr. Agora, no MESMO `modal-ia`:
 1. **Catálogo** — corre sozinho ao abrir (grátis, e para toda a gente,
    `sem_ia` incluído). "O vinho já existe no Catálogo e a informação foi
    importada: N campos" / "não existe". Pergunta: IA ou à mão?
+   Pergunta primeiro que COLHEITAS o catálogo tem
+   (`winecatalog.colheitas`, 27/09/2026) e só depois a ficha de UMA delas
+   (`comparar` com o nome e o ano dessa linha). A `colheitas` tira a cor dos
+   dois lados e casa só com a mesma cor — "Morais Rocha Reserva Tinto" acha
+   o "Morais Rocha Reserva" (tinto) sem mexer na chave. Sem ano e com várias
+   colheitas, **pergunta-se qual é** (uma por botão), ou escreve-se OUTRA
+   (vêm só os factos estáveis, e a IA procura já para essa colheita), ou
+   "Não sei a colheita" (a mais completa). A escolha vai para o ano do
+   formulário no vinho novo, e num vinho gravado sem ano grava-se com o
+   resto (`PQ.anoEscolhido`). O que vem do catálogo grava-se por PATCH, com
+   o valor que se viu — a `aplicar_do_catalogo` voltava a procurar a linha
+   pelo nome, que é justamente o que pode não casar.
 2. **IA** — o motor do direito (`motorDoPlano`). "A pesquisa com IA
    terminou e preencheu mais N campos." A resposta de memória diz-se a
    todos, não só ao admin. Pergunta: pesquisa avançada?
@@ -1488,9 +1500,9 @@ as propostas de cada fonte (as iguais juntam-se), escolhidas com um toque
 (`.ia-op`). **"Importada" é posta na lista, não gravada**: nada entra sem
 "Guardar" (ou "Pôr no formulário" no vinho novo). Vem escolhido o de agora
 se o campo tem valor; senão a fonte mais forte (`PQ_FORCA`: avançada >
-colada > catálogo > IA). O ano e a cor nunca se propõem (`pqChaves`). O que
-veio do catálogo grava-se pela `aplicar_do_catalogo`; o resto por PATCH,
-com o carimbo `ai_*`. "Preencher à mão" guarda o que já se escolheu e abre
+colada > catálogo > IA). O ano e a cor nunca se propõem (`pqChaves`) — o ano só
+entra pela escolha da colheita. Tudo se grava por PATCH, com o carimbo
+`ai_*` quando houve IA. "Preencher à mão" guarda o que já se escolheu e abre
 o Editar. Fechar a meio não perde nada: `PQ` fica, e o mesmo botão retoma.
 A **atualização massiva** continua com o ecrã dela (`iaMostrarResultado`/
 `iaAplicar`, onde vivem ainda a segunda opinião e os rádios descritos mais

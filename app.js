@@ -5411,7 +5411,7 @@ function pqNovoEstado(novo,id,atual){
     fase:'cat',corre:'',repetir:null,manual:null,sites:[],notas:'',colheitaEsp:false,pedidoCampos:null,ultima:''};
 }
 // Ainda há alguma coisa a fazer com esta procura (a correr, ou por rever)?
-function pqPendente(P){return !!P&&(!!P.corre||Object.keys(P.hist).length>0);}
+function pqPendente(P){return !!P&&(!!P.corre||!!P.escolher||Object.keys(P.hist).length>0);}
 
 /* Vinho já gravado: o botão "Procurar informação" da página do vinho. */
 function iaAbrirProcura(vinhoId){
@@ -5461,35 +5461,90 @@ function pqJuntar(P,fonte,res){
   return {novos,dif,outro};
 }
 
-/* ── Etapa 1: o catálogo ── */
+/* ── Etapa 1: o catálogo ──
+   Primeiro que COLHEITAS do vinho o catálogo tem (`winecatalog.colheitas`),
+   e só depois a ficha de UMA delas (`comparar`, com o nome e o ano dessa
+   linha). Duas coisas que a `comparar` sozinha fazia mal (27/09/2026):
+   · "Morais Rocha Reserva Tinto" não achava o "Morais Rocha Reserva"
+     (tinto) do catálogo — a cor fica dentro da chave. A `colheitas` tira a
+     cor dos dois lados, e só casa com linhas da mesma cor;
+   · com o 2020 e o 2021 no catálogo e nenhum ano do nosso lado, vinha o
+     mais preenchido, calado. Agora pergunta-se de que colheita é — ou
+     escreve-se outra, e aí do catálogo vêm só os factos estáveis. */
 async function pqCatalogo(){
   const P=PQ;
-  P.corre='cat';pqPintar();
+  P.corre='cat';P.escolher=null;pqPintar();
+  let lista=null,erro='';
+  try{
+    lista=await sbReq('POST','rpc/colheitas',{p_nome:P.id.nome,p_produtor:P.id.produtor||'',p_tipo:P.id.tipo||null},
+      {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
+  }catch(e){erro=e.message;}
+  if(PQ!==P)return;
+  // O catálogo é uma poupança, nunca uma dependência: se falhar, segue-se.
+  if(erro||!Array.isArray(lista)){P.corre='';P.fase='ia';P.et.cat={estado:'erro',msg:erro||'sem resposta'};pqPintar();return;}
+  // Outra cor = outro vinho (o "Papa Figos" tinto não é o branco).
+  const mesmaCor=lista.filter(c=>!c.tipo||!P.id.tipo||chave(c.tipo)===chave(P.id.tipo));
+  if(!mesmaCor.length){
+    P.corre='';P.fase='ia';
+    P.et.cat=lista.length?{estado:'cor',nome:lista[0].nome||P.id.nome,cor:String(lista[0].tipo)}:{estado:'nada'};
+    pqPintar();return;
+  }
+  const maisCompleta=mesmaCor.slice().sort((a,b)=>(b.campos||0)-(a.campos||0))[0];
+  if(P.id.ano!=null){
+    return pqCatalogoUsar(mesmaCor.find(c=>c.ano===P.id.ano)||maisCompleta);
+  }
+  if(mesmaCor.length===1)return pqCatalogoUsar(mesmaCor[0]);
+  // Sem ano e com várias colheitas: quem tem a garrafa é que sabe qual é.
+  P.corre='';P.escolher=mesmaCor;
+  pqPintar();
+}
+/* A colheita escolhida passa a ser a do vinho: no vinho novo vai para o
+   campo do ano do formulário; num vinho gravado sem ano, grava-se com o
+   resto ao carregar em Guardar (`PQ.anoEscolhido`). */
+function pqAnoFica(ano){
+  const P=PQ;
+  P.id.ano=ano;
+  if(P.novo){
+    const e=document.getElementById('e-ano');
+    if(e){e.value=String(ano);janelaSincronizarForm();}
+  }else P.anoEscolhido=ano;
+}
+function pqColheitaEscolher(i){
+  const P=PQ;if(!P||!P.escolher)return;
+  const c=P.escolher[i];if(!c)return;
+  if(c.ano!=null)pqAnoFica(c.ano);
+  pqCatalogoUsar(c);
+}
+function pqColheitaOutra(){
+  const P=PQ;if(!P||!P.escolher)return;
+  const ano=inteiro(document.getElementById('pq-outro-ano')?.value);
+  if(ano==null||ano<1900||ano>2100){toast('Escreve o ano da colheita (ex.: 2019)',1);document.getElementById('pq-outro-ano')?.focus();return;}
+  const lista=P.escolher;
+  pqAnoFica(ano);
+  pqCatalogoUsar(lista.find(c=>c.ano===ano)||lista.slice().sort((a,b)=>(b.campos||0)-(a.campos||0))[0]);
+}
+function pqColheitaNaoSei(){
+  const P=PQ;if(!P||!P.escolher)return;
+  pqCatalogoUsar(P.escolher.slice().sort((a,b)=>(b.campos||0)-(a.campos||0))[0]);
+}
+async function pqCatalogoUsar(c){
+  const P=PQ;
+  P.escolher=null;P.corre='cat';pqPintar();
   let r=null,erro='';
   try{
-    if(P.novo){
-      r=await sbReq('POST','rpc/comparar',{p_nome:P.id.nome,p_produtor:P.id.produtor,p_ano:P.id.ano,p_ficha:{}},
-        {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
-    }else{
-      await catComparar(P.vid,true);
-      r=catDados(P.vid);
-      if(r&&r.semCatalogo){erro='o catálogo não respondeu';r=null;}
-    }
+    // O nome, o produtor e o ano DA LINHA escolhida: é assim que a
+    // `comparar` devolve essa e não outra (a mesma colheita ganha).
+    r=await sbReq('POST','rpc/comparar',{p_nome:c.nome,p_produtor:c.produtor||'',p_ano:c.ano??null,p_ficha:{}},
+      {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
   }catch(e){erro=e.message;}
   if(PQ!==P)return;
   P.corre='';P.fase='ia';
-  // O catálogo é uma poupança, nunca uma dependência: se falhar, segue-se.
-  if(erro||!r){P.et.cat={estado:'erro',msg:erro||'sem resposta'};pqPintar();return;}
-  if(!r.encontrado){P.et.cat={estado:'nada'};pqPintar();return;}
+  if(erro||!r||!r.encontrado){P.et.cat={estado:'erro',msg:erro||'o catálogo não devolveu a ficha'};pqPintar();return;}
   const val={};
-  (r.campos||[]).forEach(c=>{if(c&&!pqVazio(c.catalogo))val[c.campo]=c.catalogo;});
-  // Outra cor = outro vinho (o "Papa Figos" tinto não é o branco): não se
-  // traz nada, e diz-se porquê.
-  if(val.tipo&&P.id.tipo&&chave(val.tipo)!==chave(P.id.tipo)){
-    P.et.cat={estado:'cor',nome:r.nome||P.id.nome,cor:String(val.tipo)};pqPintar();return;
-  }
+  (r.campos||[]).forEach(k=>{if(k&&!pqVazio(k.catalogo))val[k.campo]=k.catalogo;});
+  delete val.tipo;delete val.ano;
   // Com ano e outra colheita no catálogo, só servem os factos estáveis.
-  const outraColheita=P.id.ano!=null&&r.mesmaColheita===false;
+  const outraColheita=P.id.ano!=null&&r.ano!==P.id.ano;
   if(outraColheita)CAT_DA_COLHEITA.forEach(k=>delete val[k]);
   // Os preços das LOJAS não são um campo: a app lê-os do catálogo sempre que
   // carrega (`precos_lojas`). No vinho novo diz-se que existem.
@@ -5497,13 +5552,14 @@ async function pqCatalogo(){
     .filter(([,p])=>p&&typeof p==='object'&&!p.retirado&&Number(p.preco)>0)
     .sort((a,b)=>lojaOrdem(a[0])-lojaOrdem(b[0]));
   delete val.precos;
-  // O produtor é identidade: num vinho gravado não vem de lá (é por ele que
-  // se acha a linha); num vinho novo sem produtor, sim.
+  // O produtor é identidade: num vinho gravado não vem de lá; num vinho
+  // novo sem produtor, sim.
+  delete val.produtor;
   if(P.novo&&!P.id.produtor&&r.produtor)val.produtor=r.produtor;
   // Um link fora do formato do Vivino não se traz — e diz-se.
   const vivinoMau=val.vivino_url&&!vivinoLink(val.vivino_url)?String(val.vivino_url):'';
   const n=pqJuntar(P,'cat',val);
-  P.et.cat={estado:'feito',n:n.novos,dif:n.dif,ano:r.ano,outraColheita,vivinoMau,lojas:P.novo?lojas:[]};
+  P.et.cat={estado:'feito',n:n.novos,dif:n.dif,ano:r.ano,nome:r.nome,outraColheita,vivinoMau,lojas:P.novo?lojas:[]};
   P.ultima='cat';
   pqPintar();
 }
@@ -5633,13 +5689,14 @@ function pqManualLer(){
 /* ── O ecrã ── */
 function pqPassoHTML(k,P){
   const e=P.et[k]||{};
-  const st=P.corre===k?'a procurar…'
+  const st=k==='cat'&&P.escolher?'escolhe a colheita'
+    :P.corre===k?'a procurar…'
     :e.estado==='feito'?(k==='cat'?`✓ ${e.n} ${e.n===1?'campo':'campos'}`:`✓ +${e.n}`)
     :e.estado==='nada'?'não conhece'
     :e.estado==='cor'?'outra cor'
     :e.estado==='erro'?'não deu'
     :'—';
-  const cls=P.corre===k?'corre':e.estado==='feito'?'feito':e.estado==='erro'?'erro':e.estado?'nada':'';
+  const cls=P.corre===k||(k==='cat'&&P.escolher)?'corre':e.estado==='feito'?'feito':e.estado==='erro'?'erro':e.estado?'nada':'';
   return `<div class="pq-passo ${cls}"><b>${esc(PQ_NOMES[k])}</b><span>${esc(st)}</span></div>`;
 }
 function pqQtd(n,um,varios){return `<b>${n}</b> ${n===1?um:varios}`;}
@@ -5654,10 +5711,11 @@ function pqRelatoHTML(P){
   if(c&&(P.ultima==='cat'||!P.ultima)){
     if(c.estado==='feito'){
       out.push(c.n
-        ?`O vinho já existe no Catálogo e a informação foi importada: ${pqQtd(c.n,'campo','campos')}.`
-        :'O vinho já existe no Catálogo, mas não tinha nada que falte a esta ficha.');
+        ?`O vinho já existe no Catálogo${c.nome&&chave(c.nome)!==chave(P.id.nome)?` (como <b>${esc(c.nome)}</b>${c.ano?' '+esc(String(c.ano)):''})`:c.ano?` (colheita ${esc(String(c.ano))})`:''} e a informação foi importada: ${pqQtd(c.n,'campo','campos')}.`
+        :`O vinho já existe no Catálogo${c.ano?` (colheita ${esc(String(c.ano))})`:''}, mas não tinha nada que falte a esta ficha.`);
       if(c.dif)out.push(`Tem também outro valor em ${pqQtd(c.dif,'campo que já estava preenchido','campos que já estavam preenchidos')}.`);
-      if(c.outraColheita)out.push(`<span class="note">A linha do Catálogo é da colheita ${esc(String(c.ano||'sem ano'))}: vieram só os factos do vinho, sem nota, preço nem imagem.</span>`);
+      if(c.outraColheita)out.push(`<span class="note">A tua colheita (${esc(String(P.id.ano))}) não está no Catálogo: vieram só os factos do vinho da colheita ${esc(String(c.ano||'sem ano'))}, sem nota, preço nem imagem.</span>`);
+      if(P.anoEscolhido)out.push(`<span class="note">A colheita ${esc(String(P.anoEscolhido))} fica gravada no vinho quando guardares.</span>`);
       if(c.vivinoMau)out.push(`<span class="note">O link do Vivino que o Catálogo tem não está no formato do Vivino — não o trouxe.</span>`);
       if(c.lojas&&c.lojas.length)out.push(`<span class="note">💶 Nas lojas: ${c.lojas.map(([k,p])=>
         `<b>${esc(lojaInfo(k).nome)}</b> ${esc(eur(p.preco))}${p.colheita?' ('+esc(p.colheita)+')':''}`).join(' · ')}. Não se copiam: o vinho lê-os do Catálogo, sempre atualizados.</span>`);
@@ -5708,6 +5766,21 @@ function pqPerguntaHTML(P){
       :'A fazer a pesquisa avançada. Pode levar até dois minutos.';
     return `<div class="pq-espera"><div class="gl-spin"></div><div>${t}${P.corre!=='cat'
       ?'<div class="note">Podes fechar esta janela: a pesquisa continua, e ao voltares a “Procurar informação” está aqui à tua espera.</div>':''}</div></div>`;
+  }
+  if(P.escolher){
+    const L=P.escolher;
+    return `<p class="pq-q">O vinho já existe no Catálogo em ${L.length} colheitas. De que colheita é o teu?</p>
+      <div class="pq-colheitas">${L.map((c,i)=>{
+        const nota=c.vivino_nota??c.vivino_nota_global;
+        return `<button class="pq-colh" onclick="pqColheitaEscolher(${i})"><b>${c.ano!=null?esc(String(c.ano)):'sem ano'}</b>
+          <span>${esc(c.nome)}${c.produtor?' · '+esc(c.produtor):''}</span>
+          <i>${c.campos||0} campos${nota!=null&&nota!==''?' · Vivino '+esc(String(nota)):''}</i></button>`;}).join('')}</div>
+      <div class="pq-outro"><label for="pq-outro-ano">Outra colheita</label>
+        <input type="text" id="pq-outro-ano" inputmode="numeric" maxlength="4" placeholder="ex.: 2019">
+        <button class="btn ghost" onclick="pqColheitaOutra()">Usar esta</button></div>
+      <p class="note">Com outra colheita, do Catálogo vêm só os factos do vinho (castas, região…), sem nota, preço nem imagem;
+        o resto procura-se a seguir com a IA, já para essa colheita.</p>
+      <button class="pq-link" onclick="pqColheitaNaoSei()">Não sei a colheita</button>`;
   }
   if(P.repetir){
     return `<div class="aviso">${P.repetir.minha?'Pesquisaste este vinho':'Este vinho foi pesquisado'} pela última vez em
@@ -5786,7 +5859,8 @@ function pqEscolhas(P){
 function pqContar(){
   const P=PQ,b=document.getElementById('pq-guardar');
   if(!P||!b)return;
-  const n=pqEscolhas(P).length;
+  // A colheita escolhida (num vinho gravado sem ano) também é um campo a gravar.
+  const n=pqEscolhas(P).length+(P.anoEscolhido?1:0);
   b.disabled=!n||!!P.corre;
   b.textContent=n?`${P.novo?'Pôr no formulário':'Guardar'} ${n} ${n===1?'campo':'campos'}`:'Nada escolhido';
 }
@@ -5808,7 +5882,7 @@ function pqPintar(){
       <div class="pq-linhas">${linhas}</div>`:''}
     ${iguais.length?`<div class="note" style="margin-top:8px">${iguais.length===1?'1 campo veio':iguais.length+' campos vieram'} igual ao que já está (${esc(iguais.map(pqRot).join(', '))}).</div>`:''}
     <div class="macoes pq-fim">
-      ${linhas?`<button class="btn prim" id="pq-guardar" onclick="pqGuardar()"></button>`:''}
+      ${linhas||P.anoEscolhido?`<button class="btn prim" id="pq-guardar" onclick="pqGuardar()"></button>`:''}
       <button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button>
     </div>`;
   pqContar();
@@ -5818,20 +5892,22 @@ function pqPintar(){
 async function pqGuardar(){
   const P=PQ;if(!P)return false;
   const escs=pqEscolhas(P);
-  if(!escs.length){toast('Não escolheste nada');return false;}
+  if(!escs.length&&!P.anoEscolhido){toast('Não escolheste nada');return false;}
   if(P.novo){pqPorNoForm(P,escs);return true;}
   if(roGuard())return false;
   const v=IDXV[P.vid];if(!v)return false;
-  // O que se trouxe do catálogo grava-se pela MESMA porta do painel do
-  // catálogo (`aplicar_do_catalogo`); o resto como qualquer procura.
-  const doCat=escs.filter(e=>e.fonte==='cat').map(e=>e.k);
+  // Tudo por PATCH, o catálogo incluído: o valor gravado é o que se viu no
+  // ecrã. A `aplicar_do_catalogo` voltava a procurar a linha pelo nome do
+  // vinho, e o nome pode ser justamente o que não casa ("… Reserva Tinto")
+  // ou casar com outra colheita da que se escolheu.
   const outros=escs.filter(e=>e.fonte!=='cat');
   const patch={};let castas=null;
-  outros.forEach(e=>{
+  escs.forEach(e=>{
     if(e.k==='castas'){castas=Array.isArray(e.val)?e.val:String(e.val).split(',').map(s=>s.trim()).filter(Boolean);return;}
     patch[e.k]=e.val;
   });
-  if(!v.ano)IA_JANELA.forEach(k=>delete patch[k]);
+  if(P.anoEscolhido&&!v.ano)patch.ano=P.anoEscolhido;
+  if(!(patch.ano||v.ano))IA_JANELA.forEach(k=>delete patch[k]);
   if(outros.length){
     // O carimbo da procura: de onde veio, para daqui a um ano se saber.
     const usados=[...new Set(outros.map(e=>e.fonte))].map(f=>P.res[f]).filter(Boolean);
@@ -5854,15 +5930,12 @@ async function pqGuardar(){
       v.castas=castas.slice().sort((a,b)=>a.localeCompare(b,'pt'));
       await recarregarCastas();
     }
-    if(doCat.length){
-      await sbRpc('aplicar_do_catalogo',{p_vinho_id:P.vid,p_campos:doCat});
-      await carregarGarrafeira();
-    }
     PQ=null;
     fecharModal('modal-ia');
     renderLista();refrescarVinhoAberto();
     catComparar(P.vid,true);
-    toast(`${escs.length} ${escs.length===1?'campo guardado':'campos guardados'} ✓`);
+    const nG=escs.length+(patch.ano?1:0);
+    toast(`${nG} ${nG===1?'campo guardado':'campos guardados'} ✓`);
     return true;
   }catch(e){
     toast('Não foi possível guardar: '+e.message,1);
@@ -5892,7 +5965,7 @@ function pqPorNoForm(P,escs){
    para o formulário) e abre-se o sítio onde se escreve. */
 async function pqAMao(){
   const P=PQ;if(!P)return;
-  const temEsc=pqEscolhas(P).length>0;
+  const temEsc=pqEscolhas(P).length>0||!!P.anoEscolhido;
   if(P.novo){
     if(temEsc)pqPorNoForm(P,pqEscolhas(P));
     else{PQ=null;fecharModal('modal-ia');}
@@ -8094,7 +8167,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='110';
+const APP_BUILD='111';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

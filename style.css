@@ -1218,6 +1218,17 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .pq-campos summary{cursor:pointer;font-size:12.5px;color:var(--tx)}
 .pq-link{display:block;margin-top:10px;padding:0;border:0;background:none;font:inherit;font-size:12.5px;color:var(--in);text-align:left;cursor:pointer;text-decoration:underline}
 .pq-linhas{margin-top:4px}
+/* A escolha da colheita: um botão por linha do catálogo, e "outra colheita"
+   por baixo. O ano à frente, em serifa, é o que se procura com os olhos. */
+.pq-colheitas{display:grid;gap:6px;margin-top:6px}
+.pq-colh{display:grid;grid-template-columns:auto 1fr;gap:0 12px;align-items:baseline;text-align:left;width:100%;padding:9px 12px;border:1px solid var(--bo);border-radius:11px;background:var(--card);font:inherit;color:var(--tx);cursor:pointer}
+.pq-colh:hover,.pq-colh:focus-visible{border-color:var(--vh)}
+.pq-colh b{grid-row:span 2;font-family:var(--fd);font-size:20px;font-weight:600;color:var(--vh)}
+.pq-colh span{font-size:13px;min-width:0}
+.pq-colh i{font-style:normal;font-size:11.5px;color:var(--mu)}
+.pq-outro{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+.mbox .pq-outro label{margin:0}
+.pq-outro input{width:110px;flex:0 0 auto}
 /* `.mbox label` (duas classes contra uma) ganhava à `.ia-op` e punha cada
    opção em MAIÚSCULAS a 10px, com o botão numa linha e o texto noutra. */
 .mbox label.ia-op{display:flex;margin:5px 0 0;font-size:13px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--tx)}
