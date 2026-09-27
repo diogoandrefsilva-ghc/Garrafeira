@@ -5458,7 +5458,7 @@ function pqAtualForm(){
 }
 function pqNovoEstado(novo,id,atual){
   return {novo,vid:novo?null:id.vid,id,atual,hist:{},iguais:new Set(),esc:{},et:{},res:{},
-    fase:'cat',corre:'',repetir:null,escolher:null,sites:[],notas:'',colheitaEsp:false,pedidoCampos:null,
+    fase:'cat',corre:'',repetir:null,escolher:null,sites:[],soSites:false,notas:'',colheitaEsp:false,pedidoCampos:null,
     ultima:'',preenchidos:{}};
 }
 // Ainda há alguma coisa a fazer com esta procura (a correr, ou por rever)?
@@ -5609,9 +5609,12 @@ function pqCamposLidos(){
   return [...document.querySelectorAll('#modal-ia-in .pq-campo:checked')].map(e=>e.value);
 }
 function pqSitesLidos(){
+  // Inteiros: um link colado é uma PÁGINA a ler (e o do Vivino é o link
+  // dele); o corte ao domínio faz-se na `vinho-info`.
   const sites=(document.getElementById('pq-sites')?.value||'').split(/[,\n]/).map(s=>s.trim()).filter(Boolean).slice(0,5);
   const notas=(document.getElementById('pq-notas')?.value||'').trim().slice(0,300);
-  return {sites,notas};
+  const soSites=!!document.getElementById('pq-so-sites')?.checked;
+  return {sites,notas,soSites};
 }
 
 /* ── Etapa 2: a IA — uma procura só ── */
@@ -5623,8 +5626,13 @@ async function pqIA(repetir){
     if(!campos.length){toast('Escolhe pelo menos um campo',1);return;}
     P.pedidoCampos=campos;
     P.colheitaEsp=!!document.getElementById('pq-colheita')?.checked;
-    const {sites,notas}=pqSitesLidos();
-    P.sites=sites;P.notas=notas;
+    const {sites,notas,soSites}=pqSitesLidos();
+    if(soSites&&!sites.length){
+      toast('Escreve pelo menos um site (ou o link da página do vinho) para usar só esses',1);
+      document.getElementById('pq-sites')?.focus();
+      return;
+    }
+    P.sites=sites;P.notas=notas;P.soSites=soSites;
     if(!P.novo){
       // A cor confirma-se aqui (e grava-se no vinho, se mudou).
       const v=IDXV[P.vid];if(!v)return;
@@ -5649,6 +5657,7 @@ async function pqIA(repetir){
   pedido.colheitaEspecifica=P.colheitaEsp;
   if(P.notas)pedido.notas=P.notas;
   if(P.sites.length)pedido.sites=P.sites;
+  if(P.soSites&&P.sites.length)pedido.soSites=true;
   P.corre='ia';P.et.ia={estado:'corre'};
   pqPintar();
   try{
@@ -5658,6 +5667,9 @@ async function pqIA(repetir){
     const n=pqJuntar(P,'ia',res);
     P.et.ia={estado:'feito',n:n.novos,dif:n.dif,outro:n.outro,memoria:res.pesquisaWeb===false,
       sites:Array.isArray(res.sites)?res.sites:[],confianca:res.confianca||null,
+      paginas:Array.isArray(res.paginas)?res.paginas:[],soSites:!!res.soSites,
+      semFonte:Array.isArray(res.semFonte)?res.semFonte:[],
+      origem:res.origemCampos&&typeof res.origemCampos==='object'?res.origemCampos:{},
       fontes:Array.isArray(res.fontes)?res.fontes:[],aviso:res.aviso||''};
     P.ultima='ia';P.fase='fim';
   }catch(e){
@@ -5686,22 +5698,63 @@ function pqPassoHTML(k,P){
   return `<div class="pq-passo ${cls}"><b>${esc(PQ_NOMES[k])}</b><span>${esc(st)}</span></div>`;
 }
 function pqQtd(n,um,varios){return `<b>${n}</b> ${n===1?um:varios}`;}
-/* O QUE SE FEZ COM OS SITES DE CONFIANÇA (27/09/2026). A vinho-info faz
-   uma procura só neles (no pacote completo, que é o que tem Serper) e conta
-   quantos resultados vieram de cada um (`confianca`); sem essa contagem
-   foram só uma frase no pedido à IA, e diz-se isso — era o que não se sabia. */
+/* O QUE SE FEZ COM OS SITES DE CONFIANÇA (27/09/2026). A vinho-info procura
+   o vinho em cada domínio (no pacote completo, que é o que tem Serper) e LÊ
+   a página que encontrar — e as que se colaram, em qualquer pacote —, e diz
+   o que aconteceu a cada uma (`paginas`) e quantos resultados vieram de cada
+   site (`confianca`); sem nada disso foram só uma frase no pedido à IA, e
+   diz-se isso — era o que não se sabia. */
 function pqSitesHTML(f){
   const sites=f&&Array.isArray(f.sites)?f.sites:[];
   if(!sites.length)return '';
   const c=f.confianca&&typeof f.confianca==='object'?f.confianca:null;
-  if(!c)return `<div class="ia-fontes">Sites de referência (${esc(sites.join(', '))}): foram só no texto do pedido
+  const pags=Array.isArray(f.paginas)?f.paginas:[];
+  const titulo=f.soSites?'Só estes sites':'Sites de referência';
+  if(!c&&!pags.length)return `<div class="ia-fontes">${titulo} (${esc(sites.join(', '))}): foram só no texto do pedido
     à IA — sem a pesquisa Google do pacote completo, não há como confirmar se os usou.</div>`;
-  const partes=sites.map(s=>s in c
-    ?`${esc(s)}: <b>${Number(c[s])||0}</b> resultado${Number(c[s])===1?'':'s'}`
-    :`${esc(s)}: não é um domínio — só no texto do pedido`);
-  const nada=Object.values(c).every(n=>!Number(n));
-  return `<div class="ia-fontes">Sites de referência — ${partes.join(' · ')}.${nada
-    ?' Nenhum resultado deles: o que veio é de outras fontes.':' Foram os primeiros a ser lidos.'}</div>`;
+  const doSite=(x,d)=>!!x&&(x===d||x.endsWith('.'+d));
+  const lnk=p=>p.url?`<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.titulo||p.url)}</a>`:'';
+  const pagFrase=p=>{
+    const l=lnk(p);
+    if(p.estado==='lida')return `página lida${p.dada?' (a que colaste)':''} — ${l}`;
+    if(p.estado==='recusada')return `a página recusou a leitura (${esc(p.motivo||'bloqueio')})${l?' — '+l:''}`;
+    if(p.estado==='vazia')return `${esc(p.motivo||'a página não tem texto')}${l?' — '+l:''}`;
+    if(p.estado==='nao_encontrada')return 'o vinho não apareceu na procura neste site';
+    if(p.estado==='sem_pesquisa')return 'procurar dentro do site é do pacote completo — cola o link da página';
+    return `${p.url?'não abriu':'falhou'} (${esc(p.motivo||'erro')})${l?' — '+l:''}`;
+  };
+  const linhas=sites.map(s=>{
+    const ps=pags.filter(p=>doSite(p.site,s));
+    const n=c&&s in c?Number(c[s])||0:null;
+    const partes=ps.map(pagFrase);
+    if(n!==null&&!ps.some(p=>p.estado==='lida'||p.estado==='nao_encontrada'))partes.push(`${n} resultado${n===1?'':'s'} da pesquisa`);
+    if(!partes.length)partes.push(n===null?'não é um domínio — só no texto do pedido':'nada');
+    return `<li><b>${esc(s)}</b>: ${partes.join(' · ')}</li>`;
+  });
+  return `<div class="ia-fontes">${titulo}:<ul class="pq-sites">${linhas.join('')}</ul></div>`;
+}
+/* DE ONDE VEIO cada campo que a IA trouxe (27/09/2026, o dono das apps): a
+   página ou o resultado que ela diz ter lido (`origemCampos`), o link do
+   Vivino colado, ou a pesquisa Google do grounding — que não diz a página.
+   Sem origem não se escreve nada: não se inventa uma. */
+function pqDeOndeHTML(o){
+  if(!o||typeof o!=='object')return '';
+  if(o.google)return 'pesquisa Google';
+  if(!o.url)return '';
+  return `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.site||o.url)}</a>`;
+}
+/* Numa linha, os campos agrupados pelo sítio de onde vieram. `so`: só
+   estes campos (no vinho novo, os que a IA chegou a pôr no formulário). */
+function pqDeOndeResumoHTML(f,so){
+  const o=f&&f.origem||{};
+  const grupos=new Map();
+  Object.keys(o).forEach(k=>{
+    if(so&&!so.includes(k))return;
+    const h=pqDeOndeHTML(o[k]);if(!h)return;
+    const g=grupos.get(h)||[];g.push(pqRot(k));grupos.set(h,g);
+  });
+  if(!grupos.size)return '';
+  return `<div class="ia-fontes">De onde veio: ${[...grupos].map(([h,ks])=>`${h} — ${esc(ks.join(', '))}`).join(' · ')}.</div>`;
 }
 function pqFontesHTML(fontes){
   return fontes&&fontes.length?`<div class="ia-fontes">Fontes: ${fontes.map(f=>
@@ -5731,12 +5784,14 @@ function pqRelatoHTML(P){
   }
   const f=P.ultima==='ia'?P.et.ia:null;
   if(f&&f.estado==='feito'){
-    out.push(f.n?`A pesquisa com IA terminou e preencheu mais ${pqQtd(f.n,'campo','campos')}.`
-               :'A pesquisa com IA terminou, mas não preencheu nada de novo.');
+    const quem=f.soSites?'A leitura dos sites escolhidos':'A pesquisa com IA';
+    out.push(f.n?`${quem} terminou e preencheu mais ${pqQtd(f.n,'campo','campos')}.`
+               :`${quem} terminou, mas não preencheu nada de novo.`);
     if(f.outro)out.push(`Encontrou outro valor em ${pqQtd(f.outro,'campo','campos')} que o Catálogo já tinha — escolhe em baixo.`);
     if(f.dif)out.push(`Sugere outro valor em ${pqQtd(f.dif,'campo que já estava preenchido','campos que já estavam preenchidos')}.`);
     if(f.memoria)out.push('<span class="note">🧠 A IA respondeu <b>de memória</b>, sem pesquisar na net. Costuma acertar em vinhos conhecidos, mas confere antes de guardar.</span>');
     if(f.aviso)out.push(`<span class="note">⚠️ ${esc(f.aviso)}</span>`);
+    if(f.semFonte&&f.semFonte.length)out.push(`<span class="note">${f.semFonte.length===1?'1 campo veio':f.semFonte.length+' campos vieram'} sem a IA dizer de que página o tirou (${esc(f.semFonte.map(pqRot).join(', '))}) — com “só estes sites”, ficou de fora.</span>`);
   }
   return out.map(t=>`<p>${t}</p>`).join('')+(f?pqFontesHTML(f.fontes)+pqSitesHTML(f):'');
 }
@@ -5796,9 +5851,12 @@ function pqPerguntaHTML(P){
   const q=c&&c.estado==='feito'?'Queres completar com a IA?':'Queres pesquisar com IA?';
   return `${erro}<p class="pq-q">${q}</p>${pqCorHTML(P)}
     <label for="pq-sites">Sites de referência (opcional)</label>
-    <textarea id="pq-sites" rows="2" placeholder="ex.: garrafeiranacional.com, vivino.com/…/w/123456">${esc(P.sites.join(', '))}</textarea>
-    <div class="note">Domínios, separados por vírgula. A pesquisa faz uma procura só nestes e põe os resultados deles à
-      frente; no fim diz quantos vieram de cada um. Um link do Vivino do vinho certo é usado tal e qual.</div>
+    <textarea id="pq-sites" rows="2" placeholder="ex.: garrafeiranacional.com, ou o link da página do vinho numa loja">${esc(P.sites.join(', '))}</textarea>
+    <div class="note">Domínios ou links, separados por vírgula. Um link é lido tal e qual (o do Vivino do vinho certo é
+      usado como o link dele); de um domínio, a pesquisa procura o vinho só nesse site e lê a página que encontrar${
+      temPremium()?'':' — isso é do pacote completo; no teu, cola o link da página'}. No fim diz de que site veio cada campo.</div>
+    <label class="ia-esc pq-so"><input type="checkbox" id="pq-so-sites"${P.soSites?' checked':''}>
+      <span>Usar só a informação destes sites<i>sem a pesquisa geral nem a da IA: o que as páginas destes sites não disserem fica vazio</i></span></label>
     <label for="pq-notas">Notas para identificar o vinho (opcional)</label>
     <textarea id="pq-notas" rows="2" maxlength="300" placeholder="ex.: edição limitada, da casa Ferreirinha">${esc(P.notas)}</textarea>
     ${pqCamposHTML(P)}
@@ -5820,12 +5878,15 @@ function pqLinhasHTML(P){
       const g=grupos.find(x=>chave(x.t)===chave(t));
       g?g.fs.push(f):grupos.push({t,fs:[f]});
     });
+    // `rot` já vem escapado: leva o link do site de onde a IA tirou o valor.
     const op=(val,rot,txt,cls)=>`<label class="ia-op${cls}">
       <input type="radio" name="pq-${k}" value="${val}"${def===val?' checked':''} onchange="pqEscolher('${k}',this.value)">
-      <span><i>${esc(rot)}</i>${escLink(txt)}</span></label>`;
+      <span><i>${rot}</i>${escLink(txt)}</span></label>`;
+    const deOnde=pqDeOndeHTML(P.et.ia&&P.et.ia.origem&&P.et.ia.origem[k]);
+    const rotF=f=>f==='ia'&&deOnde?`${esc(PQ_NOMES[f])} · ${deOnde}`:esc(PQ_NOMES[f]);
     return `<div class="ia-cmp"><b class="ia-cmp-t">${esc(pqRot(k))}</b>
       ${op('atual','agora',agora||'(vazio — deixar assim)',' at')}
-      ${grupos.map(g=>op(g.fs[0],g.fs.map(f=>PQ_NOMES[f]).join(' · '),g.t,g.fs[0]==='cat'?' ct':'')).join('')}
+      ${grupos.map(g=>op(g.fs[0],g.fs.map(rotF).join(' · '),g.t,g.fs[0]==='cat'?' ct':'')).join('')}
     </div>`;
   }).join('');
 }
@@ -5939,9 +6000,12 @@ function pqFimNovo(){
   if(P)Object.values(P.preenchidos).forEach(f=>{n[f]=(n[f]||0)+1;});
   const tot=Object.values(n).reduce((a,b)=>a+b,0);
   const por=Object.entries(n).map(([f,q])=>`${PQ_NOMES[f]} ${q}`).join(' · ');
+  // No vinho novo o formulário é a revisão: é aqui que se diz de que site
+  // veio cada campo que a IA lá pôs.
+  const deOnde=P&&P.et.ia?pqDeOndeResumoHTML(P.et.ia,Object.keys(P.preenchidos).filter(k=>P.preenchidos[k]==='ia')):'';
   const est=document.getElementById('e-ia-estado');
   if(est)est.innerHTML=tot
-    ?`<div class="note" style="margin-top:8px;color:var(--vd)">✓ ${tot} ${tot===1?'campo preenchido':'campos preenchidos'} (${esc(por)}). Confere antes de gravar.</div>`
+    ?`<div class="note" style="margin-top:8px;color:var(--vd)">✓ ${tot} ${tot===1?'campo preenchido':'campos preenchidos'} (${esc(por)}). Confere antes de gravar.</div>${deOnde}`
     :`<div class="note" style="margin-top:8px">A procura não preencheu nenhum campo — escreve à mão o que souberes.</div>`;
   PQ=null;
   fecharModal('modal-ia');
@@ -8257,7 +8321,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='117';
+const APP_BUILD='119';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

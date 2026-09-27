@@ -430,7 +430,7 @@ const regraCuvee = `Se o produtor tiver mais do que um vinho com este nome
 
 const prompt = (
   nome: string, ano: number | null, produtor: string, regiao: string, tipo: string, notas: string, hoje: string,
-  campos: string[] | null, textosPesquisa: string, colheitaEspecifica: boolean, sites: string[] = [],
+  campos: string[] | null, textosPesquisa: string, colheitaEspecifica: boolean, sites: string[] = [], soSites = false,
 ) => `
 És um enólogo a preencher a ficha de um vinho para a garrafeira de uma casa particular.
 
@@ -444,10 +444,14 @@ Concentra a pesquisa NELES. Os outros campos do JSON deixa-os fora da
 resposta — não vale a pena gastar procura com o que já está preenchido do
 lado de cá.
 ` : ""}
-${sites.length ? `
-FONTES DE CONFIANÇA: dá prioridade a informação vinda de ${sites.join(", ")}. Só uses outra fonte se estas não tiverem a resposta. Na base de evidência, os resultados destes sites vêm primeiro, marcados com ★ FONTE DE CONFIANÇA.
+${soSites ? `
+SÓ ESTES SITES: quem procura quer APENAS o que dizem ${sites.join(", ")} — a base de
+evidência abaixo é só deles. Não completes com o que sabes nem com mais nada: o que
+estas páginas e resultados não disserem fica fora do JSON.
+` : sites.length ? `
+FONTES DE CONFIANÇA: dá prioridade a informação vinda de ${sites.join(", ")}. Só uses outra fonte se estas não tiverem a resposta. Na base de evidência, as páginas destes sites vêm primeiro, e os resultados deles vêm marcados com ★ FONTE DE CONFIANÇA.
 ` : ""}
-BASE DE EVIDÊNCIA (trechos de pesquisa web já recolhidos):
+BASE DE EVIDÊNCIA (páginas abertas e trechos de pesquisa web já recolhidos):
 ${textosPesquisa}
 
 REGRAS, e são a sério:
@@ -472,7 +476,14 @@ REGRAS, e são a sério:
    não tiveres a certeza, deixa vazio: uma imagem errada é pior do que nenhuma,
    porque quem olha para a ficha fica a pensar que é aquele o vinho.
 ${colheitaEspecifica && ano ? `10. ${regraColheita(ano)}
-` : ""}
+` : ""}${colheitaEspecifica && ano ? 11 : 10}. Uma PÁGINA ABERTA de OUTRO vinho (outro nome, outra gama, outra cor) não
+   serve: ignora-a. O preço de uma página é o do produto DELA (o de "DADOS DO
+   PRODUTO", se houver), nunca o de produtos relacionados ou sugeridos, nem o de
+   uma caixa ou de uma garrafa grande. A avaliação dos clientes de uma loja NÃO é
+   a nota do Vivino.
+${colheitaEspecifica && ano ? 12 : 11}. "deOnde" diz, para CADA campo que preencheres, o número [n] da página ou do
+   resultado de onde o tiraste — ex.: "castas": 1, "precoMedio": 3.${soSites ? " Um campo sem número em \"deOnde\" é deitado fora." : ""}
+
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
 {
   "encontrado": true,
@@ -500,6 +511,7 @@ ${ano ? `  "beberDe": 2026,
 ` : ""}  "notasProva": "duas ou três frases sobre aroma, boca e final",
   "harmonizacao": "com que pratos",
   "resumo": "duas ou três frases sobre o vinho e o produtor",
+  "deOnde": {"castas": 1, "teor": 1, "precoMedio": 2},
   "aviso": "vazio, ou o que ficou por confirmar"
 }
 
@@ -753,7 +765,12 @@ function vivinoLink(u: unknown): string {
 /* O link do Vivino que quem procura colou nos sites de confiança é FACTO
    (abriu-o), e ganha ao que veio da IA, da cache ou do catálogo. */
 function comVivinoDado(res: Res, vivinoDado: string, campos: string[] | null): Res {
-  if (res.ok && vivinoDado && (!campos || campos.includes("vivino_url"))) res.corpo.vivino_url = vivinoDado;
+  if (res.ok && vivinoDado && (!campos || campos.includes("vivino_url"))) {
+    res.corpo.vivino_url = vivinoDado;
+    // E diz-se de onde veio: do link que se colou.
+    const oc = (res.corpo.origemCampos && typeof res.corpo.origemCampos === "object") ? res.corpo.origemCampos as Record<string, unknown> : null;
+    if (oc) oc.vivino_url = { url: vivinoDado, site: "vivino.com", titulo: "o link que colaste", dada: true };
+  }
   return res;
 }
 
@@ -866,6 +883,373 @@ function vivinoDuas(out: Record<string, unknown>, ano: number | null): void {
       Number(out.vivino_avaliacoes) > Number(out.vivino_avaliacoes_global)) {
     delete out.vivino_nota_global; delete out.vivino_avaliacoes_global;
   }
+}
+
+/* Uma consulta ao Serper, em linhas (a `obterResultadosPesquisa` devolve
+   já o texto, e o lote continua a usá-la): é o que deixa numerar tudo de
+   seguida para o `deOnde`, e escolher a página de cada site. */
+type Resultado = { url: string; titulo: string; snippet: string; rating: unknown; ratingCount: unknown };
+async function serperConsulta(q: string, signal: AbortSignal): Promise<Resultado[]> {
+  if (!SEARCH_API_KEY) throw new Error("a pesquisa externa não está configurada: falta SEARCH_API_KEY");
+  const { signal: ss, limpar } = comLimiteProprio(signal, 12_000);
+  try {
+    const r = await fetch(SEARCH_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-KEY": SEARCH_API_KEY },
+      body: JSON.stringify({ q, gl: "pt", hl: "pt", num: SEARCH_RESULTADOS }),
+      signal: ss,
+    });
+    if (!r.ok) throw new Error(`pesquisa externa ${r.status}`);
+    const d = await r.json();
+    return (Array.isArray(d?.organic) ? d.organic : []).slice(0, SEARCH_RESULTADOS)
+      .map((x: any) => ({
+        url: String(x?.link || "").trim(), titulo: String(x?.title || "").trim(),
+        snippet: String(x?.snippet || "").replace(/\s+/g, " ").trim(),
+        rating: x?.rating, ratingCount: x?.ratingCount,
+      }))
+      .filter((x: Resultado) => /^https?:\/\//i.test(x.url));
+  } finally {
+    limpar();
+  }
+}
+
+/* ── AS PÁGINAS DOS SITES (27/09/2026, o dono das apps) ──
+   "Encontrei o vinho num site, dou o link e preenchem-se os atributos a
+   partir daí." Até aqui um link de uma loja colado nos sites de confiança
+   era reduzido ao domínio, e de um site só se lia o resumo que o Google
+   mostra em cada resultado (duas linhas — quase nunca as castas, o teor ou
+   o estágio). Agora a página ABRE-SE: a que se colou, tal e qual, e — de
+   cada domínio escrito sem página — a primeira que a procura só nesse
+   site devolver. Do HTML tira-se o que a loja declara do produto para os
+   motores de busca (o JSON-LD: nome, marca, preço, imagem, descrição), as
+   etiquetas `og:`, e o texto da zona principal sem menus nem rodapé. Lê-o
+   o Gemini, com a regra de sempre (o que lá não estiver fica fora do JSON)
+   e mais uma: dizer, campo a campo, de que página ou resultado o tirou
+   (`deOnde`) — é o que a revisão mostra ao lado de cada valor.
+   `soSites` ("Usar só a informação destes sites"): sem a consulta geral,
+   sem a do Vivino (a não ser que o Vivino seja um dos sites) e sem o
+   grounding. O que as páginas não disserem fica vazio, e um campo que a IA
+   não diga de onde veio sai.
+   O que NÃO se faz: abrir o Vivino daqui. A proteção dele recusa
+   servidores (403 na 1.ª corrida no GitHub Actions) e isso não se contorna
+   — ver o CLAUDE.md, "Links do Vivino"; do Vivino fica o que o Google
+   mostra. Uma loja que recuse (403, desafio anti-bots) também não se
+   contorna: fica o resumo do Google, se houver, e o ecrã diz que recusou.
+   Um endereço escrito por alguém é aberto por um servidor: só http(s),
+   só nomes públicos (nada de IPs, portas nem "localhost"), redireções
+   conferidas uma a uma, 1,5 MB no máximo. A MESMA leitura está na
+   `catalogo-info` da WineCatalog — mexer numa é mexer na outra. Aqui, quem
+   pode escrever um endereço é qualquer editor com IA, e é por isso que as
+   travas acima não são enfeite. */
+const PAGINA_TIMEOUT_MS = 10_000;
+const PAGINA_MAX_BYTES = 1_500_000;
+const PAGINA_MAX_TEXTO = 6_000;
+const EVIDENCIA_PAGINAS_MAX = 20_000;
+const UA_PAGINA = "Mozilla/5.0 (compatible; Garrafeira/1.0)";
+const RECUSA = /just a moment|attention required|access denied|captcha|verify you are human|unusual traffic|verifica[çc][ãa]o de seguran[çc]a/i;
+
+function hostPublico(u: URL): boolean {
+  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+  if (u.port || u.username || u.password) return false;
+  const h = u.hostname.toLowerCase();
+  return /^([a-z0-9-]+\.)+[a-z]{2,}$/.test(h) && !/(^|\.)(localhost|local|internal|lan|home|arpa)$/.test(h);
+}
+const siteDe = (url: string): string => {
+  try { return new URL(url).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; }
+};
+/* O endereço de uma PÁGINA (com caminho) — só o domínio não é uma página. */
+function paginaDe(s: string): string {
+  let t = String(s ?? "").trim();
+  if (!/^https?:\/\//i.test(t)) {
+    if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+\/\S/i.test(t)) return "";
+    t = "https://" + t;
+  }
+  try {
+    const u = new URL(t);
+    if (!hostPublico(u) || u.pathname.replace(/\/+$/, "") === "") return "";
+    u.hash = "";
+    for (const k of [...u.searchParams.keys()]) {
+      if (/^(utm_|srsltid$|gclid$|fbclid$)/i.test(k)) u.searchParams.delete(k);
+    }
+    return u.toString();
+  } catch { return ""; }
+}
+/* O resultado de uma procura num site que tem ar de ser a página de UM
+   produto (não a procura, uma categoria ou a página inicial). */
+function paginaDoResultado(rows: Resultado[], dominio: string): Resultado | null {
+  return rows.find((x) => {
+    if (!doSite(x.url, dominio)) return false;
+    try {
+      const u = new URL(x.url);
+      return u.pathname.replace(/\/+$/, "") !== "" &&
+        !/catalogsearch|\/search\b|\/pesquisa\b|\/categor|\/tag\/|\/marcas?\/?$|\/brands?\/?$/i.test(u.pathname) &&
+        !u.searchParams.has("s") && !u.searchParams.has("q");
+    } catch { return false; }
+  }) ?? null;
+}
+
+const ENT: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", euro: "€", ordm: "º", ordf: "ª",
+  deg: "°", middot: "·", ndash: "–", mdash: "—", hellip: "…", laquo: "«", raquo: "»",
+  lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", reg: "®", copy: "©", trade: "™", times: "×",
+};
+const ACENTO: Record<string, string> = { acute: "\u0301", grave: "\u0300", circ: "\u0302", tilde: "\u0303", uml: "\u0308", cedil: "\u0327" };
+function entidades(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] === "#") {
+      const n = /^#x/i.test(e) ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;
+    }
+    if (e in ENT) return ENT[e];
+    const a = e.match(/^([a-z])(acute|grave|circ|tilde|uml|cedil)$/i);
+    return a ? (a[1] + ACENTO[a[2].toLowerCase()]).normalize("NFC") : m;
+  });
+}
+const semTags = (s: string) => entidades(s.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+function metaDe(html: string, nome: string): string {
+  const tag = html.match(new RegExp(`<meta[^>]+(?:property|name|itemprop)\\s*=\\s*["']${nome}["'][^>]*>`, "i"))?.[0];
+  if (!tag) return "";
+  const m = tag.match(/content\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+  return m ? texto(entidades(m[1] ?? m[2] ?? ""), 400) : "";
+}
+/* O que a loja declara do produto (JSON-LD `Product`, dentro ou fora de um
+   `@graph`). A classificação que lá vier é a dos CLIENTES DA LOJA, nunca a
+   do Vivino — e diz-se isso ao modelo. */
+function produtoDaPagina(html: string): string {
+  const ld: any[] = [];
+  const junta = (x: any) => {
+    if (!x || typeof x !== "object") return;
+    if (Array.isArray(x)) { x.forEach(junta); return; }
+    ld.push(x);
+    if (Array.isArray(x["@graph"])) x["@graph"].forEach(junta);
+  };
+  for (const m of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    try { junta(JSON.parse(m[1].trim())); } catch { /* um JSON-LD partido não deita a página abaixo */ }
+  }
+  const p = ld.find((x) => /Product|Wine/i.test(String(x?.["@type"] ?? "")));
+  if (!p) return "";
+  const um = (v: any) => (Array.isArray(v) ? v[0] : v);
+  const t = (v: unknown, n: number) => texto(semTags(String(v ?? "")), n);
+  const linhas: string[] = [];
+  if (p.name) linhas.push(`nome: ${t(p.name, 200)}`);
+  const marca = um(p.brand ?? p.manufacturer);
+  const marcaN = typeof marca === "string" ? marca : marca?.name;
+  if (marcaN) linhas.push(`marca/produtor: ${t(marcaN, 120)}`);
+  const of = um(p.offers);
+  if (of && typeof of === "object") {
+    const ps = um(of.priceSpecification);
+    const preco = of.price ?? of.lowPrice ?? ps?.price;
+    if (preco != null && preco !== "") linhas.push(`preço: ${t(preco, 20)} ${t(of.priceCurrency ?? ps?.priceCurrency ?? "", 5)}`.trim());
+  }
+  const img = um(p.image);
+  const imgU = typeof img === "string" ? img : img?.url ?? img?.contentUrl;
+  if (imgU) linhas.push(`imagem: ${t(imgU, 400)}`);
+  const ar = p.aggregateRating;
+  if (ar?.ratingValue != null) {
+    linhas.push(`avaliação dos clientes DESTA loja (não é o Vivino): ${t(ar.ratingValue, 10)}${(ar.ratingCount ?? ar.reviewCount) != null ? ` (${t(ar.ratingCount ?? ar.reviewCount, 12)})` : ""}`);
+  }
+  for (const ap of (Array.isArray(p.additionalProperty) ? p.additionalProperty : []).slice(0, 20)) {
+    if (ap?.name && ap?.value != null) linhas.push(`${t(ap.name, 60)}: ${t(ap.value, 200)}`);
+  }
+  if (p.description) linhas.push(`descrição: ${t(p.description, 1500)}`);
+  return linhas.join("\n");
+}
+/* O texto da zona principal (o `<main>`, se houver), sem menus, rodapé,
+   scripts nem botões. As tabelas ficam "rótulo | valor" numa linha — é
+   onde as lojas escrevem as castas, a região, o teor e o estágio. */
+function textoDaPagina(html: string): string {
+  let h = html;
+  const main = h.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i);
+  if (main && main[1].length > 500) h = main[1];
+  else {
+    const b = h.match(/<body\b[^>]*>([\s\S]*)<\/body>/i);
+    h = (b ? b[1] : h).replace(/<header\b[^>]*>[\s\S]*?<\/header>/gi, " ");
+  }
+  h = h.replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(script|style|noscript|svg|template|iframe|nav|footer|aside|select|button)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/t[hd]>/gi, " | ")
+    .replace(/<\/dt>/gi, ": ")
+    .replace(/<\/(p|div|li|h[1-6]|section|article|tr|ul|ol|table|dd|dl|figcaption|blockquote)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ");
+  const linhas: string[] = [];
+  for (const bruta of entidades(h).split("\n")) {
+    const l = bruta.replace(/[ \t\u00a0]+/g, " ").replace(/^[\s|]+|[\s|]+$/g, "");
+    if (!l || l === linhas[linhas.length - 1]) continue;
+    linhas.push(l);
+  }
+  return linhas.join("\n").slice(0, PAGINA_MAX_TEXTO);
+}
+async function lerAte(r: Response, max: number): Promise<Uint8Array> {
+  const rd = r.body?.getReader();
+  if (!rd) return new Uint8Array();
+  const partes: Uint8Array[] = [];
+  let n = 0;
+  while (n < max) {
+    const { done, value } = await rd.read();
+    if (done || !value) break;
+    partes.push(value);
+    n += value.length;
+  }
+  if (n >= max) await rd.cancel().catch(() => {});
+  const out = new Uint8Array(Math.min(n, max));
+  let o = 0;
+  for (const p of partes) {
+    const c = p.subarray(0, out.length - o);
+    out.set(c, o);
+    o += c.length;
+    if (o >= out.length) break;
+  }
+  return out;
+}
+type Pagina = {
+  url: string; site: string; dada: boolean;
+  estado: "lida" | "recusada" | "vazia" | "erro";
+  http?: number; titulo?: string; motivo?: string; texto?: string;
+};
+async function abrirPagina(url0: string, dada: boolean, signal: AbortSignal): Promise<Pagina> {
+  let url = url0;
+  const base = (): Pagina => ({ url, site: siteDe(url) || siteDe(url0), dada, estado: "erro" });
+  try {
+    const sinal = AbortSignal.any([signal, AbortSignal.timeout(PAGINA_TIMEOUT_MS)]);
+    let r: Response | null = null;
+    for (let i = 0; i < 5; i++) {
+      const u = new URL(url);
+      if (!hostPublico(u)) return { ...base(), motivo: "endereço não permitido" };
+      r = await fetch(u, {
+        redirect: "manual", signal: sinal,
+        headers: { "User-Agent": UA_PAGINA, Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5", "Accept-Language": "pt-PT,pt;q=0.9,en;q=0.5" },
+      });
+      const loc = r.status >= 300 && r.status < 400 ? r.headers.get("location") : null;
+      if (!loc) break;
+      await r.body?.cancel().catch(() => {});
+      url = new URL(loc, url).toString();
+      r = null;
+    }
+    if (!r) return { ...base(), motivo: "redireções a mais" };
+    const tipo = r.headers.get("content-type") ?? "";
+    if (r.status === 403 || r.status === 429 || r.status === 503) {
+      await r.body?.cancel().catch(() => {});
+      return { ...base(), estado: "recusada", http: r.status, motivo: `HTTP ${r.status}` };
+    }
+    if (!r.ok) {
+      await r.body?.cancel().catch(() => {});
+      return { ...base(), http: r.status, motivo: `HTTP ${r.status}` };
+    }
+    if (tipo && !/html|xml/i.test(tipo)) {
+      await r.body?.cancel().catch(() => {});
+      return { ...base(), http: r.status, motivo: `não é uma página (${tipo.split(";")[0]})` };
+    }
+    const bytes = await lerAte(r, PAGINA_MAX_BYTES);
+    // O charset do cabeçalho, senão o do <meta>, senão UTF-8.
+    const ascii = new TextDecoder("latin1").decode(bytes.subarray(0, 4096));
+    const cs = (tipo.match(/charset=["']?([\w-]+)/i) ?? ascii.match(/<meta[^>]+charset=["']?([\w-]+)/i) ?? [])[1] ?? "utf-8";
+    let html: string;
+    try { html = new TextDecoder(cs).decode(bytes); } catch { html = new TextDecoder().decode(bytes); }
+    const titulo = texto(semTags((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) ?? [])[1] ?? ""), 160);
+    const corpo = textoDaPagina(html);
+    const recusa = `${titulo} ${corpo.slice(0, 500)}`.match(RECUSA);
+    if (recusa) return { ...base(), estado: "recusada", http: r.status, titulo, motivo: `a página diz "${recusa[0]}"` };
+    const produto = produtoDaPagina(html);
+    const meta = [["título", "og:title"], ["imagem", "og:image"], ["preço", "product:price:amount"],
+      ["moeda", "product:price:currency"], ["preço", "price"], ["descrição", "og:description"]]
+      .map(([rot, n]) => [rot, metaDe(html, n)]).filter(([, v]) => v).map(([rot, v]) => `${rot}: ${v}`);
+    const partes = [
+      titulo ? `Título da página: ${titulo}` : "",
+      produto ? `DADOS DO PRODUTO (o que a página declara aos motores de busca):\n${produto}` : "",
+      meta.length ? `ETIQUETAS DA PÁGINA:\n${meta.join("\n")}` : "",
+      corpo ? `TEXTO DA PÁGINA:\n${corpo}` : "",
+    ].filter(Boolean);
+    if (!produto && corpo.length < 200) {
+      return { ...base(), estado: "vazia", http: r.status, titulo, motivo: "a página quase não tem texto (é montada em JavaScript?)" };
+    }
+    return { ...base(), estado: "lida", http: r.status, titulo, texto: partes.join("\n\n") };
+  } catch (e) {
+    if (signal.aborted) throw e;
+    const err = e as Error;
+    return { ...base(), motivo: err.name === "TimeoutError" ? "não respondeu a tempo" : String(err.message).slice(0, 120) };
+  }
+}
+/* O que o ecrã e o registo dizem de cada página (sem o texto). */
+type PaginaRes = { site: string; url?: string; dada?: boolean; estado: string; http?: number; titulo?: string; motivo?: string };
+const paginaRes = (p: Pagina): PaginaRes => ({
+  site: p.site, url: p.url, dada: p.dada, estado: p.estado,
+  ...(p.http ? { http: p.http } : {}), ...(p.titulo ? { titulo: p.titulo } : {}), ...(p.motivo ? { motivo: p.motivo } : {}),
+});
+
+/* A base de evidência: as páginas abertas primeiro, depois os resultados
+   da pesquisa (os dos sites de confiança à frente) — tudo numerado de
+   seguida, que é o número que o modelo devolve em `deOnde`. */
+type Origem = { url: string; site: string; titulo: string; pagina?: boolean; dada?: boolean; google?: boolean };
+function montarEvidencia(paginas: Pagina[], resultados: Resultado[], ano: number | null, dominios: string[]) {
+  const lista: Origem[] = [];
+  const blocos: string[] = [];
+  let resto = EVIDENCIA_PAGINAS_MAX;
+  for (const p of paginas) {
+    if (p.estado !== "lida" || !p.texto || resto <= 0) continue;
+    lista.push({ url: p.url, site: p.site, titulo: p.titulo || p.site, pagina: true, ...(p.dada ? { dada: true } : {}) });
+    const b = `[${lista.length}] PÁGINA ABERTA de ${p.site}${p.dada
+      ? " (indicada por quem pesquisa como sendo a deste vinho)"
+      : ` (a primeira que a procura só em ${p.site} devolveu — confirma que é deste vinho)`}\nURL: ${p.url}\n${p.texto}`;
+    blocos.push(b.slice(0, resto));
+    resto -= b.length;
+  }
+  const vistos = new Set(lista.map((x) => x.url));
+  // Um resultado sem resumo nem estrelas (a página de procura da loja, por
+  // exemplo) não diz nada — fica de fora.
+  const rs = resultados.filter((x) => (x.snippet || x.rating != null) && !vistos.has(x.url) && (vistos.add(x.url), true));
+  const deConfianca = (x: Resultado) => dominios.find((d) => doSite(x.url, d)) ?? "";
+  // Os dos sites de confiança à frente — é a eles que a regra manda ir primeiro.
+  rs.sort((a, b) => Number(!deConfianca(a)) - Number(!deConfianca(b)));
+  const textoRs: string[] = [];
+  for (const x of rs) {
+    lista.push({ url: x.url, site: siteDe(x.url), titulo: x.titulo || siteDe(x.url) });
+    const viv = vivinoDeQue(x.url, ano);
+    textoRs.push(`[${lista.length}] RESULTADO DA PESQUISA${deConfianca(x) ? " ★ FONTE DE CONFIANÇA" : ""} ${x.titulo}\nURL: ${x.url}\n` +
+      (viv ? `(${viv})\n` : "") + `Resumo: ${x.snippet}` +
+      (x.rating != null ? `\nEstrelas no Google: ${x.rating}${x.ratingCount != null ? ` (${x.ratingCount} avaliações)` : ""}` : ""));
+  }
+  const confianca: Record<string, number> = Object.fromEntries(dominios.map((d) => [d, lista.filter((o) => doSite(o.url, d)).length]));
+  const texto_ = [...blocos, textoRs.join("\n\n").slice(0, 9000)].filter(Boolean).join("\n\n");
+  return {
+    texto: texto_,
+    lista,
+    fontes: lista.slice(0, 8).map((o) => ({ titulo: o.titulo.slice(0, 120), url: o.url.slice(0, 400) })),
+    confianca,
+  };
+}
+/* `deOnde` → de que página/resultado veio cada campo (as chaves da ficha).
+   O modelo devolve o número; aceita-se também o endereço. */
+const CAMPO_DO_JSON: Record<string, string> = Object.fromEntries(Object.entries(CAMPOS).map(([k, j]) => [j, k]));
+function origemDosCampos(deOnde: unknown, lista: Origem[], ficha: Record<string, unknown>, ano: number | null): Record<string, Origem> {
+  const out: Record<string, Origem> = {};
+  if (!deOnde || typeof deOnde !== "object" || Array.isArray(deOnde)) return out;
+  for (const [kj, bruto] of Object.entries(deOnde as Record<string, unknown>)) {
+    const k = CAMPO_DO_JSON[kj] ?? (kj in CAMPOS ? kj : "");
+    if (!k) continue;
+    const n = Array.isArray(bruto) ? bruto[0] : bruto;
+    const s = String(n ?? "").trim();
+    const o = /^https?:\/\//i.test(s)
+      ? lista.find((x) => x.url === s || s.startsWith(x.url))
+      : lista[parseInt(s.replace(/\D+/g, " ").trim().split(" ")[0], 10) - 1];
+    if (o) out[k] = o;
+  }
+  // Sem colheita, a nota "da colheita" passou a ser a de todas (`vivinoDuas`).
+  if (ano === null) {
+    if (out.vivino_nota && !out.vivino_nota_global) out.vivino_nota_global = out.vivino_nota;
+    if (out.vivino_avaliacoes && !out.vivino_avaliacoes_global) out.vivino_avaliacoes_global = out.vivino_avaliacoes;
+  }
+  for (const k of Object.keys(out)) if (k !== "produtor" && !(k in ficha)) delete out[k];
+  return out;
+}
+/* Numa frase, o que se passou com uma página (para o erro do "só estes sites"). */
+function paginaEmFrase(p: PaginaRes): string {
+  if (p.estado === "nao_encontrada") return `${p.site}: o vinho não apareceu na procura deste site`;
+  if (p.estado === "sem_pesquisa") return `${p.site}: sem a pesquisa externa não há como procurar dentro do site — cola o link da página`;
+  if (p.estado === "recusada") return `${p.site}: a página recusou a leitura (${p.motivo || "bloqueio"})`;
+  if (p.estado === "vazia") return `${p.site}: ${p.motivo || "a página não tem texto"}`;
+  if (p.estado === "erro") return p.url ? `${p.site}: não abriu (${p.motivo || "erro"})` : `${p.site}: ${p.motivo || "erro"}`;
+  return `${p.site}: lida`;
 }
 
 /* O que é que o catálogo consegue responder, dos campos que se pediram.
@@ -1160,6 +1544,9 @@ async function produzirFicha(
   campos: string[] | null = null, colheitaEspecifica: boolean = false,
   tipo: string = "", notas: string = "", sites: string[] = [], profunda: boolean = false,
   vinhoGravado: boolean = false,
+  // As páginas coladas nos sites (ver "AS PÁGINAS DOS SITES") e o visto
+  // "Usar só a informação destes sites".
+  paginasDadas: string[] = [], soSites: boolean = false,
 ): Promise<Res> {
   if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
   const inicio = Date.now();
@@ -1168,7 +1555,10 @@ async function produzirFicha(
   const chave = chaveCache(modoIA, nome, ano, produtor, regiao, tipo, notas, sites, campos, colheitaEspecifica);
   // A profunda existe para refazer o que veio de memória: nem a cache nem o
   // catálogo (onde essa resposta de memória foi parar) respondem por ela.
-  const cache = profunda ? null : await cacheLer(chave, signal);
+  // COM SITES também não (27/09/2026): quem os escreve quer que se LEIAM
+  // agora — e o catálogo já respondeu na etapa 1 do ecrã, à parte.
+  const semAtalhos = profunda || sites.length > 0;
+  const cache = semAtalhos ? null : await cacheLer(chave, signal);
   if (cache?.resultado) {
     await registar("ok", {
       nome, ano, modo: "cache", modelo: cache.modelo, ms: Date.now() - inicio,
@@ -1192,7 +1582,7 @@ async function produzirFicha(
   // Nem o ano, que sem ano no pedido não se procura (ver `normalizar`).
   const pedidos = (campos && campos.length ? campos : Object.keys(CAMPOS))
     .filter((k) => ano !== null || (k !== "beber_de" && k !== "beber_ate" && k !== "ano" && !(k in PAR_VIVINO)));
-  const conhecido = profunda ? null : await catalogoProcurar(nome, produtor, ano, signal, tipo);
+  const conhecido = semAtalhos ? null : await catalogoProcurar(nome, produtor, ano, signal, tipo);
   const doCatalogo = conhecido ? catalogoResponde(conhecido, pedidos) : {};
   const emFalta = pedidos.filter((k) => !(k in doCatalogo));
 
@@ -1229,9 +1619,10 @@ async function produzirFicha(
   const campos_ia = Object.keys(doCatalogo).length ? emFalta
     : (campos && ano === null ? campos.filter((k) => k !== "beber_de" && k !== "beber_ate") : campos);
 
-  // Os `sites` de confiança: os que são domínios ganham uma consulta só
-  // deles no Serper (ver `dominioDe`); no grounding só podem ir como pedido
-  // no texto (o `google_search` não tem esse parâmetro na API pública).
+  // Os `sites` de confiança: os que são domínios ganham uma procura só
+  // deles no Serper (ver `dominioDe`), e a página que ela devolver abre-se,
+  // como as coladas (ver "AS PÁGINAS DOS SITES"); no grounding só podem ir
+  // como pedido no texto (o `google_search` não tem esse parâmetro na API).
   const dominios = [...new Set(sites.map(dominioDe).filter(Boolean))];
   const query = [nome, ano || "", produtor, regiao, notas, "vivino garrafeira nacional vinho portugal"]
     .filter(Boolean).join(" ");
@@ -1246,36 +1637,88 @@ async function produzirFicha(
      · INTERMÉDIO (`gratis`): só o grounding. O Serper gasta créditos que um
        dia se pagam; o grounding, com o modelo a responder quase sempre de
        memória, custa pouco (ver "De memória ou pesquisado").
-     A "profunda" deixou de ser um caminho à parte: é o pacote completo. */
+     A "profunda" deixou de ser um caminho à parte: é o pacote completo.
+     AS PÁGINAS COLADAS leem-se nos dois (abrir uma página não custa nada);
+     procurar DENTRO de um site é o Serper, e por isso só no completo.
+     `soSites` ("Usar só a informação destes sites"): só as páginas e as
+     procuras nos sites — nem a consulta geral, nem a do Vivino se ele não
+     for um dos sites, nem o grounding. */
   const usarSerper = (modoIA === "premium" || profunda) && !!SEARCH_API_KEY;
   let pesquisa: PesquisaWeb = { texto: "", fontes: [], status: "grounding:google_search" };
   let serperConsultas = 0;
-  let serperFalhou = false;
+  const ehVivino = (d: string) => doSite(`https://${d}/`, "vivino.com");
+  const dadas = paginasDadas.filter((u) => !doSite(u, "vivino.com"));
+  const abrirDadas = Promise.all(dadas.map((u) => abrirPagina(u, true, signal)));
+  const comPagina = dadas.map(siteDe);
+  const procurarEm = dominios.filter((d) => !ehVivino(d) && !comPagina.some((sd) => doSite(`https://${sd}/`, d)));
+  const resultados: Resultado[] = [];
+  const achadas: string[] = [];
+  let paginasRes: PaginaRes[] = [];
   if (usarSerper) {
-    try {
-      const qVivino = `"${nome.replace(/"/g, "")}" ${produtor} site:vivino.com`.replace(/\s+/g, " ");
-      // O Vivino já tem a sua consulta; os outros sites de confiança têm
-      // uma só deles — e vai À FRENTE, para caber no corte do texto.
-      const outros = dominios.filter((d) => !doSite(`https://${d}/`, "vivino.com"));
-      const qSites = outros.length
-        ? `${[nome, ano || "", produtor].filter(Boolean).join(" ")} (${outros.map((d) => `site:${d}`).join(" OR ")})` : "";
-      const consultas = [...(qSites ? [qSites] : []), query, qVivino];
-      const rs = await Promise.allSettled(consultas.map((q) => obterResultadosPesquisa(q, signal, ano, dominios)));
-      serperConsultas = consultas.length;
-      consultasFeitas = consultas;
-      const boas = rs.filter((r) => r.status === "fulfilled").map((r) => (r as PromiseFulfilledResult<PesquisaWeb>).value)
-        .filter((b) => b.texto);
-      if (!boas.length) throw (rs.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined)?.reason ?? new Error("sem resultados");
-      const fontes = boas.flatMap((b) => b.fontes).filter((f, i, a) => a.findIndex((x) => x.url === f.url) === i);
-      // Quantos resultados vieram de cada site de confiança (sem repetir URL).
-      confianca = Object.fromEntries(dominios.map((d) => [d, fontes.filter((f) => doSite(f.url, d)).length]));
-      pesquisa = { texto: boas.map((b) => b.texto).join("\n\n").slice(0, 10000), fontes, status: boas[0].status };
-    } catch (e) {
-      // Sem os resultados do Serper não se desiste: segue-se só com o
-      // grounding, que é o que o pacote intermédio faz sempre.
-      serperFalhou = true;
-      await registar("erro", { passo: "search-api", erro: String((e as Error).message || "").slice(0, 300) }, quem);
+    const qVivino = `"${nome.replace(/"/g, "")}" ${produtor} site:vivino.com`.replace(/\s+/g, " ");
+    const quem_ = [nome, ano || "", produtor].filter(Boolean).join(" ");
+    // As procuras nos sites vão À FRENTE, para caberem no corte do texto.
+    const consultas: { q: string; dominio?: string }[] = procurarEm.map((d) => ({ q: `${quem_} site:${d}`, dominio: d }));
+    if (!soSites) consultas.push({ q: query });
+    if (!soSites || dominios.some(ehVivino)) consultas.push({ q: qVivino, dominio: "vivino.com" });
+    const rs = await Promise.allSettled(consultas.map((c) => serperConsulta(c.q, signal)));
+    if (signal.aborted) throw new DOMException("timeout", "AbortError");
+    serperConsultas = consultas.length;
+    consultasFeitas = consultas.map((c) => c.q);
+    rs.forEach((r, i) => {
+      const d = consultas[i].dominio;
+      if (r.status !== "fulfilled") {
+        if (d && d !== "vivino.com") paginasRes.push({ site: d, estado: "erro", motivo: "a procura neste site falhou" });
+        return;
+      }
+      // Com o `soSites`, um resultado de fora dos sites não entra.
+      const rows = soSites && d ? r.value.filter((x) => doSite(x.url, d)) : r.value;
+      resultados.push(...rows);
+      if (d && d !== "vivino.com") {
+        const pr = paginaDoResultado(rows, d);
+        if (pr) achadas.push(pr.url);
+        else paginasRes.push({ site: d, estado: "nao_encontrada" });
+      }
+    });
+    const falhou = rs.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+    if (falhou && !resultados.length) {
+      // Sem os resultados do Serper não se desiste: segue-se com o que houver
+      // (as páginas coladas, e o grounding fora do "só estes sites").
+      await registar("erro", { passo: "search-api", erro: String((falhou.reason as Error)?.message ?? falhou.reason).slice(0, 300) }, quem);
     }
+  } else {
+    // Sem o Serper não há como procurar dentro de um site.
+    procurarEm.forEach((d) => paginasRes.push({ site: d, estado: "sem_pesquisa" }));
+  }
+  const [abertasDadas, abertasAchadas] = await Promise.all([abrirDadas, Promise.all(achadas.map((u) => abrirPagina(u, false, signal)))]);
+  // Uma página colada que não se deixou ler (403, desafio anti-bots, 404):
+  // fica o que o Google mostra desse site, se houver pesquisa.
+  const semLeitura = [...new Set(abertasDadas.filter((p) => p.estado !== "lida").map((p) => p.site))]
+    .filter((d) => d && !procurarEm.includes(d));
+  if (usarSerper && semLeitura.length) {
+    const qs = semLeitura.map((d) => `${[nome, ano || "", produtor].filter(Boolean).join(" ")} site:${d}`);
+    const rs2 = await Promise.allSettled(qs.map((q) => serperConsulta(q, signal)));
+    serperConsultas += qs.length;
+    consultasFeitas = [...consultasFeitas, ...qs];
+    rs2.forEach((r, i) => { if (r.status === "fulfilled") resultados.push(...r.value.filter((x) => doSite(x.url, semLeitura[i]))); });
+  }
+  const abertas = [...abertasDadas, ...abertasAchadas];
+  paginasRes = [...abertas.map(paginaRes), ...paginasRes];
+  const paginasLidas = abertas.filter((p) => p.estado === "lida").length;
+  const ev = montarEvidencia(abertas, resultados, ano, dominios);
+  if (ev.texto) {
+    pesquisa = { texto: ev.texto, fontes: ev.fontes, status: serperConsultas ? `search-api:${extrairHost(SEARCH_API_URL) || "externa"}` : "paginas" };
+  }
+  // Sem pesquisa nem páginas, os sites foram só texto no pedido — e é isso
+  // que o ecrã diz quando não há contagem.
+  if (dominios.length && (serperConsultas || abertas.length)) confianca = ev.confianca;
+  const temEvidencia = !!pesquisa.texto;
+  if (soSites && !temEvidencia) {
+    const porque = paginasRes.map(paginaEmFrase).join("; ") ||
+      (usarSerper ? "nenhum dos sites é um domínio ou um link" : "sem a pesquisa do pacote completo, só se leem links de páginas — cola o link da página do vinho");
+    await registar("erro", { passo: "so_sites_vazio", nome, sites, paginas: paginasRes,
+      ...(serperConsultas ? { serper_consultas: serperConsultas, consultas: consultasFeitas } : {}) }, quem);
+    return { ok: false, status: 404, erro: `não consegui ler nada dos sites escolhidos — ${porque}.` };
   }
 
   const tentativas: { modelo: string; modo: string; estado: number | string; usageMetadata?: UsageMetadata }[] = [];
@@ -1286,7 +1729,7 @@ async function produzirFicha(
   // senão, grounding.
   const fase = async (comSerper: boolean, camposFase: string[] | null) => {
     const texto = comSerper
-      ? prompt(nome, ano, produtor, regiao, tipo, notas, hoje, camposFase, pesquisa.texto, colheitaEspecifica, sites)
+      ? prompt(nome, ano, produtor, regiao, tipo, notas, hoje, camposFase, pesquisa.texto, colheitaEspecifica, sites, soSites)
       : promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, hoje, camposFase, colheitaEspecifica);
     let fontesG: Fonte[] = [];
     const run = async (modelo: string, modo: string, maxTokens: number, semThinking: boolean) => {
@@ -1325,23 +1768,31 @@ async function produzirFicha(
     if (comSerper && parsed) pesquisouF = true;
     return {
       ficha: parsed ? normalizar(parsed, ano, camposFase) : null,
+      // De onde veio cada campo (só na leitura da base de evidência).
+      deOnde: comSerper ? parsed?.deOnde : undefined,
       pesquisou: pesquisouF, erro, modelo, modo,
       fontes: comSerper ? pesquisa.fontes : (pesquisouF ? fontesG : []),
     };
   };
 
-  const f1 = await fase(usarSerper && !serperFalhou, campos_ia);
+  // Com base de evidência (o Serper e/ou as páginas), o Gemini só a lê;
+  // sem ela, grounding.
+  const f1 = await fase(temEvidencia, campos_ia);
   let ficha = f1.ficha;
   let pesquisou = f1.pesquisou;
   let usadoModelo = f1.modelo, usadoModo = f1.modo, erroUltimo = f1.erro;
   let fontesIA: Fonte[] = f1.fontes;
-  // Pacote completo: o grounding só pelo que o Serper não trouxe, logo a seguir.
-  if (usarSerper && !serperFalhou) {
+  // Os campos que só o grounding trouxe — dizem-se como tal no ecrã.
+  const doGround = new Set<string>();
+  // O grounding só pelo que a base de evidência não trouxe, logo a seguir —
+  // nunca com o "só estes sites": o que eles não disserem fica vazio.
+  if (temEvidencia && !soSites) {
     const quis = (campos_ia && campos_ia.length ? campos_ia : pedidos);
     const faltam = quis.filter((k) => !(ficha && !vazioCampo((ficha as any)[k])) && !(k in doCatalogo));
     if (faltam.length && budgetMs - (Date.now() - inicio) > 15_000) {
       const f2 = await fase(false, faltam);
       if (f2.ficha) {
+        for (const k of Object.keys(f2.ficha)) if (k !== "aviso" && k !== "ano" && vazioCampo((ficha as any)?.[k])) doGround.add(k);
         ficha = { ...f2.ficha, ...(ficha ?? {}) };
         fontesIA = [...fontesIA, ...f2.fontes];
         usadoModelo = f1.ficha ? `${f1.modelo} + ${f2.modelo}` : f2.modelo;
@@ -1353,6 +1804,7 @@ async function produzirFicha(
   if (!ficha && !Object.keys(doCatalogo).length) {
     await registar("erro", {
       passo: "vazio", nome, modo: usadoModo, modelo: usadoModelo,
+      ...(paginasRes.length ? { paginas: paginasRes } : {}), ...(soSites ? { so_sites: true } : {}),
       tentativas, erro: erroUltimo.slice(0, 300), ms: Date.now() - inicio,
       ...(usageTotal ? { usageMetadata: usageTotal } : {}),
     }, quem);
@@ -1377,12 +1829,29 @@ async function produzirFicha(
      formulário). Um nome que o catálogo já conhece, ou um vinho já gravado,
      escreve-se como sempre. O que se perde: a ficha da IA de um desejo com
      um nome novo (a wishlist não vai ao catálogo — é a regra dela). */
+  /* DE ONDE VEIO CADA CAMPO (27/09/2026): o número que o modelo deu em
+     `deOnde` → a página ou o resultado; o que só o grounding trouxe diz-se
+     como tal. Com o "só estes sites", um campo sem origem sai — não há como
+     dizer que veio deles (o ano e o aviso não são campos da ficha). */
+  const origemCampos: Record<string, Origem> = ficha ? origemDosCampos(f1.deOnde, ev.lista, ficha, ano) : {};
+  for (const k of doGround) if (ficha && k in ficha && !origemCampos[k]) origemCampos[k] = { url: "", site: "", titulo: "pesquisa Google", google: true };
+  const semFonte: string[] = [];
+  if (soSites && ficha) {
+    for (const k of Object.keys(ficha)) {
+      if (k === "aviso" || k === "ano" || origemCampos[k]) continue;
+      delete (ficha as Record<string, unknown>)[k];
+      semFonte.push(k);
+    }
+  }
+
   let catalogoAdiado = false;
   if (ficha) {
     const nomeConfirmado = vinhoGravado || !!conhecido ||
-      (profunda && !!(await catalogoProcurar(nome, produtor, ano, signal, tipo)));
-    if (nomeConfirmado) {
-      const { aviso: _aviso, ...factos } = ficha as Record<string, unknown>;
+      (semAtalhos && !!(await catalogoProcurar(nome, produtor, ano, signal, tipo)));
+    const { aviso: _aviso, ...factos } = ficha as Record<string, unknown>;
+    if (!Object.keys(factos).some((k) => k !== "ano")) {
+      // Nada a levar (o "só estes sites" deixou tudo de fora).
+    } else if (nomeConfirmado) {
       await catalogoJuntar(
         nome, produtor, ano, factos, `vinho-info-${modoIA}`,
         fontesIA, signal,
@@ -1395,7 +1864,9 @@ async function produzirFicha(
      explícita, que é o que se quer ler daqui a um ano. */
   ficha = { ...doCatalogo, ...(ficha ?? {}) };
 
-  await cacheEscrever(
+  // Com sites não se lê a cache (ver `semAtalhos`), por isso também não se
+  // escreve: era uma linha que ninguém ia ler.
+  if (!semAtalhos) await cacheEscrever(
     chave,
     { nome, ano, produtor, regiao, tipo, notas, sites, campos, query, fonte: pesquisa.status, modo_ia: modoIA },
     // `pesquisaWeb` vai com a cache para o botão da profunda não se perder
@@ -1422,6 +1893,8 @@ async function produzirFicha(
     // O que se fez com os sites de confiança: sem isto não havia maneira de
     // saber se tinham servido para alguma coisa.
     ...(sites.length ? { sites, ...(confianca ? { confianca } : {}) } : {}),
+    ...(paginasRes.length ? { paginas: paginasRes, paginas_lidas: paginasLidas } : {}),
+    ...(soSites ? { so_sites: true, ...(semFonte.length ? { sem_fonte: semFonte } : {}) } : {}),
     ms: dur, tentativas, custo_estimado_eur: custoEstimado,
     ...(usageTotal ? { usageMetadata: usageTotal } : {}),
   }, quem);
@@ -1440,7 +1913,14 @@ async function produzirFicha(
       plano: modoIA,
       ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}),
       ...(profunda ? { profunda: true } : {}),
-      ...(sites.length ? { sites, confianca } : {}),
+      ...(sites.length ? {
+        sites, confianca,
+        ...(paginasRes.length ? { paginas: paginasRes } : {}),
+        ...(soSites ? { soSites: true, ...(semFonte.length ? { semFonte } : {}) } : {}),
+      } : {}),
+      // De onde veio cada campo (a página, o resultado, ou o grounding) —
+      // a app mostra-o ao lado de cada proposta.
+      ...(Object.keys(origemCampos).length ? { origemCampos } : {}),
       modelo: usadoModelo,
       modo: usadoModo,
       custoEstimadoEur: custoEstimado,
@@ -1751,6 +2231,13 @@ Deno.serve(async (req) => {
     const vivinoDado = Array.isArray(body?.sites)
       ? (body.sites as unknown[]).map((s) => vivinoLink(texto(s, 300))).find(Boolean) ?? ""
       : "";
+    // E um link de uma PÁGINA de outro site abre-se e lê-se (ver "AS PÁGINAS
+    // DOS SITES"); o domínio dela fica nos `sites`, como antes.
+    const paginasDadas: string[] = Array.isArray(body?.sites)
+      ? [...new Set((body.sites as unknown[]).map((s) => paginaDe(texto(s, 400))).filter(Boolean))].slice(0, 5)
+      : [];
+    // "Usar só a informação destes sites" — sem sites não quer dizer nada.
+    const soSites = body?.soSites === true && sites.length > 0;
     const notas = texto(body?.notas, 300);
     const vinhoId = typeof body?.vinhoId === "number" ? body.vinhoId : null;
     /* `campos`: a app diz o que quer que se procure. Só se aceitam nomes
@@ -1784,7 +2271,7 @@ Deno.serve(async (req) => {
        existir, `criarAnalise` devolve null e cai-se no modo síncrono em vez
        de rebentar. */
     if (body?.assincrono === true) {
-      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, tipo, notas, sites, campos: camposPedidos }, vinhoId, quem!, ctrl.signal);
+      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, tipo, notas, sites, ...(soSites ? { soSites } : {}), campos: camposPedidos }, vinhoId, quem!, ctrl.signal);
       if (analiseId != null) {
         const dono = quem!;
         // NÃO faz await: o trabalho pesado sobrevive ao pedido original.
@@ -1792,7 +2279,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null), vivinoDado, camposPedidos);
+          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites), vivinoDado, camposPedidos);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -1810,7 +2297,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null), vivinoDado, camposPedidos);
+    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites), vivinoDado, camposPedidos);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";

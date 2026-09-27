@@ -1426,6 +1426,29 @@ prompt do Serper não os levava de todo); e o resultado (`sites`,
 ecrã mostra (`pqSitesHTML`). Só o pacote completo tem Serper: no intermédio,
 no grounding e na resposta colada vão só no texto do pedido, e o ecrã di-lo.
 
+**As páginas dos sites, "só estes sites" e de onde veio cada campo**
+(27/09/2026, o dono das apps: "encontrei o vinho num site, dou o link e
+preenchem-se os atributos a partir daí"). A `vinho-info` ABRE as páginas: um
+link colado na caixa, tal e qual (em qualquer pacote — abrir uma página não
+custa nada), e, de cada domínio escrito sem página, a primeira página de
+produto que a procura só nesse site devolver (isso é Serper, por isso só no
+completo; no intermédio o ecrã diz para colar o link). Do HTML lê o JSON-LD
+do produto, as etiquetas `og:` e o texto do `<main>`; as páginas vão à frente
+na base de evidência, e o Gemini devolve `deOnde` (de que página ou resultado
+tirou cada campo) → `origemCampos` no resultado → a opção da IA diz
+"IA · garrafeiranacional.com" (`pqDeOndeHTML`) e, no vinho novo, o
+`pqFimNovo` diz de onde veio cada campo que pôs no formulário. O visto
+**"Usar só a informação destes sites"** (`soSites`): sem a consulta geral,
+sem a do Vivino se ele não for um dos sites, sem o grounding, sem a cache e
+sem o catálogo; um campo sem origem sai (`semFonte`). **Com sites, a cache e o
+catálogo do servidor não respondem** (`semAtalhos`): quem os escreve quer que
+se leiam agora, e o catálogo já respondeu na etapa 1 do ecrã. O Vivino não se
+abre (recusa servidores); uma loja que recuse fica com o resumo do Google.
+Só http(s) e nomes públicos, redireções conferidas, 1,5 MB — aqui qualquer
+editor com IA pode escrever um endereço. A leitura é a MESMA da
+`catalogo-info` da WineCatalog (o `CLAUDE.md` de lá tem o resto) — mexer numa
+é mexer na outra.
+
 A nota que CONTA — no crachá do cartão e da grelha, na página do vinho, na
 ordenação dentro dos grupos, no filtro por Vivino, no "A completar" e na PDF
 da wishlist — é **uma só**, e sai sempre de `notaVivino(v)`/`notaVivinoNum(v)`;
