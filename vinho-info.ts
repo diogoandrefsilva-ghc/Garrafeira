@@ -1737,8 +1737,11 @@ Deno.serve(async (req) => {
        vinho com um homónimo ("grande reserva", "edição limitada", …) e a
        dar prioridade a fontes em que a pessoa confia. Nunca são pedidos de
        volta à IA, só entram no prompt/pesquisa como contexto. */
+    // Um domínio fica só o domínio (sem "www.", sem caminho — é o que a
+    // contagem `confianca` usa); um nome sem domínio ("Garrafeira Nacional")
+    // fica como foi escrito: vai para o prompt, nunca para um `site:`.
     const sites: string[] = Array.isArray(body?.sites)
-      ? [...new Set<string>(body.sites.map((s: unknown) => texto(s, 100).replace(/^https?:\/\//i, "").replace(/\/.*$/, "")).filter(Boolean))].slice(0, 5)
+      ? [...new Set<string>(body.sites.map((s: unknown) => dominioDe(texto(s, 300)) || texto(s, 60)).filter(Boolean))].slice(0, 5)
       : [];
     // Os sites viram só o domínio (acima) — mas um link do Vivino de UM vinho
     // colado ali é a resposta, não uma fonte: guarda-se inteiro, antes de o
