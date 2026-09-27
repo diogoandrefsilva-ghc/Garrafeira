@@ -1048,6 +1048,7 @@ async function produzirFicha(
   quem: string | null, signal: AbortSignal, budgetMs: number,
   campos: string[] | null = null, colheitaEspecifica: boolean = false,
   tipo: string = "", notas: string = "", sites: string[] = [], profunda: boolean = false,
+  vinhoGravado: boolean = false,
 ): Promise<Res> {
   if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
   const inicio = Date.now();
@@ -1238,13 +1239,32 @@ async function produzirFicha(
   /* O que a IA acabou de descobrir vai para o catálogo — é isto que faz a
      próxima pessoa (nesta app ou na WineSelection) não pagar a mesma
      pergunta. Só o que veio da IA: o que já era do catálogo voltar para lá
-     não acrescenta nada e só remexia as datas de quem lá pôs primeiro. */
+     não acrescenta nada e só remexia as datas de quem lá pôs primeiro.
+
+     MAS SÓ COM UM NOME CONFIRMADO (27/09/2026). No vinho novo o formulário
+     é a confirmação: o nome que se procura é o que a pessoa escreveu, e ela
+     ainda o pode corrigir antes de gravar. Alguém escreveu "Cristo vinhas
+     velhas", a IA respondeu pelo Quinta do Crasto, a pessoa gravou "Crasto
+     Vinhas Velhas" (na wishlist) — e o catálogo ficou com uma linha
+     "Cristo vinhas velhas", sem produtor, que ninguém tinha, e que só os
+     Duplicados da WineCatalog apanharam. Por isso, com o vinho por gravar
+     (`vinhoId` nulo) e um nome que o catálogo ainda não conhece, NÃO se
+     escreve: a linha nasce quando o vinho for gravado, pelo trigger
+     `vinhos_catalogo`, com o nome final (e a ficha da IA que ficou no
+     formulário). Um nome que o catálogo já conhece, ou um vinho já gravado,
+     escreve-se como sempre. O que se perde: a ficha da IA de um desejo com
+     um nome novo (a wishlist não vai ao catálogo — é a regra dela). */
+  let catalogoAdiado = false;
   if (ficha) {
-    const { aviso: _aviso, ...factos } = ficha as Record<string, unknown>;
-    await catalogoJuntar(
-      nome, produtor, ano, factos, `vinho-info-${modoIA}`,
-      fontesIA, signal,
-    );
+    const nomeConfirmado = vinhoGravado || !!conhecido ||
+      (profunda && !!(await catalogoProcurar(nome, produtor, ano, signal, tipo)));
+    if (nomeConfirmado) {
+      const { aviso: _aviso, ...factos } = ficha as Record<string, unknown>;
+      await catalogoJuntar(
+        nome, produtor, ano, factos, `vinho-info-${modoIA}`,
+        fontesIA, signal,
+      );
+    } else catalogoAdiado = true;
   }
 
   /* O catálogo por baixo, a IA por cima: a IA só foi chamada pelo que
@@ -1272,6 +1292,8 @@ async function produzirFicha(
     // se vê se isto está a valer a pena (Definições › Diagnóstico).
     catalogo_campos: Object.keys(doCatalogo).length,
     ia_campos: emFalta.length,
+    // O vinho novo com um nome que o catálogo não conhece: vai quando for gravado.
+    ...(catalogoAdiado ? { catalogo: "adiado" } : {}),
     ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}), ...(profunda ? { profunda: true } : {}),
     ...(serperConsultas ? { serper_consultas: serperConsultas } : {}),
     ms: dur, tentativas, custo_estimado_eur: custoEstimado,
@@ -1639,7 +1661,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda), vivinoDado, camposPedidos);
+          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null), vivinoDado, camposPedidos);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -1657,7 +1679,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda), vivinoDado, camposPedidos);
+    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null), vivinoDado, camposPedidos);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";

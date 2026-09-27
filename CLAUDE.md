@@ -1321,7 +1321,9 @@ lado para o outro, e duas cópias divergem no dia em que se edita uma.
 - **Não alimenta o catálogo partilhado** enquanto for desejo: a
   `catalogar_vinho` salta-o, porque quem o escreveu não tem a garrafa na mão
   e o catálogo dar-lhe-ia essa força. Ao passar para a garrafeira, o UPDATE
-  volta a disparar o trigger.
+  volta a disparar o trigger. E a procura da IA de um desejo NOVO com um
+  nome que o catálogo não conhece também não lá chega (ver "O catálogo
+  partilhado" › a escrever): o nome ainda não estava confirmado.
 - **É visível numa garrafeira emprestada** (é aí que um amigo vai ver o que
   oferecer), e o **PDF** também (`exportarWishlistPDF`, a mesma folha do
   Exportar PDF). Mexer é só de quem pode editar. O PDF não leva as minhas
@@ -1769,7 +1771,16 @@ Como funciona, dos dois lados:
   campos**: um pedido mais estreito é mais barato e melhor respondido, que
   é a mesma razão por que a app já deixa escolher os campos ("O que pedir");
 - **a escrever**: o que a IA acabou de descobrir volta ao catálogo, e o
-  trigger `vinhos_catalogo` leva para lá cada vinho que alguém guarda. As
+  trigger `vinhos_catalogo` leva para lá cada vinho que alguém guarda —
+  **mas a IA só escreve com um nome confirmado** (27/09/2026): um vinho já
+  gravado (`vinhoId`), ou um nome que o catálogo já conhece. No vinho novo
+  com um nome que o catálogo não conhece, não escreve (`catalogo: "adiado"`
+  no `sync_log`): o nome é o que a pessoa escreveu e ainda o pode corrigir —
+  o formulário é a confirmação. Foi o "Cristo vinhas velhas": a IA respondeu
+  pelo Quinta do Crasto, a pessoa gravou "Crasto Vinhas Velhas" na wishlist,
+  e o catálogo ficou com uma linha com o nome errado e sem produtor, de um
+  vinho que ninguém tinha (resolvida nos Duplicados da WineCatalog). A linha
+  nasce quando o vinho é gravado, pelo trigger, com o nome final. As
   castas não vivem na linha do vinho, por isso o trigger não as vê mudar —
   o gancho que falta está no fim da `definir_castas`, em `functions.sql`;
 - **nada disto pode deitar uma procura abaixo.** É uma poupança, não uma
