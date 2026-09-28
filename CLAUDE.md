@@ -336,17 +336,21 @@ quando abre o vinho.
 O **estágio** (`estagioDe`, `ESTAGIO_OPCOES`) é texto livre, e nos dados
 quase tudo é "barrica de carvalho francês" — filtrar pela madeira ou pela
 origem do carvalho devolvia a lista quase inteira. O que varia é o TEMPO em
-madeira e, nalguns, onde estagiou em vez dela. Daí sete opções num campo:
+madeira e, nalguns, onde estagiou em vez dela. Daí nove opções num campo:
 *Sem madeira* · *Madeira · até 6 meses* · *· 7 a 12* · *· 13 a 18* · *·
-mais de 18* · *Tonel / balseiro* · *Ânfora / talha*. Um vinho pode estar em
+mais de 18* · *Tonel / balseiro* · *Ânfora / talha* · *Outras opções de
+estágio* · *Sem informação* — as duas últimas garantem que TODOS os vinhos
+caem em alguma (pedido do dono, 28/09/2026). Um vinho pode estar em
 duas ("18 meses em tonéis" é 13–18 E tonel; uma talha é também sem madeira)
 — o `valorDe` devolve lista, como nas castas. Os meses saem do TEXTO primeiro
 (o primeiro "N meses" que fala de madeira ou de nada — salta "24 meses em
 garrafa" e "sobre borras"; anos só com madeira à frente, senão "vinhas com
 mais de 60 anos" era estágio) e o `estagio_meses` só vale quando o texto não
 diz: é o texto que a ficha mostra, e o número às vezes está errado. Um
-estágio sem texto e com 0 meses não entra em opção nenhuma — é o valor por
-defeito da importação, não "sem madeira".
+estágio sem texto e com 0 meses é *Sem informação* — é o valor por defeito
+da importação, não "sem madeira"; um estágio escrito que não encaixa em
+nenhuma das outras ("Estágio em barricas", sem meses) é *Outras opções de
+estágio*.
 
 `Locais` (`renderMapa`) é **um local de cada vez, a ocupar o ecrã**: a
 barra com ‹ › (o nome, a contagem "**35** / 45 garrafas" e ✎ editar ao

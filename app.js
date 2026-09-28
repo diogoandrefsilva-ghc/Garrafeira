@@ -1949,10 +1949,13 @@ function faixaTeorIndice(valor){
    talha é também sem madeira) — o `valorDe` devolve lista, como nas castas.
    Os meses saem do TEXTO primeiro, porque é o texto que a ficha do vinho
    mostra e o número às vezes está errado (há "12 meses em madeira e 24 em
-   garrafa" com 36 no número); o número só vale quando o texto não diz. E
-   um estágio sem texto e com 0 meses não está em lado nenhum: é o valor
-   por defeito da importação, não "sem madeira" — seria dizer que 30 vinhos
-   não passaram por madeira sem ninguém o ter escrito. */
+   garrafa" com 36 no número); o número só vale quando o texto não diz.
+   TODOS os vinhos caem em pelo menos uma opção, e é o que as duas últimas
+   garantem: sem texto e com 0 meses é "Sem informação" (é o valor por
+   defeito da importação, não "sem madeira" — seria dizer que 30 vinhos não
+   passaram por madeira sem ninguém o ter escrito); um estágio escrito que
+   não encaixa em nenhuma das outras ("Estágio em barricas de carvalho",
+   sem os meses) é "Outras opções de estágio". */
 const ESTAGIO_OPCOES=[
   ['sem','Sem madeira'],
   ['m6','Madeira · até 6 meses'],
@@ -1960,7 +1963,9 @@ const ESTAGIO_OPCOES=[
   ['m18','Madeira · 13 a 18 meses'],
   ['m99','Madeira · mais de 18 meses'],
   ['tonel','Tonel / balseiro'],
-  ['anfora','Ânfora / talha']
+  ['anfora','Ânfora / talha'],
+  ['outro','Outras opções de estágio'],
+  ['nd','Sem informação']
 ];
 const RE_MADEIRA=/barric|madeira|carvalho|\btone(l|is)\b|balseir|\bpip[ao]s?\b|\bcasco|\bbarril/;
 // O que NÃO é madeira: onde estagiou em vez dela, ou a garrafa depois dela.
@@ -2007,6 +2012,7 @@ function estagioDe(v){
   if(madeira&&meses)out.push(meses<=6?'m6':meses<=12?'m12':meses<=18?'m18':'m99');
   if(/\btone(l|is)\b|balseir/.test(t))out.push('tonel');
   if(/\b(anforas?|talhas?)\b/.test(t))out.push('anfora');
+  if(!out.length)out.push((txt.trim()||col)?'outro':'nd');
   _ESTAGIO.set(k,out);
   return out;
 }
@@ -8432,7 +8438,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='120';
+const APP_BUILD='121';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
