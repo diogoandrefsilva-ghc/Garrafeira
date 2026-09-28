@@ -2023,8 +2023,8 @@ gravação seguinte fazia nascer lá outra linha com o nome antigo. Agora:
   `identidade_do_catalogo`). Chega tal e qual: o `vinhos_nomes` deixa-o
   passar sem o arrumar (marca `garrafeira.do_catalogo`), não volta ao
   catálogo e não carimba `atualizado_em`. Nunca o ano nem a cor; um produtor
-  vazio no catálogo não apaga o de cá. O que a `juntar` muda sozinha (o nome
-  mais comprido de uma pesquisa com IA) não chega cá.
+  vazio no catálogo não apaga o de cá. O que a `juntar` muda sozinha (o
+  produtor que enche um vazio) não chega cá — e o nome ela já não muda.
 **Se mexeres no `vinhos_nomes` ou no `vinhos_catalogo`**, as duas marcas
 (`garrafeira.do_catalogo`, `garrafeira.ligar`) têm de continuar lá à
 cabeça: sem elas, o nome do catálogo era rearrumado à chegada ou a escrita

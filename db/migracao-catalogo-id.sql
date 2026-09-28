@@ -130,8 +130,9 @@ REVOKE ALL ON FUNCTION garrafeira.achar_no_catalogo(bigint) FROM PUBLIC, anon, a
 -- nenhuma). Sem ele, e com o vinho ligado a uma linha da MESMA colheita,
 -- a `juntar` recebe a identidade DESSA linha (o nome do catálogo; o
 -- produtor do catálogo, ou o de cá se lá estiver vazio) — é o que impede
--- um nome que divergiu de fazer nascer outra linha, e o que impede o nome
--- mais comprido de cá de renomear a linha do catálogo. Só se a `juntar`
+-- um nome que divergiu de fazer nascer outra linha (e, até a `juntar` deixar
+-- de renomear, o nome mais comprido de cá de renomear a linha do catálogo).
+-- Só se a `juntar`
 -- for de facto cair nessa linha (a mesma pergunta que ela faz): senão,
 -- pelo nome.
 -- ---------------------------------------------------------------------
