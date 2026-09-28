@@ -455,6 +455,25 @@ avisos chegam: `SELECT estado, resultado, criado_em FROM
 garrafeira.push_avisos ORDER BY id DESC LIMIT 20;`, e as respostas da
 função em `net._http_response`. Aplicada a 28/09/2026 (`garrafeira_27_push`).
 
+### Migração 28 — a ligação ao catálogo e o nome que vem de lá
+
+`db/migracao-catalogo-id.sql`. A coluna `vinhos.catalogo_id` (a linha do
+catálogo de cada vinho, sem FK), a guarda que só a deixa escrever pela
+`ligar_catalogo`, o `vinhos_catalogo`/`catalogar_vinho` a guardá-la e a
+escrever na linha ligada (`catalogar_e_ligar`), o `vinhos_nomes` a deixar
+passar o que vem do catálogo, a `receber_identidade` (o nome e o produtor
+do catálogo nos vinhos ligados, com `sync_log`) e a `religar_catalogo`
+(desfeita uma fusão). No fim liga os vinhos que já existem, pelo nome, sem
+escrever no catálogo nem mexer em mais coluna nenhuma (a 28/09/2026: 238 dos
+243). Corre depois da 24 e do `catalogo-partilhado.sql` (substitui funções
+de ambos) e ANTES do `db/garrafeiras-identidade.sql` da WineCatalog, que
+chama estas funções. Testada numa réplica local; **por aplicar** no
+Supabase a 28/09/2026.
+
+1. `db/cor-na-chave.sql` (repo WineCatalog — só a `juntar`, com a marca `winecatalog.juntar`)
+2. `db/migracao-catalogo-id.sql`
+3. `db/garrafeiras-identidade.sql` (repo WineCatalog)
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as

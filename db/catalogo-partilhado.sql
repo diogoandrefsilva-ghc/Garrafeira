@@ -113,6 +113,9 @@ BEGIN
 END;
 $$;
 
+-- SUBSTITUÍDA pela migração 28 (`migracao-catalogo-id.sql`): a de lá
+-- guarda a ligação ao catálogo e escreve na linha ligada. Voltar a correr
+-- este ficheiro sem correr a 28 a seguir desfaz isso (e o trigger de baixo).
 CREATE OR REPLACE FUNCTION garrafeira.catalogar_vinho(p_vinho_id bigint)
   RETURNS bigint
   LANGUAGE plpgsql SECURITY DEFINER

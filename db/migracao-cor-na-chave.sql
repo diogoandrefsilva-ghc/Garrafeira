@@ -25,6 +25,8 @@
 -- por isso quem escrever "Papa Figos Tinto 2021" vê "Papa Figos", 2021.
 -- =====================================================================
 
+-- SUBSTITUÍDA pela migração 28 (`migracao-catalogo-id.sql`), que deixa
+-- passar tal e qual o nome e o produtor que vêm do catálogo.
 CREATE OR REPLACE FUNCTION garrafeira.vinhos_nomes()
   RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
   SET search_path TO 'garrafeira', 'winecatalog', 'public'

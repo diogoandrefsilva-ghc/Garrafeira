@@ -83,6 +83,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   corre depois do `db/comentarios.sql` da WineCatalog, onde vive a tabela.
   `migracao-push.sql` é a 27: as notificações push — as subscrições, a
   caixa de saída, os gatilhos nos comentários e o cron da nova tentativa.
+  `migracao-catalogo-id.sql` é a 28: cada vinho guarda a sua linha do
+  catálogo (`vinhos.catalogo_id`), e o nome e o produtor que o catálogo
+  muda chegam cá sozinhos (ver "O catálogo partilhado" › "A ligação").
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
@@ -1999,6 +2002,33 @@ aceitável e num catálogo é a nota errada dada como certa.
 Na UI, uma ficha que aparece do nada merece dizer de onde veio
 (`iaOrigemHTML`, `.ia-cat`): verde e não dourado, que o dourado é a
 distinção do vinho e isto é uma boa notícia sobre a PROCURA.
+
+**A ligação ao catálogo guarda-se** (migração 28, 28/09/2026). Até aqui um
+vinho não sabia qual era a sua linha: achava-a pelo NOME de cada vez, e por
+isso um nome corrigido no catálogo partia a ligação em vez de chegar cá — a
+gravação seguinte fazia nascer lá outra linha com o nome antigo. Agora:
+- `vinhos.catalogo_id` é a linha do catálogo deste vinho. **A app nunca o
+  escreve** (a guarda `vinhos_ligacao_guard` desfaz o que vier dela); quem o
+  escreve é a `ligar_catalogo`, chamada pelo trigger `vinhos_catalogo` a
+  cada gravação. Sem FK, de propósito: o catálogo é uma poupança. A wishlist
+  também se liga (não alimenta o catálogo, mas recebe o nome);
+- enquanto o dono não mexe na identidade (nome, produtor, ano, cor) e a
+  colheita é a mesma, o trigger escreve NA linha ligada, com o nome e o
+  produtor dela (`catalogar_e_ligar`). Mudada a identidade, procura-se pelo
+  nome, como sempre — pode ser outro vinho;
+- **o nome e o produtor que o admin muda no catálogo chegam cá sozinhos**
+  (`receber_identidade`, chamada por um trigger do catálogo —
+  `db/garrafeiras-identidade.sql` da WineCatalog, que tem o resto), em todas
+  as garrafeiras, com uma linha no `sync_log` (origem `winecatalog`, acao
+  `identidade_do_catalogo`). Chega tal e qual: o `vinhos_nomes` deixa-o
+  passar sem o arrumar (marca `garrafeira.do_catalogo`), não volta ao
+  catálogo e não carimba `atualizado_em`. Nunca o ano nem a cor; um produtor
+  vazio no catálogo não apaga o de cá. O que a `juntar` muda sozinha (o nome
+  mais comprido de uma pesquisa com IA) não chega cá.
+**Se mexeres no `vinhos_nomes` ou no `vinhos_catalogo`**, as duas marcas
+(`garrafeira.do_catalogo`, `garrafeira.ligar`) têm de continuar lá à
+cabeça: sem elas, o nome do catálogo era rearrumado à chegada ou a escrita
+voltava ao catálogo.
 
 ## Importar por imagens (`importar-vinhos`)
 
