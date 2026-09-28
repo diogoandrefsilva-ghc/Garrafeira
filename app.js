@@ -3251,6 +3251,7 @@ function catOrigemTxt(o,f){
   return ({
     'garrafeira':'outra garrafeira (garrafa na mão)',
     'garrafeira-bruto':'outra garrafeira (escrito à pressa)',
+    'garrafeira-desejo':'a wishlist de uma garrafeira',
     'catalogo-admin':'corrigido à mão pelo admin do catálogo',
     'catalogo-pesquisa':'pesquisa Google pedida no catálogo',
     'ws-verificacao':'verificação com pesquisa Google',
@@ -8779,7 +8780,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='124';
+const APP_BUILD='125';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

@@ -86,6 +86,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-catalogo-id.sql` é a 28: cada vinho guarda a sua linha do
   catálogo (`vinhos.catalogo_id`), e o nome e o produtor que o catálogo
   muda chegam cá sozinhos (ver "O catálogo partilhado" › "A ligação").
+  `migracao-desejos-catalogo.sql` é a 29: a wishlist também alimenta o
+  catálogo, com força 1 (ver "A wishlist é um vinho sem garrafas");
+  corre depois da `garrafeira-desejo` na `forca()` da WineCatalog.
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
@@ -1409,12 +1412,27 @@ lado para o outro, e duas cópias divergem no dia em que se edita uma.
   pessoa confirma — a semelhança sugere, nunca decide (a lição dos
   Duplicados da WineCatalog). A regra é apertada de propósito (ver o
   comentário no app.js): o ano não conta, o produtor e a cor contam.
-- **Não alimenta o catálogo partilhado** enquanto for desejo: a
-  `catalogar_vinho` salta-o, porque quem o escreveu não tem a garrafa na mão
-  e o catálogo dar-lhe-ia essa força. Ao passar para a garrafeira, o UPDATE
-  volta a disparar o trigger. E a procura da IA de um desejo NOVO com um
-  nome que o catálogo não conhece também não lá chega (ver "O catálogo
-  partilhado" › a escrever): o nome ainda não estava confirmado.
+- **Alimenta o catálogo partilhado, mas com força 1** (migração 29,
+  28/09/2026, o dono das apps: "wishlist não preenche o Catálogo? tem que
+  preencher!"). Até aí a `catalogar_vinho` saltava-o — quem o escreveu não
+  tem a garrafa na mão — e, somado ao "adiado" da `vinho-info` (ver "O
+  catálogo partilhado" › a escrever), um desejo procurado com IA nunca lá
+  chegava: a IA esperava pelo trigger e o trigger saltava o desejo. A razão
+  continua certa, era a FORÇA que estava errada: o desejo escreve com a
+  origem `garrafeira-desejo`, que vale 1 em todos os campos (nem o rótulo
+  vale 3 sem a garrafa) — enche o que está vazio e perde para qualquer
+  coisa a sério. Ao passar para a garrafeira, o UPDATE volta a disparar o
+  trigger e a garrafeira passa-lhe por cima.
+  **Um desejo nunca faz nascer uma segunda linha de um vinho que o catálogo
+  já tem**: escreve na linha a que está ligado (ou na que a `achar` der, a
+  mesma colheita primeiro, senão qualquer uma); com a colheita diferente —
+  ou sem ela, quase metade da wishlist — só os factos do VINHO (nada da
+  `winecatalog.da_colheita`: a nota e as avaliações da colheita, o preço, a
+  janela). Só um vinho que o catálogo não conhece em colheita nenhuma faz
+  nascer a linha. Um vinho com a garrafa na mão, esse, faz nascer a linha da
+  sua colheita. A 1.ª corrida (25 desejos, quase todos já no catálogo pelas
+  procuras com IA de antes do "adiado") encheu 23 campos vazios e não fez
+  nascer linha nenhuma.
 - **É visível numa garrafeira emprestada** (é aí que um amigo vai ver o que
   oferecer), e o **PDF** também (`exportarWishlistPDF`, a mesma folha do
   Exportar PDF). Mexer é só de quem pode editar. O PDF não leva as minhas
@@ -1921,7 +1939,9 @@ Como funciona, dos dois lados:
   pelo Quinta do Crasto, a pessoa gravou "Crasto Vinhas Velhas" na wishlist,
   e o catálogo ficou com uma linha com o nome errado e sem produtor, de um
   vinho que ninguém tinha (resolvida nos Duplicados da WineCatalog). A linha
-  nasce quando o vinho é gravado, pelo trigger, com o nome final. As
+  nasce quando o vinho é gravado, pelo trigger, com o nome final — na
+  wishlist também, desde a migração 29 (com força 1; ver "A wishlist é um
+  vinho sem garrafas"). As
   castas não vivem na linha do vinho, por isso o trigger não as vê mudar —
   o gancho que falta está no fim da `definir_castas`, em `functions.sql`;
 - **nada disto pode deitar uma procura abaixo.** É uma poupança, não uma
@@ -1934,7 +1954,8 @@ frente: quem tem a garrafa em casa e a pesquisa Google a sério da
 `verificar-vinhos` valem 3; as pesquisas normais das duas apps valem 2; um
 vinho escrito à pressa numa garrafeira, a que ninguém tocou, vale 1 (o
 `tipo` nasce 'Tinto' por omissão nesta app, e sem essa distinção uma linha
-de rascunho carimbava "Tinto" por cima de uma pesquisa que dizia Branco); e
+de rascunho carimbava "Tinto" por cima de uma pesquisa que dizia Branco),
+e um desejo da wishlist também (`garrafeira-desejo`, sem a garrafa na mão); e
 a estimativa de memória da WineSelection vale **0** — não entra nunca.
 
 **A força é da origem E DO CAMPO**, e a segunda metade é o que impede o
@@ -2011,7 +2032,8 @@ gravação seguinte fazia nascer lá outra linha com o nome antigo. Agora:
   escreve** (a guarda `vinhos_ligacao_guard` desfaz o que vier dela); quem o
   escreve é a `ligar_catalogo`, chamada pelo trigger `vinhos_catalogo` a
   cada gravação. Sem FK, de propósito: o catálogo é uma poupança. A wishlist
-  também se liga (não alimenta o catálogo, mas recebe o nome);
+  também se liga, e desde a migração 29 também alimenta o catálogo (com
+  força 1, e sem fazer nascer outra linha de um vinho que lá está);
 - enquanto o dono não mexe na identidade (nome, produtor, ano, cor) e a
   colheita é a mesma, o trigger escreve NA linha ligada, com o nome e o
   produtor dela (`catalogar_e_ligar`). Mudada a identidade, procura-se pelo

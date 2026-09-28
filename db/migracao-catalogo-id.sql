@@ -124,6 +124,8 @@ REVOKE ALL ON FUNCTION garrafeira.achar_no_catalogo(bigint) FROM PUBLIC, anon, a
 -- ---------------------------------------------------------------------
 -- CATALOGAR E LIGAR: o que a `catalogar_vinho` fazia (levar a ficha ao
 -- catálogo pela `juntar`), agora a saber em que linha escreve.
+-- SUBSTITUÍDA pela migração 29 (`migracao-desejos-catalogo.sql`): a
+-- wishlist passou a escrever no catálogo, com força 1. A de lá é a que vale.
 --
 -- `p_religar` — o dono mudou o nome, o produtor, o ano ou a cor: procura-se
 -- pelo nome, como sempre, e a ligação passa a ser a que a `juntar` der (ou

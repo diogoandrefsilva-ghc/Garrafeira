@@ -476,6 +476,22 @@ nenhuma outra coluna nem linha do catálogo mexida.
 2. `db/migracao-catalogo-id.sql`
 3. `db/garrafeiras-identidade.sql` (repo WineCatalog)
 
+### Migração 29 — a wishlist também alimenta o catálogo (já aplicada)
+
+`db/migracao-desejos-catalogo.sql`. A `catalogar_e_ligar` deixa de saltar
+os desejos: escrevem com a origem `garrafeira-desejo` (força 1 em tudo), na
+linha a que estão ligados (ou na que a `achar` der, em qualquer colheita) —
+com a colheita diferente, ou sem ela, só os factos do vinho —, e só fazem
+nascer uma linha quando o catálogo não conhece o vinho. No fim passa pelos
+desejos que já existem. Testada numa réplica local e aplicada a 28/09/2026:
+25 desejos, 23 campos vazios cheios no catálogo, nenhuma linha nova,
+nenhuma ligação mudada, nada mexido nas garrafeiras.
+
+1. `db/catalogo.sql` e `db/historico.sql` (repo WineCatalog — só a `forca`
+   e a `quem_escreve`, com a `garrafeira-desejo`; sem elas a força é 0 e a
+   `juntar` não escreve nada)
+2. `db/migracao-desejos-catalogo.sql`
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
