@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="122">
+<body data-build="123">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone.svg" alt="">
@@ -294,6 +294,16 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       <div id="diag-box"></div>
     </div>
 
+    <!-- SEM `ro-hide`: quem só vê também tem ideias e dá com problemas. -->
+    <div class="fcard" id="fcard-comentarios">
+      <h3>Sugestões e comentários</h3>
+      <div class="note">Uma ideia para a app, ou alguma coisa que não funciona como devia? Escreve ao admin.
+        Um problema com <b>um vinho</b> (atributos errados, um site com a informação certa) diz-se na página
+        dele, em “Algo não está bem?”. As respostas aparecem aqui.</div>
+      <button class="btn ghost" onclick="abrirSugestao()">💡 Enviar uma sugestão</button>
+      <div id="cfg-comentarios"></div>
+    </div>
+
     <div class="fcard">
       <h3>Sobre</h3>
       <div class="note" id="sobre-box"></div>
@@ -338,6 +348,10 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 <!-- O espelho do catálogo — abre POR CIMA da página do vinho (ver
      "O ESPELHO DO CATÁLOGO" no app.js). -->
 <div class="modal" id="modal-catalogo"><div class="mbox" id="modal-catalogo-in"></div></div>
+<!-- Um comentário sobre o vinho (abre POR CIMA da página dele) ou uma
+     sugestão sobre a app (de Definições) — ver "COMENTÁRIOS E SUGESTÕES"
+     no app.js. Vai para o admin do catálogo. -->
+<div class="modal" id="modal-comentario"><div class="mbox" id="modal-comentario-in"></div></div>
 
 <div class="toast" id="toast"></div>
 

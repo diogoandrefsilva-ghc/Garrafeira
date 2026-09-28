@@ -3426,6 +3426,155 @@ async function catReportar(id,campo){
   }catch(e){toast('Erro: '+e.message,1);}
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   COMENTÁRIOS E SUGESTÕES
+
+   Duas conversas com o admin, pelo mesmo caminho (a migração 26 daqui e o
+   `db/comentarios.sql` do WineCatalog — é lá que ele as lê, em Alertas e no
+   painel do PC):
+     · um COMENTÁRIO SOBRE UM VINHO, da página dele ("Algo não está bem?"):
+       atributos que não estão bem, um site de onde atualizar a ficha, outro
+       problema. Não é o "⚠ O errado é o catálogo" do espelho de cima: esse
+       só aparece quando a comparação vê um campo diferente, e o caso mais
+       comum é o catálogo e a garrafeira estarem IGUAIS e errados (foi de lá
+       que o erro veio). Corrigido no catálogo, chega a toda a gente;
+     · uma SUGESTÃO sobre a app, de Definições.
+   Os valores dos atributos escolhidos seguem da BD (`comentar_vinho`), não
+   do que se escreve na caixa. Quem vê o vinho pode comentar — mesmo numa
+   garrafeira emprestada, como no reportar: por isso nada disto é `ro-hide`.
+   As respostas do admin lêem-se em Definições › Sugestões e comentários.
+   ══════════════════════════════════════════════════════════════════ */
+const COM_MOTIVOS_VINHO=[
+  ['atributos','Há atributos que não estão bem','Ex.: as castas são Touriga Nacional e Touriga Franca, não Syrah.'],
+  ['atualizar','Atualizar a partir de um site','Opcional — ex.: a página tem as notas de prova e o estágio.'],
+  ['outro','Outro problema','Conta o que se passa com este vinho.']
+];
+const COM_MOTIVOS_SUG=[
+  ['melhoria','Uma ideia / melhoria','Ex.: dava jeito ordenar a lista pelo preço.'],
+  ['problema','Algo não funciona','O que fizeste, o que esperavas e o que aconteceu.']
+];
+const COM_MOTIVO_TXT=Object.fromEntries([...COM_MOTIVOS_VINHO,...COM_MOTIVOS_SUG].map(([k,t])=>[k,t]));
+/* Os atributos que se podem apontar, pelo nome que têm na ficha — cada um
+   com os campos que estão por trás (a nota do Vivino são quatro). */
+const COM_CAMPOS=[
+  ['Nome',['nome']],['Produtor',['produtor']],['Ano',['ano']],
+  ['Cor / estilo',['tipo','estilo']],['Menção',['mencao']],['Classificação',['classificacao']],
+  ['Castas',['castas']],['Região',['regiao','sub_regiao']],['Álcool',['teor']],
+  ['Estágio',['estagio_meses','estagio_texto']],
+  ['Nota do Vivino',['vivino_nota','vivino_avaliacoes','vivino_nota_global','vivino_avaliacoes_global']],
+  ['Link do Vivino',['vivino_url']],['Preço',['preco_medio']],['Beber entre',['beber_de','beber_ate']],
+  ['Notas de prova',['notas_prova']],['Harmoniza com',['harmonizacao']],['Imagem',['imagem_url']]
+];
+const COM_ESTADO={aberto:'por ver',resolvido:'tratado',rejeitado:'recusado'};
+let COM_MEUS=null, COM_A_LER=false;
+
+function comModal(h){document.getElementById('modal-comentario-in').innerHTML=h;abrirModal('modal-comentario');}
+function comBotoes(acao){
+  return `<div class="macoes">
+      <button class="btn prim" id="cm-btn" onclick="${acao}">Enviar</button>
+      <button class="btn ghost" onclick="fecharModal('modal-comentario')">Cancelar</button>
+    </div>`;
+}
+function abrirComentario(vinhoId){
+  const v=IDXV[vinhoId];if(!v)return;
+  comModal(`<div class="mtop"><h3>💬 Algo não está bem?</h3>
+      <button class="mx" onclick="fecharModal('modal-comentario')">✕</button></div>
+    <p class="note"><b>${esc(v.nome)}</b>${v.ano?' · '+v.ano:''}${v.produtor?' · '+esc(v.produtor):''}. Vai para o
+      admin do catálogo, que corrige o vinho lá — e daí chega às garrafeiras, a tua incluída. A resposta
+      aparece em Definições › Sugestões e comentários.</p>
+    <label>O que se passa</label>
+    <select id="cm-motivo" onchange="comMotivo()">${COM_MOTIVOS_VINHO.map(([k,t])=>`<option value="${k}">${esc(t)}</option>`).join('')}</select>
+    <div id="cm-campos-box"><label>Que atributos (opcional)</label>
+      <div class="cm-campos">${COM_CAMPOS.map(([t],i)=>`<label class="ll-enc"><input type="checkbox" class="cm-campo" data-i="${i}"><span>${esc(t)}</span></label>`).join('')}</div></div>
+    <label id="cm-link-l">Link (opcional)</label>
+    <input type="url" id="cm-link" inputmode="url" autocomplete="off" placeholder="https://… a página do vinho numa loja ou no produtor">
+    <label>Comentário</label>
+    <textarea id="cm-texto" maxlength="2000"></textarea>
+    ${comBotoes(`enviarComentario(${v.id})`)}`);
+  comMotivo();
+}
+function abrirSugestao(){
+  comModal(`<div class="mtop"><h3>💡 Uma sugestão</h3>
+      <button class="mx" onclick="fecharModal('modal-comentario')">✕</button></div>
+    <p class="note">Uma ideia para a app, ou alguma coisa que não funciona como devia. Vai para o admin; a
+      resposta aparece aqui, em Definições.</p>
+    <label>O que é</label>
+    <select id="cm-motivo" onchange="comMotivo()">${COM_MOTIVOS_SUG.map(([k,t])=>`<option value="${k}">${esc(t)}</option>`).join('')}</select>
+    <label>Conta</label>
+    <textarea id="cm-texto" maxlength="2000" style="min-height:120px"></textarea>
+    ${comBotoes('enviarSugestao()')}`);
+  comMotivo();
+}
+/* O motivo muda o que se pede: "atualizar" pede o link (e é ele que diz
+   tudo — o texto passa a opcional); "outro problema" não aponta atributos. */
+function comMotivo(){
+  const m=document.getElementById('cm-motivo').value;
+  const d=[...COM_MOTIVOS_VINHO,...COM_MOTIVOS_SUG].find(x=>x[0]===m);
+  const tx=document.getElementById('cm-texto');if(tx&&d)tx.placeholder=d[2];
+  const cb=document.getElementById('cm-campos-box');if(cb)cb.style.display=m==='outro'?'none':'';
+  const ll=document.getElementById('cm-link-l');if(ll)ll.textContent=m==='atualizar'?'Link da página com a informação certa':'Link (opcional)';
+}
+async function enviarComentario(vinhoId){
+  const motivo=document.getElementById('cm-motivo').value;
+  const texto=document.getElementById('cm-texto').value.trim();
+  const link=document.getElementById('cm-link').value.trim();
+  const campos=motivo==='outro'?[]
+    :[...document.querySelectorAll('#modal-comentario-in .cm-campo:checked')].flatMap(c=>COM_CAMPOS[+c.dataset.i][1]);
+  if(link&&!/^https?:\/\/\S+$/i.test(link)){toast('O link tem de ser um endereço completo, começado por https://',1);return;}
+  if(motivo==='atualizar'&&!link){toast('Cola o link da página com a informação certa',1);document.getElementById('cm-link').focus();return;}
+  if(motivo!=='atualizar'&&texto.length<3){toast('Escreve o que se passa',1);document.getElementById('cm-texto').focus();return;}
+  await comEnviar('comentar_vinho',{p_vinho_id:vinhoId,p_motivo:motivo,p_texto:texto||null,
+    p_campos:campos.length?campos:null,p_link:link||null});
+}
+async function enviarSugestao(){
+  const motivo=document.getElementById('cm-motivo').value;
+  const texto=document.getElementById('cm-texto').value.trim();
+  if(texto.length<3){toast('Escreve a sugestão',1);document.getElementById('cm-texto').focus();return;}
+  await comEnviar('sugerir',{p_motivo:motivo,p_texto:texto});
+}
+async function comEnviar(fn,args){
+  const b=document.getElementById('cm-btn');
+  if(b){b.disabled=true;b.textContent='A enviar…';}
+  try{
+    await sbRpc(fn,args);
+    fecharModal('modal-comentario');
+    toast('Enviado ✓ o admin vai ver isto');
+    if(tabAtiva==='cfg')renderMeusComentarios();
+  }catch(e){
+    if(b){b.disabled=false;b.textContent='Enviar';}
+    toast(/Could not find the function|schema cache/i.test(e.message)
+      ?'Ainda não está ligado — falta correr a migração 26 no Supabase'
+      :'Não foi possível enviar: '+e.message,1);
+  }
+}
+/* Os meus, com o estado e a resposta do admin. Só se pedem com Definições à
+   vista (o `renderCfg` corre também no arranque e depois de outras
+   mudanças); até chegarem, fica o que já se tinha. Sem a migração 26 a
+   lista fica vazia — o botão de enviar é que o diz. */
+async function renderMeusComentarios(){
+  const box=document.getElementById('cfg-comentarios');
+  if(!box)return;
+  if(COM_MEUS)box.innerHTML=meusComentariosHTML();
+  if(COM_A_LER)return;
+  COM_A_LER=true;
+  try{COM_MEUS=(await sbRpc('meus_comentarios',{}))||[];}
+  catch(e){COM_MEUS=COM_MEUS||[];}
+  finally{COM_A_LER=false;}
+  box.innerHTML=meusComentariosHTML();
+}
+function meusComentariosHTML(){
+  if(!COM_MEUS||!COM_MEUS.length)return '';
+  return `<div class="cm-lista">${COM_MEUS.map(c=>`
+    <div class="cm-item">
+      <div class="cm-cab"><b>${c.tipo==='vinho'?esc(c.nome||'')+(c.ano?' '+esc(String(c.ano)):''):'Sugestão'}</b>
+        <span class="cm-est ${esc(c.estado)}">${esc(COM_ESTADO[c.estado]||c.estado)}</span></div>
+      <i>${esc(COM_MOTIVO_TXT[c.motivo]||c.motivo)} · ${esc(dataPT(c.quando))}</i>
+      ${c.texto?`<div class="cm-tx">${esc(c.texto)}</div>`:''}
+      ${c.link?`<div class="cm-tx"><a href="${esc(c.link)}" target="_blank" rel="noopener">${esc(c.link)}</a></div>`:''}
+      ${c.resposta?`<div class="cm-resp"><b>Resposta</b>${esc(c.resposta)}</div>`:''}
+    </div>`).join('')}</div>`;
+}
+
 /* ── A PÁGINA DO VINHO (comportamento) ─────────────────────────────
    A pele está no style.css ("PÁGINA DO VINHO"); aqui está o que se
    mexe: o cabeçalho a encolher ao rolar, o botão de voltar do
@@ -3712,6 +3861,11 @@ function vinhoDetalheHTML(v){
       Pesquisa com IA: ${v.ai_atualizado_em&&/^gemini/i.test(String(v.ai_modelo||''))
         ?dataHoraLocal(v.ai_atualizado_em):'ainda não'}<br>
       Atualização manual: ${dataHoraLocal(TEM_ATUALIZADO?(v.atualizado_em||v.criado_em):v.criado_em)}
+    </div>
+    <div class="cat-tira cm-tira" onclick="abrirComentario(${v.id})">
+      <span class="cat-tira-i">💬</span>
+      <span><strong>Algo não está bem?</strong> Um atributo errado, ou um site com a informação certa — diz ao admin do catálogo.</span>
+      <span class="cat-tira-v">escrever</span>
     </div>
 
     <div class="macoes">
@@ -7155,6 +7309,7 @@ function renderCfg(){
     Dados e login no Supabase, schema <code>garrafeira</code>. Admin atual: <b>${esc(ADMIN_EMAIL)}</b>.`;
   renderCfgGarrafeira();
   renderCfgLocais();
+  if(tabAtiva==='cfg')renderMeusComentarios();
   if(isAdmin()){admRenderPedidos();admRenderUtilizadores();}
 }
 
@@ -8438,7 +8593,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='122';
+const APP_BUILD='123';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
@@ -8523,6 +8678,8 @@ document.addEventListener('keydown',e=>{
   // A folha do formato está por cima do modal do local: sai só ela, senão
   // levava atrás o que já se tinha escrito no local.
   if(e.key==='Escape'&&document.getElementById('modal-formato').classList.contains('on')){fecharModal('modal-formato');return;}
+  // O comentário abre por cima da página do vinho: sai só ele.
+  if(e.key==='Escape'&&document.getElementById('modal-comentario').classList.contains('on')){fecharModal('modal-comentario');return;}
   if(e.key==='Escape')document.querySelectorAll('.modal.on').forEach(m=>fecharModal(m.id));
 });
 

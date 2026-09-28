@@ -75,6 +75,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-avaliacao-decimal.sql` é a 25: a nota de um consumo passa a
   ter uma casa decimal (`consumo_avaliacao numeric(2,1)`, 4,2), e a
   `consumir_garrafa` com ela — seguida por `functions.sql`.
+  `migracao-comentarios.sql` é a 26: as portas dos comentários sobre um
+  vinho e das sugestões (ver "Comentários e sugestões"); corre depois do
+  `db/comentarios.sql` da WineCatalog, onde vive a tabela.
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
@@ -1161,6 +1164,27 @@ app **deteta** se a coluna existe (`detetarImagem()`) e, se um dia faltar
 numa base nova antes do `db/schema.sql` correr, esconde o campo e não o
 manda nas gravações — sem isso um PATCH rebentava **todas** as gravações
 com 400.
+
+## Comentários e sugestões (28/09/2026, migração 26)
+Duas conversas com o admin, que as lê na WineCatalog (Alertas › dois
+cartões) e no painel do PC (dois separadores) — ver o `CLAUDE.md` de lá:
+- **"Algo não está bem?"**, no fim da página de cada vinho (`abrirComentario`,
+  `#modal-comentario`): atributos que não estão bem (com os atributos
+  apontados), atualizar a partir de um site (o link é obrigatório), outro
+  problema. **Não é o "⚠ O errado é o catálogo"** do espelho: esse só existe
+  quando a comparação vê um campo diferente, e o caso mais comum é o
+  catálogo e a garrafeira estarem IGUAIS e errados. Corrigido no catálogo,
+  chega às garrafeiras (fichas × catálogo, ou "≠ catálogo").
+- **"Enviar uma sugestão"**, em Definições › Sugestões e comentários
+  (`abrirSugestao`): uma ideia, ou algo que não funciona. O mesmo cartão
+  lista os meus, com o estado e a **resposta** do admin
+  (`renderMeusComentarios`, só com Definições à vista).
+Nada disto é `ro-hide`: avisar não é mexer, e numa garrafeira emprestada
+também se dá com erros (guarda `pode_ver`, como o reportar). Os valores dos
+atributos apontados saem da BD (`comentar_vinho` → `ficha_catalogo`), nunca
+da caixa de texto — e nunca as notas, o preço de compra, o lugar ou a foto.
+A tabela é do catálogo (`winecatalog.comentarios`), não daqui: quem a lê é o
+admin do catálogo, como os reportes.
 
 ## A exceção: as marcas dos amigos na WineSelection (25/09/2026)
 Por decisão do dono das apps, **dentro do grupo das Prendas de Anos**

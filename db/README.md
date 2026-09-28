@@ -420,6 +420,22 @@ ANTES de publicar a app que a usa: a app antiga funciona com a base nova
 1. `db/migracao-avaliacao-decimal.sql`
 2. `db/functions.sql`
 
+### Migração 26 — comentários sobre um vinho e sugestões (já aplicada)
+
+`db/migracao-comentarios.sql`. Três portas para o admin do catálogo: a
+`comentar_vinho` (a página do vinho, "Algo não está bem?": atributos
+errados, um site de onde atualizar, outro problema — guarda `pode_ver`, e os
+valores dos atributos apontados saem da `ficha_catalogo`), a `sugerir`
+(Definições › Sugestões e comentários — `is_allowed`) e a `meus_comentarios`
+(a lista de quem escreveu, com o estado e a resposta). A tabela e as funções
+vivem no catálogo: corre ANTES o `db/comentarios.sql` do repo WineCatalog,
+que é onde o admin as lê (Alertas e o painel do PC). Sem esta migração a app
+funciona: o envio diz que falta correr a migração 26 e a lista fica vazia.
+Aplicada a 28/09/2026 (`winecatalog_comentarios` e `garrafeira_26_comentarios`).
+
+1. `db/comentarios.sql` (repo WineCatalog)
+2. `db/migracao-comentarios.sql`
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as

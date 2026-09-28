@@ -1518,6 +1518,30 @@ body.naominha .minha-only{display:none!important}
 .cat-tira.dif span:nth-child(2) strong{color:var(--dg)}
 .cat-tira-v{flex-shrink:0;font-weight:600;text-decoration:underline}
 
+/* "Algo não está bem?" (ver "COMENTÁRIOS E SUGESTÕES" no app.js): a MESMA
+   tira do catálogo, no fim da ficha, e sempre à vista — é a porta para
+   dizer ao admin o que está errado, mesmo quando a comparação não viu nada. */
+.cm-tira{margin-top:12px}
+/* Os atributos a apontar: vistos `ll-enc` (a pele de qualquer visto dentro
+   de um modal), numa grelha que dá duas colunas no telemóvel. */
+.cm-campos{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:0 12px}
+.mbox .cm-campos label.ll-enc{margin:8px 0 0}
+/* Os meus comentários e sugestões, em Definições: o estado à direita e a
+   resposta do admin por baixo, destacada — é a razão de a lista existir. */
+.cm-lista{margin-top:12px}
+.cm-item{padding:10px 0;border-top:1px solid var(--bo);font-size:12.5px}
+.cm-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.cm-cab b{font-weight:600;min-width:0}
+.cm-item>i{display:block;font-style:normal;font-size:11px;color:var(--mu);margin-top:2px}
+.cm-tx{margin-top:5px;white-space:pre-wrap;word-break:break-word;line-height:1.5}
+.cm-tx a{color:var(--in);word-break:break-all}
+.cm-resp{margin-top:8px;padding:8px 10px;background:var(--vhp);border-radius:9px;white-space:pre-wrap;line-height:1.5}
+.cm-resp b{display:block;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--vh);margin-bottom:2px}
+.cm-est{flex-shrink:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  padding:2px 8px;border-radius:99px;background:var(--bg);color:var(--mu);border:1px solid var(--bo)}
+.cm-est.resolvido{background:#eef7f1;color:#2f7a4b;border-color:#cfe3d8}
+.cm-est.rejeitado{background:var(--dgp);color:var(--dg);border-color:#f2cdcb}
+
 /* O painel — cada campo com os dois valores lado a lado. */
 #modal-catalogo-in .msec{margin-top:18px}
 .cat-cmp{padding:11px 0;border-bottom:1px solid var(--bo)}
