@@ -3980,7 +3980,8 @@ function vinhoDetalheHTML(v){
 
     ${desejado(v)?`<div class="msec">Wishlist</div>
     <div class="desejo-faixa">
-      <div class="note">⭐ Ainda não está na garrafeira — é um vinho que se quer ter.${v.criado_em?` Na wishlist desde ${dataPT(String(v.criado_em).slice(0,10))}.`:''}</div>
+      <div class="note">${bebidas.length?'⭐ Já foi bebido e quer-se voltar a ter.'
+        :`⭐ Ainda não está na garrafeira — é um vinho que se quer ter.${v.criado_em?` Na wishlist desde ${dataPT(String(v.criado_em).slice(0,10))}.`:''}`}</div>
       <div class="macoes ro-hide" style="margin-top:10px">
         <button class="btn prim" onclick="abrirEditarVinho(${v.id},'converter')">🍷 Passar para a garrafeira</button>
         <button class="btn ghost" onclick="retirarDesejo(${v.id})">Retirar da wishlist</button>
@@ -4001,7 +4002,8 @@ function vinhoDetalheHTML(v){
           <button class="mini o ro-hide" onclick="abrirConsumir(${v.id},${g.id})">Consumir</button>
         </div>`;}).join('')
       : `<div class="note" style="padding:8px 0">Não há garrafas deste vinho na garrafeira${bebidas.length?' — já foram todas bebidas':''}.</div>`}
-    <button class="btn ghost ro-hide" onclick="abrirGarrafa(0,${v.id})">+ Acrescentar garrafa</button>`}
+    <button class="btn ghost ro-hide" onclick="abrirGarrafa(0,${v.id})">+ Acrescentar garrafa</button>
+    ${TEM_DESEJO&&!ativas.length&&bebidas.length?`<button class="btn ghost ro-hide" onclick="quererDeNovo(${v.id})">⭐ Quero voltar a ter</button>`:''}`}
 
     <div class="msec">Ficha</div>
     <div class="mdet">
@@ -4267,10 +4269,22 @@ function novoDesejo(){
 // é só a ficha — e o que ela tinha de sabido já foi para o catálogo pela
 // procura da IA. `semPerguntar` é para quem já perguntou (o
 // `oferecerRetirarDesejos`, a seguir a um vinho novo).
+// A EXCEÇÃO é o vinho já bebido que se quer voltar a ter (`quererDeNovo`):
+// tem garrafas consumidas, e apagá-lo levava-as atrás (CASCADE) — a prova,
+// a nota, os comentários. Esse só perde a marca.
 async function retirarDesejo(id,semPerguntar){
   if(roGuard())return false;
   const v=IDXV[id];if(!v||!desejado(v))return false;
   if(!semPerguntar&&!confirm(`Retirar "${v.nome}" da wishlist?`))return false;
+  if(garrafasDe(id,false).length){
+    try{
+      await sbReq('PATCH',`vinhos?id=eq.${id}`,{desejado:false});
+      v.desejado=false;
+      renderLista();refrescarVinhoAberto();
+      toast('Retirado da wishlist');
+      return true;
+    }catch(e){toast('Não foi possível retirar: '+e.message,1);return false;}
+  }
   try{
     const foto=String(v.imagem_path||'').trim();
     await sbReq('DELETE',`vinhos?id=eq.${id}`);
@@ -4282,6 +4296,20 @@ async function retirarDesejo(id,semPerguntar){
     toast('Retirado da wishlist');
     return true;
   }catch(e){toast('Não foi possível retirar: '+e.message,1);return false;}
+}
+// "Bebi, gostei, quero voltar a ter": um vinho já todo bebido passa para a
+// wishlist com a MESMA ficha, e a prova fica onde estava. Sem isto a única
+// saída era um "Novo vinho na wishlist" — duas fichas do mesmo vinho na mesma
+// garrafeira, e ao voltar a comprá-lo as garrafas novas longe da prova.
+async function quererDeNovo(id){
+  if(!TEM_DESEJO||roGuard())return;
+  const v=IDXV[id];if(!v||desejado(v)||stockDe(id))return;
+  try{
+    await sbReq('PATCH',`vinhos?id=eq.${id}`,{desejado:true});
+    v.desejado=true;
+    renderLista();refrescarVinhoAberto();
+    toast('Na wishlist ⭐');
+  }catch(e){toast('Não foi possível pôr na wishlist: '+e.message,1);}
 }
 
 /* "Este vinho novo é um da wishlist?" — para quem comprou um desejo e o pôs
@@ -4608,7 +4636,7 @@ function abrirEditarVinho(id,modo){
     <textarea id="e-notas" placeholder="Onde comprei, para que ocasião guardei, o que achei…">${esc(o('notas'))}</textarea>
 
     ${!comGarrafa?'':`
-      <div class="msec">Primeira garrafa</div>
+      <div class="msec">${conv&&garrafasDe(id,false).length?'Nova garrafa':'Primeira garrafa'}</div>
       <div class="mrow">
         <div><label>Local</label><select id="e-local">${locOpts||'<option value="">(cria um local primeiro)</option>'}</select></div>
         <div><label>Quantas</label><input type="number" id="e-qtd" inputmode="numeric" value="1" min="1" max="60"></div>

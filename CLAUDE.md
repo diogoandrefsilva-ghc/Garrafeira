@@ -1406,6 +1406,18 @@ lado para o outro, e duas cópias divergem no dia em que se edita uma.
   com `desejado(v)` — um desejo não tem lugar na prateleira.
 - **Um vinho com garrafas não é um desejo**: o `guardarGarrafa` desliga a
   marca se uma garrafa chegar por outro caminho.
+- **A exceção: "bebi, gostei, quero voltar a ter"** (`quererDeNovo`, o botão
+  "⭐ Quero voltar a ter" num vinho já todo bebido). O vinho passa à wishlist
+  com a MESMA ficha e as garrafas CONSUMIDAS continuam lá — a prova, a nota,
+  os comentários. Antes a única saída era um "Novo vinho na wishlist", e
+  ficavam duas fichas do mesmo vinho na mesma garrafeira (foi o Ponte
+  Mouchão do Barrona, juntado à mão a 28/09/2026). Por isso **retirar um
+  desejo só o apaga quando ele não tem garrafa NENHUMA** (`retirarDesejo`):
+  com garrafas bebidas, perde só a marca — apagar levava-as atrás pelo
+  CASCADE, e isto vale também para o `oferecerRetirarDesejos`. Na página, a
+  faixa da wishlist diz "Já foi bebido e quer-se voltar a ter" (a data de
+  criação do vinho não é a de entrada na wishlist), e o "Passar para a
+  garrafeira" chama "Nova garrafa" ao que noutro desejo é a "Primeira".
 - **Quem se esquecer de passar o desejo** e puser o vinho pelo "Novo vinho"
   (ou pela importação) é apanhado no fim da gravação
   (`oferecerRetirarDesejos`/`mesmoDesejo`): a app PROPÕE, par a par, e a
@@ -1557,6 +1569,16 @@ Só http(s) e nomes públicos, redireções conferidas, 1,5 MB — aqui qualquer
 editor com IA pode escrever um endereço. A leitura é a MESMA da
 `catalogo-info` da WineCatalog (o `CLAUDE.md` de lá tem o resto) — mexer numa
 é mexer na outra.
+**Numa página comprida, a parte que é deste vinho** (28/09/2026): de cada
+página só se lia o princípio (6 000 caracteres), e numa página com vários
+vinhos ("moraisrocha.com/vinhos/#MR-As-Velhas-Red") o vinho ficava de fora —
+a página abria e o Gemini respondia, com razão, que ele não estava lá. Agora
+o `#…` do link fica (`ancoraDe`; nunca vai no pedido) e, numa página maior
+do que o princípio, vai a MAIS a secção para onde ele aponta (até ao vinho
+seguinte, quando os `id` o dizem) e os trechos mais abaixo onde o nome
+aparece (`extraDaPagina`). Só acrescenta: o princípio vai igual e o extra tem
+uma quota à parte na base de evidência (`EVIDENCIA_EXTRA_MAX`); no registo, a
+página diz `secao`/`trechos`.
 
 A nota que CONTA — no crachá do cartão e da grelha, na página do vinho, na
 ordenação dentro dos grupos, no filtro por Vivino, no "A completar" e na PDF
