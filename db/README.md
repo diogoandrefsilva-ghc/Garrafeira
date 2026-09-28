@@ -402,7 +402,7 @@ existente, a seguir a esta corre o `catalogo-partilhado.sql` e o
 que se mostra decide-a a app (`notaVivino`: a da colheita a partir de 100
 avaliações). Aplicada a 26/09/2026.
 
-### Migração 25 — a nota de um consumo com uma casa decimal (**por aplicar**)
+### Migração 25 — a nota de um consumo com uma casa decimal (já aplicada)
 
 `db/migracao-avaliacao-decimal.sql`. `garrafas.consumo_avaliacao` passa de
 `integer` a `numeric(2,1)`: continua de 1 a 5, agora com uma casa decimal
@@ -414,7 +414,8 @@ criar a nova. A `winecatalog.marcas_amigos` (as marcas dos amigos na
 WineSelection) lê esta coluna com `avg()`/`round(…, 1)` e não muda. Corre
 ANTES de publicar a app que a usa: a app antiga funciona com a base nova
 (manda inteiros), mas a nova com a base antiga só grava notas redondas — um
-4,2 dá erro.
+4,2 dá erro. Aplicada a 28/09/2026 (só a `consumir_garrafa` do
+`functions.sql`, mais o GRANT a `authenticated` que a de inteiro tinha).
 
 1. `db/migracao-avaliacao-decimal.sql`
 2. `db/functions.sql`
