@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="123">
+<body data-build="124">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone.svg" alt="">
@@ -118,7 +118,7 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
          (`body.sem-desejo`, ver `detetarDesejo`). Fica ANTES do ⚙️ porque o
          `restaurarTab` casa a posição do botão com o `ORDEM_TABS`. -->
     <button class="it desejo-only" onclick="tab('desejos',this)"><span class="ic">⭐</span> Wishlist</button>
-    <button class="it so-ic" onclick="tab('cfg',this)" title="Definições" aria-label="Definições">⚙️</button>
+    <button class="it so-ic" onclick="tab('cfg',this)" title="Definições" aria-label="Definições">⚙️<span class="it-n" id="cfg-n"></span></button>
   </div>
 
   <!-- ═══ GARRAFEIRA (ecrã inicial: só o resumo) ═══ -->
@@ -299,7 +299,9 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       <h3>Sugestões e comentários</h3>
       <div class="note">Uma ideia para a app, ou alguma coisa que não funciona como devia? Escreve ao admin.
         Um problema com <b>um vinho</b> (atributos errados, um site com a informação certa) diz-se na página
-        dele, em “Algo não está bem?”. As respostas aparecem aqui.</div>
+        dele, em “Algo não está bem?”. As respostas — e as perguntas do admin — aparecem aqui.</div>
+      <div id="cfg-com-admin"></div>
+      <div id="cfg-push"></div>
       <button class="btn ghost" onclick="abrirSugestao()">💡 Enviar uma sugestão</button>
       <div id="cfg-comentarios"></div>
     </div>

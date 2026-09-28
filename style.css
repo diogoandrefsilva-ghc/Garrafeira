@@ -1535,12 +1535,38 @@ body.naominha .minha-only{display:none!important}
 .cm-item>i{display:block;font-style:normal;font-size:11px;color:var(--mu);margin-top:2px}
 .cm-tx{margin-top:5px;white-space:pre-wrap;word-break:break-word;line-height:1.5}
 .cm-tx a{color:var(--in);word-break:break-all}
-.cm-resp{margin-top:8px;padding:8px 10px;background:var(--vhp);border-radius:9px;white-space:pre-wrap;line-height:1.5}
-.cm-resp b{display:block;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--vh);margin-bottom:2px}
 .cm-est{flex-shrink:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
   padding:2px 8px;border-radius:99px;background:var(--bg);color:var(--mu);border:1px solid var(--bo)}
+.cm-est.duvida{background:var(--vh);color:#fff;border-color:var(--vh)}
 .cm-est.resolvido{background:#eef7f1;color:#2f7a4b;border-color:#cfe3d8}
 .cm-est.rejeitado{background:var(--dgp);color:var(--dg);border-color:#f2cdcb}
+/* A conversa: as falas do admin em bordô claro (é a app a responder), as
+   minhas em papel. Um item com alguma coisa por ler leva o filete bordô à
+   esquerda até a lista se voltar a desenhar — é o que diz QUAL era o novo. */
+.cm-item.novo{border-left:3px solid var(--vh);padding-left:9px;margin-left:-12px}
+.cm-fio{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.cm-fala{padding:7px 10px;border-radius:9px;background:var(--bg);white-space:pre-wrap;word-break:break-word;line-height:1.5}
+.cm-fala.adm{background:var(--vhp)}
+.cm-fala b{display:block;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--mu);margin-bottom:2px}
+.cm-fala.adm b{color:var(--vh)}
+.cm-rbox{margin-top:8px}
+.fcard .cm-rbox textarea{min-height:64px;font-size:13.5px}
+.cm-rac{display:flex;gap:6px;margin-top:6px}
+.cm-mais{margin-top:6px;padding:0;border:none;background:none;font-family:inherit;font-size:11.5px;font-weight:600;
+  color:var(--vh);cursor:pointer;text-decoration:underline}
+/* O que o admin tem por tratar, e as notificações deste aparelho: duas
+   linhas curtas antes do botão da sugestão. */
+.cm-adm,.cm-push{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  margin:10px 0 2px;padding:9px 12px;background:var(--bg);border:1px solid var(--bo);border-radius:11px;font-size:12.5px}
+.cm-adm{background:var(--vhp);border-color:transparent}
+.cm-adm a.mini{text-decoration:none;color:var(--tx)}
+.cm-push-n{margin-top:10px}
+/* O número no ⚙️: o que precisa de mim (respostas por ler, perguntas do
+   admin; ao admin, o que está por tratar). Dentro do botão e não por cima
+   dele — a fita dos separadores rola de lado e cortava o que saísse. */
+.it-n{display:none;margin-left:4px;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--dg);
+  color:#fff;font-size:9.5px;font-weight:700;line-height:16px;text-align:center;vertical-align:1px}
+.it-n.on{display:inline-block}
 
 /* O painel — cada campo com os dois valores lado a lado. */
 #modal-catalogo-in .msec{margin-top:18px}

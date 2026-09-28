@@ -432,9 +432,28 @@ vivem no catálogo: corre ANTES o `db/comentarios.sql` do repo WineCatalog,
 que é onde o admin as lê (Alertas e o painel do PC). Sem esta migração a app
 funciona: o envio diz que falta correr a migração 26 e a lista fica vazia.
 Aplicada a 28/09/2026 (`winecatalog_comentarios` e `garrafeira_26_comentarios`).
+A 2.ª parte — a conversa (`comentario_responder`, `comentarios_lidos`,
+`comentarios_avisos`) — no mesmo dia (`winecatalog_comentarios_conversa` e
+`garrafeira_26b_comentarios_conversa`).
 
 1. `db/comentarios.sql` (repo WineCatalog)
 2. `db/migracao-comentarios.sql`
+
+### Migração 27 — notificações push (já aplicada)
+
+`db/migracao-push.sql`. As subscrições por aparelho (`push_subscriptions`,
+só pelas funções `push_registar`/`push_retirar`/`push_estado`), a caixa de
+saída (`push_avisos`, com o que aconteceu a cada aviso), os gatilhos em
+`winecatalog.comentarios`/`comentarios_msgs` e o cron
+`garrafeira-push-retry` (30 em 30 min). Precisa, fora do SQL:
+- a Edge Function `garrafeira-push` publicada (`garrafeira-push.ts`);
+- os secrets `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` do projeto (os mesmos
+  das outras apps — já lá estão);
+- o segredo `service_role_key` no Vault (o mesmo do `goals-push-retry`).
+Corre depois da 26 e do `db/comentarios.sql` com a conversa. Para ver se os
+avisos chegam: `SELECT estado, resultado, criado_em FROM
+garrafeira.push_avisos ORDER BY id DESC LIMIT 20;`, e as respostas da
+função em `net._http_response`. Aplicada a 28/09/2026 (`garrafeira_27_push`).
 
 ## Regra de ouro
 

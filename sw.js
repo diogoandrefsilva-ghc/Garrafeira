@@ -9,7 +9,7 @@
 // os dois últimos que o app.js apanha ao arrancar — o network-first abaixo
 // manda no browser, mas não no CDN do GitHub Pages, que propaga um
 // ficheiro de cada vez.
-const CACHE_NAME = 'garrafeira-v123';
+const CACHE_NAME = 'garrafeira-v124';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -57,4 +57,34 @@ self.addEventListener('fetch', (e) => {
             return res;
         })
     ));
+});
+
+// ── NOTIFICAÇÕES PUSH (migração 27) ─────────────────────────────────────
+// O texto vem da Edge Function `garrafeira-push`, que o leu da caixa de
+// saída na base. O `url` diz onde o toque leva: a Garrafeira em
+// "#comentarios" (quem escreveu) ou o Alertas do WineCatalog (o admin).
+self.addEventListener('push', (e) => {
+    let d = {};
+    try { d = e.data ? e.data.json() : {}; } catch (_) { d = { body: e.data ? e.data.text() : '' }; }
+    const base = self.registration.scope;
+    e.waitUntil(self.registration.showNotification(d.title || 'Garrafeira', {
+        body: d.body || '',
+        icon: new URL('apple-touch-icon.png', base).href,
+        badge: new URL('icone.svg', base).href,
+        tag: d.tag || undefined,
+        data: { url: d.url || base },
+    }));
+});
+
+self.addEventListener('notificationclick', (e) => {
+    e.notification.close();
+    const url = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
+    const semHash = (u) => u.split('#')[0];
+    e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((ws) => {
+        // Uma janela já aberta na mesma página: vai para lá (o hash diz o
+        // sítio, e a app ouve o `hashchange`) em vez de abrir outra.
+        const w = ws.find((x) => semHash(x.url) === semHash(url));
+        if (w) return (w.navigate ? w.navigate(url) : Promise.resolve(w)).then((x) => (x || w).focus());
+        return self.clients.openWindow(url);
+    }));
 });

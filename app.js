@@ -3442,7 +3442,11 @@ async function catReportar(id,campo){
    Os valores dos atributos escolhidos seguem da BD (`comentar_vinho`), não
    do que se escreve na caixa. Quem vê o vinho pode comentar — mesmo numa
    garrafeira emprestada, como no reportar: por isso nada disto é `ro-hide`.
-   As respostas do admin lêem-se em Definições › Sugestões e comentários.
+   A CONVERSA vive em Definições › Sugestões e comentários: o admin pode
+   fechar com uma resposta ou devolver uma PERGUNTA (`duvida` — a vez passa
+   a quem escreveu), e quem escreveu responde daí. Chega-se lá por três
+   avisos, do mais forte ao mais fraco: o push no telemóvel (migração 27),
+   o toast à entrada e o número no ⚙️ (`comentariosAvisos`).
    ══════════════════════════════════════════════════════════════════ */
 const COM_MOTIVOS_VINHO=[
   ['atributos','Há atributos que não estão bem','Ex.: as castas são Touriga Nacional e Touriga Franca, não Syrah.'],
@@ -3465,8 +3469,8 @@ const COM_CAMPOS=[
   ['Link do Vivino',['vivino_url']],['Preço',['preco_medio']],['Beber entre',['beber_de','beber_ate']],
   ['Notas de prova',['notas_prova']],['Harmoniza com',['harmonizacao']],['Imagem',['imagem_url']]
 ];
-const COM_ESTADO={aberto:'por ver',resolvido:'tratado',rejeitado:'recusado'};
-let COM_MEUS=null, COM_A_LER=false;
+const COM_ESTADO={aberto:'por ver',duvida:'pergunta para ti',resolvido:'tratado',rejeitado:'recusado'};
+let COM_MEUS=null, COM_A_LER=false, COM_AVISOS=null, COM_RESP_ABERTA=null;
 
 function comModal(h){document.getElementById('modal-comentario-in').innerHTML=h;abrirModal('modal-comentario');}
 function comBotoes(acao){
@@ -3547,13 +3551,19 @@ async function comEnviar(fn,args){
       :'Não foi possível enviar: '+e.message,1);
   }
 }
-/* Os meus, com o estado e a resposta do admin. Só se pedem com Definições à
-   vista (o `renderCfg` corre também no arranque e depois de outras
-   mudanças); até chegarem, fica o que já se tinha. Sem a migração 26 a
-   lista fica vazia — o botão de enviar é que o diz. */
+/* Os meus, com a CONVERSA: o que escrevi, cada pergunta ou resposta do
+   admin e o que respondi. Só se pedem com Definições à vista (o
+   `renderCfg` corre também no arranque e depois de outras mudanças); até
+   chegarem, fica o que já se tinha. Sem a migração 26 a lista fica vazia —
+   o botão de enviar é que o diz.
+   Com a lista à vista, o que o admin disse deixa de estar por ler; o
+   realce (`.novo`) fica até ela se voltar a desenhar, que é o que deixa ver
+   QUAL era o novo. */
 async function renderMeusComentarios(){
   const box=document.getElementById('cfg-comentarios');
   if(!box)return;
+  comAdminPintar();
+  pushPintar();
   if(COM_MEUS)box.innerHTML=meusComentariosHTML();
   if(COM_A_LER)return;
   COM_A_LER=true;
@@ -3561,18 +3571,192 @@ async function renderMeusComentarios(){
   catch(e){COM_MEUS=COM_MEUS||[];}
   finally{COM_A_LER=false;}
   box.innerHTML=meusComentariosHTML();
+  if(COM_MEUS.some(c=>c.porLer)){
+    try{await sbRpc('comentarios_lidos',{});}catch(e){}
+    comentariosAvisos();
+  }
 }
 function meusComentariosHTML(){
   if(!COM_MEUS||!COM_MEUS.length)return '';
-  return `<div class="cm-lista">${COM_MEUS.map(c=>`
-    <div class="cm-item">
+  return `<div class="cm-lista">${COM_MEUS.map(c=>{
+    const falas=(c.mensagens||[]).map(comFalaHTML).join('');
+    // A caixa de responder abre-se sozinha numa pergunta do admin (é a vez
+    // de quem escreveu); nos outros, a um toque — acrescentar alguma coisa,
+    // ou "continua mal" depois de tratado (volta à lista do admin).
+    const aberta=c.estado==='duvida'||COM_RESP_ABERTA===c.id;
+    return `<div class="cm-item${c.porLer?' novo':''}">
       <div class="cm-cab"><b>${c.tipo==='vinho'?esc(c.nome||'')+(c.ano?' '+esc(String(c.ano)):''):'Sugestão'}</b>
         <span class="cm-est ${esc(c.estado)}">${esc(COM_ESTADO[c.estado]||c.estado)}</span></div>
       <i>${esc(COM_MOTIVO_TXT[c.motivo]||c.motivo)} · ${esc(dataPT(c.quando))}</i>
       ${c.texto?`<div class="cm-tx">${esc(c.texto)}</div>`:''}
       ${c.link?`<div class="cm-tx"><a href="${esc(c.link)}" target="_blank" rel="noopener">${esc(c.link)}</a></div>`:''}
-      ${c.resposta?`<div class="cm-resp"><b>Resposta</b>${esc(c.resposta)}</div>`:''}
-    </div>`).join('')}</div>`;
+      ${falas?`<div class="cm-fio">${falas}</div>`:''}
+      ${aberta?`<div class="cm-rbox">
+          <textarea id="cm-r-${c.id}" maxlength="2000" placeholder="${c.estado==='duvida'?'A tua resposta ao admin':'O que queres acrescentar?'}"></textarea>
+          <div class="cm-rac"><button class="mini p" id="cm-rb-${c.id}" onclick="comResponderAdmin(${c.id})">Responder</button>
+            ${c.estado==='duvida'?'':`<button class="mini" onclick="comRespToggle(${c.id})">Cancelar</button>`}</div>
+        </div>`
+        :`<button class="cm-mais" onclick="comRespToggle(${c.id})">${c.estado==='aberto'?'Acrescentar alguma coisa':'Responder'}</button>`}
+    </div>`;}).join('')}</div>`;
+}
+function comFalaHTML(m){
+  const adm=m.de==='admin';
+  const quem=adm?({duvida:'Pergunta do admin',resolvido:'O admin tratou',rejeitado:'O admin respondeu'}[m.estado]||'O admin'):'Tu';
+  return `<div class="cm-fala${adm?' adm':''}"><b>${esc(quem)} · ${esc(dataHoraLocal(m.quando))}</b>${m.texto?esc(m.texto):''}</div>`;
+}
+function comRespToggle(id){
+  COM_RESP_ABERTA=COM_RESP_ABERTA===id?null:id;
+  const box=document.getElementById('cfg-comentarios');
+  if(box)box.innerHTML=meusComentariosHTML();
+  const t=document.getElementById('cm-r-'+id);if(t)t.focus();
+}
+async function comResponderAdmin(id){
+  const t=document.getElementById('cm-r-'+id);
+  const texto=((t&&t.value)||'').trim();
+  if(texto.length<2){toast('Escreve a resposta',1);if(t)t.focus();return;}
+  const b=document.getElementById('cm-rb-'+id);
+  if(b){b.disabled=true;b.textContent='A enviar…';}
+  try{
+    await sbRpc('comentario_responder',{p_id:id,p_texto:texto});
+    COM_RESP_ABERTA=null;
+    toast('Enviado ✓ o admin vai ver isto');
+    await renderMeusComentarios();
+    comentariosAvisos();
+  }catch(e){
+    if(b){b.disabled=false;b.textContent='Responder';}
+    toast('Não foi possível enviar: '+e.message,1);
+  }
+}
+
+/* ── OS AVISOS À ENTRADA ──────────────────────────────────────────────
+   A rede por baixo do push: o que o admin me disse e ainda não li, as
+   perguntas dele à espera da minha resposta e — só ao admin do catálogo —
+   os comentários e sugestões por tratar. Pergunta-se uma vez no arranque
+   (e depois de cada conversa): dá o número no ⚙️ e, uma vez por sessão, um
+   toast a dizer o que há. Um push que não chegue não perde nada. */
+async function comentariosAvisos(arranque){
+  try{COM_AVISOS=(await sbRpc('comentarios_avisos',{}))||null;}catch(e){COM_AVISOS=null;}
+  const a=COM_AVISOS||{}, adm=a.admin||null;
+  const meus=Number(a.atencao||0), porTratar=adm?Number(adm.vinho||0)+Number(adm.sugestao||0):0;
+  const n=meus+porTratar;
+  const el=document.getElementById('cfg-n');
+  if(el){el.textContent=n>0?String(n):'';el.classList.toggle('on',n>0);}
+  comAdminPintar();
+  if(!arranque||!n)return;
+  const chave=meus+'/'+porTratar;
+  let visto=null;try{visto=sessionStorage.getItem('gf_avisos');}catch(e){}
+  if(visto===chave)return;
+  try{sessionStorage.setItem('gf_avisos',chave);}catch(e){}
+  toast(meus>0
+    ?(Number(a.duvidas||0)>0?'📬 O admin tem uma pergunta para ti — vê em ⚙️ › Sugestões e comentários'
+                            :'📬 O admin respondeu a um comentário teu — vê em ⚙️ › Sugestões e comentários')
+    :`📬 ${porTratar} comentário${porTratar>1?'s':''} ou sugest${porTratar>1?'ões':'ão'} por tratar no WineCatalog`);
+}
+/* Ao admin do catálogo, no mesmo cartão: o que está por tratar, e o
+   caminho para lá (é no WineCatalog que se trata). */
+function comAdminPintar(){
+  const box=document.getElementById('cfg-com-admin');
+  if(!box)return;
+  const adm=COM_AVISOS&&COM_AVISOS.admin;
+  if(!adm){box.innerHTML='';return;}
+  const v=Number(adm.vinho||0), s=Number(adm.sugestao||0);
+  box.innerHTML=`<div class="cm-adm"><span>${v+s
+      ?`📬 <b>${v}</b> comentário${v===1?'':'s'} e <b>${s}</b> sugest${s===1?'ão':'ões'} por tratar`
+      :'📭 Nada por tratar'}</span>
+    <a class="mini" href="/WineCatalog/#alertas" target="_blank" rel="noopener">Abrir no WineCatalog ›</a></div>`;
+}
+/* O toque numa notificação abre a app em "#comentarios" (ver o sw.js):
+   vai-se a Definições, ao cartão da conversa. */
+function comentariosIrPara(){
+  if(location.hash!=='#comentarios')return;
+  history.replaceState(null,'',location.pathname+location.search);
+  const bts=document.querySelectorAll('.itabs .it');
+  tab('cfg',bts[ORDEM_TABS.indexOf('cfg')]);
+  setTimeout(()=>{const c=document.getElementById('fcard-comentarios');if(c)c.scrollIntoView({behavior:'smooth',block:'start'});},80);
+}
+window.addEventListener('hashchange',()=>{if(_sbSession&&GA_LISTA.length)comentariosIrPara();});
+
+/* ── NOTIFICAÇÕES PUSH (migração 27) ──────────────────────────────────
+   Ligam-se por APARELHO, aqui em Definições: o browser pede autorização,
+   subscreve com a chave pública da Edge Function `garrafeira-push`, e a
+   subscrição fica na BD em nome de quem está com sessão
+   (`push_registar`). Quem envia é a base — os gatilhos dos comentários
+   escrevem uma caixa de saída e acordam a função (db/migracao-push.sql) —,
+   por isso nada aqui depende de a app estar aberta. No iPhone só funciona
+   com a app no ecrã principal; o cartão di-lo. */
+const FN_PUSH=SB_URL+'/functions/v1/garrafeira-push';
+const PUSH_ESTADO={enviado:'chegou',sem_subscricao:'não havia aparelho ligado',falhou:'falhou',pendente:'a enviar'};
+function pushSuportado(){return 'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;}
+function pushIOSsemInstalar(){
+  const ios=/iP(hone|ad|od)/.test(navigator.userAgent);
+  const inst=(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone;
+  return ios&&!inst;
+}
+async function pushSubAtual(){
+  try{const reg=await navigator.serviceWorker.ready;return await reg.pushManager.getSubscription();}
+  catch(e){return null;}
+}
+function b64UrlBytes(s){
+  const b=atob((s+'='.repeat((4-s.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/'));
+  return Uint8Array.from(b,c=>c.charCodeAt(0));
+}
+async function pushPintar(){
+  const box=document.getElementById('cfg-push');
+  if(!box)return;
+  if(!pushSuportado()){
+    box.innerHTML=`<div class="note cm-push-n">🔕 ${pushIOSsemInstalar()
+      ?'No iPhone, as notificações só funcionam com a app no ecrã principal: Partilhar › <b>Adicionar ao ecrã principal</b>, e abre-a daí.'
+      :'Este browser não recebe notificações.'}</div>`;
+    return;
+  }
+  if(Notification.permission==='denied'){
+    box.innerHTML='<div class="note cm-push-n">🔕 As notificações desta app estão bloqueadas — liga-as nas definições do telemóvel (ou do browser).</div>';
+    return;
+  }
+  const sub=await pushSubAtual();
+  let est=null;
+  if(sub){try{est=await sbRpc('push_estado',{p_endpoint:sub.endpoint});}catch(e){}}
+  const para=(COM_AVISOS&&COM_AVISOS.admin)?'quando chegar um comentário ou uma resposta':'quando o admin responder aos teus comentários';
+  if(sub&&est&&est.registado){
+    const u=est.ultimo;
+    box.innerHTML=`<div class="cm-push"><span>🔔 Notificações ligadas neste aparelho</span>
+        <button class="mini" onclick="pushDesligar()">Desligar</button></div>
+      ${u?`<div class="note">Último aviso: ${esc(u.titulo)} · ${esc(dataHoraLocal(u.quando))} · ${esc(PUSH_ESTADO[u.estado]||u.estado)}</div>`:''}`;
+  }else{
+    box.innerHTML=`<div class="cm-push"><span>🔕 Recebe um aviso no telemóvel ${esc(para)}</span>
+        <button class="mini p" onclick="pushLigar()">🔔 Ligar</button></div>`;
+  }
+}
+async function pushLigar(){
+  if(!pushSuportado())return;
+  try{
+    // O pedido de autorização é a PRIMEIRA coisa depois do toque: o Safari
+    // recusa-o fora do gesto de quem carregou.
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){toast('Sem autorização para mostrar notificações',1);pushPintar();return;}
+    const r=await sbFetch(FN_PUSH,{method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY},
+      body:JSON.stringify({acao:'chave'})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.chave)throw new Error(r.status===404?'a função garrafeira-push ainda não está publicada':(d.error||('HTTP '+r.status)));
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64UrlBytes(d.chave)});
+    const j=sub.toJSON();
+    await sbRpc('push_registar',{p_endpoint:j.endpoint,p_p256dh:j.keys.p256dh,p_auth:j.keys.auth});
+    toast('🔔 Notificações ligadas neste aparelho');
+  }catch(e){
+    toast('Não foi possível ligar as notificações: '+e.message,1);
+  }
+  pushPintar();
+}
+async function pushDesligar(){
+  const sub=await pushSubAtual();
+  if(sub){
+    try{await sbRpc('push_retirar',{p_endpoint:sub.endpoint});}catch(e){}
+    try{await sub.unsubscribe();}catch(e){}
+  }
+  toast('Notificações desligadas neste aparelho');
+  pushPintar();
 }
 
 /* ── A PÁGINA DO VINHO (comportamento) ─────────────────────────────
@@ -7118,6 +7302,8 @@ async function sbAposLogin(){
     return;
   }
   renderLista();renderCfg();restaurarTab();
+  comentariosIrPara();
+  comentariosAvisos(true);
   if(window.glEsconderSplash)window.glEsconderSplash();
 }
 
@@ -8593,7 +8779,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='123';
+const APP_BUILD='124';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

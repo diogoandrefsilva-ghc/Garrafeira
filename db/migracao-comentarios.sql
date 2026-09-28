@@ -89,11 +89,62 @@ BEGIN
 END;
 $$;
 
+-- ---------------------------------------------------------------------
+-- A CONVERSA (28/09/2026): o admin pode devolver uma dúvida em vez de
+-- fechar, e quem escreveu responde daqui. As três são só a porta: a regra
+-- (só a própria pessoa, a trava, o estado que volta a `aberto`) vive na
+-- `winecatalog.comentario_do_autor` e irmãs, no db/comentarios.sql.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION garrafeira.comentario_responder(p_id bigint, p_texto text)
+  RETURNS jsonb
+  LANGUAGE plpgsql SECURITY DEFINER
+  SET search_path TO 'garrafeira', 'winecatalog', 'public'
+AS $$
+BEGIN
+  IF NOT garrafeira.is_allowed() THEN RAISE EXCEPTION 'Sem acesso à app.'; END IF;
+  RETURN winecatalog.comentario_do_autor(p_id, p_texto);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION garrafeira.comentarios_lidos()
+  RETURNS integer
+  LANGUAGE plpgsql SECURITY DEFINER
+  SET search_path TO 'garrafeira', 'winecatalog', 'public'
+AS $$
+BEGIN
+  IF NOT garrafeira.is_allowed() THEN RETURN 0; END IF;
+  RETURN winecatalog.comentarios_marcar_lidos();
+END;
+$$;
+
+-- À entrada da app: o que há por ler, as dúvidas à espera e (ao admin do
+-- catálogo) o que está por tratar. Nunca um erro — no pior caso, zeros.
+CREATE OR REPLACE FUNCTION garrafeira.comentarios_avisos()
+  RETURNS jsonb
+  LANGUAGE plpgsql STABLE SECURITY DEFINER
+  SET search_path TO 'garrafeira', 'winecatalog', 'public'
+AS $$
+BEGIN
+  IF NOT garrafeira.is_allowed() THEN RETURN jsonb_build_object('porLer', 0, 'duvidas', 0); END IF;
+  BEGIN
+    RETURN winecatalog.meus_avisos();
+  EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object('porLer', 0, 'duvidas', 0);
+  END;
+END;
+$$;
+
 -- GRANTs nomeados (ver o porquê no fim do catalogo-partilhado.sql). Cada uma
 -- confirma lá dentro quem é (`pode_ver`/`is_allowed`).
 REVOKE ALL ON FUNCTION garrafeira.comentar_vinho(bigint, text, text, text[], text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION garrafeira.sugerir(text, text)                              FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION garrafeira.meus_comentarios()                               FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION garrafeira.comentario_responder(bigint, text)              FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION garrafeira.comentarios_lidos()                              FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION garrafeira.comentarios_avisos()                             FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION garrafeira.comentar_vinho(bigint, text, text, text[], text) TO authenticated;
 GRANT EXECUTE ON FUNCTION garrafeira.sugerir(text, text)                              TO authenticated;
 GRANT EXECUTE ON FUNCTION garrafeira.meus_comentarios()                               TO authenticated;
+GRANT EXECUTE ON FUNCTION garrafeira.comentario_responder(bigint, text)              TO authenticated;
+GRANT EXECUTE ON FUNCTION garrafeira.comentarios_lidos()                              TO authenticated;
+GRANT EXECUTE ON FUNCTION garrafeira.comentarios_avisos()                             TO authenticated;

@@ -32,6 +32,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
 - `sw.js` — service worker (cache PWA).
 - `vinho-info.ts` — a Edge Function que procura a ficha do vinho na net
   (deploy à parte: `supabase functions deploy vinho-info`).
+- `garrafeira-push.ts` — a Edge Function das notificações push (a chave
+  pública VAPID para a app, e o envio da caixa de saída `push_avisos`; ver
+  "Comentários e sugestões"). Deploy: `supabase functions deploy garrafeira-push`.
 - `db/` — `schema.sql` → `functions.sql` → `policies.sql` → `seed.sql`
   (+ `README.md` com os passos manuais no painel do Supabase). Fonte de
   verdade do schema. `migracao-garrafeiras.sql` é a migração 07 (uma
@@ -76,8 +79,10 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   ter uma casa decimal (`consumo_avaliacao numeric(2,1)`, 4,2), e a
   `consumir_garrafa` com ela — seguida por `functions.sql`.
   `migracao-comentarios.sql` é a 26: as portas dos comentários sobre um
-  vinho e das sugestões (ver "Comentários e sugestões"); corre depois do
-  `db/comentarios.sql` da WineCatalog, onde vive a tabela.
+  vinho e das sugestões, e da conversa (ver "Comentários e sugestões");
+  corre depois do `db/comentarios.sql` da WineCatalog, onde vive a tabela.
+  `migracao-push.sql` é a 27: as notificações push — as subscrições, a
+  caixa de saída, os gatilhos nos comentários e o cron da nova tentativa.
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
@@ -1185,6 +1190,41 @@ atributos apontados saem da BD (`comentar_vinho` → `ficha_catalogo`), nunca
 da caixa de texto — e nunca as notas, o preço de compra, o lugar ou a foto.
 A tabela é do catálogo (`winecatalog.comentarios`), não daqui: quem a lê é o
 admin do catálogo, como os reportes.
+
+**A conversa** (28/09/2026, o dono: "um estado de devolver uma dúvida"). O
+admin pode fechar com uma resposta ou devolver uma PERGUNTA — o estado
+`duvida` é a vez de quem escreveu, e a caixa de responder abre-se sozinha no
+cartão. Quem escreveu responde daí (`comentario_responder`), e o comentário
+volta a `aberto` — também depois de fechado ("continua mal"). Cada fala é uma
+linha em `winecatalog.comentarios_msgs`, e a lista mostra-as todas.
+
+**Três avisos, do mais forte ao mais fraco — e nenhum pode faltar:**
+- **o push no telemóvel** (migração 27, `garrafeira-push.ts`). Liga-se por
+  APARELHO em Definições › Sugestões e comentários (`pushLigar`: a
+  autorização é a primeira coisa depois do toque, que o Safari recusa-a fora
+  do gesto). No iPhone só com a app no ecrã principal, e o cartão di-lo.
+  Quem ENVIA é a base, não a app: os gatilhos em `comentarios` e
+  `comentarios_msgs` escrevem na caixa de saída (`garrafeira.push_avisos`) e
+  acordam a função pelo `pg_net`, com a `service_role_key` do cofre; o cron
+  `garrafeira-push-retry` tenta outra vez de 30 em 30 minutos, até 10.
+  Comentário novo e resposta de quem escreveu → o admin do catálogo (o toque
+  abre o Alertas do WineCatalog); pergunta ou fecho do admin → quem escreveu
+  (o toque abre `#comentarios`, que leva a Definições). Venha a fala da
+  Garrafeira, do WineCatalog ou do painel do PC — é por isso que está num
+  gatilho e não em cada ecrã;
+- **o toast à entrada e o número no ⚙️** (`comentariosAvisos`,
+  `garrafeira.comentarios_avisos`): as respostas por ler, as perguntas à
+  espera e, ao admin do catálogo, o que está por tratar (com "Abrir no
+  WineCatalog");
+- **o realce na lista** (`.cm-item.novo`), até ela se voltar a desenhar.
+**A caixa de saída diz o que aconteceu a cada aviso** (`estado` e
+`resultado`: enviado a N aparelhos · ninguém com as notificações ligadas ·
+o erro do serviço), e o cartão mostra o último. É a lição do Goals, que
+passou semanas a "enviar" sem nada chegar. E a função confere o PAPEL do
+token (`service_role`), não a chave letra a letra: a do cofre e a do
+ambiente das funções deixaram de ser a mesma cadeia — a comparação dava 403
+a um token certo, e é o que está a acontecer ao `push-retry-goals` do Goals
+(visto a 28/09/2026 no `net._http_response`).
 
 ## A exceção: as marcas dos amigos na WineSelection (25/09/2026)
 Por decisão do dono das apps, **dentro do grupo das Prendas de Anos**
