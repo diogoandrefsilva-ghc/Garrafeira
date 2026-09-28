@@ -1156,6 +1156,16 @@ São duas colunas e não uma de propósito: tirar a minha faz **reaparecer** a
 que a IA encontrou, em vez de deixar o vinho sem nada. Quem decide é
 `imagemDe(v)` — usa-se esse, nunca `v.imagem_url` à mão.
 
+**E mostram-se de maneira diferente nas molduras** (a miniatura da lista, a
+grelha, o mapa, a capa da página): a de uma loja ou do Vivino vê-se
+**inteira** (`contain`, com `multiply` para o fundo branco se fundir com o
+papel); a minha **enche** a moldura (`cover`, classe `foto-minha`, posta
+pelo `imgClasse(v)`). Foi `cover` para todas, e a moldura da grelha é 3:4:
+as garrafas do Vivino e de muitas lojas vêm recortadas rente ao vidro,
+muito mais altas do que largas, e ficava só o meio delas — o ombro e meio
+rótulo, sem gargalo nem base —, ao lado de uma da Granvine (com margem à
+volta) que aparecia inteira. Parecia imagem mal carregada, e não era.
+
 O bucket é **privado** (as fotos são tiradas em casa e apanham a prateleira
 à volta), por isso um `<img src>` não lhe chega com o JWT. A saída são links
 assinados: `assinarImagens()` pede-os TODOS num pedido só ao carregar e

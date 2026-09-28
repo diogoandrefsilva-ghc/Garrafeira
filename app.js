@@ -515,6 +515,11 @@ function imagemDe(v){
   return String(v.imagem_url||'').trim();
 }
 function imagemPropria(v){return !!String((v||{}).imagem_path||'').trim();}
+// A classe da <img> de uma moldura: a MINHA fotografia enche-a (`cover`), a
+// de uma loja/Vivino vê-se inteira — ver o `.foto-minha` no style.css.
+// Pergunta pelo link assinado e não só pelo `imagem_path`: sem ele, o
+// `imagemDe` já respondeu com o `imagem_url`, que é da loja.
+function imgClasse(v){return imagemPropria(v)&&IMG_ASSINADA[v.id]?' class="foto-minha"':'';}
 
 /* Um `imagem_url` preenchido não é o mesmo que uma imagem que abre — a IA
    às vezes traz um link de uma loja que entretanto mudou a foto ou tirou o
@@ -580,7 +585,7 @@ async function assinarImagens(){
 function vinhoThumb(v,qtd){
   const img=imagemDe(v);
   return `<div class="vc-thumb">${garrafaSVG(v)}
-    ${img?`<img src="${esc(img)}" alt="" loading="lazy" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}
+    ${img?`<img src="${esc(img)}"${imgClasse(v)} alt="" loading="lazy" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}
     ${qtd>1?`<span class="vc-qtd">\u00d7${qtd}</span>`:''}</div>`;
 }
 // "Nível 2" tem de vir antes de "Nível 10" — a ordenação alfabética punha o
@@ -2976,7 +2981,7 @@ function mapaPopupItemHTML(g,total){
   return `<div class="mspot-item">
     <div class="mspot-top">
       <div class="mspot-thumb">${garrafaSVG(v)}
-        ${img?`<img src="${esc(img)}" alt="" loading="lazy" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}
+        ${img?`<img src="${esc(img)}"${imgClasse(v)} alt="" loading="lazy" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}
       </div>
       <div class="mspot-tx">
         <div class="mspot-nome">${esc(v.nome)}</div>
@@ -3952,7 +3957,7 @@ function vinhoDetalheHTML(v){
       <button class="mx" onclick="fecharModal('modal-vinho')">✕</button>
       <div class="mhero-in">
         <button class="mhero-g" onclick="abrirFoto(${v.id})" title="Ver a imagem em grande">
-          ${garrafaSVG(v)}${img?`<img src="${esc(img)}" alt="" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}
+          ${garrafaSVG(v)}${img?`<img src="${esc(img)}"${imgClasse(v)} alt="" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}
           <span class="mhero-lupa">⤢</span>
         </button>
         <div class="mhero-tx">
@@ -4833,7 +4838,7 @@ function abrirConsumir(vinhoId,garrafaId){
       <button class="mx" onclick="fecharModal('modal-consumir')">✕</button>
       <div class="mhero-in">
         <div class="mhero-g">${garrafaSVG(v)}${imagemDe(v)
-          ?`<img src="${esc(imagemDe(v))}" alt="" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}</div>
+          ?`<img src="${esc(imagemDe(v))}"${imgClasse(v)} alt="" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}</div>
         <div class="mhero-tx">
           <div class="mhero-k">Dar saída</div>
           <h3>${esc(v.nome)}</h3>
@@ -4981,7 +4986,7 @@ function editarConsumo(gid){
       <button class="mx" onclick="fecharModal('modal-consumir')">✕</button>
       <div class="mhero-in">
         <div class="mhero-g">${garrafaSVG(v)}${imagemDe(v)
-          ?`<img src="${esc(imagemDe(v))}" alt="" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}</div>
+          ?`<img src="${esc(imagemDe(v))}"${imgClasse(v)} alt="" onload="this.parentNode.classList.add('com-foto')" onerror="this.remove()">`:''}</div>
         <div class="mhero-tx">
           <div class="mhero-k">Editar consumo</div>
           <h3>${esc(v.nome)}</h3>
@@ -8808,7 +8813,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='126';
+const APP_BUILD='127';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
