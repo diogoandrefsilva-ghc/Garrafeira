@@ -1539,6 +1539,16 @@ Só http(s) e nomes públicos, redireções conferidas, 1,5 MB — aqui qualquer
 editor com IA pode escrever um endereço. A leitura é a MESMA da
 `catalogo-info` da WineCatalog (o `CLAUDE.md` de lá tem o resto) — mexer numa
 é mexer na outra.
+**Numa página comprida, a parte que é deste vinho** (28/09/2026): de cada
+página só se lia o princípio (6 000 caracteres), e numa página com vários
+vinhos ("moraisrocha.com/vinhos/#MR-As-Velhas-Red") o vinho ficava de fora —
+a página abria e o Gemini respondia, com razão, que ele não estava lá. Agora
+o `#…` do link fica (`ancoraDe`; nunca vai no pedido) e, numa página maior
+do que o princípio, vai a MAIS a secção para onde ele aponta (até ao vinho
+seguinte, quando os `id` o dizem) e os trechos mais abaixo onde o nome
+aparece (`extraDaPagina`). Só acrescenta: o princípio vai igual e o extra tem
+uma quota à parte na base de evidência (`EVIDENCIA_EXTRA_MAX`); no registo, a
+página diz `secao`/`trechos`.
 
 A nota que CONTA — no crachá do cartão e da grelha, na página do vinho, na
 ordenação dentro dos grupos, no filtro por Vivino, no "A completar" e na PDF

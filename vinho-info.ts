@@ -937,7 +937,10 @@ async function serperConsulta(q: string, signal: AbortSignal): Promise<Resultado
    contorna: fica o resumo do Google, se houver, e o ecrã diz que recusou.
    Um endereço escrito por alguém é aberto por um servidor: só http(s),
    só nomes públicos (nada de IPs, portas nem "localhost"), redireções
-   conferidas uma a uma, 1,5 MB no máximo. A MESMA leitura está na
+   conferidas uma a uma, 1,5 MB no máximo. De uma página comprida lê-se o
+   princípio e, a mais, a parte que é DESTE vinho (a secção do `#…` do
+   link, os trechos com o nome — ver "A PARTE DA PÁGINA QUE É DESTE
+   VINHO"). A MESMA leitura está na
    `catalogo-info` da WineCatalog — mexer numa é mexer na outra. Aqui, quem
    pode escrever um endereço é qualquer editor com IA, e é por isso que as
    travas acima não são enfeite. */
@@ -945,6 +948,12 @@ const PAGINA_TIMEOUT_MS = 10_000;
 const PAGINA_MAX_BYTES = 1_500_000;
 const PAGINA_MAX_TEXTO = 6_000;
 const EVIDENCIA_PAGINAS_MAX = 20_000;
+// O que se lê a MAIS numa página comprida (ver "A PARTE DA PÁGINA QUE É
+// DESTE VINHO"), com uma quota à parte: o que já ia nunca fica de fora.
+const PAGINA_MAX_SECAO = 5_000;
+const PAGINA_MAX_TRECHOS = 7_000;
+const TRECHO_JANELA = 1_800;
+const EVIDENCIA_EXTRA_MAX = 20_000;
 const UA_PAGINA = "Mozilla/5.0 (compatible; Garrafeira/1.0)";
 const RECUSA = /just a moment|attention required|access denied|captcha|verify you are human|unusual traffic|verifica[çc][ãa]o de seguran[çc]a/i;
 
@@ -967,7 +976,11 @@ function paginaDe(s: string): string {
   try {
     const u = new URL(t);
     if (!hostPublico(u) || u.pathname.replace(/\/+$/, "") === "") return "";
-    u.hash = "";
+    // O `#…` fica quando aponta para um sítio da página (ver `ancoraDe`):
+    // é o que diz onde está ESTE vinho numa página com vários. Nunca chega
+    // ao servidor — o fetch não o manda.
+    const anc = ancoraDe(u.hash);
+    if (!anc.id && !anc.texto) u.hash = "";
     for (const k of [...u.searchParams.keys()]) {
       if (/^(utm_|srsltid$|gclid$|fbclid$)/i.test(k)) u.searchParams.delete(k);
     }
@@ -1056,8 +1069,9 @@ function produtoDaPagina(html: string): string {
 }
 /* O texto da zona principal (o `<main>`, se houver), sem menus, rodapé,
    scripts nem botões. As tabelas ficam "rótulo | valor" numa linha — é
-   onde as lojas escrevem as castas, a região, o teor e o estágio. */
-function textoDaPagina(html: string): string {
+   onde as lojas escrevem as castas, a região, o teor e o estágio. Em
+   linhas e inteiro: o corte ao princípio faz-se na `abrirPagina`. */
+function linhasDaPagina(html: string): string[] {
   let h = html;
   const main = h.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i);
   if (main && main[1].length > 500) h = main[1];
@@ -1078,7 +1092,175 @@ function textoDaPagina(html: string): string {
     if (!l || l === linhas[linhas.length - 1]) continue;
     linhas.push(l);
   }
-  return linhas.join("\n").slice(0, PAGINA_MAX_TEXTO);
+  return linhas;
+}
+
+/* ── A PARTE DA PÁGINA QUE É DESTE VINHO (28/09/2026) ──
+   De cada página lia-se só o PRINCÍPIO do texto (`PAGINA_MAX_TEXTO`). Numa
+   página com vários vinhos — a de "Vinhos" de um produtor, uma lista — o
+   vinho que se procura fica muitas vezes mais abaixo: o "As Velhas" da
+   Morais Rocha (moraisrocha.com/vinhos/#MR-As-Velhas-Red) não chegou ao
+   Gemini, que leu os outros vinhos e respondeu, com razão, que este não
+   estava lá. Agora, numa página maior do que o princípio, vai o princípio
+   de sempre E, a mais:
+   · a SECÇÃO para onde o link aponta — o `#…` no fim do endereço, que o
+     browser usa para descer até ao vinho e que nunca chega ao servidor:
+     procura-se no HTML o elemento com esse `id` e lê-se dali para baixo.
+     Um link copiado com o texto realçado (`#:~:text=…`) dá, em vez disso,
+     esse texto como mais uma maneira de dizer o nome;
+   · os TRECHOS mais abaixo onde o NOME do vinho aparece (a frase inteira
+     conta mais do que uma palavra solta, e uma palavra que está em todo o
+     lado — o produtor — conta pouco).
+   Só se ACRESCENTA: uma página curta vai exatamente como antes, numa
+   comprida o princípio continua lá, e na base de evidência isto tem uma
+   quota à parte (`EVIDENCIA_EXTRA_MAX`), que só se gasta depois de todas
+   as páginas terem o que já levavam. */
+type Ancora = { id: string; texto: string };
+function ancoraDe(hash: string): Ancora {
+  let h = String(hash ?? "").replace(/^#/, "");
+  let texto = "";
+  const i = h.indexOf(":~:");
+  if (i >= 0) {
+    // text=[prefixo-,]início[,fim][,-sufixo]
+    const m = h.slice(i + 3).match(/(?:^|&)text=([^&]*)/);
+    if (m) {
+      const inicio = m[1].split(",").filter((x) => x && !x.endsWith("-") && !x.startsWith("-"))[0] ?? "";
+      try { texto = decodeURIComponent(inicio); } catch { texto = ""; }
+    }
+    h = h.slice(0, i);
+  }
+  let id = "";
+  try { id = decodeURIComponent(h); } catch { id = ""; }
+  // "#!/…" e "#/…" são rotas de uma app montada em JavaScript, não um sítio da página.
+  if (!/^[^\s"'<>]{1,120}$/.test(id) || /^[!\/]/.test(id)) id = "";
+  return { id, texto: texto.replace(/\s+/g, " ").trim().slice(0, 120) };
+}
+const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// Onde começa, no HTML, o elemento com este `id` (ou `<a name>`); -1 se não há.
+function posicaoDaAncora(html: string, id: string): number {
+  const e = escRe(id);
+  const m = new RegExp(`<[a-z][^>]*?\\s(?:id|name)\\s*=\\s*(?:"${e}"|'${e}'|${e}(?=[\\s/>]))`, "i").exec(html);
+  return m ? m.index : -1;
+}
+/* Onde começa o vinho SEGUINTE da mesma lista, quando os `id` o dizem: o
+   do "As Velhas" é "MR-As-Velhas-Red", o de a seguir "MR-Talha" — o mesmo
+   prefixo ("MR-"). Um `id` que começa pelo desta âncora é uma parte dela
+   ("MR-As-Velhas-Red-ficha"), não o seguinte. -1 se não se sabe. */
+function fimDaAncora(html: string, pos: number, id: string): number {
+  const p = id.match(/^([A-Za-z0-9]{1,10}[-_])./)?.[1];
+  if (!p) return -1;
+  const depois = html.indexOf(">", pos) + 1;
+  if (depois <= 0) return -1;
+  const re = new RegExp(`<[a-z][^>]*?\\s(?:id|name)\\s*=\\s*["']?(${escRe(p)}[^"'\\s>]*)`, "g");
+  re.lastIndex = depois;
+  for (let m = re.exec(html); m; m = re.exec(html)) if (!m[1].startsWith(id)) return m.index;
+  return -1;
+}
+const MARCA_ANCORA = "\u2063ANCORA\u2063";
+const MARCA_FIM = "\u2063FIM\u2063";
+const TERMO_GENERICO = new Set(["tinto", "branco", "rose", "red", "white", "vinho", "vinhos", "wine", "wines",
+  "doc", "igp", "the", "and", "com", "dos", "das", "del", "los", "las", "les"]);
+const normTermo = (s: string) => " " + s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+  .replace(/[^a-z0-9]+/g, " ").trim() + " ";
+/* Os trechos (a partir da linha `desde`, fora das já `usadas`) onde o nome
+   aparece: cada um vai da linha do nome até ~`TRECHO_JANELA` caracteres
+   depois (é lá que vêm as castas, o teor e a prova), os melhores primeiro
+   até `PAGINA_MAX_TRECHOS`, e escritos pela ordem da página. Nada ANTES
+   do nome: numa lista, as linhas de cima são o fim do vinho anterior (o
+   "Estágio: 6 meses em inox" dele colado ao nome deste). */
+function trechosDoVinho(linhas: string[], desde: number, usadas: Set<number>, nome: string, outroNome: string) {
+  const frases = [nome, outroNome].map(normTermo).filter((f) => f.trim().length >= 3);
+  const termos = [...new Set(normTermo(nome).trim().split(" ")
+    .filter((w) => w.length >= 3 && !TERMO_GENERICO.has(w) && !/^(19|20)\d\d$/.test(w)))];
+  if (!frases.length && !termos.length) return { texto: "", n: 0 };
+  const ln = linhas.map(normTermo);
+  // Uma palavra que aparece em muitas linhas (o produtor, numa página dele) conta pouco.
+  const quantas = new Map(termos.map((t) => [t, ln.filter((l) => l.includes(` ${t} `)).length || 1]));
+  const precisa = Math.min(2, termos.length);
+  const alvos: { i: number; s: number }[] = [];
+  for (let i = desde; i < ln.length; i++) {
+    if (usadas.has(i)) continue;
+    const naFrase = frases.some((f) => ln[i].includes(f));
+    const ts = termos.filter((t) => ln[i].includes(` ${t} `));
+    if (!naFrase && (!ts.length || ts.length < precisa)) continue;
+    alvos.push({ i, s: (naFrase ? 3 : 0) + ts.reduce((a, t) => a + 1 / (quantas.get(t) ?? 1), 0) });
+  }
+  alvos.sort((a, b) => b.s - a.s || a.i - b.i);
+  const escolhidas = new Set<number>();
+  let total = 0, n = 0;
+  for (const { i } of alvos) {
+    if (total >= PAGINA_MAX_TRECHOS) break;
+    if (escolhidas.has(i)) continue;
+    let b = i, t = 0;
+    while (b < linhas.length && t < TRECHO_JANELA && !usadas.has(b)) { t += linhas[b].length + 1; b++; }
+    for (let j = i; j < b; j++) {
+      if (escolhidas.has(j)) continue;
+      escolhidas.add(j);
+      total += linhas[j].length + 1;
+    }
+    n++;
+  }
+  const ordem = [...escolhidas].sort((x, y) => x - y);
+  let out = "";
+  ordem.forEach((j, k) => { out += (k === 0 ? "" : ordem[k - 1] === j - 1 ? "\n" : "\n[…]\n") + linhas[j]; });
+  return { texto: out.slice(0, PAGINA_MAX_TRECHOS), n };
+}
+/* O que vai A MAIS de uma página cujo texto passa do princípio que já se lia
+   (`linhas` são as da página sem marca nenhuma; null se não há nada a
+   acrescentar). */
+function extraDaPagina(html: string, linhas: string[], ancora: Ancora, nome: string):
+  { texto: string; secao: boolean; trechos: number } | null {
+  // A secção do `#…`: marca-se no HTML onde começa (e onde começa o vinho
+  // seguinte, se se souber) e vê-se em que linhas do texto ficaram.
+  let k = -1, kFim = -1;
+  if (ancora.id) {
+    const pos = posicaoDaAncora(html, ancora.id);
+    if (pos >= 0) {
+      const fim = fimDaAncora(html, pos, ancora.id);
+      const marcadas = linhasDaPagina(fim > pos
+        ? `${html.slice(0, pos)}\n${MARCA_ANCORA}\n${html.slice(pos, fim)}\n${MARCA_FIM}\n${html.slice(fim)}`
+        : `${html.slice(0, pos)}\n${MARCA_ANCORA}\n${html.slice(pos)}`);
+      const tira = (marca: string) => {
+        const j = marcadas.findIndex((l) => l.includes(marca));
+        if (j < 0) return -1;
+        const resto = marcadas[j].replace(marca, "").trim();
+        if (resto) marcadas[j] = resto; else marcadas.splice(j, 1);
+        return j;
+      };
+      const j = tira(MARCA_ANCORA);
+      if (j >= 0) {
+        kFim = tira(MARCA_FIM);
+        linhas = marcadas;
+        k = j;
+      }
+    }
+  }
+  // Até onde vai o princípio que já se lia.
+  let desde = 0, n = 0;
+  while (desde < linhas.length && n + linhas[desde].length <= PAGINA_MAX_TEXTO) { n += linhas[desde].length + 1; desde++; }
+  if (desde >= linhas.length) return null;
+  const partes: string[] = [];
+  const usadas = new Set<number>();
+  let secao = false;
+  // Uma secção que começa dentro do princípio já vai nele.
+  if (k >= desde) {
+    // Até ao vinho seguinte — a não ser que isso dê uma secção sem nada (o
+    // `id` estava num elemento vazio antes do título, por exemplo).
+    let ate = linhas.length;
+    if (kFim > k && linhas.slice(k, kFim).join("\n").length >= 150) ate = kFim;
+    const ls: string[] = [];
+    let t = 0;
+    for (let j = k; j < ate && t < PAGINA_MAX_SECAO; j++) { ls.push(linhas[j]); usadas.add(j); t += linhas[j].length + 1; }
+    partes.push(`SECÇÃO DA PÁGINA PARA ONDE O LINK APONTA (#${ancora.id}) — é aqui que está o vinho indicado:\n` +
+      ls.join("\n").slice(0, PAGINA_MAX_SECAO));
+    secao = true;
+  }
+  const tr = trechosDoVinho(linhas, desde, usadas, nome, ancora.texto);
+  if (tr.texto) {
+    partes.push(`MAIS ABAIXO NA PÁGINA, OS TRECHOS ONDE APARECE «${nome}» (o princípio da página, acima, ` +
+      `pode ser de outros vinhos — usa só o que é deste):\n${tr.texto}`);
+  }
+  return partes.length ? { texto: partes.join("\n\n"), secao, trechos: tr.n } : null;
 }
 async function lerAte(r: Response, max: number): Promise<Uint8Array> {
   const rd = r.body?.getReader();
@@ -1106,9 +1288,15 @@ type Pagina = {
   url: string; site: string; dada: boolean;
   estado: "lida" | "recusada" | "vazia" | "erro";
   http?: number; titulo?: string; motivo?: string; texto?: string;
+  // O que se leu A MAIS numa página comprida (ver "A PARTE DA PÁGINA QUE É
+  // DESTE VINHO"): a secção do `#…` e quantos trechos com o nome.
+  extra?: string; secao?: boolean; trechos?: number;
 };
-async function abrirPagina(url0: string, dada: boolean, signal: AbortSignal): Promise<Pagina> {
+// `nome`: o do vinho que se procura — é por ele que se acham os trechos.
+async function abrirPagina(url0: string, dada: boolean, signal: AbortSignal, nome = ""): Promise<Pagina> {
   let url = url0;
+  let ancora: Ancora = { id: "", texto: "" };
+  try { ancora = ancoraDe(new URL(url0).hash); } catch { /* o endereço inválido dá erro mais abaixo */ }
   const base = (): Pagina => ({ url, site: siteDe(url) || siteDe(url0), dada, estado: "erro" });
   try {
     const sinal = AbortSignal.any([signal, AbortSignal.timeout(PAGINA_TIMEOUT_MS)]);
@@ -1147,7 +1335,9 @@ async function abrirPagina(url0: string, dada: boolean, signal: AbortSignal): Pr
     let html: string;
     try { html = new TextDecoder(cs).decode(bytes); } catch { html = new TextDecoder().decode(bytes); }
     const titulo = texto(semTags((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) ?? [])[1] ?? ""), 160);
-    const corpo = textoDaPagina(html);
+    const linhas = linhasDaPagina(html);
+    const inteiro = linhas.join("\n");
+    const corpo = inteiro.slice(0, PAGINA_MAX_TEXTO);
     const recusa = `${titulo} ${corpo.slice(0, 500)}`.match(RECUSA);
     if (recusa) return { ...base(), estado: "recusada", http: r.status, titulo, motivo: `a página diz "${recusa[0]}"` };
     const produto = produtoDaPagina(html);
@@ -1163,7 +1353,11 @@ async function abrirPagina(url0: string, dada: boolean, signal: AbortSignal): Pr
     if (!produto && corpo.length < 200) {
       return { ...base(), estado: "vazia", http: r.status, titulo, motivo: "a página quase não tem texto (é montada em JavaScript?)" };
     }
-    return { ...base(), estado: "lida", http: r.status, titulo, texto: partes.join("\n\n") };
+    const extra = inteiro.length > PAGINA_MAX_TEXTO ? extraDaPagina(html, linhas, ancora, nome) : null;
+    return {
+      ...base(), estado: "lida", http: r.status, titulo, texto: partes.join("\n\n"),
+      ...(extra ? { extra: extra.texto, ...(extra.secao ? { secao: true } : {}), ...(extra.trechos ? { trechos: extra.trechos } : {}) } : {}),
+    };
   } catch (e) {
     if (signal.aborted) throw e;
     const err = e as Error;
@@ -1171,10 +1365,14 @@ async function abrirPagina(url0: string, dada: boolean, signal: AbortSignal): Pr
   }
 }
 /* O que o ecrã e o registo dizem de cada página (sem o texto). */
-type PaginaRes = { site: string; url?: string; dada?: boolean; estado: string; http?: number; titulo?: string; motivo?: string };
+type PaginaRes = {
+  site: string; url?: string; dada?: boolean; estado: string; http?: number; titulo?: string; motivo?: string;
+  secao?: boolean; trechos?: number;
+};
 const paginaRes = (p: Pagina): PaginaRes => ({
   site: p.site, url: p.url, dada: p.dada, estado: p.estado,
   ...(p.http ? { http: p.http } : {}), ...(p.titulo ? { titulo: p.titulo } : {}), ...(p.motivo ? { motivo: p.motivo } : {}),
+  ...(p.secao ? { secao: true } : {}), ...(p.trechos ? { trechos: p.trechos } : {}),
 });
 
 /* A base de evidência: as páginas abertas primeiro, depois os resultados
@@ -1184,17 +1382,30 @@ type Origem = { url: string; site: string; titulo: string; pagina?: boolean; dad
 function montarEvidencia(paginas: Pagina[], resultados: Resultado[], ano: number | null, dominios: string[]) {
   const lista: Origem[] = [];
   const blocos: string[] = [];
+  const doBloco: { p: Pagina; inteiro: boolean }[] = [];
   let resto = EVIDENCIA_PAGINAS_MAX;
   for (const p of paginas) {
     if (p.estado !== "lida" || !p.texto || resto <= 0) continue;
     lista.push({ url: p.url, site: p.site, titulo: p.titulo || p.site, pagina: true, ...(p.dada ? { dada: true } : {}) });
     const b = `[${lista.length}] PÁGINA ABERTA de ${p.site}${p.dada
       ? " (indicada por quem pesquisa como sendo a deste vinho)"
-      : ` (a primeira que a procura só em ${p.site} devolveu — confirma que é deste vinho)`}\nURL: ${p.url}\n${p.texto}`;
+      : ` (a primeira que a procura só em ${p.site} devolveu — confirma que é deste vinho)`}\nURL: ${p.url.split("#")[0]}\n${p.texto}`;
     blocos.push(b.slice(0, resto));
+    doBloco.push({ p, inteiro: b.length <= resto });
     resto -= b.length;
   }
-  const vistos = new Set(lista.map((x) => x.url));
+  // Só depois de todas as páginas levarem o que já levavam, o que se leu A
+  // MAIS em cada uma (ver "A PARTE DA PÁGINA QUE É DESTE VINHO"), com a sua
+  // quota — no bloco da própria página, que o número [n] é o mesmo.
+  let restoExtra = EVIDENCIA_EXTRA_MAX;
+  doBloco.forEach(({ p, inteiro }, j) => {
+    if (!p.extra || !inteiro || restoExtra <= 0) return;
+    const e = `\n\n${p.extra}`;
+    blocos[j] += e.slice(0, restoExtra);
+    restoExtra -= e.length;
+  });
+  // O link colado leva o `#…`; o mesmo endereço nos resultados, não.
+  const vistos = new Set(lista.flatMap((x) => [x.url, x.url.split("#")[0]]));
   // Um resultado sem resumo nem estrelas (a página de procura da loja, por
   // exemplo) não diz nada — fica de fora.
   const rs = resultados.filter((x) => (x.snippet || x.rating != null) && !vistos.has(x.url) && (vistos.add(x.url), true));
@@ -1648,7 +1859,7 @@ async function produzirFicha(
   let serperConsultas = 0;
   const ehVivino = (d: string) => doSite(`https://${d}/`, "vivino.com");
   const dadas = paginasDadas.filter((u) => !doSite(u, "vivino.com"));
-  const abrirDadas = Promise.all(dadas.map((u) => abrirPagina(u, true, signal)));
+  const abrirDadas = Promise.all(dadas.map((u) => abrirPagina(u, true, signal, nome)));
   const comPagina = dadas.map(siteDe);
   const procurarEm = dominios.filter((d) => !ehVivino(d) && !comPagina.some((sd) => doSite(`https://${sd}/`, d)));
   const resultados: Resultado[] = [];
@@ -1690,7 +1901,7 @@ async function produzirFicha(
     // Sem o Serper não há como procurar dentro de um site.
     procurarEm.forEach((d) => paginasRes.push({ site: d, estado: "sem_pesquisa" }));
   }
-  const [abertasDadas, abertasAchadas] = await Promise.all([abrirDadas, Promise.all(achadas.map((u) => abrirPagina(u, false, signal)))]);
+  const [abertasDadas, abertasAchadas] = await Promise.all([abrirDadas, Promise.all(achadas.map((u) => abrirPagina(u, false, signal, nome)))]);
   // Uma página colada que não se deixou ler (403, desafio anti-bots, 404):
   // fica o que o Google mostra desse site, se houver pesquisa.
   const semLeitura = [...new Set(abertasDadas.filter((p) => p.estado !== "lida").map((p) => p.site))]
