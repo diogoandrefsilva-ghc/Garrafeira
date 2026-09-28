@@ -1072,7 +1072,9 @@ function eur0(v){
 }
 function num(v){const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?null:n;}
 function inteiro(v){const n=parseInt(String(v),10);return isNaN(n)?null:n;}
-function estrelas(n){return n?'★'.repeat(n)+'☆'.repeat(5-n):'';}
+// A nota de um consumo tem uma casa decimal (4,2); as estrelas em texto são
+// as da nota arredondada — o número exato vai ao lado (`avalFmt`).
+function estrelas(n){if(!n)return '';const k=Math.round(n);return '★'.repeat(k)+'☆'.repeat(5-k);}
 // Sem acentos e em minúsculas — a procura tem de encontrar "Bacalhoa" quando
 // se escreve "bacalhôa" e vice-versa.
 function chave(s){
@@ -1598,7 +1600,7 @@ function renderFiltrados(){
    Os valores possíveis de cada filtro saem SEMPRE dos dados que lá estão
    (não de listas fixas): assim uma região nova aparece no filtro sozinha,
    e nunca fica um filtro a apontar para coisa nenhuma. */
-/* TRÊS deles são LISTAS — cor, região e castas — e os outros oito um valor
+/* TRÊS deles são LISTAS — cor, região e castas — e os outros nove um valor
    só. Não é capricho nem simetria por simetria: são as três perguntas que
    se fazem sempre ("um tinto do Douro de Touriga?") e são as únicas onde
    escolher DUAS opções quer dizer alguma coisa. "Tinto ou Branco" e "Douro
@@ -1608,7 +1610,7 @@ function renderFiltrados(){
    pergunta se o valor guardado é um array, e o `campoToggle` acrescenta ou
    tira num caso e troca no outro — tocar no valor já escolhido limpa-o, que
    é como se desmarca um campo de valor único sem um "qualquer" postiço na
-   lista. Os onze passam pelo MESMO desenho (a fita e os cartões com
+   lista. Os doze passam pelo MESMO desenho (a fita e os cartões com
    contagem); os `<select>` nativos que os oito costumavam usar saíram com
    os andares, porque um seletor nativo não mostra contagens e a contagem é
    o que faz este painel valer a pena.
@@ -1619,7 +1621,7 @@ function renderFiltrados(){
    É a mesma decisão, o mesmo desenho e o mesmo vocabulário do Catálogo da
    WineCatalog: quem anda nas duas apps não aprende dois nomes para a mesma
    coisa. */
-let F={local:'',tipo:[],regiao:[],casta:[],produtor:'',ano:'',mencao:'',preco:'',teor:'',janela:'',vivino:''};
+let F={local:'',tipo:[],regiao:[],casta:[],produtor:'',ano:'',mencao:'',preco:'',teor:'',estagio:'',janela:'',vivino:''};
 let CASTAS_TODAS=false;
 try{CASTAS_TODAS=localStorage.getItem('gf_castas_todas')==='1';}catch(e){}
 /* "Só monocasta" foi um VALOR do campo "Nº de castas" e agora é um estado
@@ -1639,7 +1641,7 @@ let CASTAS_MONO=false;
 function filtroLigado(k){const v=F[k];return Array.isArray(v)?v.length>0:!!v;}
 
 /* ── O PAINEL: a procura SEMPRE, os filtros um campo de cada vez ─────
-   Onze filtros abertos de uma vez são onze decisões à frente de quem só
+   Doze filtros abertos de uma vez são doze decisões à frente de quem só
    queria escrever "crasto". Já se tentou escondê-los todos atrás de um
    botão (tudo ou nada) e já se tentou abri-los por andares — e o andar que
    mostrava cor + região + castas ao mesmo tempo dava meio ecrã de cartões
@@ -1647,11 +1649,11 @@ function filtroLigado(k){const v=F[k];return Array.isArray(v)?v.length>0:!!v;}
    Agora são dois passos e mais nenhum:
      · a PROCURA LIVRE está sempre à vista — é o que se usa em nove de cada
        dez vezes, e um pedaço do nome chega;
-     · o botão "Filtros" abre uma FITA horizontal com os onze campos
+     · o botão "Filtros" abre uma FITA horizontal com os doze campos
        (`.fcampos`). Escolhe-se UM, e só os valores DESSE campo abrem por
        baixo (`FILTRO_CAMPO`).
    O que isto ganha é altura: a fita é uma linha, e o painel de valores é o
-   de um campo só em vez dos onze. O que custa é um toque a mais para trocar
+   de um campo só em vez dos doze. O que custa é um toque a mais para trocar
    de campo — e é um toque que se dá poucas vezes, porque quem filtra por
    região raramente filtra por teor a seguir. */
 let FILTROS_ABERTO=false;
@@ -1670,8 +1672,8 @@ function abrirCampo(k){
   renderFiltros();
 }
 
-/* OS ONZE CAMPOS, num sítio só: chave, ícone, nome e se aceita MAIS DO QUE
-   UM valor. Cor, região e castas aceitam; os outros oito não — são as três
+/* OS DOZE CAMPOS, num sítio só: chave, ícone, nome e se aceita MAIS DO QUE
+   UM valor. Cor, região e castas aceitam; os outros nove não — são as três
    perguntas que se fazem sempre ("um tinto do Douro de Touriga?") e as
    únicas onde escolher duas opções quer dizer alguma coisa. "Tinto ou
    Branco" e "Douro ou Alentejo" são perguntas legítimas; "2019 ou 2021"
@@ -1683,7 +1685,7 @@ const F_CAMPOS=[
   ['tipo','🍷','Cor',1],['regiao','🗺️','Região',1],['casta','🍇','Castas',1],
   ['local','📍','Local',0],['produtor','🏭','Produtor',0],['ano','📅','Ano',0],
   ['mencao','🏅','Menção',0],['preco','💶','Preço',0],['teor','🌡️','Grau',0],
-  ['janela','⏱️','Maturação',0],['vivino','★','Vivino',0]
+  ['estagio','🪵','Estágio',0],['janela','⏱️','Maturação',0],['vivino','★','Vivino',0]
 ];
 const F_META={};
 F_CAMPOS.forEach(([k,ico,nome])=>{F_META[k]=[ico,nome];});
@@ -1711,6 +1713,7 @@ function valorDe(v,k){
     case 'local':   return [...new Set(garrafasDe(v.id,true).map(g=>String(g.local_id)))];
     case 'preco':   {const x=precoVinho(v);return x==null?[]:[String(faixaIndice(x))];}
     case 'teor':    return v.teor==null?[]:[String(faixaTeorIndice(v.teor))];
+    case 'estagio': return estagioDe(v);
     case 'vivino':  {const x=notaVivinoNum(v);return x==null?[]:[String(faixaVivinoIndice(x))];}
     /* A maturação não filtra por "No ponto" — filtra pelo TERÇO da janela.
        "No ponto" sozinho está em quase todos os vinhos e devolvia a lista
@@ -1755,6 +1758,7 @@ function valoresDe(k){
     case 'vivino':return FAIXAS_VIVINO.map((f,i)=>[String(i),f.nome]);
     case 'preco':return FAIXAS_PRECO.map((f,i)=>[String(i),f.nome]);
     case 'teor':return FAIXAS_TEOR.map((f,i)=>[String(i),f.nome]);
+    case 'estagio':return ESTAGIO_OPCOES;
     default:return dados().sort(pt).map(x=>[x,x]);
   }
 }
@@ -1779,8 +1783,8 @@ function rotuloFiltro(k,val){
    escolhidas — é a pergunta a que o cartão tem de responder ("se eu juntar
    esta, com quantos fico?"). De outro modo dizia "Syrah 28" com a lista a
    mostrar três vinhos.
-   Só corre para o campo ABERTO: varrer a garrafeira onze vezes para
-   desenhar uma fita de onze nomes era trabalho que ninguém ia ler. */
+   Só corre para o campo ABERTO: varrer a garrafeira doze vezes para
+   desenhar uma fita de doze nomes era trabalho que ninguém ia ler. */
 function opcoesCampo(k){
   const termos=termosProcura();
   const base=db.vinhos.filter(v=>passaFiltros(v,termos,k));
@@ -1928,6 +1932,83 @@ const FAIXAS_TEOR=[
 ];
 function faixaTeorIndice(valor){
   return FAIXAS_TEOR.findIndex(f=>valor<=f.max);
+}
+
+/* O ESTÁGIO é texto livre ("18 meses em barricas novas de carvalho francês,
+   seguidos de 12 meses em garrafa") e um número (`estagio_meses`) que nem
+   sempre concorda com ele. Nos dados, quase tudo é barrica de carvalho
+   francês — filtrar pela madeira ou pela origem do carvalho devolvia a
+   lista quase inteira. O que VARIA é quanto tempo passou em madeira e,
+   nalguns, onde estagiou em vez dela. Daí três perguntas num campo só:
+     · sem madeira — inox, cimento, ânfora, ou "sem estágio em madeira";
+     · QUANTO TEMPO em madeira, em quatro faixas (a de 12 meses é a mais
+       comum; 13 a 18 é o "Reserva" típico; mais de 18 é madeira longa);
+     · as duas formas que se reconhecem pelo nome: tonel/balseiro (madeira
+       GRANDE e velha, a do Douro e do Alentejo antigos) e ânfora/talha.
+   Um vinho pode estar em duas ("18 meses em tonéis" é 13–18 E tonel; uma
+   talha é também sem madeira) — o `valorDe` devolve lista, como nas castas.
+   Os meses saem do TEXTO primeiro, porque é o texto que a ficha do vinho
+   mostra e o número às vezes está errado (há "12 meses em madeira e 24 em
+   garrafa" com 36 no número); o número só vale quando o texto não diz. E
+   um estágio sem texto e com 0 meses não está em lado nenhum: é o valor
+   por defeito da importação, não "sem madeira" — seria dizer que 30 vinhos
+   não passaram por madeira sem ninguém o ter escrito. */
+const ESTAGIO_OPCOES=[
+  ['sem','Sem madeira'],
+  ['m6','Madeira · até 6 meses'],
+  ['m12','Madeira · 7 a 12 meses'],
+  ['m18','Madeira · 13 a 18 meses'],
+  ['m99','Madeira · mais de 18 meses'],
+  ['tonel','Tonel / balseiro'],
+  ['anfora','Ânfora / talha']
+];
+const RE_MADEIRA=/barric|madeira|carvalho|\btone(l|is)\b|balseir|\bpip[ao]s?\b|\bcasco|\bbarril/;
+// O que NÃO é madeira: onde estagiou em vez dela, ou a garrafa depois dela.
+const RE_NAO_MADEIRA=/garrafa|inox|\baco\b|\bcubas?\b|cimento|\bbetao|\banforas?\b|\btalhas?\b|\bbarro\b|borras/;
+const RE_SEM_MADEIRA=/\bsem (?:estagio (?:em|de) |passagem (?:em|por) |passar por )?(?:madeira|barricas?|carvalho)|unoaked/g;
+const NUM_PT={um:1,uma:1,dois:2,duas:2,tres:3};
+/* Os meses em madeira ditos no texto: o PRIMEIRO "N meses" que fala de
+   madeira — ou de nada ("12 meses, 50% em carvalho e 50% em cuba"). Salta
+   os que falam de outra coisa ANTES de falar de madeira ("24 meses em
+   garrafa", "3 meses sobre borras"). Anos só contam com madeira à frente:
+   "vinhas com mais de 60 anos" não é estágio nenhum. Num intervalo ("12 a
+   18 meses") vale o maior. */
+function estagioMesesTexto(t){
+  const re=/\b(\d+|um|uma|dois|duas|tres)(?:\s*(?:a|-)\s*(\d+))?\s*(mes(?:es)?|anos?)\b([^.;,]{0,60})/g;
+  let m;
+  while((m=re.exec(t))){
+    const n=Number(m[2]||(NUM_PT[m[1]]??m[1]));
+    const ano=m[3].startsWith('ano');
+    const iw=m[4].search(RE_MADEIRA),io=m[4].search(RE_NAO_MADEIRA);
+    const madeira=iw>=0&&(io<0||iw<io);
+    if(madeira||(!ano&&iw<0&&io<0))return ano?n*12:n;
+  }
+  return null;
+}
+// Por conteúdo e não por vinho: a mesma ficha dá sempre a mesma resposta,
+// e editar o estágio muda a chave — não há cache a invalidar.
+const _ESTAGIO=new Map();
+function estagioDe(v){
+  const txt=v.estagio_texto||'',col=Number(v.estagio_meses)||0;
+  const k=txt+'\u0001'+col;
+  if(_ESTAGIO.has(k))return _ESTAGIO.get(k);
+  const bruto=chave(txt);
+  const negou=RE_SEM_MADEIRA.test(bruto);
+  RE_SEM_MADEIRA.lastIndex=0;
+  const t=bruto.replace(RE_SEM_MADEIRA,' ');
+  const out=[];
+  let madeira=false,meses=null;
+  if(t.trim()){
+    madeira=RE_MADEIRA.test(t);
+    if(madeira)meses=estagioMesesTexto(t)??(col||null);
+    else if(negou||RE_NAO_MADEIRA.test(t))out.push('sem');
+  }else if(negou)out.push('sem');
+  else if(col>0){madeira=true;meses=col;}   // o número é "meses em barrica/madeira"
+  if(madeira&&meses)out.push(meses<=6?'m6':meses<=12?'m12':meses<=18?'m18':'m99');
+  if(/\btone(l|is)\b|balseir/.test(t))out.push('tonel');
+  if(/\b(anforas?|talhas?)\b/.test(t))out.push('anfora');
+  _ESTAGIO.set(k,out);
+  return out;
 }
 function limparTexto(){
   const c=document.getElementById('f-texto');
@@ -3036,7 +3117,7 @@ function renderConsumidos(){
   const ano=new Date().getFullYear();
   const nEsteAno=gs.filter(g=>String(g.consumido_em||'').startsWith(String(ano))).length;
   const notas=gs.filter(g=>g.consumo_avaliacao);
-  const media=notas.length?(notas.reduce((s,g)=>s+g.consumo_avaliacao,0)/notas.length):0;
+  const media=notas.length?(notas.reduce((s,g)=>s+Number(g.consumo_avaliacao),0)/notas.length):0;
   document.getElementById('stats-consumo').innerHTML=`
     <div class="sc co"><div class="sc-l">Já bebidas</div><div class="sc-v">${gs.length}</div>
       <div class="sc-s">${nEsteAno} em ${ano}</div></div>
@@ -3053,7 +3134,7 @@ function renderConsumidos(){
         <div class="cc-data">${dataPT(g.consumido_em)}</div>
       </div>
       ${g.consumo_local?`<div class="cc-onde">📍 ${esc(g.consumo_local)}</div>`:''}
-      ${g.consumo_avaliacao?`<div class="estrelas">${estrelas(g.consumo_avaliacao)}</div>`:''}
+      ${g.consumo_avaliacao?`<div class="estrelas">${estrelas(g.consumo_avaliacao)}<b class="aval-n">${avalFmt(g.consumo_avaliacao)}</b></div>`:''}
       ${notasConsumoHTML(g)}
       <div class="macoes ro-hide" style="margin-top:10px">
         <button class="mini" onclick="editarConsumo(${g.id})">✎ Editar</button>
@@ -3618,7 +3699,7 @@ function vinhoDetalheHTML(v){
     ${bebidas.length?`<div class="msec">Já bebidas (${bebidas.length})</div>
       ${bebidas.sort((a,b)=>String(b.consumido_em).localeCompare(String(a.consumido_em))).map(g=>`
         <div class="mgar"><div class="g-onde"><b>${dataPT(g.consumido_em)}${g.consumo_local?' · '+esc(g.consumo_local):''}</b>
-          <i>${g.consumo_avaliacao?estrelas(g.consumo_avaliacao)+' ':''}${(g.notas||[]).map(n=>esc(n.nota)).join(' · ')}</i></div></div>`).join('')}`:''}
+          <i>${g.consumo_avaliacao?estrelas(g.consumo_avaliacao)+' '+avalFmt(g.consumo_avaliacao)+' ':''}${(g.notas||[]).map(n=>esc(n.nota)).join(' · ')}</i></div></div>`).join('')}`:''}
 
     <div class="msec">Atualizações</div>
     <div class="ia-fontes">
@@ -4399,11 +4480,7 @@ function abrirConsumir(vinhoId,garrafaId){
     <input type="text" id="c-local" placeholder="Jantar de anos, lá em casa">
 
     <label>Que tal era</label>
-    <input type="hidden" id="c-aval" value="">
-    <div class="stars" id="c-stars">
-      ${[1,2,3,4,5].map(n=>`<button type="button" class="star" onclick="setAval(${n})" title="${n}">★</button>`).join('')}
-    </div>
-    <div class="stars-l" id="c-stars-l">Sem nota — toca numa estrela (e outra vez na mesma para tirar).</div>
+    ${avalHTML(null)}
 
     <label>Observações</label>
     <textarea id="c-nota" placeholder="Estava no ponto, ainda aguentava mais uns anos…"></textarea>
@@ -4413,25 +4490,60 @@ function abrirConsumir(vinhoId,garrafaId){
       <button class="btn ghost" onclick="fecharModal('modal-consumir')">Cancelar</button>
     </div>`;
   abrirModal('modal-consumir');
+  avalPintar();
 }
-/* As estrelas escrevem num <input type=hidden> com o id de sempre
-   (`c-aval`), por isso `confirmarConsumo` não muda: continua a ler o
-   `.value`. Antes isto era um <select> com "★★★☆☆" nas opções — dava uma
-   lista de texto no telemóvel e ninguém percebia que era a nota. */
+/* A NOTA VAI DE 1 A 5 COM UMA CASA DECIMAL (4,2 — migração 25). As
+   estrelas continuam a ser o gesto rápido: um toque dá o número redondo, e
+   outra vez na mesma tira-o. A casa decimal escreve-se na caixa ao lado,
+   que é o `c-aval` — o que se grava é SEMPRE o que lá está, por isso as
+   estrelas nunca discordam dele: são só o desenho do número (a estrela a
+   meio enche-se na proporção, `.star.parte`).
+   Antes de haver estrelas isto era um <select> com "★★★☆☆" nas opções —
+   dava uma lista de texto no telemóvel e ninguém percebia que era a nota. */
 const AVAL_TXT=['','Fraquinho','Assim-assim','Bom','Muito bom','Do outro mundo'];
+const AVAL_VAZIO='Sem nota — toca numa estrela (outra vez na mesma para tirar) ou escreve-a ao lado, como 4,2.';
+// '' → null (sem nota); fora de 1–5 ou ilegível → NaN, que a gravação recusa.
+function avalLer(s){
+  if(String(s??'').trim()==='')return null;
+  const n=num(s);
+  if(n==null||n<1||n>5)return NaN;
+  return Math.round(n*10)/10;
+}
+// Com ponto, como a nota do Vivino ao lado ("★ 4.2").
+function avalFmt(n){return Number(n).toFixed(1);}
+function avalHTML(valor){
+  return `<div class="stars" id="c-stars">
+      ${[1,2,3,4,5].map(n=>`<button type="button" class="star" onclick="setAval(${n})" title="${n}"><span>★</span></button>`).join('')}
+      <input type="text" id="c-aval" inputmode="decimal" autocomplete="off" placeholder="—"
+        aria-label="Nota, de 1 a 5" value="${valor?avalFmt(valor):''}" oninput="avalPintar()">
+    </div>
+    <div class="stars-l" id="c-stars-l">${AVAL_VAZIO}</div>`;
+}
+function avalPintar(){
+  const inp=document.getElementById('c-aval');if(!inp)return;
+  const v=avalLer(inp.value),ok=v!=null&&!isNaN(v);
+  document.querySelectorAll('#c-stars .star').forEach((b,i)=>{
+    const p=ok?Math.min(1,Math.max(0,v-i)):0;   // quanto DESTA estrela está cheio
+    b.classList.toggle('on',p>=1);
+    b.classList.toggle('parte',p>0&&p<1);
+    b.style.setProperty('--p',String(p));
+  });
+  document.getElementById('c-stars-l').textContent=v==null?AVAL_VAZIO
+    :isNaN(v)?'A nota vai de 1 a 5, com uma casa decimal (4,2).'
+    :estrelas(v)+'  '+avalFmt(v)+' · '+AVAL_TXT[Math.round(v)];
+}
 function setAval(n){
   const inp=document.getElementById('c-aval');
-  const novo=(String(inp.value)===String(n))?'':String(n);
-  inp.value=novo;
-  document.querySelectorAll('#c-stars .star').forEach((b,i)=>b.classList.toggle('on',!!novo&&i<Number(novo)));
-  document.getElementById('c-stars-l').textContent=
-    novo?estrelas(Number(novo))+'  '+AVAL_TXT[Number(novo)]:'Sem nota — toca numa estrela (e outra vez na mesma para tirar).';
+  inp.value=(avalLer(inp.value)===n)?'':avalFmt(n);
+  avalPintar();
 }
 async function confirmarConsumo(vinhoId){
   if(roGuard())return;
   const gid=parseInt(document.getElementById('c-garrafa').value,10);
   const data=document.getElementById('c-data').value||hoje();
   const nota=document.getElementById('c-nota').value.trim();
+  const aval=avalLer(document.getElementById('c-aval').value);
+  if(Number.isNaN(aval)){toast('A nota vai de 1 a 5, com uma casa decimal (4,2).',1);return;}
   const btn=document.getElementById('c-btn');
   btn.disabled=true;btn.textContent='A gravar…';
   try{
@@ -4445,12 +4557,12 @@ async function confirmarConsumo(vinhoId){
       p_data:data,
       p_local:document.getElementById('c-local').value.trim(),
       p_nota:nota,
-      p_avaliacao:inteiro(document.getElementById('c-aval').value)
+      p_avaliacao:aval
     });
     const g=db.garrafas.find(x=>x.id===gid);
     if(g)Object.assign(g,{estado:'consumida',consumido_em:data,
       consumo_local:document.getElementById('c-local').value.trim(),
-      consumo_avaliacao:inteiro(document.getElementById('c-aval').value),
+      consumo_avaliacao:aval,
       notas:nota?[{id:null,nota,criado_em:new Date().toISOString()}]:[]});
     fecharModal('modal-consumir');renderLista();refrescarVinhoAberto();
     if(tabAtiva==='locais')renderMapa();
@@ -4514,11 +4626,7 @@ function editarConsumo(gid){
     <input type="text" id="c-local" value="${esc(g.consumo_local||'')}" placeholder="Jantar de anos, lá em casa">
 
     <label>Que tal era</label>
-    <input type="hidden" id="c-aval" value="${g.consumo_avaliacao||''}">
-    <div class="stars" id="c-stars">
-      ${[1,2,3,4,5].map(n=>`<button type="button" class="star${g.consumo_avaliacao&&n<=g.consumo_avaliacao?' on':''}" onclick="setAval(${n})" title="${n}">★</button>`).join('')}
-    </div>
-    <div class="stars-l" id="c-stars-l">${g.consumo_avaliacao?estrelas(g.consumo_avaliacao)+'  '+AVAL_TXT[g.consumo_avaliacao]:'Sem nota — toca numa estrela (e outra vez na mesma para tirar).'}</div>
+    ${avalHTML(g.consumo_avaliacao)}
 
     <div class="macoes" style="margin-top:14px">
       <button class="btn prim" id="c-btn" onclick="guardarEdicaoConsumo(${gid})">Guardar</button>
@@ -4532,6 +4640,7 @@ function editarConsumo(gid){
       <button class="btn ghost" id="c-nota-add-btn" style="flex:none" onclick="adicionarNotaConsumo(${gid})">+ Acrescentar</button>
     </div>`;
   abrirModal('modal-consumir');
+  avalPintar();
 }
 function notasEditavelHTML(gid,notas){
   if(!notas.length)return '<div class="note" style="padding:6px 0">Ainda sem comentários.</div>';
@@ -4569,10 +4678,12 @@ async function apagarNotaConsumo(notaId,gid){
 }
 async function guardarEdicaoConsumo(gid){
   if(roGuard())return;
+  const aval=avalLer(document.getElementById('c-aval').value);
+  if(Number.isNaN(aval)){toast('A nota vai de 1 a 5, com uma casa decimal (4,2).',1);return;}
   const dados={
     consumido_em:document.getElementById('c-data').value||hoje(),
     consumo_local:document.getElementById('c-local').value.trim(),
-    consumo_avaliacao:inteiro(document.getElementById('c-aval').value)
+    consumo_avaliacao:aval
   };
   const btn=document.getElementById('c-btn');
   btn.disabled=true;btn.textContent='A gravar…';
@@ -8321,7 +8432,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='119';
+const APP_BUILD='120';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

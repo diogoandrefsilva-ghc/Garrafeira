@@ -361,7 +361,7 @@ CREATE TABLE IF NOT EXISTS garrafeira.garrafas (
   -- só que a próxima edição apagava por cima.
   consumido_em    date,
   consumo_local   text NOT NULL DEFAULT '',   -- "Jantar em casa do Barrona"
-  consumo_avaliacao integer,                  -- 1 a 5 estrelas, opcional
+  consumo_avaliacao numeric(2,1),             -- 1 a 5, com uma casa decimal (4,2), opcional
 
   criado_em  timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT garrafas_pkey PRIMARY KEY (id),

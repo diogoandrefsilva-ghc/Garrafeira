@@ -480,12 +480,17 @@ $$;
 -- `p_nota`, se vier alguma coisa, é a PRIMEIRA linha do histórico deste
 -- consumo em `consumo_notas` — as seguintes (o vinho a mudar ao longo da
 -- refeição) entram à parte, um INSERT de cada vez, direto da app.
+-- `p_avaliacao` é `numeric` desde a migração 25 (notas como 4,2). O DROP da
+-- versão de inteiro é o que impede as duas de ficarem lado a lado: mudar o
+-- tipo de um parâmetro não SUBSTITUI a função, cria outra, e o PostgREST
+-- deixava de saber qual chamar.
+DROP FUNCTION IF EXISTS garrafeira.consumir_garrafa(bigint, date, text, text, integer);
 CREATE OR REPLACE FUNCTION garrafeira.consumir_garrafa(
   p_garrafa_id bigint,
   p_data       date,
   p_local      text DEFAULT '',
   p_nota       text DEFAULT '',
-  p_avaliacao  integer DEFAULT NULL
+  p_avaliacao  numeric DEFAULT NULL
 ) RETURNS bigint LANGUAGE plpgsql SECURITY INVOKER
   SET search_path TO 'garrafeira', 'public'
 AS $$

@@ -402,6 +402,23 @@ existente, a seguir a esta corre o `catalogo-partilhado.sql` e o
 que se mostra decide-a a app (`notaVivino`: a da colheita a partir de 100
 avaliações). Aplicada a 26/09/2026.
 
+### Migração 25 — a nota de um consumo com uma casa decimal (**por aplicar**)
+
+`db/migracao-avaliacao-decimal.sql`. `garrafas.consumo_avaliacao` passa de
+`integer` a `numeric(2,1)`: continua de 1 a 5, agora com uma casa decimal
+(4,2). Os valores que havia passam tal e qual. A `consumir_garrafa` recebia
+`p_avaliacao integer`, e trocar o tipo de um parâmetro com CREATE OR REPLACE
+cria uma SEGUNDA função ao lado (o PostgREST deixa de saber qual chamar) —
+por isso a migração apaga a de inteiro, e o `functions.sql` também, antes de
+criar a nova. A `winecatalog.marcas_amigos` (as marcas dos amigos na
+WineSelection) lê esta coluna com `avg()`/`round(…, 1)` e não muda. Corre
+ANTES de publicar a app que a usa: a app antiga funciona com a base nova
+(manda inteiros), mas a nova com a base antiga só grava notas redondas — um
+4,2 dá erro.
+
+1. `db/migracao-avaliacao-decimal.sql`
+2. `db/functions.sql`
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as

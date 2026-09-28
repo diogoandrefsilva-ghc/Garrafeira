@@ -72,6 +72,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   produtor troca-o pelo oficial e não mexe no nome (os nomes antigos
   arrumam-se pela simulação do painel do admin). Ver "O nome, a cor e o
   produtor".
+  `migracao-avaliacao-decimal.sql` é a 25: a nota de um consumo passa a
+  ter uma casa decimal (`consumo_avaliacao numeric(2,1)`, 4,2), e a
+  `consumir_garrafa` com ela — seguida por `functions.sql`.
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
@@ -161,7 +164,7 @@ Agora são **dois** estados e uma fita:
 - **fechado.** Só a procura livre, que fica **sempre** visível, e o botão
   "Filtros" com o número de filtros ligados ao lado.
 - **aberto** (`FILTROS_ABERTO`, `filtrosToggle`). Por baixo da procura
-  aparece uma **fita horizontal** (`.fcampos`, `#f-campos`) com os onze
+  aparece uma **fita horizontal** (`.fcampos`, `#f-campos`) com os doze
   campos, um por pastilha, que rola de lado. Tocar num campo abre **os
   valores DESSE campo e só desse** por baixo dela (`FILTRO_CAMPO`,
   `abrirCampo`, `#f-dominio`); tocar no mesmo outra vez fecha-os.
@@ -196,8 +199,8 @@ mostram-se todos os filtros ligados EXCETO os do campo que está aberto —
 esses já se leem nos cartões acesos por cima, e repeti-los por baixo era
 dizer a mesma coisa duas vezes.
 
-### Três filtros são LISTAS, oito são um valor só
-Cor, região e castas aceitam mais do que um valor; os outros oito não. Não é
+### Três filtros são LISTAS, nove são um valor só
+Cor, região e castas aceitam mais do que um valor; os outros nove não. Não é
 simetria por simetria: são as três perguntas que se fazem sempre ("um tinto
 do Douro de Touriga?") e são as únicas onde escolher DUAS opções quer dizer
 alguma coisa. "Tinto ou Branco" e "Douro ou Alentejo" são perguntas
@@ -209,7 +212,7 @@ guardado é um array, e `campoToggle` acrescenta/tira num caso e troca no
 outro (tocar no valor já escolhido limpa-o — é como se desmarca um campo
 de valor único sem um "qualquer" postiço na lista).
 
-**Os onze passam pelo MESMO desenho** — a fita, os cartões com contagem —
+**Os doze passam pelo MESMO desenho** — a fita, os cartões com contagem —
 e os `<select>` nativos invisíveis por cima de chips, que os oito
 costumavam usar, desapareceram com eles. Um seletor nativo não mostra
 contagens, e a contagem é o que faz este painel valer a pena.
@@ -291,8 +294,8 @@ escolher Tinto — senão, escolher uma cor apagava todas as outras e não
 havia como acrescentar uma segunda. Uma opção que dê zero não aparece; uma
 ESCOLHIDA aparece sempre, mesmo a zero, senão não havia como a desmarcar.
 
-Contar só o campo ABERTO (e não os onze de uma vez) é também o que torna
-isto barato: são onze varreduras da lista a cada tecla se for tudo, uma se
+Contar só o campo ABERTO (e não os doze de uma vez) é também o que torna
+isto barato: são doze varreduras da lista a cada tecla se for tudo, uma se
 for só o que está à vista.
 
 As castas em "todas em simultâneo" são a exceção dentro da exceção: deixam
@@ -329,6 +332,21 @@ inteira; a pergunta que sobra é em que parte da janela se está, e *a fechar*
 é a lista do que se deve beber primeiro. As palavras são as mesmas que a
 ficha do vinho escreve (`FASES`) — quem filtra por uma tem de a reconhecer
 quando abre o vinho.
+
+O **estágio** (`estagioDe`, `ESTAGIO_OPCOES`) é texto livre, e nos dados
+quase tudo é "barrica de carvalho francês" — filtrar pela madeira ou pela
+origem do carvalho devolvia a lista quase inteira. O que varia é o TEMPO em
+madeira e, nalguns, onde estagiou em vez dela. Daí sete opções num campo:
+*Sem madeira* · *Madeira · até 6 meses* · *· 7 a 12* · *· 13 a 18* · *·
+mais de 18* · *Tonel / balseiro* · *Ânfora / talha*. Um vinho pode estar em
+duas ("18 meses em tonéis" é 13–18 E tonel; uma talha é também sem madeira)
+— o `valorDe` devolve lista, como nas castas. Os meses saem do TEXTO primeiro
+(o primeiro "N meses" que fala de madeira ou de nada — salta "24 meses em
+garrafa" e "sobre borras"; anos só com madeira à frente, senão "vinhas com
+mais de 60 anos" era estágio) e o `estagio_meses` só vale quando o texto não
+diz: é o texto que a ficha mostra, e o número às vezes está errado. Um
+estágio sem texto e com 0 meses não entra em opção nenhuma — é o valor por
+defeito da importação, não "sem madeira".
 
 `Locais` (`renderMapa`) é **um local de cada vez, a ocupar o ecrã**: a
 barra com ‹ › (o nome, a contagem "**35** / 45 garrafas" e ✎ editar ao
@@ -1284,7 +1302,9 @@ diferentes são **duas** linhas em `garrafas` e **uma** em `vinhos`.
 Consequências práticas, todas de propósito:
 - a ficha da IA é gravada **uma vez** por vinho, não copiada por garrafa;
 - **consumir não apaga**: muda `garrafas.estado` para `'consumida'` e
-  carimba data/sítio/avaliação. É esse histórico que responde ao "onde é
+  carimba data/sítio/avaliação (de 1 a 5 com uma casa decimal, 4,2 — as
+  estrelas dão o número redondo com um toque e a caixa ao lado a casa
+  decimal; `avalLer`/`avalPintar`, migração 25). É esse histórico que responde ao "onde é
   que bebi aquela relíquia" — apagar a linha era deitar isso fora, e é a
   única parte destes dados que não se recupera. Os COMENTÁRIOS são a
   exceção que não vive na garrafa: um vinho muda ao longo de uma refeição
