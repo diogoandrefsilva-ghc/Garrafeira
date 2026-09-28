@@ -1961,7 +1961,7 @@ const ESTAGIO_OPCOES=[
   ['m6','Madeira · até 6 meses'],
   ['m12','Madeira · 7 a 12 meses'],
   ['m18','Madeira · 13 a 18 meses'],
-  ['m99','Madeira · mais de 18 meses'],
+  ['m99','Madeira · + 18 meses'],
   ['tonel','Tonel / balseiro'],
   ['anfora','Ânfora / talha'],
   ['outro','Outras opções de estágio'],
@@ -8438,7 +8438,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='121';
+const APP_BUILD='122';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

@@ -338,7 +338,7 @@ quase tudo é "barrica de carvalho francês" — filtrar pela madeira ou pela
 origem do carvalho devolvia a lista quase inteira. O que varia é o TEMPO em
 madeira e, nalguns, onde estagiou em vez dela. Daí nove opções num campo:
 *Sem madeira* · *Madeira · até 6 meses* · *· 7 a 12* · *· 13 a 18* · *·
-mais de 18* · *Tonel / balseiro* · *Ânfora / talha* · *Outras opções de
++ 18 meses* (e não "mais de 18 meses", que quebrava a linha no cartão) · *Tonel / balseiro* · *Ânfora / talha* · *Outras opções de
 estágio* · *Sem informação* — as duas últimas garantem que TODOS os vinhos
 caem em alguma (pedido do dono, 28/09/2026). Um vinho pode estar em
 duas ("18 meses em tonéis" é 13–18 E tonel; uma talha é também sem madeira)
