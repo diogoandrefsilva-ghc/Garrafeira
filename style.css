@@ -237,7 +237,7 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
   linear-gradient(160deg,#fff,var(--bg2));border:1px solid var(--bo);display:flex;align-items:center;justify-content:center;
   padding:5px 3px;overflow:hidden}
 .vc-thumb svg{display:block;width:100%;height:auto;max-height:74px;filter:drop-shadow(0 2px 3px rgba(43,10,22,.18))}
-.vc-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:4px 3px;mix-blend-mode:multiply;display:block}
+.vc-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .vc-qtd{position:absolute;top:-1px;right:-1px;background:var(--vh);color:#fff;font-size:10px;font-weight:700;
   padding:2px 6px;border-radius:0 9px 0 9px;letter-spacing:.2px}
 
@@ -349,7 +349,7 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    cortada. Aqui é a ALTURA que manda e a largura vem atrás. */
 .vgcard .vc-thumb{width:100%;max-width:136px;margin:0 auto;aspect-ratio:3/4;padding:8px 6px}
 .vgcard .vc-thumb svg{width:auto;height:100%;max-height:none;max-width:100%}
-.vgcard .vc-thumb img{padding:8px 6px}
+.vgcard .vc-thumb img.alta{padding:8px 6px}
 .vg-nome{font-family:var(--fd);font-weight:600;font-size:14px;line-height:1.3;color:var(--tx);margin-top:10px;
   overflow-wrap:anywhere}
 .vg-sub{font-size:10.5px;color:var(--mu);margin-top:3px;line-height:1.4;overflow-wrap:anywhere}
@@ -811,7 +811,7 @@ body:not(.readonly) .msdot.vazia:hover{background:#fff;border-color:var(--vh);co
 .mspot-thumb{position:relative;width:54px;height:84px;flex-shrink:0;border-radius:11px;background:linear-gradient(160deg,#fff,var(--bg2));
   border:1px solid var(--bo);display:flex;align-items:center;justify-content:center;overflow:hidden}
 .mspot-thumb svg{width:100%;height:auto;max-height:74px;padding:5px 3px;filter:drop-shadow(0 2px 4px rgba(43,10,22,.18))}
-.mspot-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:5px 3px;mix-blend-mode:multiply;display:block}
+.mspot-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .mspot-tx{min-width:0;flex:1}
 .mspot-nome{font-family:var(--fd);font-weight:600;font-size:16px;line-height:1.25;color:var(--tx)}
 .mspot-meta{font-size:11.5px;color:var(--mu);margin-top:4px;line-height:1.45}
@@ -1112,7 +1112,7 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
    papel, cantos redondos e `overflow:hidden`. Antes não tinha altura
    definida nem overflow: a foto ficava um quadrado branco no meio do
    bordô, com a garrafa desenhada a espreitar por cima e por baixo. O
-   `contain` e o `cover` de cada foto estão explicados ao pé do
+   `cover` e o `contain` de cada foto estão explicados ao pé do
    `.com-foto`. Se lhe mexeres, mexe também na `.vc-thumb` — são a mesma
    ideia em dois tamanhos. */
 .mhero{position:relative;margin:-20px -20px 4px;padding:18px 18px 16px;border-radius:var(--r2) var(--r2) 0 0;
@@ -1128,7 +1128,7 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
   background:linear-gradient(160deg,#fff,var(--bg2));border:1px solid rgba(255,255,255,.5);
   box-shadow:0 8px 20px -8px rgba(0,0,0,.6)}
 .mhero-g svg{width:100%;height:auto;max-height:94px;padding:5px 3px;filter:drop-shadow(0 2px 4px rgba(43,10,22,.22))}
-.mhero-g img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:5px 3px;mix-blend-mode:multiply;display:block}
+.mhero-g img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .mhero-tx{min-width:0;flex:1}
 .mhero-k{font-size:10px;font-weight:600;letter-spacing:1.1px;text-transform:uppercase;color:rgba(255,255,255,.7)}
 .mhero h3{font-family:var(--fd);font-weight:600;font-size:21px;line-height:1.2;margin-top:4px}
@@ -1876,17 +1876,21 @@ body.sem-desejo .desejo-only{display:none!important}
 /* A foto carregou: a garrafa desenhada sai de trás. As fotos das lojas são
    PNG com fundo transparente e o desenho via-se pelos buracos. */
 .com-foto>svg,.com-foto>.foto-svg{visibility:hidden}
-/* Uma imagem de LOJA ou do Vivino é um produto fotografado sozinho: vê-se
-   INTEIRA (`contain`), e o fundo branco dela funde-se com o papel da
-   moldura (`multiply` — sem ele, um JPG de fundo branco ficava um
-   retângulo mais claro dentro dela). Era `cover`, e cortava: a moldura é
-   3:4 e as garrafas do Vivino (`…_pb_x600.png`) e de muitas lojas vêm
-   recortadas rente ao vidro, bem mais altas do que largas — o `cover`
-   enchia a largura com a garrafa e sobrava o meio dela, o ombro e metade
-   do rótulo, com o gargalo e a base de fora. Na grelha lia-se como uma
-   imagem mal carregada ao lado de outra (a da Granvine, com margem à
-   volta) que aparecia inteira.
-   A MINHA fotografia (`imagem_path`) é outra coisa: é uma foto tirada com
-   o telemóvel, não um produto recortado, e enche a moldura como sempre
-   encheu. Quem decide é o `imgClasse()`. */
-.vc-thumb img.foto-minha,.mspot-thumb img.foto-minha,.mhero-g img.foto-minha{object-fit:cover;padding:0;mix-blend-mode:normal}
+/* Como a foto cabe na moldura depende da FORMA dela, e decide-o o
+   `fotoCarregou()` quando ela chega:
+   - MAIS LARGA do que a moldura — a foto quadrada da loja (a garrafa ao meio,
+     margem à volta), a de um rótulo, a minha — fica em `cover`: enche a
+     altura e perde só os lados, que são margem. É como sempre foi;
+   - MAIS ALTA (`.alta`: mais estreita do que 3:5 ou do que a moldura) — a
+     garrafa recortada rente ao vidro, do Vivino (`…_pb_x600.png`) e de
+     muitas lojas — fica INTEIRA (`contain`), com
+     `multiply` para o fundo branco se fundir com o papel. Em `cover` a
+     moldura enchia-se com a largura dela e sobrava o meio: o ombro e meio
+     rótulo, sem gargalo nem base.
+   `contain` para todas também não serve (29/09/2026): na lista a moldura é
+   alta e estreita, e a foto quadrada da loja ficava do tamanho da largura —
+   a garrafa, um terço dela, reduzida a um risco no meio do papel. E o 3:5
+   é porque a moldura da lista é mais estreita do que qualquer garrafa: só
+   pela moldura, a recortada da GN (≈ 1:2) enchia a altura e perdia os
+   ombros. */
+.vc-thumb img.alta,.mhero-g img.alta,.mspot-thumb img.alta{object-fit:contain;padding:4px 3px;mix-blend-mode:multiply}
