@@ -3170,6 +3170,9 @@ function renderConsumidos(){
 // mostrar (resumo, notas de prova, link do Vivino). Vive só entre a procura
 // e o gravar do MESMO formulário.
 let _iaExtraNovo=null;
+// O modo do formulário aberto ('' · 'desejo' · 'converter'): é o que o
+// `pqPassarForm` precisa para gravar o vinho novo sem passar pelo botão.
+let FORM_MODO='';
 let VINHO_ABERTO=null;
 function verVinho(id){
   const v=IDXV[id];
@@ -4550,6 +4553,7 @@ function abrirEditarVinho(id,modo){
   const titulo=conv?'Passar para a garrafeira':id?'Editar vinho':paraDesejo?'Novo vinho na wishlist':'Novo vinho';
   const rotulo=conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
   _iaExtraNovo=null;   // o que a procura trouxe é de UM formulário, não fica de um para o outro
+  FORM_MODO=modo||'';
   const o=(k,d)=>v?(v[k]==null?'':v[k]):(d==null?'':d);
   const opts=(arr,sel)=>arr.map(x=>`<option value="${esc(x)}"${String(sel)===String(x)?' selected':''}>${esc(x||'—')}</option>`).join('');
   const locOpts=db.locais.map(l=>`<option value="${l.id}">${esc(l.nome)}</option>`).join('');
@@ -4712,7 +4716,7 @@ function lerFormVinho(){
   return f;
 }
 
-async function guardarVinho(id,modo){
+async function guardarVinho(id,modo,verDepois){
   if(roGuard())return;
   const conv=!!id&&modo==='converter';
   const paraDesejo=!id&&modo==='desejo'&&TEM_DESEJO;
@@ -4813,12 +4817,20 @@ async function guardarVinho(id,modo){
     }
     _iaExtraNovo=null;
     fecharModal('modal-edit');renderLista();refrescarVinhoAberto();
+    // Depois de aceitar uma pesquisa, o vinho novo abre em CONSULTA
+    // (29/09/2026, o dono: o formulário inteiro aberto "não é elegante").
+    if(verDepois)verVinho(vinhoId);
     if(outraChave)recarregarPrecosLoja();
     if(tabAtiva==='locais')renderMapa();
-    toast(conv?'Na garrafeira ✓':id?'Guardado ✓':paraDesejo?'Na wishlist ⭐':'Vinho adicionado ✓');
+    // Gravado sem o formulário à vista: diz-se onde ficou a garrafa, que
+    // ninguém a escolheu (muda-se em "Mover", na página do vinho).
+    const locG=verDepois&&comGarrafa&&primeiraGarrafa.local_id!=null?(db.locais.find(l=>l.id===primeiraGarrafa.local_id)||{}).nome:'';
+    toast((conv?'Na garrafeira ✓':id?'Guardado ✓':paraDesejo?'Na wishlist ⭐':'Vinho adicionado ✓')
+      +(verDepois&&comGarrafa?(locG?` · 1 garrafa em ${locG} (muda em “Mover”)`:' · 1 garrafa por arrumar'):''));
     // Quem comprou um vinho da wishlist e o pôs pelo "Novo vinho" (em vez
     // de o passar a partir da wishlist) fica com o desejo lá esquecido.
     if(!id&&!paraDesejo)await oferecerRetirarDesejos([IDXV[vinhoId]]);
+    return vinhoId;
   }catch(e){
     toast('Não foi possível guardar: '+e.message,1);
     btn.disabled=false;btn.textContent=rotulo;
@@ -5896,8 +5908,9 @@ function iaPreencherForm(res,substituir){
    No VINHO NOVO (e na wishlist) o catálogo vai direto para os campos
    VAZIOS do formulário (escolher o vinho dele é a confirmação); o que a IA
    trouxer passa primeiro pela lista do que se encontrou, e só o que ficar
-   marcado vai para o formulário (`pqPassarForm`), que se abre inteiro para
-   gravar. Num vinho JÁ GRAVADO há valores de alguém a proteger, por isso
+   marcado vai para o formulário (`pqPassarForm`) — e grava-se logo, com o
+   vinho a abrir em consulta ("Rever antes de gravar" abre o formulário
+   inteiro, como era até 29/09/2026). Num vinho JÁ GRAVADO há valores de alguém a proteger, por isso
    cada fonte só acrescenta PROPOSTAS (`PQ.hist[campo][fonte]`) a essa
    lista, e nada entra sem Guardar. A lista é o ecrã da WineCatalog
    (29/09/2026): uma linha por campo, o de agora riscado → o encontrado, e
@@ -6605,7 +6618,7 @@ function pqContar(){
   if(P.novo){
     const n=pqEscolhas(P).length;
     b.disabled=!!P.corre;
-    b.textContent=n?`Pôr ${n} ${n===1?'campo':'campos'} no formulário`:'Ir para o formulário';
+    b.textContent=n?`Guardar com ${n} ${n===1?'campo':'campos'}`:'Guardar o vinho';
     return;
   }
   // A colheita escolhida (num vinho gravado sem ano) também é um campo a gravar.
@@ -6626,13 +6639,14 @@ function pqPintar(){
       <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
     <div class="pq-passos">${(podeUsarIA()?['cat','ia']:['cat']).map(k=>pqPassoHTML(k,P)).join('<span class="pq-seta">›</span>')}</div>
     <div class="pq-conversa">${pqRelatoHTML(P)}${pqPerguntaHTML(P)}</div>
-    ${linhas?`<p class="note rv-intro"><b>${P.novo?'Ainda não está no formulário.':'Ainda não foi gravado nada.'}</b>
-        Só ${P.novo?'passa':'entra'} o que ficar marcado. Já vêm marcados os campos que estavam <b>vazios</b>;
+    ${linhas?`<p class="note rv-intro"><b>Ainda não foi gravado nada.</b>
+        Só entra o que ficar marcado. Já vêm marcados os campos que estavam <b>vazios</b>;
         para trocar o que já lá estava, marca à mão.</p>
       <div class="rv-lista">${linhas}</div>`:''}
     ${iguais.length&&!(P.novo&&P.fase!=='fim')?`<div class="note" style="margin-top:8px">${linhas?'Mais ':''}${iguais.length===1?'1 campo veio':iguais.length+' campos vieram'} igual ao que já está (${esc(iguais.map(pqRot).join(', '))}).</div>`:''}
     <div class="macoes pq-fim">
       ${podeGuardar?`<button class="btn prim" id="pq-guardar" onclick="${revNovo?'pqPassarForm()':'pqGuardar()'}"></button>`:''}
+      ${revNovo?'<button class="btn ghost" onclick="pqPassarForm(true)">✏️ Rever antes de gravar</button>':''}
       ${linhas?'<button class="btn ghost" onclick="pqMarcarTudo()">Marcar tudo</button>':''}
       <button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button>
     </div>
@@ -6710,7 +6724,7 @@ function pqPorNoForm(P,fonte){
 /* No vinho novo, depois da revisão: o que ficou marcado vai para o
    formulário — por cima do que lá estava, se foi marcado à mão — e abre-se
    o formulário inteiro para gravar. */
-function pqPassarForm(){
+function pqPassarForm(rever){
   const P=PQ;if(!P||!P.novo)return;
   const escs=pqEscolhas(P);
   if(escs.length){
@@ -6727,7 +6741,21 @@ function pqPassarForm(){
     // deixa o campo vazio: volta o que lá estava.
     Object.entries(antes).forEach(([id,v])=>{const el=document.getElementById(id);if(el&&!el.value)el.value=v;});
   }
-  pqFimNovo();
+  if(rever){pqFimNovo();return;}
+  // Aceitar é gravar: o vinho abre em CONSULTA, e editar é uma escolha
+  // (29/09/2026, o dono das apps). Quem quiser rever antes (o local da
+  // garrafa, o preço de compra…) tem o "Rever antes de gravar".
+  pqGravarNovo();
+}
+async function pqGravarNovo(){
+  const b=document.getElementById('pq-guardar');
+  if(b){b.disabled=true;b.textContent='A guardar…';}
+  PQ=null;
+  fecharModal('modal-ia');
+  const vid=await guardarVinho(null,FORM_MODO,true);
+  // Não gravou (falta a cor, o ano fora do razoável, a rede…): o toast já
+  // disse porquê, e o formulário abre-se com tudo lá dentro.
+  if(!vid)formMostrarResto();
 }
 function pqFimNovo(){
   const P=PQ;
@@ -9075,7 +9103,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='133';
+const APP_BUILD='134';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

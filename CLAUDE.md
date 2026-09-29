@@ -1795,8 +1795,15 @@ de botões que apareciam e desapareciam. Agora:
   a IA trouxer passa pela lista acima, comparado com o formulário de AGORA
   (`P.atual` relido antes de pesquisar), e só o marcado vai para o
   formulário (`pqPassarForm`, por cima do que lá estava se foi marcado à
-  mão), que se abre inteiro para gravar. Até 29/09/2026 a IA enchia os
+  mão). Até 29/09/2026 a IA enchia os
   vazios sozinha e dizia numa linha de que site tinham vindo.
+  **Aceitar é gravar** (29/09/2026, o dono: o formulário inteiro aberto a
+  seguir "não é elegante"): "Guardar com N campos" grava o vinho
+  (`pqGravarNovo` → `guardarVinho(…,true)`) e abre-o em CONSULTA; editar é
+  uma escolha. A garrafa fica no local que o formulário já tinha escolhido
+  (o primeiro), sem lugar, e o toast di-lo ("muda em Mover"). "✏️ Rever
+  antes de gravar" abre o formulário inteiro, como antes; se a gravação
+  falhar, o formulário abre-se com tudo lá dentro.
 - **Num vinho gravado** há valores a proteger: cada fonte acrescenta
   PROPOSTAS a essa lista (`PQ.hist[campo][fonte]`). Nada entra sem Guardar;
   num campo vazio vem marcado o catálogo, senão a IA (`PQ_FORCA`). Tudo por
