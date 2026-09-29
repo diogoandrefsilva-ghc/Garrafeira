@@ -51,6 +51,13 @@ const SEARCH_RESULTADOS = 5;
 // "Procurar links": quantos se mostram, e quantos se podem escolher.
 const LINKS_MOSTRAR = 5;
 const LINKS_ESCOLHER = 2;
+// A 1.ª lista de links vem SÓ destas lojas (29/09/2026, o dono das apps):
+// uma consulta Serper com os `site:` juntos por OR. Boas bases de vinho que
+// um servidor consegue abrir (o Vivino não se deixa). "Mais links" passa à
+// pesquisa geral, página a página.
+const LINKS_LOJAS = ["garrafeiranacional.com", "granvine.com", "vinha.pt", "portugalvineyards.com", "radar.wine"];
+const LINKS_POR_SITE = 2;   // numa lista de 5, no máximo 2 do mesmo site
+const LINKS_PAGINAS = 5;    // "Mais links" na pesquisa geral até à página 5
 
 const TIMEOUT_MS = 55_000;        // modo síncrono, preso ao browser
 const PROC_TIMEOUT_MS = 110_000;  // segundo plano — já não depende do browser
@@ -899,14 +906,14 @@ function vivinoDuas(out: Record<string, unknown>, ano: number | null): void {
    já o texto, e o lote continua a usá-la): é o que deixa numerar tudo de
    seguida para o `deOnde`, e escolher a página de cada site. */
 type Resultado = { url: string; titulo: string; snippet: string; rating: unknown; ratingCount: unknown };
-async function serperConsulta(q: string, signal: AbortSignal, num = SEARCH_RESULTADOS): Promise<Resultado[]> {
+async function serperConsulta(q: string, signal: AbortSignal, num = SEARCH_RESULTADOS, page = 1): Promise<Resultado[]> {
   if (!SEARCH_API_KEY) throw new Error("a pesquisa externa não está configurada: falta SEARCH_API_KEY");
   const { signal: ss, limpar } = comLimiteProprio(signal, 12_000);
   try {
     const r = await fetch(SEARCH_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-API-KEY": SEARCH_API_KEY },
-      body: JSON.stringify({ q, gl: "pt", hl: "pt", num }),
+      body: JSON.stringify({ q, gl: "pt", hl: "pt", num, ...(page > 1 ? { page } : {}) }),
       signal: ss,
     });
     if (!r.ok) throw new Error(`pesquisa externa ${r.status}`);
@@ -2397,40 +2404,65 @@ Deno.serve(async (req) => {
       if (!SEARCH_API_KEY) return json({ error: "a pesquisa de links não está configurada (falta SEARCH_API_KEY)" }, 503);
       const lano = anoValido(body?.ano);
       const lprod = texto(body?.produtor, 90);
-      const q = [lnome, lano || "", lprod, "vinho"].filter(Boolean).join(" ");
+      // Por passos (29/09/2026): primeiro só as lojas (`LINKS_LOJAS`), depois
+      // — "Mais links" — a pesquisa geral, página a página. Cada passo é UMA
+      // consulta Serper; os links já mostrados (`excluir`) não se repetem.
+      let fase: "lojas" | "web" = body?.fase === "web" ? "web" : "lojas";
+      let pagina = Math.max(1, Math.min(LINKS_PAGINAS, Math.floor(Number(body?.pagina) || 1)));
+      const excluir = new Set<string>((Array.isArray(body?.excluir) ? body.excluir : []).slice(0, 60)
+        .map((u: unknown) => paginaDe(texto(u, 400))).filter(Boolean));
+      const base = [lnome, lano || "", lprod].filter(Boolean).join(" ");
+      const qLojas = `${base} (${LINKS_LOJAS.map((d) => `site:${d}`).join(" OR ")})`;
+      const qWeb = `${base} vinho`;
       const t0 = Date.now();
-      let rows: Resultado[];
-      try { rows = await serperConsulta(q, ctrl.signal, 10); }
-      catch (e) {
-        const err = String((e as Error)?.message ?? e).slice(0, 300);
-        await registar("erro", { passo: "links", nome: lnome, erro: err, modelo: "serper", serper_consultas: 1, pesquisa: "serper" }, quem);
-        return json({ error: `a pesquisa de links falhou — ${err}` }, 502);
-      }
       const hist = await paginasPorSite(ctrl.signal);
-      const vistos = new Set<string>();
+      const consultas: string[] = [];
       let vivino: Resultado | null = null;
       const links: Record<string, unknown>[] = [];
-      for (const r of rows) {
-        if (doSite(r.url, "vivino.com")) { vivino = vivino ?? r; continue; }
-        const url = paginaDe(r.url);
-        if (!url || vistos.has(url) || links.length >= LINKS_MOSTRAR) continue;
-        const site = siteDe(url);
-        // Uma página de procura, categoria ou marcas não tem o vinho: fica de fora.
-        if (!paginaDoResultado([{ ...r, url }], site)) continue;
-        vistos.add(url);
-        // Um ano no título ou no endereço que não é o nosso: diz-se, não se decide.
-        const anos = [...`${r.titulo} ${url}`.matchAll(/\b(19[5-9]\d|20[0-4]\d)\b/g)].map((m) => Number(m[1]));
-        links.push({
-          url, titulo: r.titulo, snippet: r.snippet, site,
-          ...(lano && anos.length && !anos.includes(lano) ? { outroAno: anos[0] } : {}),
-          ...(hist[site] ? { historico: hist[site] } : {}),
-        });
+      let semMais = false;
+      const passo = async () => {
+        const q = fase === "lojas" ? qLojas : qWeb;
+        consultas.push(pagina > 1 ? `${q} [página ${pagina}]` : q);
+        const rows = await serperConsulta(q, ctrl.signal, 10, fase === "web" ? pagina : 1);
+        if (!rows.length) semMais = true;
+        const porSite: Record<string, number> = {};
+        for (const r of rows) {
+          if (doSite(r.url, "vivino.com")) { vivino = vivino ?? r; continue; }
+          const url = paginaDe(r.url);
+          if (!url || excluir.has(url) || links.length >= LINKS_MOSTRAR) continue;
+          const site = siteDe(url);
+          if ((porSite[site] || 0) >= LINKS_POR_SITE) continue;
+          // Uma página de procura, categoria ou marcas não tem o vinho: fica de fora.
+          if (!paginaDoResultado([{ ...r, url }], site)) continue;
+          excluir.add(url);
+          porSite[site] = (porSite[site] || 0) + 1;
+          // Um ano no título ou no endereço que não é o nosso: diz-se, não se decide.
+          const anos = [...`${r.titulo} ${url}`.matchAll(/\b(19[5-9]\d|20[0-4]\d)\b/g)].map((m) => Number(m[1]));
+          links.push({
+            url, titulo: r.titulo, snippet: r.snippet, site, grupo: fase, pagina,
+            ...(lano && anos.length && !anos.includes(lano) ? { outroAno: anos[0] } : {}),
+            ...(hist[site] ? { historico: hist[site] } : {}),
+          });
+        }
+      };
+      try {
+        await passo();
+        // As lojas não têm o vinho: segue logo para a pesquisa geral, na mesma
+        // chamada (fica uma lista em vez de nada, e o registo diz 2 consultas).
+        if (fase === "lojas" && !links.length) { fase = "web"; pagina = 1; semMais = false; await passo(); }
+      } catch (e) {
+        const err = String((e as Error)?.message ?? e).slice(0, 300);
+        await registar("erro", { passo: "links", nome: lnome, erro: err, modelo: "serper", serper_consultas: consultas.length, pesquisa: "serper", fase, pagina }, quem);
+        return json({ error: `a pesquisa de links falhou — ${err}` }, 502);
       }
+      const proximo = fase === "lojas" ? { fase: "web", pagina: 1 }
+        : !semMais && pagina < LINKS_PAGINAS ? { fase: "web", pagina: pagina + 1 } : null;
       await registar("ok", {
-        passo: "links", nome: lnome, ano: lano, consultas: [q], n: links.length, vivino: !!vivino,
-        modelo: "serper", pesquisa: "serper", serper_consultas: 1, custo_estimado_eur: 0.001, ms: Date.now() - t0,
+        passo: "links", nome: lnome, ano: lano, consultas, n: links.length, vivino: !!vivino, fase, pagina,
+        modelo: "serper", pesquisa: "serper", serper_consultas: consultas.length,
+        custo_estimado_eur: 0.001 * consultas.length, ms: Date.now() - t0,
       }, quem);
-      return json({ links, escolher: LINKS_ESCOLHER, ...(vivino ? { vivino } : {}) });
+      return json({ links, escolher: LINKS_ESCOLHER, proximo, ...(vivino ? { vivino } : {}) });
     }
 
     /* ── LOTE: vários vinhos, uma chamada só ──

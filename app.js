@@ -6169,7 +6169,7 @@ async function pqIA(repetir){
   // O resultado do Vivino que a procura de links trouxe vai junto: o link e
   // as estrelas do Google, sem outra pesquisa (o Vivino não se abre).
   if(P.links&&P.linksVivino&&pedido.soSites)pedido.vivinoGoogle=P.linksVivino;
-  P.links=null;P.linksMarca=[];
+  P.links=null;P.linksMarca=[];P.linksProx=null;
   P.corre='ia';P.et.ia={estado:'corre'};
   pqPintar();
   try{
@@ -6355,17 +6355,27 @@ function pqCorHTML(P){
    pelo "só estes sites" de sempre. Para outros, volta-se aqui depois. O
    Vivino não entra na lista (não se deixa abrir): o link e as estrelas que
    o Google mostra vão com a pesquisa (`vivinoGoogle`). Ao lado de cada
-   site, como se tem portado (`paginas_por_site`, migração 30). */
-async function pqLinks(){
+   site, como se tem portado (`paginas_por_site`, migração 30).
+   Por passos (29/09/2026): a 1.ª lista vem só das lojas (GN, Granvine,
+   Vinha.pt, Portugal Vineyards, Wine Radar); "Mais links" acrescenta a
+   pesquisa geral, página a página (`P.linksProx`, que a função devolve).
+   Cada passo é UMA pesquisa Serper; o que já se marcou fica marcado. */
+async function pqLinks(mais){
   const P=PQ;if(!P)return;
   if(!temPremium()){toast('Procurar links é do pacote completo',1);return;}
-  const {sites,notas,soSites}=pqSitesLidos();
-  P.sites=sites;P.notas=notas;P.soSites=soSites;
+  if(!mais){
+    const {sites,notas,soSites}=pqSitesLidos();
+    P.sites=sites;P.notas=notas;P.soSites=soSites;
+  }else if(!P.links||!P.linksProx)return;
   const pedido={links:true,nome:P.id.nome};
+  if(mais){
+    pedido.fase=P.linksProx.fase;pedido.pagina=P.linksProx.pagina;
+    pedido.excluir=P.links.map(l=>l.url);
+  }
   if(P.id.ano)pedido.ano=P.id.ano;
   const prod=P.id.produtor||(P.novo?document.getElementById('e-produtor')?.value.trim():'')||'';
   if(prod)pedido.produtor=prod;
-  P.corre='links';pqPintar();
+  P.corre=mais?'links+':'links';pqPintar();
   let d={},ok=false;
   try{
     const r=await sbFetch(`${SB_URL}/functions/v1/vinho-info`,{method:'POST',
@@ -6377,12 +6387,23 @@ async function pqLinks(){
   if(PQ!==P)return;
   P.corre='';
   if(!ok){toast('Procurar links: '+d.error,1);pqPintar();return;}
-  P.links=Array.isArray(d.links)?d.links:[];
+  const novos=Array.isArray(d.links)?d.links:[];
+  const viv=d.vivino&&typeof d.vivino==='object'?d.vivino:null;
+  P.linksProx=d.proximo&&typeof d.proximo==='object'?d.proximo:null;
   P.linksMax=Number(d.escolher)||2;
-  P.linksVivino=d.vivino&&typeof d.vivino==='object'?d.vivino:null;
-  P.linksMarca=[];
-  if(!P.links.length)toast('A pesquisa não trouxe links que se possam abrir',1);
+  if(mais){
+    P.links=P.links.concat(novos);
+    P.linksVivino=P.linksVivino||viv;
+    if(!novos.length)toast('Não vieram links novos'+(P.linksProx?' — podes tentar a página seguinte':''),1);
+  }else{
+    P.links=novos;P.linksVivino=viv;P.linksMarca=[];
+    if(!novos.length)toast('A pesquisa não trouxe links que se possam abrir',1);
+  }
   pqPintar();
+  if(mais&&novos.length){
+    const el=document.querySelector('.pq-links .pq-grupo:last-of-type');
+    if(el)el.scrollIntoView({block:'start',behavior:'smooth'});
+  }
 }
 function pqLinksMarcados(P){return (P.linksMarca||[]).map(i=>P.links[i]&&P.links[i].url).filter(Boolean);}
 function pqLinkMarcar(el,i){
@@ -6395,10 +6416,19 @@ function pqLinkMarcar(el,i){
   const b=document.getElementById('pq-links-ir');
   if(b)b.textContent=`🔎 Pesquisar só nestes (${P.linksMarca.length})`;
 }
-function pqLinksVoltar(){const P=PQ;if(!P)return;P.links=null;P.linksMarca=[];pqPintar();}
+function pqLinksVoltar(){const P=PQ;if(!P)return;P.links=null;P.linksMarca=[];P.linksProx=null;pqPintar();}
+// O título de cada leva de links: de onde vieram.
+function pqLinksGrupo(l){
+  return l.grupo==='lojas'?'Nas lojas (Garrafeira Nacional, Granvine, Vinha.pt, Portugal Vineyards, Wine Radar)'
+    :l.grupo==='web'?`Na internet${Number(l.pagina)>1?' · página '+l.pagina:''}`:'';
+}
 function pqLinksHTML(P){
   const L=P.links;
+  let grupo=null;
   const lista=L.length?L.map((l,i)=>{
+    const g=pqLinksGrupo(l);
+    const cab=g&&g!==grupo?`<div class="pq-grupo">${esc(g)}</div>`:'';
+    grupo=g||grupo;
     const h=l.historico;
     const marcas=[];
     if(l.outroAno)marcas.push(`parece ser da colheita ${esc(String(l.outroAno))}`);
@@ -6406,22 +6436,24 @@ function pqLinksHTML(P){
       if(!h.lidas&&h.tentativas>=3)marcas.push(`<b>este site não deixou ler ${h.tentativas} de ${h.tentativas} vezes</b>`);
       else marcas.push(`site lido ${h.lidas} de ${h.tentativas} ${h.tentativas===1?'vez':'vezes'}`);
     }
-    return `<label class="ia-esc pq-link"><input type="checkbox"${(P.linksMarca||[]).includes(i)?' checked':''} onchange="pqLinkMarcar(this,${i})">
+    return `${cab}<label class="ia-esc pq-link"><input type="checkbox"${(P.linksMarca||[]).includes(i)?' checked':''} onchange="pqLinkMarcar(this,${i})">
       <span><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.titulo||l.url)}</a>
       <i>${esc(l.site)}${l.snippet?' — '+esc(l.snippet):''}</i>${marcas.length?`<i class="pq-link-m">${marcas.join(' · ')}</i>`:''}</span></label>`;
   }).join(''):'<p class="note">Não veio nenhum link que se possa abrir.</p>';
+  const px=P.linksProx;
+  const mais=px?`<button class="btn ghost pq-mais" onclick="pqLinks(true)">➕ ${px.fase==='web'&&px.pagina===1?'Mais links (na internet)':'Mais 5 links'}</button>`:'';
   const viv=P.linksVivino?`<p class="note">🍷 O Vivino não se deixa abrir, mas o link e a nota que o Google mostra
     (<a href="${esc(P.linksVivino.url)}" target="_blank" rel="noopener">${esc(P.linksVivino.titulo||'Vivino')}</a>) vão com a pesquisa.</p>`:'';
   return `<p class="pq-q">Que páginas são deste vinho?</p>
     <p class="note">Abre os links para confirmar e marca até ${P.linksMax}. A IA lê só essas páginas; para outras, voltas aqui a seguir.</p>
-    ${pqCorHTML(P)}<div class="pq-links">${lista}</div>${viv}${pqCamposHTML(P)}
+    ${pqCorHTML(P)}<div class="pq-links">${lista}</div>${mais}${viv}${pqCamposHTML(P)}
     <div class="macoes"><button class="btn prim" id="pq-links-ir" onclick="pqIA()">🔎 Pesquisar só nestes (${(P.linksMarca||[]).length})</button>
       <button class="btn ghost" onclick="pqLinksVoltar()">‹ Voltar</button></div>`;
 }
 /* A pergunta da etapa em que se está, com os botões dela. */
 function pqPerguntaHTML(P){
   if(P.corre){
-    const t=P.corre==='cat'?'A ver o que o Catálogo já sabe…':P.corre==='links'?'A procurar links…':'A pesquisar com IA. Pode levar até dois minutos.';
+    const t=P.corre==='cat'?'A ver o que o Catálogo já sabe…':P.corre==='links'?'A procurar links nas lojas…':P.corre==='links+'?'A procurar mais links…':'A pesquisar com IA. Pode levar até dois minutos.';
     return `<div class="pq-espera"><div class="gl-spin"></div><div>${t}${P.corre==='ia'
       ?'<div class="note">Podes fechar esta janela: a pesquisa continua, e ao voltares a “Procurar informação” está aqui à tua espera.</div>':''}</div></div>`;
   }
@@ -6457,7 +6489,7 @@ function pqPerguntaHTML(P){
     <label for="pq-sites">Sites de referência (opcional)</label>
     <textarea id="pq-sites" rows="2" placeholder="ex.: garrafeiranacional.com, ou o link da página do vinho numa loja">${esc(P.sites.join(', '))}</textarea>
     ${temPremium()?`<div class="pq-links-bt"><button class="btn ghost" onclick="pqLinks()">🔗 Procurar links</button>
-      <span class="note">encontra as páginas deste vinho; escolhes até 2 e a IA lê só essas</span></div>`:''}
+      <span class="note">procura as páginas deste vinho nas lojas (e, se quiseres, na internet); escolhes até 2 e a IA lê só essas</span></div>`:''}
     <div class="note">Domínios ou links, separados por vírgula. Um link é lido tal e qual (o do Vivino do vinho certo é
       usado como o link dele); de um domínio, a pesquisa procura o vinho só nesse site e lê a página que encontrar${
       temPremium()?'':' — isso é do pacote completo; no teu, cola o link da página'}. No fim diz de que site veio cada campo.</div>
@@ -9043,7 +9075,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='132';
+const APP_BUILD='133';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

@@ -1623,6 +1623,19 @@ ao lado de cada link e em Definições › Diagnóstico. Um site que recuse semp
 ainda só se AVISA; tirá-lo da lista fica para quando houver números. A
 `catalogo-info` da WineCatalog não tem isto, de propósito: o Catálogo vai ser
 fundido na Garrafeira.
+**As lojas primeiro, e "Mais links"** (29/09/2026, o dono). A primeira lista
+vem SÓ das lojas (`LINKS_LOJAS`: Garrafeira Nacional, Granvine, Vinha.pt,
+Portugal Vineyards, Wine Radar), numa consulta só com os `site:` juntos por
+OR (`num:10`, no máximo 2 links por site — `LINKS_POR_SITE` —, senão uma loja
+enchia a lista). Portugal Vineyards e Wine Radar abrem-se do servidor (a
+`paginas_por_site` disse-o); o anti-bots da Portugal Vineyards foi só no
+script do PC. **➕ Mais links** (`pqLinks(true)`) vai à internet, página a
+página (`fase: "web"`, `pagina` 1 a 5, `LINKS_PAGINAS`), com os links já
+mostrados em `excluir` para não se repetirem; os marcados ficam marcados, e a
+lista diz de onde veio cada grupo (`pqLinksGrupo`). Cada toque é UMA consulta
+Serper; a resposta diz qual é a seguinte (`proximo`, `null` no fim). Se as
+lojas não tiverem nada, a mesma chamada passa logo à página 1 da internet (e
+o registo conta 2 consultas).
 
 A nota que CONTA — no crachá do cartão e da grelha, na página do vinho, na
 ordenação dentro dos grupos, no filtro por Vivino, no "A completar" e na PDF
