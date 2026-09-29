@@ -1275,6 +1275,29 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 /* O site de onde a IA tirou o valor, no rótulo da opção ("IA · garrafeiranacional.com"):
    um domínio lê-se em minúsculas, e é um link. */
 .ia-op i a{color:var(--in);text-transform:none;letter-spacing:0;font-weight:600}
+/* O QUE SE ENCONTROU (`pqLinhasHTML`) — o desenho da revisão da WineCatalog
+   (`.rv-*` de lá), com as cores daqui: uma linha por campo, o nome em
+   versalete, o que está (riscado) → o que se encontrou, e por baixo de onde
+   veio. O `.mbox label`/`.mbox input` (duas classes contra uma) ganhavam à
+   linha e à caixa: daí o `.mbox` à frente. */
+.rv-intro{margin-top:12px}
+.rv-lista{margin-top:6px;border-top:1px solid var(--bo)}
+.mbox label.rv-linha{display:flex;gap:10px;align-items:flex-start;margin:0;padding:10px 0;border-bottom:1px solid var(--bo);
+  cursor:pointer;font-size:inherit;font-weight:400;letter-spacing:0;text-transform:none;color:var(--tx)}
+.mbox .rv-linha input{width:17px;height:17px;margin:2px 0 0;padding:0;flex-shrink:0;accent-color:var(--vh)}
+.rv-campo{flex:1;min-width:0;font-size:13px;line-height:1.55;word-break:break-word}
+.rv-campo b{display:block;font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--mu)}
+.rv-antes{color:var(--mu);text-decoration:line-through;font-size:12px}
+.rv-seta{color:var(--mu);margin:0 6px}
+.rv-novo{color:var(--tx);font-weight:600}
+.rv-vazio{font-style:normal;color:var(--mu);font-weight:400}
+.rv-img{display:block;height:64px;width:auto;max-width:100%;object-fit:contain;margin:4px 0;border-radius:6px;background:#fff}
+.rv-antes .rv-img{opacity:.55}
+.rv-de{display:block;font-size:11.5px;color:var(--mu);margin-top:2px}
+.rv-de a{color:var(--in);font-weight:600}
+.rv-de i{font-style:normal}
+.rv-aviso{margin:8px 0;padding:9px 11px;border:1px solid #eddfba;border-radius:11px;background:var(--oup);
+  font-size:12.5px;color:#6f5205;line-height:1.55}
 .aviso{background:var(--oup);border:1px solid #eddfba;border-radius:11px;padding:11px 13px;font-size:12px;color:#6f5205;line-height:1.6;margin-top:12px}
 .erro{background:var(--dgp);border:1px solid #f2cdcb;border-radius:11px;padding:11px 13px;font-size:12.5px;color:var(--dg);line-height:1.6;margin-top:12px}
 

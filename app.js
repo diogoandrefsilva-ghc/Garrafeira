@@ -5893,14 +5893,16 @@ function iaPreencherForm(res,substituir){
    A resposta colada de outro assistente saiu daqui: vive no Editar
    (`formManualAbrir`), ao lado de onde se escreve à mão.
 
-   No VINHO NOVO (e na wishlist) o formulário é a confirmação: o catálogo e
-   a IA vão preenchendo os campos VAZIOS à medida que respondem, e no fim
-   o formulário inteiro abre-se, já cheio, para rever e gravar. Num vinho
-   JÁ GRAVADO há valores de alguém a proteger, por isso cada fonte só
-   acrescenta PROPOSTAS (`PQ.hist[campo][fonte]`) a uma lista onde se vê o
-   valor de agora e o que cada fonte trouxe, e nada entra sem Guardar.
-   Vem escolhido o de agora, se o campo tem valor; senão a fonte mais
-   forte (`PQ_FORCA`).
+   No VINHO NOVO (e na wishlist) o catálogo vai direto para os campos
+   VAZIOS do formulário (escolher o vinho dele é a confirmação); o que a IA
+   trouxer passa primeiro pela lista do que se encontrou, e só o que ficar
+   marcado vai para o formulário (`pqPassarForm`), que se abre inteiro para
+   gravar. Num vinho JÁ GRAVADO há valores de alguém a proteger, por isso
+   cada fonte só acrescenta PROPOSTAS (`PQ.hist[campo][fonte]`) a essa
+   lista, e nada entra sem Guardar. A lista é o ecrã da WineCatalog
+   (29/09/2026): uma linha por campo, o de agora riscado → o encontrado, e
+   de que página veio. Vêm marcados os campos vazios (a fonte mais forte,
+   `PQ_FORCA`, quando há duas).
 
    Fechar a janela a meio não perde nada: `PQ` fica, e o mesmo botão
    retoma — com a pesquisa ainda a correr, ou já acabada e por rever.
@@ -5979,7 +5981,7 @@ function pqAbrirNovo(){
   if(elTipo&&!elTipo.value){toast('Escolhe primeiro a cor do vinho',1);elTipo.focus();return;}
   const id={vid:null,nome,ano:inteiro(document.getElementById('e-ano').value),
     produtor:document.getElementById('e-produtor').value.trim(),regiao:'',tipo:elTipo?elTipo.value:''};
-  if(PQ&&PQ.novo&&PQ.corre&&PQ.id.nome===nome){abrirModal('modal-ia');pqPintar();return;}
+  if(PQ&&PQ.novo&&(PQ.corre||PQ.fase==='fim')&&PQ.id.nome===nome){abrirModal('modal-ia');pqPintar();return;}
   PQ=pqNovoEstado(true,id,pqAtualForm());
   abrirModal('modal-ia');
   pqCatalogo();
@@ -6142,6 +6144,10 @@ async function pqIA(repetir){
     }
   }
   P.repetir=null;
+  // No vinho novo, o "agora" de cada campo é o que o formulário tem neste
+  // momento (o catálogo e a pessoa já lá escreveram): é contra isso que se
+  // compara o que a IA trouxer.
+  if(P.novo)P.atual=pqAtualForm();
   const pedido={nome:P.id.nome,tipo:P.id.tipo};
   if(P.id.ano)pedido.ano=P.id.ano;
   // O produtor que o catálogo trouxe ajuda a IA a acertar no vinho.
@@ -6165,6 +6171,8 @@ async function pqIA(repetir){
       paginas:Array.isArray(res.paginas)?res.paginas:[],soSites:!!res.soSites,
       semFonte:Array.isArray(res.semFonte)?res.semFonte:[],
       origem:res.origemCampos&&typeof res.origemCampos==='object'?res.origemCampos:{},
+      catalogoCampos:Array.isArray(res.catalogoCampos)?res.catalogoCampos:[],
+      pesquisaWeb:res.pesquisaWeb,modelo:res.modelo||'',
       fontes:Array.isArray(res.fontes)?res.fontes:[],aviso:res.aviso||''};
     P.ultima='ia';P.fase='fim';
   }catch(e){
@@ -6172,7 +6180,9 @@ async function pqIA(repetir){
     P.et.ia={estado:'erro',msg:e.message};
   }
   P.corre='';
-  if(P.novo&&P.fase==='fim'){pqPorNoForm(P,'ia');pqFimNovo();return;}
+  // No vinho novo também se revê (29/09/2026, o dono das apps — o ecrã da
+  // WineCatalog): o que a IA trouxe, campo a campo e de que página, e só o
+  // que ficar marcado passa para o formulário (`pqPassarForm`).
   if(!document.getElementById('modal-ia').classList.contains('on'))
     toast('A procura terminou — abre “Procurar informação” para rever o que encontrou');
   pqPintar();
@@ -6277,18 +6287,31 @@ function pqRelatoHTML(P){
     else if(c.estado==='cor')out.push(`O Catálogo tem um <b>${esc(c.nome)}</b>, mas ${esc(c.cor.toLowerCase())} — deve ser outro vinho, não trouxe nada.`);
     else if(c.estado==='erro')out.push(`Não consegui perguntar ao Catálogo (${esc(c.msg)}).`);
   }
+  // A IA, como na WineCatalog (`wcRevisaoCorpo`): o que fez numa frase, e os
+  // avisos em caixa; as fontes e os sites vão para o fim, depois da lista.
   const f=P.ultima==='ia'?P.et.ia:null;
+  let caixas='';
   if(f&&f.estado==='feito'){
     const quem=f.soSites?'A leitura dos sites escolhidos':'A pesquisa com IA';
-    out.push(f.n?`${quem} terminou e preencheu mais ${pqQtd(f.n,'campo','campos')}.`
-               :`${quem} terminou, mas não preencheu nada de novo.`);
-    if(f.outro)out.push(`Encontrou outro valor em ${pqQtd(f.outro,'campo','campos')} que o Catálogo já tinha — escolhe em baixo.`);
-    if(f.dif)out.push(`Sugere outro valor em ${pqQtd(f.dif,'campo que já estava preenchido','campos que já estavam preenchidos')}.`);
-    if(f.memoria)out.push('<span class="note">🧠 A IA respondeu <b>de memória</b>, sem pesquisar na net. Costuma acertar em vinhos conhecidos, mas confere antes de guardar.</span>');
-    if(f.aviso)out.push(`<span class="note">⚠️ ${esc(f.aviso)}</span>`);
-    if(f.semFonte&&f.semFonte.length)out.push(`<span class="note">${f.semFonte.length===1?'1 campo veio':f.semFonte.length+' campos vieram'} sem a IA dizer de que página o tirou (${esc(f.semFonte.map(pqRot).join(', '))}) — com “só estes sites”, ficou de fora.</span>`);
+    const n=pqLinhasIA(P).length;
+    out.push(`${quem} terminou e ${n?`trouxe informação nova em ${pqQtd(n,'campo','campos')}.`:'não trouxe nada de novo.'}`);
+    if(f.aviso)caixas+=`<div class="rv-aviso">⚠️ ${esc(f.aviso)}</div>`;
+    if(f.semFonte&&f.semFonte.length)caixas+=`<div class="rv-aviso">${f.semFonte.length===1?'1 campo veio':f.semFonte.length+' campos vieram'} sem a IA dizer de que página o tirou (${esc(f.semFonte.map(pqRot).join(', '))}) — com “só estes sites”, ficou de fora.</div>`;
+    if(f.memoria)caixas+='<div class="rv-aviso">🧠 A IA respondeu <b>de memória</b>, sem pesquisar na net — confere antes de guardar.</div>';
   }
-  return out.map(t=>`<p>${t}</p>`).join('')+(f?pqFontesHTML(f.fontes)+pqSitesHTML(f):'');
+  return out.map(t=>`<p>${t}</p>`).join('')+caixas;
+}
+/* Depois da lista: as fontes, o que se fez com cada site, e numa linha em
+   itálico de onde saiu tudo isto (a mesma frase da WineCatalog). */
+function pqRodapeHTML(P){
+  const f=P.ultima==='ia'?P.et.ia:null;
+  if(!f||f.estado!=='feito')return '';
+  const fim=f.pesquisaWeb===false?'⚠️ Isto saiu da memória do modelo, sem pesquisa na net — confere tudo antes de aceitar.'
+    :f.soSites?'Lido só das páginas e dos resultados dos sites escolhidos — confere antes de aceitar.'
+    :f.pesquisaWeb===true?'Pesquisado no Google. Leitura automática de páginas da net — vale como ponto de partida, não como certeza.'
+    :'';
+  return pqFontesHTML(f.fontes)+pqSitesHTML(f)
+    +(fim||f.modelo?`<div class="ia-fontes"><i>${esc(fim)}${f.modelo?`${fim?' · ':''}${esc(f.modelo)}`:''}</i></div>`:'');
 }
 function pqCamposHTML(P){
   const ks=pqChavesIA(P);
@@ -6360,39 +6383,111 @@ function pqPerguntaHTML(P){
 function pqDefeito(P,k){
   if(P.esc[k])return P.esc[k];
   if(!pqVazio(P.atual[k]))return 'atual';
+  // No vinho novo só se revê o que a IA trouxe: o catálogo já foi para o
+  // formulário quando se escolheu o vinho dele.
+  if(P.novo)return 'ia';
   return PQ_FORCA.find(f=>f in P.hist[k])||'atual';
 }
+/* Os campos em que a IA trouxe alguma coisa (diferente do que está). */
+function pqLinhasIA(P){return pqChaves(P).filter(k=>P.hist[k]&&'ia' in P.hist[k]);}
+
+/* O QUE SE ENCONTROU — o ecrã da WineCatalog (29/09/2026, o dono das apps:
+   "fica mais claro o que encontrou, onde encontrou, com links"). Uma linha
+   por campo: o nome, o que está agora (riscado) → o que se encontrou, e por
+   baixo DE ONDE veio (a página que a IA diz ter lido, o link colado, a
+   pesquisa Google, o Catálogo). A linha inteira é o <label>: toca-se em
+   qualquer sítio para marcar, e um link lá dentro abre-se sem mexer na
+   caixa. Vêm marcados os campos vazios; trocar o que lá está é um clique
+   consciente. Quando o Catálogo e a IA trazem valores DIFERENTES para o
+   mesmo campo, são duas linhas e só uma pode ficar marcada (`pqMarcar`).
+   No vinho novo, só as da IA: o Catálogo já está no formulário. */
+function pqValorHTML(k,v){
+  if(pqVazio(v))return '<em class="rv-vazio">vazio</em>';
+  if(Array.isArray(v))return esc(v.join(', '));
+  if(typeof v==='object')return esc(JSON.stringify(v));
+  const s=String(v);
+  if(/^https?:\/\/\S+$/i.test(s)){
+    const img=k==='imagem_url'?`<img class="rv-img" src="${esc(s)}" alt="" onerror="this.remove()">`:'';
+    return img+escLink(s);
+  }
+  if(k==='preco_medio')return esc(eur(v));
+  if(k==='teor')return esc(s)+' %';
+  return esc(s);
+}
+function pqFonteHTML(k,f,P){
+  if(f==='cat')return '<span class="rv-de">↳ do Catálogo</span>';
+  const ia=P.et.ia||{};
+  const o=ia.origem&&ia.origem[k];
+  if(o&&typeof o==='object'){
+    if(o.google)return '<span class="rv-de">↳ da pesquisa Google <i>(a IA não diz a página)</i></span>';
+    if(o.url){
+      const lnk=`<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.site||o.url)}</a>`;
+      if(o.dada&&!o.pagina)return `<span class="rv-de">↳ do link que colaste · ${lnk}</span>`;
+      return `<span class="rv-de">↳ de ${lnk} <i>${o.pagina?'· página lida':'· resumo no Google'}</i></span>`;
+    }
+  }
+  // O que a vinho-info respondeu do catálogo do lado dela (uma pesquisa
+  // anterior) não tem página — diz-se isso, e não se inventa uma.
+  if(Array.isArray(ia.catalogoCampos)&&ia.catalogoCampos.includes(k))
+    return '<span class="rv-de">↳ do Catálogo <i>· de uma pesquisa anterior</i></span>';
+  return '<span class="rv-de">↳ da IA <i>(sem dizer de onde)</i></span>';
+}
 function pqLinhasHTML(P){
-  if(P.novo)return '';   // no vinho novo a revisão é o próprio formulário
-  return pqChaves(P).filter(k=>P.hist[k]).map(k=>{
-    const h=P.hist[k], def=pqDefeito(P,k), agora=pqTxt(P.atual[k]);
-    // As fontes que trouxeram o MESMO valor são uma opção só.
+  const ks=P.novo?pqLinhasIA(P):pqChaves(P).filter(k=>P.hist[k]);
+  return ks.map(k=>{
+    const h=P.hist[k], def=pqDefeito(P,k), agora=P.atual[k];
+    // As fontes que trouxeram o MESMO valor são uma linha só.
     const grupos=[];
-    PQ_FORCA.filter(f=>f in h).forEach(f=>{
+    (P.novo?['ia']:PQ_FORCA.filter(f=>f in h)).forEach(f=>{
       const t=pqTxt(h[f]);
       const g=grupos.find(x=>chave(x.t)===chave(t));
       g?g.fs.push(f):grupos.push({t,fs:[f]});
     });
-    // `rot` já vem escapado: leva o link do site de onde a IA tirou o valor.
-    const op=(val,rot,txt,cls)=>`<label class="ia-op${cls}">
-      <input type="radio" name="pq-${k}" value="${val}"${def===val?' checked':''} onchange="pqEscolher('${k}',this.value)">
-      <span><i>${rot}</i>${escLink(txt)}</span></label>`;
-    const deOnde=pqDeOndeHTML(P.et.ia&&P.et.ia.origem&&P.et.ia.origem[k]);
-    const rotF=f=>f==='ia'&&deOnde?`${esc(PQ_NOMES[f])} · ${deOnde}`:esc(PQ_NOMES[f]);
-    return `<div class="ia-cmp"><b class="ia-cmp-t">${esc(pqRot(k))}</b>
-      ${op('atual','agora',agora||'(vazio — deixar assim)',' at')}
-      ${grupos.map(g=>op(g.fs[0],g.fs.map(rotF).join(' · '),g.t,g.fs[0]==='cat'?' ct':'')).join('')}
-    </div>`;
+    return grupos.map(g=>`<label class="rv-linha">
+      <input type="checkbox" data-campo="${esc(k)}" value="${g.fs[0]}"${g.fs.includes(def)?' checked':''} onchange="pqMarcar(this)">
+      <span class="rv-campo">
+        <b>${esc(pqRot(k))}</b>
+        ${pqVazio(agora)?'':`<span class="rv-antes">${pqValorHTML(k,agora)}</span><span class="rv-seta">→</span>`}<span class="rv-novo">${pqValorHTML(k,h[g.fs[0]])}</span>
+        ${g.fs.map(f=>pqFonteHTML(k,f,P)).join('')}
+      </span>
+    </label>`).join('');
   }).join('');
 }
-function pqEscolher(k,val){if(PQ){PQ.esc[k]=val;pqContar();}}
+/* Marcar uma linha desmarca as outras do mesmo campo; desmarcar deixa o de agora. */
+function pqMarcar(el){
+  const P=PQ;if(!P)return;
+  const k=el.dataset.campo;
+  if(el.checked){
+    document.querySelectorAll('#modal-ia-in .rv-linha input').forEach(x=>{if(x!==el&&x.dataset.campo===k)x.checked=false;});
+    P.esc[k]=el.value;
+  }else P.esc[k]='atual';
+  pqContar();
+}
 function pqEscolhas(P){
-  return pqChaves(P).filter(k=>P.hist[k]).map(k=>({k,fonte:pqDefeito(P,k)}))
-    .filter(e=>e.fonte!=='atual').map(e=>({...e,val:P.hist[e.k][e.fonte]}));
+  return (P.novo?pqLinhasIA(P):pqChaves(P).filter(k=>P.hist[k])).map(k=>({k,fonte:pqDefeito(P,k)}))
+    .filter(e=>e.fonte!=='atual'&&e.fonte in P.hist[e.k]).map(e=>({...e,val:P.hist[e.k][e.fonte]}));
+}
+function pqMarcarTudo(){
+  const P=PQ;if(!P)return;
+  // Uma linha por campo: onde há duas propostas, fica a que já estava marcada
+  // (ou a primeira).
+  const vistos=new Set();
+  document.querySelectorAll('#modal-ia-in .rv-linha input:checked').forEach(x=>vistos.add(x.dataset.campo));
+  document.querySelectorAll('#modal-ia-in .rv-linha input').forEach(x=>{
+    if(vistos.has(x.dataset.campo))return;
+    x.checked=true;vistos.add(x.dataset.campo);P.esc[x.dataset.campo]=x.value;
+  });
+  pqContar();
 }
 function pqContar(){
   const P=PQ,b=document.getElementById('pq-guardar');
   if(!P||!b)return;
+  if(P.novo){
+    const n=pqEscolhas(P).length;
+    b.disabled=!!P.corre;
+    b.textContent=n?`Pôr ${n} ${n===1?'campo':'campos'} no formulário`:'Ir para o formulário';
+    return;
+  }
   // A colheita escolhida (num vinho gravado sem ano) também é um campo a gravar.
   const n=pqEscolhas(P).length+(P.anoEscolhido?1:0);
   b.disabled=!n||!!P.corre;
@@ -6401,24 +6496,27 @@ function pqContar(){
 function pqPintar(){
   const P=PQ;if(!P)return;
   const box=document.getElementById('modal-ia-in');
-  const linhas=pqLinhasHTML(P);
-  const iguais=P.novo?[]:[...P.iguais].filter(k=>!P.hist[k]);
-  const podeGuardar=!P.novo&&(linhas||P.anoEscolhido);
+  const linhas=P.novo&&P.fase!=='fim'?'':pqLinhasHTML(P);
+  const iguais=[...P.iguais].filter(k=>!P.hist[k]||(P.novo&&!('ia' in P.hist[k])));
+  const revNovo=P.novo&&P.fase==='fim'&&!P.corre;
+  const podeGuardar=revNovo||(!P.novo&&(linhas||P.anoEscolhido));
   box.innerHTML=`
     <div class="mtop"><div><h3>🔎 Procurar informação</h3>
       <div class="note" style="margin-top:3px">${esc(P.id.nome)} ${P.id.ano||''}</div></div>
       <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
     <div class="pq-passos">${(podeUsarIA()?['cat','ia']:['cat']).map(k=>pqPassoHTML(k,P)).join('<span class="pq-seta">›</span>')}</div>
     <div class="pq-conversa">${pqRelatoHTML(P)}${pqPerguntaHTML(P)}</div>
-    ${linhas?`<div class="msec">O que se encontrou</div>
-      <div class="note">Nada está gravado ainda. Toca no que queres guardar.
-        Nos campos que já tinham valor fica o de agora, a não ser que escolhas outro.</div>
-      <div class="pq-linhas">${linhas}</div>`:''}
-    ${iguais.length?`<div class="note" style="margin-top:8px">${iguais.length===1?'1 campo veio':iguais.length+' campos vieram'} igual ao que já está (${esc(iguais.map(pqRot).join(', '))}).</div>`:''}
+    ${linhas?`<p class="note rv-intro"><b>${P.novo?'Ainda não está no formulário.':'Ainda não foi gravado nada.'}</b>
+        Só ${P.novo?'passa':'entra'} o que ficar marcado. Já vêm marcados os campos que estavam <b>vazios</b>;
+        para trocar o que já lá estava, marca à mão.</p>
+      <div class="rv-lista">${linhas}</div>`:''}
+    ${iguais.length&&!(P.novo&&P.fase!=='fim')?`<div class="note" style="margin-top:8px">${linhas?'Mais ':''}${iguais.length===1?'1 campo veio':iguais.length+' campos vieram'} igual ao que já está (${esc(iguais.map(pqRot).join(', '))}).</div>`:''}
     <div class="macoes pq-fim">
-      ${podeGuardar?`<button class="btn prim" id="pq-guardar" onclick="pqGuardar()"></button>`:''}
+      ${podeGuardar?`<button class="btn prim" id="pq-guardar" onclick="${revNovo?'pqPassarForm()':'pqGuardar()'}"></button>`:''}
+      ${linhas?'<button class="btn ghost" onclick="pqMarcarTudo()">Marcar tudo</button>':''}
       <button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button>
-    </div>`;
+    </div>
+    ${pqRodapeHTML(P)}`;
   pqContar();
 }
 
@@ -6488,6 +6586,28 @@ function pqPorNoForm(P,fonte){
   if(fonte==='cat')res.modelo='catálogo partilhado';
   else if(P.res[fonte]){res.modelo=P.res[fonte].modelo||'';res.fontes=P.res[fonte].fontes||[];}
   iaPreencherForm(res,false);
+}
+/* No vinho novo, depois da revisão: o que ficou marcado vai para o
+   formulário — por cima do que lá estava, se foi marcado à mão — e abre-se
+   o formulário inteiro para gravar. */
+function pqPassarForm(){
+  const P=PQ;if(!P||!P.novo)return;
+  const escs=pqEscolhas(P);
+  if(escs.length){
+    const res={}, antes={};
+    escs.forEach(e=>{
+      res[e.k]=e.val;
+      const id=PQ_FORM[e.k], el=id&&document.getElementById(id);
+      if(el){antes[id]=el.value;el.value='';}
+      P.preenchidos[e.k]='ia';
+    });
+    if(P.res.ia){res.modelo=P.res.ia.modelo||'';res.fontes=P.res.ia.fontes||[];}
+    iaPreencherForm(res,false);
+    // Um valor que o campo não aceita (uma opção que a lista não tem) não
+    // deixa o campo vazio: volta o que lá estava.
+    Object.entries(antes).forEach(([id,v])=>{const el=document.getElementById(id);if(el&&!el.value)el.value=v;});
+  }
+  pqFimNovo();
 }
 function pqFimNovo(){
   const P=PQ;
@@ -8819,7 +8939,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='128';
+const APP_BUILD='129';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

@@ -1734,16 +1734,31 @@ de botões que apareciam e desapareciam. Agora:
   créditos que se pagam, o grounding responde quase sempre de memória e
   custa pouco (decisão do dono, 27/09/2026). Os **sites de referência** e as
   notas pedem-se aqui. A resposta de memória diz-se a todos.
-- **No vinho novo o formulário é a confirmação**: o catálogo e a IA enchem
-  os campos VAZIOS à medida que respondem (`pqPorNoForm`; o que a pessoa
-  escreveu nunca se toca) e no fim abre-se o formulário inteiro, já cheio.
+- **O que se encontrou é o ecrã da WineCatalog** (29/09/2026, o dono das
+  apps: "fica mais claro o que encontrou, onde encontrou, com links"):
+  `pqLinhasHTML`, as classes `.rv-*` de lá com as cores daqui. Uma linha
+  por campo — o nome, o de agora riscado → o encontrado — e por baixo DE
+  ONDE veio (`pqFonteHTML`): a página que a IA diz ter lido (com link, e se
+  foi lida ou só o resumo do Google), o link colado, a pesquisa Google do
+  grounding, o Catálogo, ou "da IA (sem dizer de onde)" — nunca se inventa
+  uma origem. Vêm marcados os campos VAZIOS; quando o Catálogo e a IA
+  trazem valores diferentes são duas linhas e só uma fica marcada
+  (`pqMarcar`). A frase do que a pesquisa fez, os avisos em caixa, e no fim
+  as fontes, os sites e a linha em itálico (`pqRodapeHTML`) são as mesmas
+  da `wcRevisaoCorpo`.
+- **No vinho novo**, o catálogo vai direto para os campos VAZIOS do
+  formulário (`pqPorNoForm` — escolher o vinho dele é a confirmação); o que
+  a IA trouxer passa pela lista acima, comparado com o formulário de AGORA
+  (`P.atual` relido antes de pesquisar), e só o marcado vai para o
+  formulário (`pqPassarForm`, por cima do que lá estava se foi marcado à
+  mão), que se abre inteiro para gravar. Até 29/09/2026 a IA enchia os
+  vazios sozinha e dizia numa linha de que site tinham vindo.
 - **Num vinho gravado** há valores a proteger: cada fonte acrescenta
-  PROPOSTAS a UMA lista (valor de agora + o que cada fonte trouxe, as
-  iguais juntas, escolhidas com um toque, `.ia-op`). Nada entra sem Guardar;
-  vem escolhido o de agora se o campo tem valor, senão o catálogo, senão a
-  IA (`PQ_FORCA`). Tudo por PATCH (a `aplicar_do_catalogo` voltava a
-  procurar a linha pelo nome, que é o que pode não casar). "Preencher à mão"
-  guarda o que já se escolheu e abre o Editar.
+  PROPOSTAS a essa lista (`PQ.hist[campo][fonte]`). Nada entra sem Guardar;
+  num campo vazio vem marcado o catálogo, senão a IA (`PQ_FORCA`). Tudo por
+  PATCH (a `aplicar_do_catalogo` voltava a procurar a linha pelo nome, que
+  é o que pode não casar). "Preencher à mão" guarda o que já se escolheu e
+  abre o Editar.
 - **A resposta colada de outro assistente vive no Editar** (e no "Preencher
   à mão" do vinho novo): `formManualAbrir`, para toda a gente que edita — é
   grátis. Preenche só os campos VAZIOS do formulário aberto e diz quantos
