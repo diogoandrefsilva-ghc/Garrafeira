@@ -688,22 +688,25 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código, com exat
   ]
 }`;
 
-/* Aspas tipográficas (“ ” ‘ ’) não são JSON válido, e um chat-UI troca-as
-   por conta própria ao mostrar texto normal (não costuma acontecer dentro
-   de blocos de código) — apanhado com uma resposta colada à mão que tinha
-   TODAS as aspas assim e o JSON.parse recusava logo na primeira chave.
-   Trocar aqui por retas resolve os dois casos (automático e colado) de
-   uma vez, sem arriscar strings verdadeiras: uma aspa tipográfica dentro
-   de uma frase vira reta na mesma, mas fica dentro da MESMA string — só
-   muda um caracter, nunca a estrutura. */
-function normalizarAspas(s: string): string {
-  return s.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
-}
+/* Aspas tipográficas (“ ” ‘ ’) não são JSON válido A FAZER DE ESTRUTURA, e
+   um chat-UI troca-as por conta própria ao mostrar texto normal (não costuma
+   acontecer dentro de blocos de código) — apanhado com uma resposta colada
+   à mão que tinha TODAS as aspas assim e o JSON.parse recusava logo na
+   primeira chave.
+   MAS DENTRO DE UMA STRING SÃO TEXTO VÁLIDO, e trocá-las aí PARTE o JSON:
+   uma aspa reta a meio de uma frase fecha a string. Este comentário dizia o
+   contrário ("fica dentro da MESMA string"), e todas as respostas com “…”
+   no texto davam "resposta ilegível" — apanhado a 29/09/2026 na
+   `catalogo-info` da WineCatalog, com a página do Piano Reserva Touriga
+   Nacional ("própria do nosso “terroir”"). Por isso o texto lê-se primeiro
+   TAL COMO VEIO, e só se não se ler é que se trocam as aspas duplas (o caso
+   da resposta colada). As simples (‘ ’) trocam-se sempre: nunca são
+   estrutura em JSON. A MESMA regra da `catalogo-info` e do
+   `iaManualExtrairJson` do app.js — mexer numa é mexer nas outras. */
 
 /* Mesmo pedindo JSON, alguns modelos devolvem texto com blocos ``` e frases
    à volta. Aqui apanha-se o primeiro objeto JSON equilibrado do texto. */
-function extrairJson(txt: string): any | null {
-  const s = normalizarAspas(String(txt || "").trim());
+function lerJson(s: string): any | null {
   if (!s) return null;
   try { return JSON.parse(s); } catch (_) { /* segue */ }
   const limpo = s.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
@@ -723,6 +726,10 @@ function extrairJson(txt: string): any | null {
     }
   }
   return null;
+}
+function extrairJson(txt: string): any | null {
+  const s = String(txt || "").trim().replace(/[‘’]/g, "'");
+  return lerJson(s) ?? lerJson(s.replace(/[“”]/g, '"'));
 }
 
 /* Limpeza do que o modelo devolveu. Tudo o que não passa aqui é deitado

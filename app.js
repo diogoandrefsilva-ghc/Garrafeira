@@ -6815,20 +6815,25 @@ async function iaManualCopiar(){
   }
 }
 
-/* Aspas tipográficas (“ ” ‘ ’) não são JSON válido, e algumas apps de chat
-   trocam-nas por conta própria ao mostrar texto normal (não costuma
-   acontecer dentro de blocos de código) — apanhado com uma resposta colada
-   com TODAS as aspas assim, que o JSON.parse recusava logo na primeira
-   chave. Trocar aqui por retas não arrisca strings verdadeiras: uma aspa
-   tipográfica dentro de uma frase vira reta na mesma, mas fica dentro da
-   MESMA string — só muda um caracter, nunca a estrutura. */
-function iaManualNormalizarAspas(s){return s.replace(/[“”]/g,'"').replace(/[‘’]/g,"'");}
+/* Aspas tipográficas (“ ” ‘ ’) não são JSON válido A FAZER DE ESTRUTURA, e
+   algumas apps de chat trocam-nas por conta própria ao mostrar texto normal
+   (não costuma acontecer dentro de blocos de código) — apanhado com uma
+   resposta colada com TODAS as aspas assim, que o JSON.parse recusava logo
+   na primeira chave. MAS DENTRO DE UMA STRING SÃO TEXTO VÁLIDO, e trocá-las
+   aí parte o JSON (uma aspa reta a meio de uma frase fecha a string) — o
+   "própria do nosso “terroir”" da página do Piano Reserva Touriga Nacional,
+   29/09/2026. Por isso lê-se primeiro o texto TAL COMO VEIO, e só se não se
+   ler é que se trocam as aspas duplas; as simples trocam-se sempre (nunca
+   são estrutura). A MESMA regra do `extrairJson` da `vinho-info`. */
+function iaManualExtrairJson(txt){
+  const s=String(txt||'').trim().replace(/[‘’]/g,"'");
+  return iaManualLerJson(s)??iaManualLerJson(s.replace(/[“”]/g,'"'));
+}
 
-/* Espelho do `extrairJson` da Edge Function: o Gemini às vezes devolve
+/* Espelho do `lerJson` da Edge Function: o Gemini às vezes devolve
    texto à volta do JSON ou blocos ```; isto apanha o primeiro objeto
    equilibrado. */
-function iaManualExtrairJson(txt){
-  const s=iaManualNormalizarAspas(String(txt||'').trim());
+function iaManualLerJson(s){
   if(!s)return null;
   try{return JSON.parse(s);}catch(e){}
   const limpo=s.replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
@@ -8939,7 +8944,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='129';
+const APP_BUILD='130';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
