@@ -6123,7 +6123,10 @@ async function pqIA(repetir){
     if(!campos.length){toast('Escolhe pelo menos um campo',1);return;}
     P.pedidoCampos=campos;
     P.colheitaEsp=!!document.getElementById('pq-colheita')?.checked;
-    const {sites,notas,soSites}=pqSitesLidos();
+    // Com a lista do "Procurar links" à vista, os sites são os links marcados
+    // e é sempre "só estes sites" (ver `pqLinks`).
+    const {sites,notas,soSites}=P.links?{sites:pqLinksMarcados(P),notas:P.notas,soSites:true}:pqSitesLidos();
+    if(P.links&&!sites.length){toast('Marca pelo menos um link',1);return;}
     if(soSites&&!sites.length){
       toast('Escreve pelo menos um site (ou o link da página do vinho) para usar só esses',1);
       document.getElementById('pq-sites')?.focus();
@@ -6159,6 +6162,10 @@ async function pqIA(repetir){
   if(P.notas)pedido.notas=P.notas;
   if(P.sites.length)pedido.sites=P.sites;
   if(P.soSites&&P.sites.length)pedido.soSites=true;
+  // O resultado do Vivino que a procura de links trouxe vai junto: o link e
+  // as estrelas do Google, sem outra pesquisa (o Vivino não se abre).
+  if(P.links&&P.linksVivino&&pedido.soSites)pedido.vivinoGoogle=P.linksVivino;
+  P.links=null;P.linksMarca=[];
   P.corre='ia';P.et.ia={estado:'corre'};
   pqPintar();
   try{
@@ -6333,11 +6340,83 @@ function pqCorHTML(P){
   return `<div class="pq-cor"><label for="ia-cor-sel">Cor</label><select id="ia-cor-sel">${opts}</select>
     <span class="note">Confirma-a antes de pesquisar: um branco não é o tinto do mesmo nome.</span></div>`;
 }
+/* ── PROCURAR LINKS (29/09/2026, o dono das apps) ──
+   "Dar um link à IA e dizer 'lê só isto'" é o que traz a informação mais
+   fidedigna. Este passo só encontra os links: UMA pesquisa Serper (na
+   `vinho-info`, `links:true`, só no pacote completo), e a lista mostra os
+   resultados — o título abre a página noutro separador, para se ver se é
+   o vinho. Nenhum vem marcado; escolhem-se até `P.linksMax` (2), e seguem
+   pelo "só estes sites" de sempre. Para outros, volta-se aqui depois. O
+   Vivino não entra na lista (não se deixa abrir): o link e as estrelas que
+   o Google mostra vão com a pesquisa (`vivinoGoogle`). Ao lado de cada
+   site, como se tem portado (`paginas_por_site`, migração 30). */
+async function pqLinks(){
+  const P=PQ;if(!P)return;
+  if(!temPremium()){toast('Procurar links é do pacote completo',1);return;}
+  const {sites,notas,soSites}=pqSitesLidos();
+  P.sites=sites;P.notas=notas;P.soSites=soSites;
+  const pedido={links:true,nome:P.id.nome};
+  if(P.id.ano)pedido.ano=P.id.ano;
+  const prod=P.id.produtor||(P.novo?document.getElementById('e-produtor')?.value.trim():'')||'';
+  if(prod)pedido.produtor=prod;
+  P.corre='links';pqPintar();
+  let d={},ok=false;
+  try{
+    const r=await sbFetch(`${SB_URL}/functions/v1/vinho-info`,{method:'POST',
+      headers:{'Content-Type':'application/json','apikey':SB_KEY},body:JSON.stringify(pedido)});
+    try{d=await r.json();}catch(_){}
+    ok=r.ok;
+    if(!ok&&!d.error)d.error='o servidor respondeu HTTP '+r.status;
+  }catch(e){d={error:'não foi possível falar com o servidor. Sem rede?'};}
+  if(PQ!==P)return;
+  P.corre='';
+  if(!ok){toast('Procurar links: '+d.error,1);pqPintar();return;}
+  P.links=Array.isArray(d.links)?d.links:[];
+  P.linksMax=Number(d.escolher)||2;
+  P.linksVivino=d.vivino&&typeof d.vivino==='object'?d.vivino:null;
+  P.linksMarca=[];
+  if(!P.links.length)toast('A pesquisa não trouxe links que se possam abrir',1);
+  pqPintar();
+}
+function pqLinksMarcados(P){return (P.linksMarca||[]).map(i=>P.links[i]&&P.links[i].url).filter(Boolean);}
+function pqLinkMarcar(el,i){
+  const P=PQ;if(!P||!P.links)return;
+  const m=P.linksMarca||(P.linksMarca=[]);
+  if(el.checked){
+    if(m.length>=P.linksMax){el.checked=false;toast(`Escolhe no máximo ${P.linksMax} — para outros, pesquisa outra vez a seguir`);return;}
+    if(!m.includes(i))m.push(i);
+  }else P.linksMarca=m.filter(x=>x!==i);
+  const b=document.getElementById('pq-links-ir');
+  if(b)b.textContent=`🔎 Pesquisar só nestes (${P.linksMarca.length})`;
+}
+function pqLinksVoltar(){const P=PQ;if(!P)return;P.links=null;P.linksMarca=[];pqPintar();}
+function pqLinksHTML(P){
+  const L=P.links;
+  const lista=L.length?L.map((l,i)=>{
+    const h=l.historico;
+    const marcas=[];
+    if(l.outroAno)marcas.push(`parece ser da colheita ${esc(String(l.outroAno))}`);
+    if(h&&h.tentativas){
+      if(!h.lidas&&h.tentativas>=3)marcas.push(`<b>este site não deixou ler ${h.tentativas} de ${h.tentativas} vezes</b>`);
+      else marcas.push(`site lido ${h.lidas} de ${h.tentativas} ${h.tentativas===1?'vez':'vezes'}`);
+    }
+    return `<label class="ia-esc pq-link"><input type="checkbox"${(P.linksMarca||[]).includes(i)?' checked':''} onchange="pqLinkMarcar(this,${i})">
+      <span><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.titulo||l.url)}</a>
+      <i>${esc(l.site)}${l.snippet?' — '+esc(l.snippet):''}</i>${marcas.length?`<i class="pq-link-m">${marcas.join(' · ')}</i>`:''}</span></label>`;
+  }).join(''):'<p class="note">Não veio nenhum link que se possa abrir.</p>';
+  const viv=P.linksVivino?`<p class="note">🍷 O Vivino não se deixa abrir, mas o link e a nota que o Google mostra
+    (<a href="${esc(P.linksVivino.url)}" target="_blank" rel="noopener">${esc(P.linksVivino.titulo||'Vivino')}</a>) vão com a pesquisa.</p>`:'';
+  return `<p class="pq-q">Que páginas são deste vinho?</p>
+    <p class="note">Abre os links para confirmar e marca até ${P.linksMax}. A IA lê só essas páginas; para outras, voltas aqui a seguir.</p>
+    ${pqCorHTML(P)}<div class="pq-links">${lista}</div>${viv}${pqCamposHTML(P)}
+    <div class="macoes"><button class="btn prim" id="pq-links-ir" onclick="pqIA()">🔎 Pesquisar só nestes (${(P.linksMarca||[]).length})</button>
+      <button class="btn ghost" onclick="pqLinksVoltar()">‹ Voltar</button></div>`;
+}
 /* A pergunta da etapa em que se está, com os botões dela. */
 function pqPerguntaHTML(P){
   if(P.corre){
-    const t=P.corre==='cat'?'A ver o que o Catálogo já sabe…':'A pesquisar com IA. Pode levar até dois minutos.';
-    return `<div class="pq-espera"><div class="gl-spin"></div><div>${t}${P.corre!=='cat'
+    const t=P.corre==='cat'?'A ver o que o Catálogo já sabe…':P.corre==='links'?'A procurar links…':'A pesquisar com IA. Pode levar até dois minutos.';
+    return `<div class="pq-espera"><div class="gl-spin"></div><div>${t}${P.corre==='ia'
       ?'<div class="note">Podes fechar esta janela: a pesquisa continua, e ao voltares a “Procurar informação” está aqui à tua espera.</div>':''}</div></div>`;
   }
   if(P.escolher){
@@ -6359,6 +6438,7 @@ function pqPerguntaHTML(P){
         <button class="btn ghost" onclick="PQ.repetir=null;pqPintar()">Não</button></div>`;
   }
   if(P.fase!=='ia')return '';
+  if(P.links&&temPremium())return pqLinksHTML(P);
   const aMao=P.novo
     ?`<button class="btn ghost" onclick="pqFimNovo()">Ir para o formulário</button>`
     :`<button class="btn ghost" onclick="pqAMao()">✏️ Preencher à mão</button>`;
@@ -6370,6 +6450,8 @@ function pqPerguntaHTML(P){
   return `${erro}<p class="pq-q">${q}</p>${pqCorHTML(P)}
     <label for="pq-sites">Sites de referência (opcional)</label>
     <textarea id="pq-sites" rows="2" placeholder="ex.: garrafeiranacional.com, ou o link da página do vinho numa loja">${esc(P.sites.join(', '))}</textarea>
+    ${temPremium()?`<div class="pq-links-bt"><button class="btn ghost" onclick="pqLinks()">🔗 Procurar links</button>
+      <span class="note">encontra as páginas deste vinho; escolhes até 2 e a IA lê só essas</span></div>`:''}
     <div class="note">Domínios ou links, separados por vírgula. Um link é lido tal e qual (o do Vivino do vinho certo é
       usado como o link dele); de um domínio, a pesquisa procura o vinho só nesse site e lê a página que encontrar${
       temPremium()?'':' — isso é do pacote completo; no teu, cola o link da página'}. No fim diz de que site veio cada campo.</div>
@@ -8908,13 +8990,24 @@ function diagMetaHTML(d){
   ].filter(Boolean);
   return bits.length?`<div class="note">${bits.join(' · ')}</div>`:'';
 }
+/* Que sites deixam a vinho-info ler as páginas (60 dias, migração 30): é o
+   que diz se um site vale a pena ser proposto no "Procurar links". Não lida
+   = recusou, veio vazia ou não respondeu a tempo — o efeito é o mesmo. */
+async function diagSitesHTML(){
+  let rows;
+  try{rows=await sbRpc('paginas_por_site',{p_dias:60});}catch(e){return '';}
+  if(!Array.isArray(rows)||!rows.length)return '<div class="diag-l"><b>Páginas por site (60 dias)</b><div class="note">Ainda nenhuma página aberta.</div></div>';
+  return `<div class="diag-l"><b>Páginas por site (60 dias)</b>${rows.map(r=>
+    `<div class="note">${esc(r.site)}: lidas <b>${r.lidas}</b> de ${r.tentativas}${r.lidas<r.tentativas&&r.motivo?` · ${esc(r.motivo)}`:''}</div>`).join('')}</div>`;
+}
 async function renderDiag(){
   const box=document.getElementById('diag-box');
   box.innerHTML='<div class="note">A ler…</div>';
   try{
     const l=await sbReq('GET','sync_log?select=*&order=criado_em.desc&limit=25');
     if(!l||!l.length){box.innerHTML='<div class="note">Sem registos ainda.</div>';return;}
-    box.innerHTML=l.map(r=>`<div class="diag-l">
+    const sites=await diagSitesHTML();
+    box.innerHTML=sites+l.map(r=>`<div class="diag-l">
       <b>${esc(r.estado)}</b> · ${esc(String(r.criado_em).slice(0,19).replace('T',' '))} · ${esc(r.origem)}
       ${r.acao?' · '+esc(r.acao):''}${r.quem?' · '+esc(r.quem):''}
       ${diagMetaHTML(r.detalhe||{})}
@@ -8944,7 +9037,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='130';
+const APP_BUILD='131';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

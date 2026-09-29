@@ -492,6 +492,13 @@ nenhuma ligação mudada, nada mexido nas garrafeiras.
    `juntar` não escreve nada)
 2. `db/migracao-desejos-catalogo.sql`
 
+### Migração 30 — que sites deixam ler as páginas (já aplicada)
+
+`db/migracao-paginas-sites.sql`. Só uma função, `garrafeira.paginas_por_site`
+(admin ou `service_role`), que conta por site as páginas que a `vinho-info`
+abriu (o `detalhe.paginas` do `sync_log`). Serve o "Procurar links" e o
+Diagnóstico. Sem tabela nova, nada mexido. Aplicada a 29/09/2026.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as

@@ -89,6 +89,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-desejos-catalogo.sql` é a 29: a wishlist também alimenta o
   catálogo, com força 1 (ver "A wishlist é um vinho sem garrafas");
   corre depois da `garrafeira-desejo` na `forca()` da WineCatalog.
+  `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
+  deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
+  links").
   `migracao-blindagem.sql` é a 13: fecha o que o linter do Supabase apanhou
   (as tabelas de backup de setembro estavam com RLS DESLIGADA num schema
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
@@ -1594,6 +1597,32 @@ seguinte, quando os `id` o dizem) e os trechos mais abaixo onde o nome
 aparece (`extraDaPagina`). Só acrescenta: o princípio vai igual e o extra tem
 uma quota à parte na base de evidência (`EVIDENCIA_EXTRA_MAX`); no registo, a
 página diz `secao`/`trechos`.
+
+**Procurar links** (29/09/2026, o dono das apps: "dar um link ao Gemini e
+dizer 'procura só neste link' é o que traz a informação mais fidedigna, e
+não é cara"). No pacote completo, ao pé da caixa dos sites, **🔗 Procurar
+links** (`pqLinks`) faz UMA pesquisa Serper (`vinho-info` com `links:true`:
+síncrona, sem Gemini, sem cache nem catálogo, `[nome, ano, produtor,
+"vinho"]`) e mostra até 5 links (`pqLinksHTML`): o título abre a página
+noutro separador, por baixo o site e o resumo, e marcas curtas (outra
+colheita no título/endereço, como o site se tem portado). Páginas de procura,
+categoria ou marcas não entram (`paginaDoResultado`), nem a página inicial.
+**Nenhum vem marcado**; escolhem-se **até 2** (`LINKS_ESCOLHER`) — para
+outros, pesquisa-se outra vez a seguir. "Pesquisar só nestes" segue pelo
+`soSites` de sempre, com os links como páginas dadas: a 2.ª fase não gasta
+Serper nenhum (a não ser que uma página recuse). **O Vivino não entra na
+lista** (recusa servidores); se vier nos resultados, o link e as estrelas do
+Google vão com a pesquisa (`vivinoGoogle`, um resultado a mais na base de
+evidência, sem outra consulta). No registo é UMA pesquisa Serper
+(`passo: "links"`, `modelo: "serper"`, `serper_consultas: 1`, também no
+`ia_uso` — a AI-API-Control ainda os conta como chamadas). **A medição**
+(`garrafeira.paginas_por_site`, migração 30) conta, por site, as páginas
+abertas nos últimos 60 dias a partir do `detalhe.paginas` do `sync_log`: não
+lida = recusou, veio vazia ou não respondeu a tempo (o efeito é o mesmo). Vê-se
+ao lado de cada link e em Definições › Diagnóstico. Um site que recuse sempre
+ainda só se AVISA; tirá-lo da lista fica para quando houver números. A
+`catalogo-info` da WineCatalog não tem isto, de propósito: o Catálogo vai ser
+fundido na Garrafeira.
 
 A nota que CONTA — no crachá do cartão e da grelha, na página do vinho, na
 ordenação dentro dos grupos, no filtro por Vivino, no "A completar" e na PDF

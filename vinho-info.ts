@@ -48,6 +48,9 @@ const MODELO_ESCALADO = Deno.env.get("GEMINI_FALLBACK_MODEL") || Deno.env.get("G
 const CACHE_TTL_HORAS = Math.max(1, Math.min(24 * 90, Number(Deno.env.get("VINHO_CACHE_TTL_HOURS") ?? 24 * 30) || 24 * 30));
 const CACHE_VERSAO = "v4"; // v4 (27/09/2026): as duas notas do Vivino (colheita e todas) · v3: o pacote completo passou a Serper + grounding
 const SEARCH_RESULTADOS = 5;
+// "Procurar links": quantos se mostram, e quantos se podem escolher.
+const LINKS_MOSTRAR = 5;
+const LINKS_ESCOLHER = 2;
 
 const TIMEOUT_MS = 55_000;        // modo síncrono, preso ao browser
 const PROC_TIMEOUT_MS = 110_000;  // segundo plano — já não depende do browser
@@ -896,19 +899,19 @@ function vivinoDuas(out: Record<string, unknown>, ano: number | null): void {
    já o texto, e o lote continua a usá-la): é o que deixa numerar tudo de
    seguida para o `deOnde`, e escolher a página de cada site. */
 type Resultado = { url: string; titulo: string; snippet: string; rating: unknown; ratingCount: unknown };
-async function serperConsulta(q: string, signal: AbortSignal): Promise<Resultado[]> {
+async function serperConsulta(q: string, signal: AbortSignal, num = SEARCH_RESULTADOS): Promise<Resultado[]> {
   if (!SEARCH_API_KEY) throw new Error("a pesquisa externa não está configurada: falta SEARCH_API_KEY");
   const { signal: ss, limpar } = comLimiteProprio(signal, 12_000);
   try {
     const r = await fetch(SEARCH_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-API-KEY": SEARCH_API_KEY },
-      body: JSON.stringify({ q, gl: "pt", hl: "pt", num: SEARCH_RESULTADOS }),
+      body: JSON.stringify({ q, gl: "pt", hl: "pt", num }),
       signal: ss,
     });
     if (!r.ok) throw new Error(`pesquisa externa ${r.status}`);
     const d = await r.json();
-    return (Array.isArray(d?.organic) ? d.organic : []).slice(0, SEARCH_RESULTADOS)
+    return (Array.isArray(d?.organic) ? d.organic : []).slice(0, num)
       .map((x: any) => ({
         url: String(x?.link || "").trim(), titulo: String(x?.title || "").trim(),
         snippet: String(x?.snippet || "").replace(/\s+/g, " ").trim(),
@@ -1498,6 +1501,23 @@ function catalogoResponde(c: Conhecido, pedidos: string[]): Record<string, unkno
   return out;
 }
 
+/* Que sites deixam ler as páginas (`garrafeira.paginas_por_site`, migração
+   30): { site: {tentativas, lidas} }. Um erro dá {} — é só uma ajuda. */
+async function paginasPorSite(signal: AbortSignal): Promise<Record<string, { tentativas: number; lidas: number }>> {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/paginas_por_site`, {
+      method: "POST", signal,
+      headers: { apikey: SB_SRV, Authorization: "Bearer " + SB_SRV, "Content-Type": "application/json", "Content-Profile": "garrafeira" },
+      body: JSON.stringify({ p_dias: 60 }),
+    });
+    if (!r.ok) return {};
+    const d = await r.json();
+    const out: Record<string, { tentativas: number; lidas: number }> = {};
+    for (const x of Array.isArray(d) ? d : []) if (x?.site) out[x.site] = { tentativas: Number(x.tentativas) || 0, lidas: Number(x.lidas) || 0 };
+    return out;
+  } catch { return {}; }
+}
+
 /* ── Registo (garrafeira.sync_log) ──
    Do lado do browser vê-se sempre a mesma coisa ("HTTP 502"); a causa está
    nesta linha. Nunca deita a resposta abaixo. */
@@ -1765,6 +1785,9 @@ async function produzirFicha(
   // As páginas coladas nos sites (ver "AS PÁGINAS DOS SITES") e o visto
   // "Usar só a informação destes sites".
   paginasDadas: string[] = [], soSites: boolean = false,
+  // O resultado do Vivino que o "Procurar links" já trouxe (ver "PROCURAR
+  // LINKS"): entra como um resultado do Serper, sem gastar outra consulta.
+  vivinoGoogle: Resultado | null = null,
 ): Promise<Res> {
   if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
   const inicio = Date.now();
@@ -1908,6 +1931,7 @@ async function produzirFicha(
     // Sem o Serper não há como procurar dentro de um site.
     procurarEm.forEach((d) => paginasRes.push({ site: d, estado: "sem_pesquisa" }));
   }
+  if (vivinoGoogle) resultados.push(vivinoGoogle);
   const [abertasDadas, abertasAchadas] = await Promise.all([abrirDadas, Promise.all(achadas.map((u) => abrirPagina(u, false, signal, nome)))]);
   // Uma página colada que não se deixou ler (403, desafio anti-bots, 404):
   // fica o que o Google mostra desse site, se houver pesquisa.
@@ -1947,7 +1971,8 @@ async function produzirFicha(
   // senão, grounding.
   const fase = async (comSerper: boolean, camposFase: string[] | null) => {
     const texto = comSerper
-      ? prompt(nome, ano, produtor, regiao, tipo, notas, hoje, camposFase, pesquisa.texto, colheitaEspecifica, sites, soSites)
+      ? prompt(nome, ano, produtor, regiao, tipo, notas, hoje, camposFase, pesquisa.texto, colheitaEspecifica,
+          vivinoGoogle ? [...sites, "vivino.com (o resultado do Google)"] : sites, soSites)
       : promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, hoje, camposFase, colheitaEspecifica);
     let fontesG: Fonte[] = [];
     const run = async (modelo: string, modo: string, maxTokens: number, semThinking: boolean) => {
@@ -2350,6 +2375,64 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
 
+    /* ── PROCURAR LINKS (29/09/2026, o dono das apps) ──
+       "Dar um link ao Gemini e dizer 'lê só isto'" é o que traz a
+       informação mais fidedigna. Este passo só encontra os links: UMA
+       consulta ao Serper, a lista volta já (síncrono, sem `analises`, sem
+       Gemini, sem cache nem catálogo), e quem procura escolhe até
+       `LINKS_ESCOLHER` — que seguem pelo "só estes sites" de sempre.
+       Nenhum vem marcado: a pessoa abre-os e decide. O Vivino não entra na
+       lista (recusa servidores — não se abre); se vier nos resultados, vai
+       à parte (`vivino`) e acompanha a pesquisa como resultado do Google
+       (o link e as estrelas), sem outra consulta. Só no pacote completo: o
+       Serper gasta créditos que se pagam. Regista-se como UMA pesquisa
+       Serper, sem modelo nenhum. */
+    if (body?.links === true) {
+      const lnome = String(body?.nome ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+      if (lnome.length < 3) return json({ error: "falta o nome do vinho" }, 400);
+      if (auth.plano !== "premium") {
+        await registar("erro", { passo: "links_sem_premium" }, quem);
+        return json({ error: "procurar links é do pacote completo (usa a pesquisa Serper)" }, 403);
+      }
+      if (!SEARCH_API_KEY) return json({ error: "a pesquisa de links não está configurada (falta SEARCH_API_KEY)" }, 503);
+      const lano = anoValido(body?.ano);
+      const lprod = texto(body?.produtor, 90);
+      const q = [lnome, lano || "", lprod, "vinho"].filter(Boolean).join(" ");
+      const t0 = Date.now();
+      let rows: Resultado[];
+      try { rows = await serperConsulta(q, ctrl.signal, 10); }
+      catch (e) {
+        const err = String((e as Error)?.message ?? e).slice(0, 300);
+        await registar("erro", { passo: "links", nome: lnome, erro: err, modelo: "serper", serper_consultas: 1, pesquisa: "serper" }, quem);
+        return json({ error: `a pesquisa de links falhou — ${err}` }, 502);
+      }
+      const hist = await paginasPorSite(ctrl.signal);
+      const vistos = new Set<string>();
+      let vivino: Resultado | null = null;
+      const links: Record<string, unknown>[] = [];
+      for (const r of rows) {
+        if (doSite(r.url, "vivino.com")) { vivino = vivino ?? r; continue; }
+        const url = paginaDe(r.url);
+        if (!url || vistos.has(url) || links.length >= LINKS_MOSTRAR) continue;
+        const site = siteDe(url);
+        // Uma página de procura, categoria ou marcas não tem o vinho: fica de fora.
+        if (!paginaDoResultado([{ ...r, url }], site)) continue;
+        vistos.add(url);
+        // Um ano no título ou no endereço que não é o nosso: diz-se, não se decide.
+        const anos = [...`${r.titulo} ${url}`.matchAll(/\b(19[5-9]\d|20[0-4]\d)\b/g)].map((m) => Number(m[1]));
+        links.push({
+          url, titulo: r.titulo, snippet: r.snippet, site,
+          ...(lano && anos.length && !anos.includes(lano) ? { outroAno: anos[0] } : {}),
+          ...(hist[site] ? { historico: hist[site] } : {}),
+        });
+      }
+      await registar("ok", {
+        passo: "links", nome: lnome, ano: lano, consultas: [q], n: links.length, vivino: !!vivino,
+        modelo: "serper", pesquisa: "serper", serper_consultas: 1, custo_estimado_eur: 0.001, ms: Date.now() - t0,
+      }, quem);
+      return json({ links, escolher: LINKS_ESCOLHER, ...(vivino ? { vivino } : {}) });
+    }
+
     /* ── LOTE: vários vinhos, uma chamada só ──
        Distingue-se do pedido de sempre por trazer `vinhos` (array) em vez de
        `nome` (um vinho só). Sempre assíncrono — o tempo de vários vinhos de
@@ -2454,6 +2537,13 @@ Deno.serve(async (req) => {
     const paginasDadas: string[] = Array.isArray(body?.sites)
       ? [...new Set((body.sites as unknown[]).map((s) => paginaDe(texto(s, 400))).filter(Boolean))].slice(0, 5)
       : [];
+    // O resultado do Vivino que o "Procurar links" trouxe (ver lá): só um
+    // endereço do vivino.com, e os números como o Serper os deu.
+    const vg = body?.vivinoGoogle;
+    const vivinoGoogle: Resultado | null = vg && typeof vg === "object" && doSite(String(vg.url ?? ""), "vivino.com") && /^https:\/\//.test(String(vg.url))
+      ? { url: texto(vg.url, 400), titulo: texto(vg.titulo, 200), snippet: texto(vg.snippet, 400),
+          rating: numero(vg.rating, 0, 5, 1), ratingCount: numero(vg.ratingCount, 0, 10_000_000, 0) }
+      : null;
     // "Usar só a informação destes sites" — sem sites não quer dizer nada.
     const soSites = body?.soSites === true && sites.length > 0;
     const notas = texto(body?.notas, 300);
@@ -2497,7 +2587,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites), vivinoDado, camposPedidos);
+          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle), vivinoDado, camposPedidos);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -2515,7 +2605,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites), vivinoDado, camposPedidos);
+    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle), vivinoDado, camposPedidos);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";
