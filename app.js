@@ -5969,6 +5969,10 @@ function iaAbrirProcura(vinhoId){
   PQ=pqNovoEstado(false,{vid:vinhoId,nome:v.nome,ano:v.ano||null,produtor:v.produtor||'',
     regiao:v.regiao||'',tipo:v.tipo||''},pqAtualVinho(v));
   abrirModal('modal-ia');
+  // Um vinho já LIGADO ao catálogo (`catalogo_id`, migração 28) não volta a
+  // escolher candidatos: já se sabe qual é a linha, e o que ela tem chega cá
+  // sozinho (o "≠ catálogo" e as fichas × catálogo). Vai direto à IA.
+  if(v.catalogo_id){PQ.fase='ia';PQ.et.cat={estado:'ligado'};pqPintar();return;}
   pqCatalogo();
 }
 /* Vinho novo (e wishlist): o mesmo ecrã por cima do formulário compacto. */
@@ -6204,9 +6208,10 @@ function pqPassoHTML(k,P){
     :e.estado==='nada'?'não conhece'
     :e.estado==='recusado'?'nenhum destes'
     :e.estado==='cor'?'outra cor'
+    :e.estado==='ligado'?'✓ já ligado'
     :e.estado==='erro'?'não deu'
     :'—';
-  const cls=P.corre===k||(k==='cat'&&P.escolher)?'corre':e.estado==='feito'?'feito':e.estado==='erro'?'erro':e.estado?'nada':'';
+  const cls=P.corre===k||(k==='cat'&&P.escolher)?'corre':e.estado==='feito'||e.estado==='ligado'?'feito':e.estado==='erro'?'erro':e.estado?'nada':'';
   return `<div class="pq-passo ${cls}"><b>${esc(PQ_NOMES[k])}</b><span>${esc(st)}</span></div>`;
 }
 function pqQtd(n,um,varios){return `<b>${n}</b> ${n===1?um:varios}`;}
@@ -6289,7 +6294,8 @@ function pqRelatoHTML(P){
       if(c.vivinoMau)out.push(`<span class="note">O link do Vivino que o Catálogo tem não está no formato do Vivino — não o trouxe.</span>`);
       if(c.lojas&&c.lojas.length)out.push(`<span class="note">💶 Nas lojas: ${c.lojas.map(([k,p])=>
         `<b>${esc(lojaInfo(k).nome)}</b> ${esc(eur(p.preco))}${p.colheita?' ('+esc(p.colheita)+')':''}`).join(' · ')}. Não se copiam: o vinho lê-os do Catálogo, sempre atualizados.</span>`);
-    }else if(c.estado==='nada')out.push('O vinho não existe no Catálogo.');
+    }else if(c.estado==='ligado')out.push('Este vinho já está ligado ao Catálogo: o que lá está chega-lhe sozinho, não é preciso escolhê-lo outra vez.');
+    else if(c.estado==='nada')out.push('O vinho não existe no Catálogo.');
     else if(c.estado==='recusado')out.push('Nenhum dos vinhos do Catálogo é este.');
     else if(c.estado==='cor')out.push(`O Catálogo tem um <b>${esc(c.nome)}</b>, mas ${esc(c.cor.toLowerCase())} — deve ser outro vinho, não trouxe nada.`);
     else if(c.estado==='erro')out.push(`Não consegui perguntar ao Catálogo (${esc(c.msg)}).`);
@@ -9037,7 +9043,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='131';
+const APP_BUILD='132';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

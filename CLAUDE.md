@@ -1756,7 +1756,9 @@ de botões que apareciam e desapareciam. Agora:
   escolhido passa a ser a do vinho (no formulário, ou `PQ.anoEscolhido`
   num vinho gravado); com outra colheita, só vêm os factos estáveis
   (`CAT_DA_COLHEITA`). A ficha pede-se depois à `comparar` com o nome e o
-  ano DA LINHA escolhida.
+  ano DA LINHA escolhida. **Um vinho gravado já ligado ao catálogo
+  (`catalogo_id`) salta esta etapa** (29/09/2026, o dono): a linha já se
+  sabe, e o que ela tem chega cá sozinho — vai direto à IA.
 - **2. IA** — UMA procura. O pacote completo (`premium`) faz na Edge
   Function, de seguida, o Serper e depois o grounding pelo que ele não
   trouxe; o intermédio (`gratis`) faz só o grounding — o Serper gasta
