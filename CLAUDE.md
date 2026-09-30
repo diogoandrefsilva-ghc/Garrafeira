@@ -998,8 +998,9 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
   continua a ser a distinção. A
   página troca o "Onde está" por **"Na tua garrafeira"** com **Pôr na
   garrafeira / Pôr na wishlist** (`catPor`: o formulário do vinho novo de
-  sempre, já preenchido e aberto por inteiro). Sai o Editar, as minhas
-  notas, o comentário e o Apagar; a capa é verde (`.mhero-cat`).
+  sempre, já preenchido e aberto por inteiro). Saem as minhas notas, o
+  comentário e o Apagar (o Procurar e o Editar só a quem corrige o catálogo,
+  a seguir); a capa é verde (`.mhero-cat`).
 - **O "Procurar informação" num vinho do catálogo** (30/09/2026, o dono:
   "quando entro no detalhe de um vinho, não tenho opção de procurar
   informação") — só aos curadores e ao admin do catálogo (`catPodeCriar`), e
@@ -1012,6 +1013,18 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
   recusa e o resto fica. Como em qualquer procura da Garrafeira, a
   `vinho-info` já enche sozinha, com força 2, os campos vazios de um nome que
   o catálogo conhece: o Guardar é o que decide por cima.
+- **E o Editar** (30/09/2026, o dono: "incluir as operações de procurar
+  informação e editar, no catálogo, para quem tem acesso") — aos mesmos
+  (`catPodeCriar`), com ou sem IA. É o formulário do Editar de sempre
+  (`abrirEditarVinho` com o id negativo), sem o formato das garrafas nem as
+  minhas notas, e grava pela `winecatalog.editar` (`catGuardarEditar`). **Só
+  vai o que mudou** em relação à linha (`catIgual`): mandar o formulário
+  inteiro apagava lá o que a `catalogo_vinhos` por acaso não trouxesse. Um
+  campo esvaziado apaga-o no catálogo, e um link do Vivino fora do formato
+  não se grava. O nome, o produtor e o ano vão numa segunda chamada, com o
+  interruptor da identidade (e chegam às garrafeiras ligadas — é a regra do
+  catálogo); se a linha passar a ser outra, a `editar` recusa, o toast di-lo
+  e o resto fica gravado.
 - **O "+" só onde se acrescenta** (`fabSincronizar`): o Detalhe da
   garrafeira e a Wishlist (aí vai direto a "Adicionar à wishlist"). Nem no
   Resumo (o separador "Garrafeira" passou a chamar-se **Resumo**), nem em

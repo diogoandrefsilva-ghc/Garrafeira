@@ -1376,6 +1376,65 @@ async function catGuardarNovo(){
     btn.disabled=false;btn.textContent='Criar no catálogo';
   }
 }
+/* Corrigir um vinho do catálogo (30/09/2026): o Editar de sempre sobre a
+   linha, gravado pela `winecatalog.editar` — a mesma do Editar da
+   WineCatalog, com a origem do curador (ou do admin). Só vai o que MUDOU no
+   formulário (um campo esvaziado apaga-o lá); o nome, o produtor e o ano vão
+   numa segunda chamada, com o interruptor da identidade, que recusa se a
+   linha passar a ser a mesma que outra — o resto fica gravado na mesma. */
+function catIgual(a,b){
+  const vz=x=>x==null||x==='';
+  if(vz(a)||vz(b))return vz(a)&&vz(b);
+  if(typeof a==='number'||typeof b==='number')return Number(a)===Number(b);
+  return String(a).trim()===String(b).trim();
+}
+async function catGuardarEditar(id){
+  const v=IDXV[id];if(!v||!(v.id<0)||!catPodeCriar())return;
+  const f=lerFormVinho();
+  if(!f.nome){toast('Falta o nome do vinho',1);return;}
+  if(f.ano!=null&&(f.ano<1900||f.ano>2100)){toast('Ano fora do razoável',1);return;}
+  const campos={};
+  CAT_FICHA_FORM.forEach(k=>{if(k in f&&!catIgual(f[k],v[k]))campos[k]=f[k]==null?'':f[k];});
+  if(campos.vivino_url){
+    const l=vivinoLink(campos.vivino_url);
+    if(!l){toast('O link do Vivino tem de ser o do vinho (…/w/<número>)',1);return;}
+    campos.vivino_url=l;
+  }
+  const cs=(f._castas||[]).slice().sort((a,b)=>a.localeCompare(b,'pt'));
+  const chaveCs=a=>a.map(x=>String(x).toLowerCase()).sort().join('|');
+  if(chaveCs(cs)!==chaveCs(v.castas||[]))campos.castas=cs;
+  // O que a resposta colada trouxe sem campo no formulário: só onde o
+  // catálogo não tinha nada (a regra do Editar da garrafeira).
+  if(_iaExtraNovo)CAT_FICHA_EXTRA.forEach(k=>{const x=_iaExtraNovo[k];
+    if(x!=null&&x!==''&&(v[k]==null||v[k]===''))campos[k]=x;});
+  const idt=f.nome!==(v.nome||'')||(f.produtor||'')!==(v.produtor||'')||(f.ano??null)!==(v.ano??null);
+  if(!Object.keys(campos).length&&!idt){fecharModal('modal-edit');toast('Nada mudou');return;}
+  const WC={'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'};
+  const btn=document.getElementById('e-guardar');
+  btn.disabled=true;btn.textContent='A guardar…';
+  let n=0,erroIdt='';
+  try{
+    if(Object.keys(campos).length){
+      const r=await sbReq('POST','rpc/editar',{p_id:v.cat_id,p_campos:campos},WC);
+      n=r?(r.campos||0)+(r.apagados||0):0;
+    }
+  }catch(e){
+    toast('Não foi possível guardar: '+e.message,1);
+    btn.disabled=false;btn.textContent='Guardar no catálogo';return;
+  }
+  if(idt){
+    try{await sbReq('POST','rpc/editar',{p_id:v.cat_id,p_campos:{},p_nome:f.nome,p_produtor:f.produtor||'',
+      p_ano:f.ano,p_mexer_identidade:true},WC);}
+    catch(e){erroIdt=e.message;}
+  }
+  _iaExtraNovo=null;
+  fecharModal('modal-edit');
+  CAT_VINHOS=null;
+  try{await catCarregar();}catch(_){}
+  renderLista();refrescarVinhoAberto();
+  if(erroIdt)toast((n?`Corrigido no catálogo (${n} campo${n>1?'s':''}), mas o nome, o produtor e o ano ficaram: `:'O nome, o produtor e o ano ficaram: ')+erroIdt,1);
+  else toast('Corrigido no catálogo ✓');
+}
 /* Um curador grava um vinho da SUA garrafeira: a BD leva o que mudou à
    linha ligada do catálogo (trigger `vinhos_catalogo`, migração 32). Diz-se
    o que aconteceu — sobretudo quando NÃO foi (outra colheita, outra cor, o
@@ -5169,8 +5228,9 @@ function vinhoDetalheHTML(v){
       ${(v.castas||[]).map(c=>`<span class="bdg cas" onclick="filtrarPorCasta('${escJs(c)}')" style="cursor:pointer" title="Ver tudo com esta casta">🍇 ${esc(c)}</span>`).join('')}
     </div>
 
-    ${cat?(catPodeCriar()&&podeUsarIA()?`<div class="macoes">
-      <button class="btn prim" onclick="iaAbrirProcura(${v.id})">🔎 Procurar informação</button>
+    ${cat?(catPodeCriar()?`<div class="macoes">
+      ${podeUsarIA()?`<button class="btn prim" onclick="iaAbrirProcura(${v.id})">🔎 Procurar informação</button>`:''}
+      <button class="btn ${podeUsarIA()?'ghost':'prim'}" onclick="abrirEditarVinho(${v.id})">✏️ Editar</button>
     </div>`:''):`<div class="macoes ro-hide">
       <button class="btn prim" onclick="iaAbrirProcura(${v.id})">🔎 Procurar informação</button>
       <button class="btn ghost" onclick="abrirEditarVinho(${v.id})">✏️ Editar</button>
@@ -5738,15 +5798,18 @@ function abrirEditarVinho(id,modo){
   // 'catalogo' (os curadores, migração 32): um vinho novo NO CATÁLOGO, sem
   // garrafa nem notas minhas — a garrafeira aberta não conta para nada.
   const noCat=!id&&modo==='catalogo';
-  if(noCat?!catPodeCriar():roGuard())return;
+  // Um vinho DO catálogo (id negativo): corrige-se a linha para toda a gente
+  // (`catGuardarEditar`), e só quem o admin fez curador.
+  const catEd=id<0;
+  if((noCat||catEd)?!catPodeCriar():roGuard())return;
   FORM_CAT=noCat;
   const v=id?IDXV[id]:null;
   if(id&&!v)return;
   const conv=!!id&&modo==='converter';
   const paraDesejo=!id&&modo==='desejo';
   const comGarrafa=((!id&&!paraDesejo)||conv)&&!noCat;
-  const titulo=noCat?'Novo vinho no catálogo':conv?'Passar para a garrafeira':id?'Editar vinho':paraDesejo?'Novo vinho na wishlist':'Novo vinho';
-  const rotulo=noCat?'Criar no catálogo':conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
+  const titulo=noCat?'Novo vinho no catálogo':catEd?'Corrigir no catálogo':conv?'Passar para a garrafeira':id?'Editar vinho':paraDesejo?'Novo vinho na wishlist':'Novo vinho';
+  const rotulo=noCat?'Criar no catálogo':catEd?'Guardar no catálogo':conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
   _catBaseNovo=null;
   _iaExtraNovo=null;   // o que a procura trouxe é de UM formulário, não fica de um para o outro
   const o=(k,d)=>v?(v[k]==null?'':v[k]):(d==null?'':d);
@@ -5780,7 +5843,7 @@ function abrirEditarVinho(id,modo){
       <input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado">`}
 
     ${conv?`<div class="aviso">Revê a ficha (o ano, sobretudo — o que se quer e o que se comprou nem sempre são a mesma colheita) e diz onde fica a garrafa. Sai da wishlist e entra na garrafeira.</div>`:''}
-    ${id&&!conv?`<div class="mrow">
+    ${id&&!conv&&!catEd?`<div class="mrow">
       <div><label>Formato da garrafa</label><select id="e-formato-edit">${FORMATOS.map(x=>
         `<option value="${esc(x)}"${formatoAtual===x?' selected':''}>${esc(x)}</option>`).join('')}</select></div>
     </div>
@@ -5842,7 +5905,7 @@ function abrirEditarVinho(id,modo){
     <label>Harmoniza com</label>
     <textarea id="e-harmonizacao" placeholder="Queijos curados, carnes grelhadas…">${esc(o('harmonizacao'))}</textarea>
 
-    ${noCat?'':`<label>As minhas notas</label>
+    ${noCat||catEd?'':`<label>As minhas notas</label>
     <textarea id="e-notas" placeholder="Onde comprei, para que ocasião guardei, o que achei…">${esc(o('notas'))}</textarea>`}
 
     ${!comGarrafa?'':`
@@ -5863,6 +5926,7 @@ function abrirEditarVinho(id,modo){
       <label>Comprada em</label>
       <input type="date" id="e-comprado">`}
     ${noCat?'<div class="note" style="margin-top:10px">Fica no <b>Catálogo</b>, à vista de toda a gente, com a força de uma correção à mão. Não entra na tua garrafeira.</div>':''}
+    ${catEd?'<div class="note" style="margin-top:10px">Corrige o vinho no <b>Catálogo</b>, para toda a gente. Um campo que esvazies deixa de lá estar; o nome e o produtor chegam também às garrafeiras que o têm.</div>':''}
     ${paraDesejo?'<div class="note" style="margin-top:10px">Fica na <b>Wishlist</b>, sem garrafas. Quando o comprares (ou to oferecerem), passa-o para a garrafeira na página do vinho.</div>':''}
 
     <div class="macoes">
@@ -5914,6 +5978,7 @@ function lerFormVinho(){
 
 async function guardarVinho(id,modo){
   if(!id&&modo==='catalogo')return catGuardarNovo();
+  if(id<0)return catGuardarEditar(id);
   if(roGuard())return;
   const conv=!!id&&modo==='converter';
   const paraDesejo=!id&&modo==='desejo'&&TEM_DESEJO;
@@ -10384,7 +10449,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='139';
+const APP_BUILD='140';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
