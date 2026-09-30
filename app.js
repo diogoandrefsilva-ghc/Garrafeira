@@ -286,6 +286,16 @@ async function carregar(){
   // admin, que é o que a BD também decide.
   const minha=(eu||[])[0]||null;
   EU={email:_sbSession.user.email,pode_editar:minha?!!minha.pode_editar:false,nome:minha?minha.nome:'',ia_plano:minha?minha.ia_plano||'sem_ia':'sem_ia'};
+  // Os CURADORES do catálogo (migração 32 · `db/curadores.sql` da
+  // WineCatalog): quem o admin do catálogo escolheu. Criam vinhos no
+  // Catálogo e o que corrigem na garrafeira chega à linha ligada (quem faz
+  // isso é o trigger, na BD). Um soluço aqui não impede ninguém de entrar.
+  const wc={'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'};
+  const [cur,admCat]=await Promise.all([
+    sbReq('POST','rpc/sou_curador',{},wc).catch(()=>false),
+    sbReq('POST','rpc/sou_admin',{},wc).catch(()=>false)
+  ]);
+  EU.curador=cur===true;EU.admin_catalogo=admCat===true;
 
   GA_LISTA=gars||[];
   // Quem pode editar e ainda não tem garrafeira nenhuma ganha a dele aqui —
@@ -1220,6 +1230,76 @@ function catPor(id,modo){
   if(TIPOS.includes(v.tipo))por('e-tipo',v.tipo);
   iaPreencherForm(Object.assign({},v,{modelo:'catálogo partilhado'}),false);
   formMostrarResto();
+}
+/* ── VINHO NOVO NO CATÁLOGO (os curadores, 30/09/2026) ──
+   Quem o admin do catálogo fez curador (Definições › Utilizadores) cria
+   vinhos no Catálogo: o formulário do vinho novo de sempre, sem garrafa,
+   gravado pela `winecatalog.criar` — a mesma do "+ Vinho novo" da
+   WineCatalog, que recusa se o vinho e a colheita já lá estiverem. */
+let FORM_CAT=false;
+function catPodeCriar(){return !!(EU.curador||EU.admin_catalogo);}
+function catNovoVinho(){
+  if(!catPodeCriar())return;
+  abrirEditarVinho(0,'catalogo');
+}
+// Os campos do formulário que são FICHA (o que o catálogo guarda) — nunca
+// as minhas notas.
+const CAT_FICHA_FORM=['tipo','estilo','mencao','classificacao','regiao','sub_regiao','teor','estagio_meses',
+  'estagio_texto','beber_de','beber_ate','preco_medio','vivino_nota','vivino_nota_global','vivino_url',
+  'imagem_url','harmonizacao'];
+const CAT_FICHA_EXTRA=['notas_prova','ai_resumo','vivino_avaliacoes','vivino_avaliacoes_global','pais'];
+async function catGuardarNovo(){
+  const f=lerFormVinho();
+  if(!f.nome){toast('Falta o nome do vinho',1);return;}
+  const elCor=document.getElementById('e-tipo');
+  if(elCor&&!elCor.value){toast('Escolhe a cor do vinho',1);elCor.focus();return;}
+  if(f.ano!=null&&(f.ano<1900||f.ano>2100)){toast('Ano fora do razoável',1);return;}
+  const campos={};
+  CAT_FICHA_FORM.forEach(k=>{if(f[k]!=null&&f[k]!=='')campos[k]=f[k];});
+  if(f._castas&&f._castas.length)campos.castas=f._castas.slice().sort((a,b)=>a.localeCompare(b,'pt'));
+  if(_iaExtraNovo)CAT_FICHA_EXTRA.forEach(k=>{const x=_iaExtraNovo[k];if(x!=null&&x!==''&&campos[k]==null)campos[k]=x;});
+  if(campos.vivino_url&&!vivinoLink(campos.vivino_url))delete campos.vivino_url;
+  const btn=document.getElementById('e-guardar');
+  btn.disabled=true;btn.textContent='A criar…';
+  try{
+    const r=await sbReq('POST','rpc/criar',{p_nome:f.nome,p_produtor:f.produtor||'',p_ano:f.ano,p_campos:campos},
+      {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
+    _iaExtraNovo=null;FORM_CAT=false;
+    fecharModal('modal-edit');
+    CAT_VINHOS=null;await catCarregar();renderLista();
+    toast('No catálogo ✓');
+    if(r&&r.id&&IDXV[-r.id])verVinho(-r.id);
+  }catch(e){
+    // A `criar` diz qual é a linha quando o vinho já existe.
+    toast('Não foi possível criar: '+e.message,1);
+    btn.disabled=false;btn.textContent='Criar no catálogo';
+  }
+}
+/* Um curador grava um vinho da SUA garrafeira: a BD leva o que mudou à
+   linha ligada do catálogo (trigger `vinhos_catalogo`, migração 32). Diz-se
+   o que aconteceu — sobretudo quando NÃO foi (outra colheita, outra cor, o
+   nome novo já é de outra linha). Só depois do "Guardado", e calado se não
+   houve nada a levar. */
+const CURADOR_MOTIVO={
+  sem_ligacao:'este vinho não está ligado a nenhuma linha do catálogo',
+  outra_colheita:'está ligado a outra colheita no catálogo',
+  outra_cor:'está ligado a um vinho de outra cor no catálogo'
+};
+async function curadorAviso(vid){
+  let r=null;
+  try{r=await sbRpc('curador_resultado',{p_vinho_id:vid});}catch(e){return;}
+  if(!Array.isArray(r)||!r.length)return;
+  const erro=r.find(x=>x.estado!=='ok');
+  if(erro){
+    toast('Não chegou ao catálogo: '+(CURADOR_MOTIVO[erro.motivo]||erro.erro||'erro desconhecido'),1);
+    return;
+  }
+  const n=new Set();let idt=false;
+  r.forEach(x=>{(x.campos||[]).forEach(k=>n.add(k));if(x.identidade)idt=true;});
+  const partes=[];
+  if(idt)partes.push('o nome');
+  if(n.size)partes.push(n.size===1?'1 campo':n.size+' campos');
+  if(partes.length){toast('Corrigido também no catálogo: '+partes.join(' e ')+' ✓');CAT_VINHOS=null;}
 }
 async function modoAlternar(){
   if(!modoCat()){
@@ -4656,6 +4736,7 @@ function limparPosicaoLayout(prefix){
    (`podeUsarIA()`), como no `loteAbrir()`: em `sem_ia` a opção aparece e
    diz porque é que não dá, em vez de desaparecer sem explicação. */
 function fabToggle(){
+  if(modoCat()){catNovoVinho();return;}
   if(tabAtiva==='desejos'){novoDesejo();return;}
   const w=document.getElementById('fab-wrap');
   if(w)w.classList.toggle('open');
@@ -4686,14 +4767,18 @@ function abrirNovoVinho(){
      (onde fica, quantas, o preço de compra). Gravar desliga a marca e
      cria as garrafas — a ficha não se copia para lado nenhum. */
 function abrirEditarVinho(id,modo){
-  if(roGuard())return;
+  // 'catalogo' (os curadores, migração 32): um vinho novo NO CATÁLOGO, sem
+  // garrafa nem notas minhas — a garrafeira aberta não conta para nada.
+  const noCat=!id&&modo==='catalogo';
+  if(noCat?!catPodeCriar():roGuard())return;
+  FORM_CAT=noCat;
   const v=id?IDXV[id]:null;
   if(id&&!v)return;
   const conv=!!id&&modo==='converter';
   const paraDesejo=!id&&modo==='desejo';
-  const comGarrafa=(!id&&!paraDesejo)||conv;
-  const titulo=conv?'Passar para a garrafeira':id?'Editar vinho':paraDesejo?'Novo vinho na wishlist':'Novo vinho';
-  const rotulo=conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
+  const comGarrafa=((!id&&!paraDesejo)||conv)&&!noCat;
+  const titulo=noCat?'Novo vinho no catálogo':conv?'Passar para a garrafeira':id?'Editar vinho':paraDesejo?'Novo vinho na wishlist':'Novo vinho';
+  const rotulo=noCat?'Criar no catálogo':conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
   _iaExtraNovo=null;   // o que a procura trouxe é de UM formulário, não fica de um para o outro
   const o=(k,d)=>v?(v[k]==null?'':v[k]):(d==null?'':d);
   const opts=(arr,sel)=>arr.map(x=>`<option value="${esc(x)}"${String(sel)===String(x)?' selected':''}>${esc(x||'—')}</option>`).join('');
@@ -4788,8 +4873,8 @@ function abrirEditarVinho(id,modo){
     <label>Harmoniza com</label>
     <textarea id="e-harmonizacao" placeholder="Queijos curados, carnes grelhadas…">${esc(o('harmonizacao'))}</textarea>
 
-    <label>As minhas notas</label>
-    <textarea id="e-notas" placeholder="Onde comprei, para que ocasião guardei, o que achei…">${esc(o('notas'))}</textarea>
+    ${noCat?'':`<label>As minhas notas</label>
+    <textarea id="e-notas" placeholder="Onde comprei, para que ocasião guardei, o que achei…">${esc(o('notas'))}</textarea>`}
 
     ${!comGarrafa?'':`
       <div class="msec">${conv&&garrafasDe(id,false).length?'Nova garrafa':'Primeira garrafa'}</div>
@@ -4808,6 +4893,7 @@ function abrirEditarVinho(id,modo){
       </div>
       <label>Comprada em</label>
       <input type="date" id="e-comprado">`}
+    ${noCat?'<div class="note" style="margin-top:10px">Fica no <b>Catálogo</b>, à vista de toda a gente, com a força de uma correção à mão. Não entra na tua garrafeira.</div>':''}
     ${paraDesejo?'<div class="note" style="margin-top:10px">Fica na <b>Wishlist</b>, sem garrafas. Quando o comprares (ou to oferecerem), passa-o para a garrafeira na página do vinho.</div>':''}
 
     <div class="macoes">
@@ -4858,6 +4944,7 @@ function lerFormVinho(){
 }
 
 async function guardarVinho(id,modo){
+  if(!id&&modo==='catalogo')return catGuardarNovo();
   if(roGuard())return;
   const conv=!!id&&modo==='converter';
   const paraDesejo=!id&&modo==='desejo'&&TEM_DESEJO;
@@ -4961,6 +5048,7 @@ async function guardarVinho(id,modo){
     if(outraChave)recarregarPrecosLoja();
     if(tabAtiva==='locais')renderMapa();
     toast(conv?'Na garrafeira ✓':id?'Guardado ✓':paraDesejo?'Na wishlist ⭐':'Vinho adicionado ✓');
+    if(id&&EU.curador)curadorAviso(vinhoId);
     // Quem comprou um vinho da wishlist e o pôs pelo "Novo vinho" (em vez
     // de o passar a partir da wishlist) fica com o desejo lá esquecido.
     if(!id&&!paraDesejo)await oferecerRetirarDesejos([IDXV[vinhoId]]);
@@ -6186,6 +6274,14 @@ async function pqCatalogo(){
 function pqColheitaEscolher(i){
   const P=PQ;if(!P||!P.escolher)return;
   const c=P.escolher[i];if(!c)return;
+  // A criar no catálogo, o candidato da MESMA colheita (ou escolhido sem ano
+  // escrito) é este vinho: já lá está. Abre-se em vez de nascer outra linha.
+  if(P.novo&&FORM_CAT&&c.id&&(P.id.ano==null||c.ano===P.id.ano)){
+    PQ=null;fecharModal('modal-ia');fecharModal('modal-edit');FORM_CAT=false;
+    toast('Este vinho já está no catálogo');
+    catCarregar().then(()=>{if(IDXV[-c.id])verVinho(-c.id);}).catch(()=>{});
+    return;
+  }
   // Sem ano escrito, a colheita escolhida passa a ser a do vinho: no vinho
   // novo vai para o campo do ano; num vinho gravado sem ano, grava-se com o
   // resto (`PQ.anoEscolhido`).
@@ -7243,7 +7339,8 @@ function fabSincronizar(){
      no Detalhe da garrafeira (novo vinho, atualização massiva, importar) e
      na Wishlist (e aí vai direto a "Adicionar à wishlist"). Nem no Resumo,
      nem em Locais, Consumidos ou Definições, nem no catálogo (fase 1). */
-  const ha=!modoCat()&&(tabAtiva==='detalhe'||(tabAtiva==='desejos'&&TEM_DESEJO));
+  const ha=modoCat()?(tabAtiva==='detalhe'&&catPodeCriar())
+    :(tabAtiva==='detalhe'||(tabAtiva==='desejos'&&TEM_DESEJO));
   if(w)w.style.display=(LOTE_SEL_MODO||!ha)?'none':'';
   if(!ha)fabFechar();
   // No mapa dos locais o `ajustarEstantes` reserva espaço para o FAB — se
@@ -8543,12 +8640,24 @@ async function admRenderUtilizadores(){
   try{
     _admUsers=await sbReq('GET','allowed_users?select=email,nome,pode_editar,ia_plano&order=email.asc')||[];
   }catch(e){box.innerHTML=`<div class="note">${esc(e.message)}</div>`;return;}
+  // Os curadores do catálogo: a lista é do CATÁLOGO e só o admin dele a vê
+  // e muda (`db/curadores.sql` da WineCatalog). Sem isso, o visto não
+  // aparece — nem a quem é só admin da Garrafeira.
+  let curadores=null;
+  if(EU.admin_catalogo){
+    try{curadores=await sbReq('POST','rpc/curadores_listar',{},{'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'})||[];}
+    catch(e){curadores=null;}
+  }
+  const curSet=new Set((curadores||[]).map(x=>String(x).toLowerCase()));
+  const curChk=u=>curadores==null?'':`<label class="chk" title="Cria vinhos no Catálogo, e o que corrige na sua garrafeira corrige também o vinho no catálogo"><input type="checkbox"${curSet.has(u.email.toLowerCase())?' checked':''}
+              onchange="admDefinirCurador('${escJs(u.email)}',this.checked)"> Curador do catálogo</label>`;
   box.innerHTML=_admUsers.map(u=>{
     const eAdmin=u.email.toLowerCase()===String(ADMIN_EMAIL).toLowerCase();
     return `<div class="ua-row">
       <span class="em">${esc(u.email)}${u.nome?' ('+esc(u.nome)+')':''}</span>
       ${eAdmin?`<div class="ua-ctrls">
             <span class="tagme">admin</span>
+            ${curChk(u)}
             <select class="mini" title="Só para TI testares o que os outros planos veem — não muda o teu acesso real" onchange="iaTesteMudar(this.value)">
               ${IA_PLANOS.map(p=>`<option value="${p.v}"${(IA_TESTE||'premium')===p.v?' selected':''}>${p.r}</option>`).join('')}
             </select>
@@ -8556,6 +8665,7 @@ async function admRenderUtilizadores(){
         :`<div class="ua-ctrls">
             <label class="chk" title="Tem garrafeira própria e pode mexer-lhe"><input type="checkbox"${u.pode_editar?' checked':''}
               onchange="admToggleEditor('${escJs(u.email)}',this.checked)"> Editor</label>
+            ${curChk(u)}
             <select class="mini" title="Plano de pesquisa por IA" onchange="admDefinirPlano('${escJs(u.email)}',this.value)">
               ${IA_PLANOS.map(p=>`<option value="${p.v}"${(u.ia_plano||'sem_ia')===p.v?' selected':''}>${p.r}</option>`).join('')}
             </select>
@@ -8575,6 +8685,13 @@ async function admToggleEditor(email,val){
   try{
     await sbReq('PATCH',`allowed_users?email=eq.${encodeURIComponent(email)}`,{pode_editar:val});
     toast(val?email+' passa a ter garrafeira própria':email+' fica só a ver');
+  }catch(e){toast('Não foi possível: '+e.message,1);admRenderUtilizadores();}
+}
+async function admDefinirCurador(email,sim){
+  try{
+    await sbReq('POST','rpc/curador_definir',{p_email:email,p_sim:!!sim},{'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
+    if(email.toLowerCase()===String(EU.email).toLowerCase()){EU.curador=!!sim;fabSincronizar();}
+    toast(sim?email+' passa a ser curador do catálogo':email+' deixa de ser curador do catálogo');
   }catch(e){toast('Não foi possível: '+e.message,1);admRenderUtilizadores();}
 }
 async function admDefinirPlano(email,plano){

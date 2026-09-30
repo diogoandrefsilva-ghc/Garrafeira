@@ -91,6 +91,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   corre depois da `garrafeira-desejo` na `forca()` da WineCatalog.
   `migracao-catalogo-na-app.sql` é a 31: `catalogo_vinhos`, o catálogo
   inteiro para o separador Catálogo (ver "O Catálogo dentro da app").
+  `migracao-curadores.sql` é a 32: os curadores do catálogo — o que um
+  curador corrige na sua garrafeira chega à linha ligada (ver "Os
+  curadores do catálogo"); corre depois do `db/curadores.sql` da WineCatalog.
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -983,8 +986,35 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
   garrafeira e a Wishlist (aí vai direto a "Adicionar à wishlist"). Nem no
   Resumo (o separador "Garrafeira" passou a chamar-se **Resumo**), nem em
   Locais, Consumidos, Definições, nem no catálogo.
-- **Fase 2** (por fazer): o Resumo do catálogo e, só para o admin, o Vinho
-  novo e a Atualização massiva no FAB do catálogo.
+- **Fase 2** (por fazer): o Resumo do catálogo e a Atualização massiva no
+  FAB do catálogo. O Vinho novo já lá está, para os curadores (a seguir).
+
+### Os curadores do catálogo (30/09/2026, migração 32)
+O dono das apps: "eu quero definir quem cria novos vinhos no catálogo… e se
+esses utilizadores fizerem alguma alteração num vinho da sua garrafeira, essa
+correção deverá atualizar também o vinho no catálogo".
+- **Quem é curador decide-o o admin do CATÁLOGO**, em Definições ›
+  Utilizadores (o visto "Curador do catálogo", `admDefinirCurador`). A lista é
+  do catálogo (`winecatalog.curadores`, `db/curadores.sql` da WineCatalog) e
+  só o admin dele a vê: a quem é só admin da Garrafeira o visto não aparece.
+  `EU.curador`/`EU.admin_catalogo` leem-se no `carregar()`.
+- **Vinho novo no Catálogo**: o "+" do Catálogo aparece a um curador (e ao
+  admin do catálogo) e abre o formulário do vinho novo em modo `catalogo`
+  (`catNovoVinho`, `FORM_CAT`): sem garrafa nem notas minhas, gravado pela
+  `winecatalog.criar` (`catGuardarNovo`), que recusa um vinho e colheita que
+  já lá estejam. No "Procurar informação", um candidato da mesma colheita É
+  este vinho: abre-se em vez de nascer outra linha.
+- **As correções chegam ao catálogo pela BD, não pela app**: o trigger
+  `vinhos_catalogo`, a um curador, leva o que MUDOU nessa gravação (o antes e
+  o depois da linha, `ficha_da_linha`) à linha ligada, pela `winecatalog.editar`
+  com a origem `catalogo-curador` (a força do admin), ANTES da `juntar` de
+  sempre. As castas vão pela `definir_castas`. Só a linha ligada da MESMA
+  colheita e cor (mudar o ano ou a cor é outro vinho); um campo esvaziado não
+  apaga nada lá; o nome e o produtor vão com o interruptor da identidade — se
+  a linha passar a ser a mesma que outra, fica registado e segue-se como antes.
+  Cada ida fica no `sync_log` (acao `curador_catalogo`), e a app di-lo num
+  aviso a seguir ao "Guardado" (`curadorAviso` → `curador_resultado`).
+  Quem não é curador continua a alimentar o catálogo como sempre.
 
 ## O detalhe do vinho é uma PÁGINA, não um modal
 Tocar num vinho não abre uma folha por cima da lista: entra-se numa

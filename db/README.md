@@ -507,6 +507,16 @@ vivas do catálogo (sem os fundidos, sem `origens`/`fontes`/`vezes`) e os
 preços das lojas no formato da `precos_lojas`. É o separador Catálogo da app.
 Aplicada a 30/09/2026.
 
+### Migração 32 — os curadores do catálogo
+
+`db/migracao-curadores.sql`, DEPOIS do `db/curadores.sql` da WineCatalog (a
+lista `winecatalog.curadores` e a `sou_curador`, e a `criar`/`editar` a
+aceitá-los — `cor-na-chave.sql` e `catalogo.sql` de lá). O que um curador
+corrige na sua garrafeira chega à linha ligada do catálogo: `ficha_da_linha`
+(a `ficha_catalogo` passa a usá-la), `curador_levar`, `curador_resultado`, e
+novas versões do trigger `vinhos_catalogo` e da `definir_castas` (também em
+`functions.sql`).
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as

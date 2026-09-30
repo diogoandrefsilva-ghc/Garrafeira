@@ -1952,3 +1952,6 @@ body.cat .it.on{background:#1d4a3b;box-shadow:0 4px 12px -4px rgba(29,74,59,.8)}
 /* Um vinho do catálogo abre na mesma página, com a capa verde do catálogo
    — venha de onde vier, diz-se logo que não é uma garrafa minha. */
 .mhero.mhero-cat{background:linear-gradient(155deg,#0f2a22,#1d4a3b 55%,#2f6e57)}
+/* O "+" do Catálogo (só aos curadores): cria um vinho no catálogo, e é
+   verde como tudo o que é do catálogo. */
+body.cat .fab{background:linear-gradient(160deg,#2f6e57,#0f2a22);box-shadow:0 8px 26px -6px rgba(15,42,34,.7)}

@@ -583,6 +583,7 @@ DECLARE
   v_nome text;
   v_ids  bigint[] := '{}';
   v_id   bigint;
+  v_antes bigint[];
 BEGIN
   -- ARRAY[]::text[] e não '{}': o literal sem tipo deixa o Postgres a
   -- adivinhar, e num FOREACH sobre um COALESCE isso dá erro de tipo.
@@ -593,12 +594,27 @@ BEGIN
     END IF;
   END LOOP;
 
+  SELECT COALESCE(array_agg(casta_id ORDER BY casta_id), ARRAY[]::bigint[])
+    INTO v_antes FROM garrafeira.vinho_castas WHERE vinho_id = p_vinho_id;
+
   DELETE FROM garrafeira.vinho_castas
    WHERE vinho_id = p_vinho_id AND NOT (casta_id = ANY(v_ids));
 
   INSERT INTO garrafeira.vinho_castas (vinho_id, casta_id)
   SELECT p_vinho_id, x FROM unnest(v_ids) AS x
   ON CONFLICT DO NOTHING;
+
+  -- Um CURADOR do catálogo (migração 32, `migracao-curadores.sql`): as
+  -- castas que mudou chegam à linha ligada do catálogo, com a força dele.
+  -- Vai ANTES da `catalogar_vinho`. O valor é lido da BD lá dentro.
+  BEGIN
+    IF cardinality(v_ids) > 0
+       AND v_antes IS DISTINCT FROM (SELECT array_agg(x ORDER BY x) FROM unnest(v_ids) x) THEN
+      PERFORM garrafeira.curador_levar(p_vinho_id, '{"castas": null}'::jsonb);
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
   -- O catálogo partilhado (ver `db/catalogo-partilhado.sql`) é alimentado
   -- por um trigger em `garrafeira.vinhos` — mas as castas não vivem nessa
