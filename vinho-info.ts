@@ -1915,6 +1915,7 @@ async function produzirFicha(
   let serperConsultas = 0;
   const ehVivino = (d: string) => doSite(`https://${d}/`, "vivino.com");
   const dadas = paginasDadas.filter((u) => !doSite(u, "vivino.com"));
+  const vivinoPag = paginasDadas.map(vivinoLink).find(Boolean) ?? "";
   const abrirDadas = Promise.all(dadas.map((u) => abrirPagina(u, true, signal, nome)));
   const comPagina = dadas.map(siteDe);
   const procurarEm = dominios.filter((d) => !ehVivino(d) && !comPagina.some((sd) => doSite(`https://${sd}/`, d)));
@@ -1922,7 +1923,15 @@ async function produzirFicha(
   const achadas: string[] = [];
   let paginasRes: PaginaRes[] = [];
   if (usarSerper) {
-    const qVivino = `"${nome.replace(/"/g, "")}" ${produtor} site:vivino.com`.replace(/\s+/g, " ");
+    /* Com um link do Vivino colado, procura-se pelo nome QUE ESTÁ NO LINK
+       ("rocim-olho-de-mocho-branco"), sem aspas, e só fica essa página. O
+       nome da garrafeira entre aspas exigia a frase exata, e bastava um
+       "do" por "de", ou um "Reserva" que o Vivino não tem, para o Google
+       não devolver nada — o Vivino não se abre daqui (ver acima), por isso
+       sem este resultado não havia nada para ler. */
+    const qVivino = vivinoPag
+      ? `${vivinoPag.split("/")[3].replace(/-/g, " ")} site:vivino.com`
+      : `"${nome.replace(/"/g, "")}" ${produtor} site:vivino.com`.replace(/\s+/g, " ");
     const quem_ = [nome, ano || "", produtor].filter(Boolean).join(" ");
     // As procuras nos sites vão À FRENTE, para caberem no corte do texto.
     const consultas: { q: string; dominio?: string }[] = procurarEm.map((d) => ({ q: `${quem_} site:${d}`, dominio: d }));
@@ -1939,7 +1948,8 @@ async function produzirFicha(
         return;
       }
       // Com o `soSites`, um resultado de fora dos sites não entra.
-      const rows = soSites && d ? r.value.filter((x) => doSite(x.url, d)) : r.value;
+      let rows = soSites && d ? r.value.filter((x) => doSite(x.url, d)) : r.value;
+      if (vivinoPag && d === "vivino.com") rows = rows.filter((x) => vivinoLink(x.url) === vivinoPag);
       resultados.push(...rows);
       if (d && d !== "vivino.com") {
         const pr = paginaDoResultado(rows, d);
@@ -1983,10 +1993,14 @@ async function produzirFicha(
   const temEvidencia = !!pesquisa.texto;
   if (soSites && !temEvidencia) {
     const porque = paginasRes.map(paginaEmFrase).join("; ") ||
-      (usarSerper ? "nenhum dos sites é um domínio ou um link" : "sem a pesquisa do pacote completo, só se leem links de páginas — cola o link da página do vinho");
+      (usarSerper ? "" : "sem a pesquisa do pacote completo, só se leem links de páginas — cola o link da página do vinho");
     await registar("erro", { passo: "so_sites_vazio", nome, sites, paginas: paginasRes,
       ...(serperConsultas ? { serper_consultas: serperConsultas, consultas: consultasFeitas } : {}) }, quem);
-    return { ok: false, status: 404, erro: `não consegui ler nada dos sites escolhidos — ${porque}.` };
+    // Sem nada a dizer de página nenhuma (o Vivino, que não se abre, e o
+    // Google sem o resultado dele), a frase é só esta.
+    return { ok: false, status: 404, erro: porque
+      ? `não consegui ler nada dos sites escolhidos — ${porque}.`
+      : "Não foi possível consultar a página facultada." };
   }
 
   const tentativas: { modelo: string; modo: string; estado: number | string; usageMetadata?: UsageMetadata }[] = [];

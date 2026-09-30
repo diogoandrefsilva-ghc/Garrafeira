@@ -1760,6 +1760,11 @@ sem o catálogo; um campo sem origem sai (`semFonte`). **Com sites, a cache e o
 catálogo do servidor não respondem** (`semAtalhos`): quem os escreve quer que
 se leiam agora, e o catálogo já respondeu na etapa 1 do ecrã. O Vivino não se
 abre (recusa servidores); uma loja que recuse fica com o resumo do Google.
+Um link do Vivino colado procura-se no Google pelo nome QUE ESTÁ NO LINK, sem
+aspas, e só fica essa página (`vivinoPag`, 30/09/2026): com o nome da
+garrafeira entre aspas, um "do" por "de" ou um "Reserva" a mais e o Google
+não devolvia nada. Sem resultado, o erro é só "Não foi possível consultar a
+página facultada."
 Só http(s) e nomes públicos, redireções conferidas, 1,5 MB — aqui qualquer
 editor com IA pode escrever um endereço. A leitura é a MESMA da
 `catalogo-info` da WineCatalog (o `CLAUDE.md` de lá tem o resto) — mexer numa
