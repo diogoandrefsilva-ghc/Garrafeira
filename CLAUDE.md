@@ -105,6 +105,15 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
 - Não mexer à mão: `apple-touch-icon.png` (é gerado — ver "Ícones").
 
 ## Os cinco separadores (o ecrã inicial não é a lista)
+**Locais e Consumidos só aparecem quando fazem falta** (30/09/2026, o dono):
+Locais só com um local DESENHADO (`temLocaisDesenhados`), Consumidos só com
+garrafas bebidas (`sincronizarTabs`, no `renderLista`). Sem local desenhado
+também não se escolhe local nem lugar a uma garrafa (o "Mover" passa a
+"Editar", e os campos ficam escondidos com o valor que já tinham) nem há o
+filtro Local. O ⇄ do catálogo vive no canto direito do cabeçalho (o título
+continua a trocar). As Definições têm uma linha de texto por cartão, não um
+parágrafo.
+
 `Garrafeira` (resumo) · `Detalhe` · `Locais` · `Consumidos` · `Definições`
 — mais a **`Wishlist`** (antes do ⚙️), que só aparece depois da migração 15
 (ver "A wishlist é um vinho sem garrafas").

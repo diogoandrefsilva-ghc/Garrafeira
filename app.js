@@ -1163,7 +1163,7 @@ function vinhosUniverso(){return modoCat()?(CAT_VINHOS||[]):db.vinhos;}
 // O que a lista mostra sem filtro nenhum.
 function vinhosBase(){return modoCat()?(CAT_VINHOS||[]):db.vinhos.filter(v=>stockDe(v.id)>0);}
 // O "Local" não é pergunta que se faça ao catálogo.
-function camposVisiveis(){return modoCat()?F_CAMPOS.filter(([k])=>k!=='local'):F_CAMPOS;}
+function camposVisiveis(){return (modoCat()||!temLocaisDesenhados())?F_CAMPOS.filter(([k])=>k!=='local'):F_CAMPOS;}
 function catNormalizar(c){
   const v=Object.assign({},c);
   v.cat_id=c.id; v.id=-c.id;
@@ -1358,6 +1358,8 @@ function restaurarTab(){
   let t=null;try{t=localStorage.getItem('gf_tab');}catch(e){}
   if(!t||t==='garrafeira')return;
   if(t==='desejos'&&!TEM_DESEJO)return;   // a migração 15 ainda não correu
+  if(t==='locais'&&!temLocaisDesenhados())return;
+  if(t==='consumidos'&&!temConsumidos())return;
   const bts=document.querySelectorAll('.itabs .it');
   const i=ORDEM_TABS.indexOf(t);
   if(i>0&&bts[i])tab(t,bts[i]);
@@ -2726,7 +2728,22 @@ function renderDetalhe(){
 // mover…): atualiza os três sítios que mostram vinhos, sem se preocupar com
 // qual separador está aberto — o dataset é pequeno, refazer os três é mais
 // simples e mais seguro do que tentar adivinhar o que precisa de mudar.
+/* Os separadores que só aparecem quando fazem falta (30/09/2026, o dono):
+   Locais só com um local DESENHADO (sem desenho não há estante para ver,
+   e não se muda uma garrafa de local — `moverPermitido`); Consumidos só
+   com garrafas bebidas. Se o separador aberto desaparecer, volta-se ao
+   Resumo. */
+function temLocaisDesenhados(){return db.locais.some(temLayoutLocal);}
+function temConsumidos(){return db.garrafas.some(g=>g.estado==='consumida');}
+function sincronizarTabs(){
+  const semL=!temLocaisDesenhados(), semC=!temConsumidos();
+  document.body.classList.toggle('sem-locais',semL);
+  document.body.classList.toggle('sem-consumidos',semC);
+  if((semL&&tabAtiva==='locais')||(semC&&tabAtiva==='consumidos'))
+    tab('garrafeira',document.querySelector('.itabs .it'));
+}
 function renderLista(){
+  sincronizarTabs();
   renderResumo();
   renderFiltrados();
   if(tabAtiva==='desejos')renderDesejos();
@@ -4275,7 +4292,7 @@ function vinhoDetalheHTML(v){
             ${pos?`<span class="g-pos">${esc(pos)}</span>`:''}
             ${meta?`<i>${esc(meta)}</i>`:''}
           </div>
-          <button class="mini ro-hide" onclick="abrirGarrafa(${g.id})">Mover</button>
+          <button class="mini ro-hide" onclick="abrirGarrafa(${g.id})">${temLocaisDesenhados()?'Mover':'Editar'}</button>
           <button class="mini o ro-hide" onclick="abrirConsumir(${v.id},${g.id})">Consumir</button>
         </div>`;}).join('')
       : `<div class="note" style="padding:8px 0">Não há garrafas deste vinho na garrafeira${bebidas.length?' — já foram todas bebidas':''}.</div>`}
@@ -4926,11 +4943,11 @@ function abrirEditarVinho(id,modo){
     ${!comGarrafa?'':`
       <div class="msec">${conv&&garrafasDe(id,false).length?'Nova garrafa':'Primeira garrafa'}</div>
       <div class="mrow">
-        <div><label>Local</label><select id="e-local">${locOpts||'<option value="">(cria um local primeiro)</option>'}</select></div>
+        <div${temLocaisDesenhados()?'':' style="display:none"'}><label>Local</label><select id="e-local">${temLocaisDesenhados()?'':'<option value="" selected></option>'}${locOpts||'<option value="">(cria um local primeiro)</option>'}</select></div>
         <div><label>Quantas</label><input type="number" id="e-qtd" inputmode="numeric" value="1" min="1" max="60"></div>
       </div>
-      <div id="e-slotpick"></div>
-      <div class="mrow">
+      <div id="e-slotpick"${temLocaisDesenhados()?'':' style="display:none"'}></div>
+      <div class="mrow"${temLocaisDesenhados()?'':' style="display:none"'}>
         <div><label>Prateleira</label><input type="text" id="e-prat" placeholder="Nível 3" oninput="renderPickerPosicoes('e',0)"></div>
         <div><label>Lugar</label><input type="text" id="e-lugar" placeholder="12" oninput="renderPickerPosicoes('e',0)"></div>
       </div>
@@ -5371,18 +5388,21 @@ function abrirGarrafa(gid,vinhoId){
   const g=gid?db.garrafas.find(x=>x.id===gid):null;
   const vid=g?g.vinho_id:vinhoId;
   const v=IDXV[vid];if(!v)return;
+  // Sem nenhum local desenhado não se escolhe local nem lugar: os campos
+  // ficam escondidos (com o valor de agora, que se grava igual).
+  const comLocal=temLocaisDesenhados();
   const locOpts=db.locais.map(l=>
     `<option value="${l.id}"${g&&g.local_id===l.id?' selected':''}>${esc(l.nome)}</option>`).join('');
   document.getElementById('modal-garrafa-in').innerHTML=`
-    <div class="mtop"><div><h3>${gid?'Mover garrafa':'Acrescentar garrafa'}</h3>
+    <div class="mtop"><div><h3>${gid?(comLocal?'Mover garrafa':'Garrafa'):'Acrescentar garrafa'}</h3>
       <div class="note" style="margin-top:3px">${esc(v.nome)} ${v.ano||''}</div></div>
       <button class="mx" onclick="fecharModal('modal-garrafa')">✕</button></div>
     <div class="mrow">
-      <div><label>Local</label><select id="g-local">${locOpts||'<option value="">(cria um local primeiro)</option>'}</select></div>
+      <div${comLocal?'':' style="display:none"'}><label>Local</label><select id="g-local">${!comLocal&&(!g||g.local_id==null)?'<option value="" selected></option>':''}${locOpts||'<option value="">(cria um local primeiro)</option>'}</select></div>
       ${gid?'':'<div><label>Quantas</label><input type="number" id="g-qtd" value="1" min="1" max="60" inputmode="numeric"></div>'}
     </div>
-    <div id="g-slotpick"></div>
-    <div class="mrow">
+    <div id="g-slotpick"${comLocal?'':' style="display:none"'}></div>
+    <div class="mrow"${comLocal?'':' style="display:none"'}>
       <div id="g-pratbox"><label>Prateleira</label><input type="text" id="g-prat" value="${esc(g?g.prateleira:'')}" placeholder="Nível 3" oninput="renderPickerPosicoes('g',${gid||0})"></div>
       <div><label id="g-lugarlbl">Lugar</label><input type="text" id="g-lugar" value="${esc(g?g.lugar:'')}" placeholder="12" inputmode="numeric" oninput="renderPickerPosicoes('g',${gid||0})"></div>
     </div>
@@ -8067,17 +8087,15 @@ function sbLogout(){
 /* ── DEFINIÇÕES ────────────────────────────────────────────────────── */
 function renderCfg(){
   const el=document.getElementById('conta-email');
-  if(el)el.textContent=_sbSession?`Sessão iniciada como ${_sbSession.user.email}`:'';
+  if(el)el.textContent=_sbSession?_sbSession.user.email:'';
   const papel=document.getElementById('conta-papel');
   if(papel)papel.textContent=(isAdmin()
-    ?'És o admin da app — mandas em quem tem acesso e em quem pode ter garrafeira. '
-    :(souEditor()?'Podes acrescentar, mover e dar saída a garrafas na tua garrafeira. '
-                 :'Podes ver e procurar, mas não editar. '))
+    ?'Admin da app. '
+    :(souEditor()?'Editor da tua garrafeira. ':'Só podes ver. '))
     +(garrafeiraAtiva()&&!souDonoDaGarrafeira()
-      ?`Neste momento estás a ver a garrafeira de ${donoGarrafeira()} — aí só podes ver.`:'');
+      ?`A ver a garrafeira de ${donoGarrafeira()} (só leitura).`:'');
   const sobre=document.getElementById('sobre-box');
-  if(sobre)sobre.innerHTML=`${nomeGarrafeira()?'<b>'+esc(nomeGarrafeira())+'</b>: ':''}${db.vinhos.length} vinhos · ${db.garrafas.length} garrafas (${db.garrafas.filter(naGarrafeira).length} na garrafeira) · ${db.locais.length} locais. ${db.castas.length} castas (a lista das castas é comum a toda a gente).<br>
-    Dados e login no Supabase, schema <code>garrafeira</code>. Admin atual: <b>${esc(ADMIN_EMAIL)}</b>.`;
+  if(sobre)sobre.innerHTML=`${nomeGarrafeira()?'<b>'+esc(nomeGarrafeira())+'</b>: ':''}${db.vinhos.length} vinhos · ${db.garrafas.length} garrafas (${db.garrafas.filter(naGarrafeira).length} na garrafeira) · ${db.locais.length} locais. ${db.castas.length} castas.<br>Admin: <b>${esc(ADMIN_EMAIL)}</b>.`;
   renderCfgGarrafeira();
   renderCfgLocais();
   if(tabAtiva==='cfg')renderMeusComentarios();
@@ -8433,19 +8451,16 @@ function renderCfgGarrafeira(){
 
         ${isAdmin()?'':`
         <h4 style="margin-top:18px">Permissões ao admin</h4>
-        <div class="note">O admin da app trata de quem entra — nas tuas garrafas só entra se tu
-          deixares. Por defeito não vê nada. Isto vale para <b>quem for admin de cada vez</b>: se a
-          app passar a outra pessoa, volta sozinho a "Nenhuma" e tens de decidir outra vez.</div>
+        <div class="note">O que o admin da app pode fazer na tua garrafeira.</div>
         <select id="ga-admin" onchange="guardarAcessoAdmin(this.value)">
-          <option value="nenhuma"${g.admin_acesso==='nenhuma'?' selected':''}>Nenhuma — nem vê a garrafeira</option>
-          <option value="leitura"${g.admin_acesso==='leitura'?' selected':''}>Só leitura — vê, não mexe</option>
-          <option value="edicao"${g.admin_acesso==='edicao'?' selected':''}>Leitura e edição — vê e mexe</option>
+          <option value="nenhuma"${g.admin_acesso==='nenhuma'?' selected':''}>Nada</option>
+          <option value="leitura"${g.admin_acesso==='leitura'?' selected':''}>Ver</option>
+          <option value="edicao"${g.admin_acesso==='edicao'?' selected':''}>Ver e mexer</option>
         </select>
         <div class="note" id="ga-admin-status"></div>`}
 
-        <h4 style="margin-top:18px">Permissões de leitura a outros</h4>
-        <div class="note">Quem puseres aqui vê as tuas garrafas mas <b>não lhes mexe</b> — nem
-          acrescenta, nem consome, nem apaga. Tem de já ter acesso à app (é o admin que aprova isso).</div>
+        <h4 style="margin-top:18px">Quem pode ver</h4>
+        <div class="note">Veem as tuas garrafas, sem mexer.</div>
         <div id="cfg-partilhas"></div>
         <div class="linha-add">
           <input type="email" id="ga-partilhar" placeholder="email@exemplo.com">
@@ -8454,9 +8469,7 @@ function renderCfgGarrafeira(){
         <div class="note" id="ga-partilhar-status"></div>
 
         <h4 style="margin-top:18px">Passar a garrafeira</h4>
-        <div class="note">Passa estas garrafas para a conta de outra pessoa — as garrafas, os locais
-          e o histórico vão todos com ela. Deixas de as ver (a não ser que ela te dê acesso de volta).
-          É diferente de "passar a app": isso é quem manda em quem entra, isto é de quem são as garrafas.</div>
+        <div class="note">As garrafas, os locais e o histórico passam para a conta de outra pessoa.</div>
         <div class="linha-add">
           <input type="email" id="ga-passar" placeholder="email@exemplo.com">
           <button class="btn danger" onclick="passarGarrafeira()">Passar</button>
@@ -8464,8 +8477,7 @@ function renderCfgGarrafeira(){
         <div class="note" id="ga-passar-status"></div>
 
         <h4 style="margin-top:18px">Outra garrafeira</h4>
-        <div class="note">Uma segunda garrafeira tua — a da casa de férias, ou a que estás a guardar
-          para alguém. Trocas entre elas aqui em cima.</div>
+        <div class="note">Por exemplo, a da casa de férias.</div>
         <div class="linha-add">
           <input type="text" id="ga-nova" placeholder="Garrafeira da praia">
           <button class="btn ghost" onclick="criarGarrafeira()">+ Criar</button>
@@ -8684,7 +8696,7 @@ let _admUsers=[];
 const IA_PLANOS=[
   {v:'sem_ia',r:'sem IA'},
   {v:'gratis',r:'IA sem pesquisa web'},
-  {v:'premium',r:'IA com pesquisa web (Grounding Search)'}
+  {v:'premium',r:'IA com pesquisa web'}
 ];
 async function admRenderUtilizadores(){
   const box=document.getElementById('adm-users-list');
@@ -9395,7 +9407,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='135';
+const APP_BUILD='136';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

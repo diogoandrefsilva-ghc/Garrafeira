@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="135">
+<body data-build="136">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone.svg" alt="">
@@ -102,7 +102,7 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
         <div class="modo-sw" role="button" tabindex="0" onclick="modoAlternar()"
              onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();modoAlternar();}"
              title="Trocar entre a garrafeira e o catálogo">
-          <h1 id="hdr-titulo">Garrafeira</h1><span class="modo-ic" aria-hidden="true">⇄</span>
+          <h1 id="hdr-titulo">Garrafeira</h1>
         </div>
         <!-- De quem é a garrafeira que está aberta. Escrito por
              `aplicarCabecalho()` e escondido quando só há uma que é minha —
@@ -111,6 +111,10 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
         <p id="hdr-garrafeira" style="display:none"></p>
       </div>
     </div>
+    <!-- O ⇄ no canto direito (30/09/2026, o dono): o título continua a
+         trocar, mas o símbolo diz onde está o interruptor. -->
+    <button type="button" class="modo-ic" onclick="modoAlternar()"
+            title="Trocar entre a garrafeira e o catálogo" aria-label="Trocar entre a garrafeira e o catálogo">⇄</button>
   </div>
 </header>
 
@@ -118,8 +122,8 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
   <div class="itabs">
     <button class="it on" onclick="tab('garrafeira',this)"><span class="ic">🍷</span> Resumo</button>
     <button class="it" onclick="tab('detalhe',this)"><span class="ic">📋</span> Detalhe</button>
-    <button class="it so-gar" onclick="tab('locais',this)"><span class="ic">📍</span> Locais</button>
-    <button class="it so-gar" onclick="tab('consumidos',this)"><span class="ic">📖</span> Consumidos</button>
+    <button class="it so-gar it-locais" onclick="tab('locais',this)"><span class="ic">📍</span> Locais</button>
+    <button class="it so-gar it-consumidos" onclick="tab('consumidos',this)"><span class="ic">📖</span> Consumidos</button>
     <!-- A WISHLIST (migração 15): escondida enquanto a coluna não existir
          (`body.sem-desejo`, ver `detetarDesejo`). Fica ANTES do ⚙️ porque o
          `restaurarTab` casa a posição do botão com o `ORDEM_TABS`. -->
@@ -249,24 +253,21 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
          e é justamente aqui que está o caminho de volta à própria. -->
     <div class="fcard" id="fcard-garrafeiras">
       <h3>Garrafeiras</h3>
-      <div class="note">A tua garrafeira é só tua. Quem quiseres pode vê-la — mas só ver.
-        Só tu decides o que o admin da app lá pode fazer.</div>
       <div id="cfg-garrafeira"></div>
     </div>
 
     <div class="fcard ro-hide" id="fcard-locais">
       <h3>Locais da garrafeira</h3>
-      <div class="note">Onde as garrafas moram. Aqui ficam os sítios — e, se quiseres, o desenho das prateleiras e dos lugares.</div>
+      <div class="note">Desenha as prateleiras de um local para veres onde está cada garrafa — é aí que aparece o separador Locais.</div>
       <div id="cfg-locais"></div>
       <button class="btn ghost" onclick="novoLocal()">+ Novo local</button>
     </div>
 
     <div class="fcard admin-hide" id="fcard-utilizadores">
       <h3>Utilizadores</h3>
-      <div class="note">Pedidos de acesso à espera:</div>
+      <div class="note">Pedidos de acesso:</div>
       <div id="adm-pedidos-list"></div>
-      <div class="note" style="margin-top:14px">Com acesso — <b>Editor</b> é quem tem garrafeira própria e lhe pode mexer.
-        Sem a marca, a pessoa entra na app mas só vê o que lhe emprestarem. Ninguém mexe na garrafeira de outro:</div>
+      <div class="note" style="margin-top:14px">Com acesso (<b>Editor</b> = tem garrafeira própria):</div>
       <div id="adm-users-list"></div>
       <div class="linha-add">
         <input type="email" id="adm-user-novo" placeholder="email@exemplo.com">
@@ -275,7 +276,7 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 
       <div class="dono-hide">
         <h4 style="margin-top:18px">Password temporária</h4>
-        <div class="note">Este projeto Supabase não tem email próprio configurado. Em vez de depender do "esqueci-me da password", gera aqui uma password, dita-a à pessoa, e ela troca-a em Definições › Conta.</div>
+        <div class="note">Dá-a à pessoa, e ela troca-a em Conta.</div>
         <div class="linha-add">
           <select id="adm-pt-email"></select>
           <input type="text" id="adm-pt-pass" placeholder="mínimo 8 caracteres">
@@ -287,15 +288,14 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 
     <div class="fcard ro-hide" id="fcard-dados">
       <h3>Dados</h3>
-      <div class="note">Cópia de segurança do que está na app, em JSON, e a lista em PDF. Só download — a app lê sempre do Supabase.
-        (A importação por imagens mudou-se para o <b>+</b> flutuante, ao lado do "Novo vinho": é por onde entram vinhos, não por onde saem cópias.)</div>
+      <div class="note">Cópia em JSON e a lista em PDF.</div>
       <button class="btn ghost" onclick="exportarJSON()">⬇️ Exportar JSON</button>
       <button class="btn ghost" onclick="exportarPDF()">⬇️ Exportar PDF</button>
     </div>
 
     <div class="fcard admin-hide dono-hide" id="fcard-diag">
       <h3>Diagnóstico</h3>
-      <div class="note">Últimas procuras à IA (browser → Edge Function → Gemini), incluindo os tokens devolvidos pelo Gemini quando a chamada chega a responder. Do lado do browser vê-se sempre "502"; a causa está aqui.</div>
+      <div class="note">Últimas procuras à IA, com o erro de cada uma.</div>
       <button class="btn ghost" onclick="renderDiag()">🔄 Ver últimas</button>
       <div id="diag-box"></div>
     </div>
@@ -303,9 +303,8 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
     <!-- SEM `ro-hide`: quem só vê também tem ideias e dá com problemas. -->
     <div class="fcard" id="fcard-comentarios">
       <h3>Sugestões e comentários</h3>
-      <div class="note">Uma ideia para a app, ou alguma coisa que não funciona como devia? Escreve ao admin.
-        Um problema com <b>um vinho</b> (atributos errados, um site com a informação certa) diz-se na página
-        dele, em “Algo não está bem?”. As respostas — e as perguntas do admin — aparecem aqui.</div>
+      <div class="note">Uma ideia ou algo que não funciona? As respostas do admin aparecem aqui.
+        Um problema com um vinho diz-se na página dele.</div>
       <div id="cfg-com-admin"></div>
       <div id="cfg-push"></div>
       <button class="btn ghost" onclick="abrirSugestao()">💡 Enviar uma sugestão</button>
