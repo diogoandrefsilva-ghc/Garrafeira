@@ -29,9 +29,9 @@
 -- =====================================================================
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES ('garrafeira-imagens', 'garrafeira-imagens', true, 3145728,
+VALUES ('garrafeira-imagens', 'garrafeira-imagens', true, 6291456,
         ARRAY['image/jpeg','image/png','image/webp','image/gif','image/avif'])
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET file_size_limit = EXCLUDED.file_size_limit;
 
 -- O prefixo de um endereço que JÁ está no Supabase (este bucket, o
 -- `winecatalog-rotulos` da WineCatalog): esses não se copiam.

@@ -547,7 +547,7 @@ já em Definições › Diagnóstico (`imagens_resumo`). Publica a função ANTE
 correr o SQL, senão o cron chama uma função que não existe.
 
 A primeira corrida (30/09/2026): 307 links, 300 copiados (35 MB), 7 com o
-link morto (404), recusado (403) ou com mais de 3 MB — esses ficam com o
+link morto (404), recusado (403) — esses ficam com o
 link de origem.
 
 ## Regra de ouro

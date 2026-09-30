@@ -14,7 +14,7 @@
 //     chama outra vez enquanto houver `restantes`.
 //
 // O que se descarrega foi escrito por quem edita (a IA, ou à mão): só
-// http(s) e nomes públicos, redireções conferidas uma a uma, até 3 MB, e só
+// http(s) e nomes públicos, redireções conferidas uma a uma, até 6 MB, e só
 // o que os BYTES dizem ser uma imagem (JPEG/PNG/WebP/GIF/AVIF — nunca SVG,
 // que é código). A mesma prudência da `abrirPagina` da `vinho-info`.
 //
@@ -24,7 +24,7 @@ const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_SRV = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SB_ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const BUCKET = "garrafeira-imagens";
-const MAX_BYTES = 3 * 1024 * 1024;
+const MAX_BYTES = 6 * 1024 * 1024;
 const TIMEOUT_MS = 15_000;
 const EM_PARALELO = 4;
 // O admin espera pela resposta: pára a tempo e diz quantas faltam.

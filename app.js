@@ -2662,6 +2662,10 @@ function faixaIndice(valor){
    sem imagem o cartão fica com a garrafa desenhada em vez do rótulo. */
 const FALTAS=[
   {k:'Sem imagem do rótulo',tem:imagemFuncional},
+  // Só no catálogo: a imagem ainda é o link de uma loja, não a cópia no
+  // Supabase (migração 34). O cron copia-a sozinho; as que ficam aqui são as
+  // que falharam (link morto, loja que recusa) ou as que ainda não passou.
+  {k:'Imagem ainda por link (fora da BD)',tem:v=>!modoCat()||!!v.imagem_path||!v.imagem_url||imagemNaBD(v.imagem_url)},
   {k:'Sem castas',          tem:v=>(v.castas||[]).length>0},
   {k:'Sem preço',           tem:v=>precoVinho(v)!=null},
   {k:'Sem classificação',   tem:v=>!!v.classificacao},
@@ -2670,6 +2674,7 @@ const FALTAS=[
   // Sem colheita não há janela de consumo (ver `IA_JANELA`) — não é falta.
   {k:'Sem informação de intervalo de consumo',tem:v=>v.ano==null||v.beber_de!=null||v.beber_ate!=null}
 ];
+function imagemNaBD(url){return String(url||'').startsWith(SB_URL+'/storage/');}
 function faltasDe(v){return FALTAS.filter(f=>!f.tem(v)).map(f=>f.k);}
 
 function renderResumo(){
@@ -10726,7 +10731,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='148';
+const APP_BUILD='149';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

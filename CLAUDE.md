@@ -1372,7 +1372,7 @@ fotografia continua a ganhar.
   › 🖼️ (`renderImagens`). Três tentativas e desiste: o link fica como
   estava.
 - **Só o que os BYTES dizem ser imagem** (JPEG/PNG/WebP/GIF/AVIF, nunca
-  SVG), até 3 MB, com a prudência da `abrirPagina` da `vinho-info`: quem
+  SVG), até 6 MB, com a prudência da `abrirPagina` da `vinho-info`: quem
   escreve os links é qualquer editor.
 - **Público e não privado** porque são fotografias de lojas, iguais para
   toda a gente; as minhas continuam no `garrafeira-rotulos`, privado.
