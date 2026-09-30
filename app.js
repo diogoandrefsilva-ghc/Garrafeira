@@ -1197,15 +1197,30 @@ function catMeus(v){
   const ids=v.cat_ids||[];
   return db.vinhos.filter(x=>x.catalogo_id!=null&&ids.includes(Number(x.catalogo_id)));
 }
+// O que este vinho do catálogo é para mim: 'tenho' (garrafas na
+// garrafeira), 'desejo' (na wishlist), 'bebido' (já o tive) ou '' (nada).
+// Uma regra só para o crachá (`catTensHTML`) e para o fundo do cartão
+// (`catFundoCls`): duas cópias desta ordem divergiam.
+function catEstado(v){
+  const meus=catMeus(v);
+  const n=meus.reduce((s,m)=>s+stockDe(m.id),0);
+  return {meus,n,que:!meus.length?'':n?'tenho':meus.some(desejado)?'desejo':'bebido'};
+}
 // No rodapé do cartão: o que tenho deste vinho, se tiver.
 // E a média das notas de quem usa a Garrafeira (`catNotaBdgHTML`).
 function catTensHTML(v,curto){
-  const meus=catMeus(v);
-  if(!meus.length)return catNotaBdgHTML(v,curto);
-  const n=meus.reduce((s,m)=>s+stockDe(m.id),0);
-  const txt=n?(curto?`🍾 ${n}`:`🍾 Tens ${n} garrafa${n>1?'s':''}`)
-    :meus.some(desejado)?(curto?'⭐':'⭐ Na tua wishlist'):(curto?'📖':'📖 Já bebido');
+  const {n,que}=catEstado(v);
+  if(!que)return catNotaBdgHTML(v,curto);
+  const txt=que==='tenho'?(curto?`🍾 ${n}`:`🍾 Tens ${n} garrafa${n>1?'s':''}`)
+    :que==='desejo'?(curto?'⭐':'⭐ Na tua wishlist'):(curto?'📖':'📖 Já bebido');
   return `<span class="bdg cat-tens">${txt}</span>`+catNotaBdgHTML(v,curto);
+}
+// O fundo do cartão no catálogo (30/09/2026, o dono das apps): verde suave
+// no que tenho ou já tive (bebido), dourado suave no que está na wishlist.
+function catFundoCls(v){
+  if(!(v.id<0))return '';
+  const q=catEstado(v).que;
+  return q==='desejo'?' cat-desejo':q?' cat-tenho':'';
 }
 // Na página do vinho do catálogo, no lugar do "Onde está".
 function catNaMinhaHTML(v){
@@ -3479,7 +3494,7 @@ function vinhoCardHTML(v,termos,loteSel){
   // "s/a" lia-se como um dado em branco. Cala-se, e a nota do Vivino sobe
   // para o lugar dele. Um desejo COM ano (uma colheita em concreto) mostra-o.
   const semAno=!v.ano&&desejado(v);
-  return `<article class="vcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}" onclick="${clique}">
+  return `<article class="vcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${catFundoCls(v)}" onclick="${clique}">
     <div class="vc-top">
       ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
       <div class="vc-main">
@@ -3534,7 +3549,7 @@ function vinhoGrelhaHTML(v,termos,loteSel){
   const on=loteSel&&loteSelTem(v.id);
   const cheio=loteSel&&!on&&loteSelCheio();
   const clique=loteSel?`loteSelToggle(${v.id})`:`verVinho(${v.id})`;
-  return `<article class="vgcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}" onclick="${clique}">
+  return `<article class="vgcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${catFundoCls(v)}" onclick="${clique}">
     ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
     <div class="vg-nome">${esc(v.nome)}</div>
     <div class="vg-sub">${vinhoMetaHTML(v,desejado(v)&&!v.ano?'':(v.ano||'s/a'))}</div>
@@ -10295,7 +10310,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='137';
+const APP_BUILD='138';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

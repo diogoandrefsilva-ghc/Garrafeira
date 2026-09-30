@@ -1951,6 +1951,17 @@ body.cat .itabs .so-gar{display:none!important}
 body.sem-locais .itabs .it-locais,body.sem-consumidos .itabs .it-consumidos{display:none!important}
 body.cat .it.on{background:#1d4a3b;box-shadow:0 4px 12px -4px rgba(29,74,59,.8)}
 .bdg.cat-tens{background:#eaf3ee;color:#1d4a3b;border-color:#cfe3d7;font-weight:600}
+/* O fundo de um vinho do catálogo diz o que ele é para mim (`catFundoCls`,
+   30/09/2026, o dono das apps): verde suave no que tenho ou já tive, e
+   dourado suave no que está na wishlist. O dourado aqui é pedido dele e
+   fica no FUNDO, em tom de papel: a distinção do vinho (menção, Vivino)
+   continua a ser o dourado cheio dos crachás. Vêm depois do `:hover` de
+   propósito: passar por cima não lhes tira a cor. */
+.vcard.cat-tenho,.vgcard.cat-tenho{background:#eef6f1;border-color:#cfe3d7}
+.vcard.cat-desejo,.vgcard.cat-desejo{background:#fbf2dc;border-color:#ead7a4}
+.vcard.cat-tenho:hover,.vgcard.cat-tenho:hover{border-color:#b5d3c1}
+.vcard.cat-desejo:hover,.vgcard.cat-desejo:hover{border-color:#dcc27e}
+.cat-tenho .bdg.cat-tens,.cat-desejo .bdg.cat-tens{background:#fff}
 /* A média das notas de quem usa a Garrafeira (migração 33): em papel, não
    em dourado — o dourado é a nota do Vivino, e isto é a opinião da casa. */
 .bdg.cat-nota{background:var(--bg2);color:var(--tx);border-color:var(--bo2);font-weight:600}
