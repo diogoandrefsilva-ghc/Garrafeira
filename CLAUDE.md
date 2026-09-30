@@ -107,6 +107,11 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   (800×800 em WebP, pelas transformações de imagem do Supabase).
   `migracao-imagem-catalogo.sql` é a 36: os curadores trocam a imagem de
   um vinho do catálogo pela app (a pasta `cat/` do bucket público).
+  `migracao-regioes-sinonimos.sql` é a 37: "Alentejano", "Évora",
+  "Evoramonte", "Terras do Sado" deixam de ser regiões — passam a
+  "Alentejo"/"Setúbal", e a sub-região que traziam vai para a `sub_regiao`
+  (a regra é a `winecatalog.normalizar_regiao`, `db/regioes.sql` da
+  WineCatalog; o trigger é o da 21).
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").

@@ -23,13 +23,26 @@
 -- mesma razão do `vinhos_nomes`: é arrumação, nunca pode impedir ninguém de
 -- guardar um vinho.
 --
--- Idempotente. Precisa do `db/catalogo.sql` do WineCatalog.
+-- Idempotente. Precisa do `db/catalogo.sql` do WineCatalog (e, para a
+-- sub-região, do `db/regioes.sql` de lá — 30/09/2026, ver a migração 37).
 -- ---------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION garrafeira.vinhos_normalizar_regiao()
   RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
   SET search_path TO 'garrafeira', 'winecatalog', 'public'
 AS $$
 BEGIN
+  -- "Évora", "Redondo", "Evoramonte" escritos como região passam a
+  -- "Alentejo" (a regra) — e a sub-região que traziam não se perde: vai para
+  -- a `sub_regiao` quando essa está vazia. Antes de normalizar, que depois
+  -- já só se lê "Alentejo". A `subregiao_de` é do `db/regioes.sql` do
+  -- WineCatalog (30/09/2026); sem ela, segue-se só com a região.
+  BEGIN
+    IF COALESCE(btrim(NEW.sub_regiao), '') = '' THEN
+      NEW.sub_regiao := COALESCE(winecatalog.subregiao_de(NEW.regiao), NEW.sub_regiao, '');
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
   BEGIN
     NEW.regiao := COALESCE(winecatalog.normalizar_regiao(NEW.regiao), '');
   EXCEPTION WHEN OTHERS THEN

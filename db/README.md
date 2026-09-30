@@ -568,6 +568,20 @@ curadores e o admin do catálogo (`winecatalog.sou_curador()`/`sou_admin()`)
 podem ENVIAR para `garrafeira-imagens/cat/` — e só isso. A app grava depois
 o link na linha pela `winecatalog.editar`.
 
+### Migração 37 — as regiões escritas com um sinónimo (já aplicada)
+
+`db/migracao-regioes-sinonimos.sql`, depois do `db/regioes.sql` do
+WineCatalog (a regra). "Alentejano" (o Vinho Regional), "Évora" (uma
+sub-região), "Evoramonte" (uma terra), "Terras do Sado", "DOC Douro"
+estavam gravados como região e eram facetas à parte nos filtros. A
+`winecatalog.normalizar_regiao` passa-os à região a sério, e o trigger
+`vinhos_normalizar_regiao` (`migracao-regiao.sql`, atualizado) guarda a
+sub-região que traziam (`winecatalog.subregiao_de`) quando a `sub_regiao`
+está vazia. A migração corrige o que já estava escrito (com a marca
+`garrafeira.do_catalogo`: não volta ao catálogo nem carimba
+`atualizado_em`), e os dois "Beiras" com a sub-região escrita (Silgueiros →
+Dão; Bairrada). Aplicada a 30/09/2026: 14 vinhos.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -612,7 +626,11 @@ Numa base de dados limpa:
 8. **`migracao-nomes.sql`** — os nomes sem CAPS LOCK (migração 20). Só
    depois do `db/nomes.sql` do WineCatalog (usa a `winecatalog.nome_proprio`).
 9. **`migracao-regiao.sql`** — a região normalizada pela
-   `winecatalog.normalizar_regiao` (migração 21).
+   `winecatalog.normalizar_regiao` (migração 21); desde 30/09/2026 enche
+   também a sub-região, com a `winecatalog.subregiao_de` do `db/regioes.sql`
+   do WineCatalog.
+10. **`migracao-regioes-sinonimos.sql`** — os sinónimos de região já
+   gravados (migração 37). Só depois do `db/regioes.sql` do WineCatalog.
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)
