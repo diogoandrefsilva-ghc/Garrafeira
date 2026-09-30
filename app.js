@@ -7153,7 +7153,9 @@ function iaPreencherForm(res,substituir){
    `PQ_FORCA`, quando há duas).
 
    Fechar a janela a meio não perde nada: `PQ` fica, e o mesmo botão
-   retoma — com a pesquisa ainda a correr, ou já acabada e por rever.
+   retoma — com a pesquisa ainda a correr, ou já acabada e por rever. Por
+   isso o resultado tem de ter a sua saída para trás: "‹ Pesquisar de outra
+   forma" (`pqOutraPesquisa`) deita fora o que a IA trouxe e volta à escolha.
 
    A atualização massiva (lote) continua com o seu ecrã
    (`iaMostrarResultado`/`iaAplicar`): é outra pergunta, vinho a vinho. */
@@ -7535,6 +7537,25 @@ function pqTipoVoltar(){
   if(P.et.ia&&P.et.ia.estado==='erro')delete P.et.ia;
   pqPintar();
 }
+/* Não se gostou do que a pesquisa trouxe (30/09/2026, o dono das apps:
+   "quis voltar atrás para fazer outro tipo de pesquisa, e fico encalhado na
+   pesquisa anterior"). Depois do resultado não havia caminho de volta, e
+   como fechar a janela não perde nada, reabri-la mostrava o mesmo. Isto
+   deita fora o que a IA trouxe — as propostas, o que se marcou nelas, os
+   campos que vieram iguais — e volta a "Como queres procurar?". O que o
+   Catálogo propôs fica: foi a 1.ª etapa, não esta. */
+function pqOutraPesquisa(){
+  const P=PQ;if(!P||P.corre)return;
+  Object.keys(P.hist).forEach(k=>{
+    if(!('ia' in P.hist[k]))return;
+    delete P.hist[k].ia;delete P.esc[k];
+    if(!Object.keys(P.hist[k]).length)delete P.hist[k];
+  });
+  if(P.antesIA){P.iguais=new Set(P.antesIA.iguais);P.ultima=P.antesIA.ultima;}
+  delete P.res.ia;delete P.et.ia;
+  P.fase='ia';P.tipo=null;P.linksVer=false;
+  pqPintar();
+}
 
 /* ── Etapa 2: a IA — uma procura só ── */
 async function pqIA(repetir){
@@ -7573,7 +7594,9 @@ async function pqIA(repetir){
       P.id.tipo=cor;
       // Cada procura custa dinheiro, e a ficha de um vinho não muda de uma
       // semana para a outra: se foi há pouco, pergunta-se (`iaUltimaProcura`).
-      const ult=await iaUltimaProcura(P.vid);
+      // Não depois de "Pesquisar de outra forma": a última foi a que se acabou
+      // de deitar fora, e voltar atrás já foi a decisão.
+      const ult=P.jaPesquisou?null:await iaUltimaProcura(P.vid);
       if(PQ!==P)return;
       if(ult){P.repetir=ult;pqPintar();return;}
     }
@@ -7606,6 +7629,8 @@ async function pqIA(repetir){
     const res=await iaPedir(pedido,P.cat?null:P.vid,motorDoPlano());
     if(PQ!==P)return;
     P.res.ia=res;
+    // O que havia antes desta resposta, para a poder deitar fora (`pqOutraPesquisa`).
+    P.antesIA={iguais:[...P.iguais],ultima:P.ultima};P.jaPesquisou=true;
     const n=pqJuntar(P,'ia',res);
     P.et.ia={estado:'feito',n:n.novos,dif:n.dif,outro:n.outro,memoria:res.pesquisaWeb===false,
       sites:Array.isArray(res.sites)?res.sites:[],confianca:res.confianca||null,
@@ -8105,6 +8130,7 @@ function pqPintar(){
     ${P._fecharPosto?'':`<div class="macoes pq-fim">
       ${podeGuardar?`<button class="btn prim" id="pq-guardar" onclick="${revNovo?'pqPassarForm()':'pqGuardar()'}"></button>`:''}
       ${linhas?'<button class="btn ghost" onclick="pqMarcarTudo()">Marcar tudo</button>':''}
+      ${P.fase==='fim'&&!P.corre&&podeUsarIA()?'<button class="btn ghost" onclick="pqOutraPesquisa()">‹ Pesquisar de outra forma</button>':''}
       <button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button>
     </div>`}
     ${pqRodapeHTML(P)}`;
@@ -10624,7 +10650,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='144';
+const APP_BUILD='145';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

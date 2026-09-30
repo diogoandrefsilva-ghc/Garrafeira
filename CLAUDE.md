@@ -2007,6 +2007,15 @@ de botões que apareciam e desapareciam. Agora:
   ficaram como estavam.
 - O ano e a cor nunca se propõem (`pqChaves`). Fechar a meio não perde nada:
   `PQ` fica, e o mesmo botão retoma.
+- **E por isso o resultado tem saída para trás**: **‹ Pesquisar de outra
+  forma** (`pqOutraPesquisa`, 30/09/2026, o dono: "quis voltar atrás para
+  fazer outro tipo de pesquisa, e fico encalhado na pesquisa anterior").
+  Sem ele, o único caminho depois da IA era Guardar ou Fechar — e reabrir
+  retomava o mesmo resultado. Deita fora o que a IA trouxe (as propostas, o
+  que se marcou nelas, os campos que vieram iguais — `P.antesIA`) e volta a
+  "Como queres procurar?"; o que o Catálogo propôs fica. A pesquisa a seguir
+  não pergunta "pesquisaste há pouco" (`P.jaPesquisou`): a última é a que se
+  acabou de deitar fora.
 A **atualização massiva** continua com o ecrã dela (`iaMostrarResultado`/
 `iaAplicar`, onde vivem ainda a segunda opinião e os rádios descritos mais
 abaixo) — é outra pergunta, vinho a vinho em fila.
