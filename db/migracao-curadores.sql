@@ -187,6 +187,48 @@ REVOKE ALL ON FUNCTION garrafeira.curador_levar(bigint, jsonb, boolean) FROM PUB
 GRANT EXECUTE ON FUNCTION garrafeira.curador_levar(bigint, jsonb, boolean) TO authenticated;
 
 -- ---------------------------------------------------------------------
+-- O VINHO NOVO de um curador (30/09/2026, o dono das apps: "ao criar um
+-- vinho novo, escolho obter da pesquisa valores que já vêm do catálogo e
+-- substituo esses valores. se for um curador, devia atualizar no catálogo").
+-- A gravar um vinho novo não há "antes" — o trigger só enche o que o
+-- catálogo tem vazio. Mas quando o "Procurar informação" mostrou a linha do
+-- catálogo e a pessoa escolheu outro valor (o da IA, ou escrito à mão),
+-- isso é uma correção. A app manda `p_base`: os valores que o catálogo lhe
+-- MOSTROU; vai só o que a gravação tem diferente deles (e não vazio). Um
+-- campo que o catálogo não mostrou não vai — pode ser de outra pesquisa.
+-- A linha tem de ser a ligada, da mesma colheita e cor (`curador_levar`).
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION garrafeira.curador_levar_novo(p_vinho_id bigint, p_base jsonb)
+  RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
+  SET search_path TO 'garrafeira', 'winecatalog', 'public'
+AS $$
+DECLARE
+  f    jsonb := garrafeira.ficha_catalogo(p_vinho_id);
+  dif  jsonb := '{}'::jsonb;
+  k    text;
+  x    jsonb;
+BEGIN
+  IF NOT COALESCE(winecatalog.sou_curador(), false) THEN
+    RETURN jsonb_build_object('ok', false, 'motivo', 'nao_curador');
+  END IF;
+  IF f IS NULL OR p_base IS NULL OR jsonb_typeof(p_base) <> 'object' THEN
+    RETURN jsonb_build_object('ok', false, 'motivo', 'nada');
+  END IF;
+  FOR k, x IN SELECT key, value FROM jsonb_each(p_base) LOOP
+    CONTINUE WHEN k IN ('tipo', 'ano', 'nome', 'produtor') OR NOT (f ? k);
+    CONTINUE WHEN winecatalog.igual(x, f -> k);
+    dif := dif || jsonb_build_object(k, f -> k);
+  END LOOP;
+  IF dif = '{}'::jsonb THEN
+    RETURN jsonb_build_object('ok', false, 'motivo', 'nada');
+  END IF;
+  RETURN garrafeira.curador_levar(p_vinho_id, dif);
+END;
+$$;
+REVOKE ALL ON FUNCTION garrafeira.curador_levar_novo(bigint, jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION garrafeira.curador_levar_novo(bigint, jsonb) TO authenticated;
+
+-- ---------------------------------------------------------------------
 -- O que aconteceu às correções deste vinho no último minuto — é o que a
 -- app mostra a um curador a seguir a gravar. Só as minhas.
 -- ---------------------------------------------------------------------

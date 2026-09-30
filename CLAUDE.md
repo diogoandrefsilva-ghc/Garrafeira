@@ -1014,6 +1014,14 @@ correção deverá atualizar também o vinho no catálogo".
   a linha passar a ser a mesma que outra, fica registado e segue-se como antes.
   Cada ida fica no `sync_log` (acao `curador_catalogo`), e a app di-lo num
   aviso a seguir ao "Guardado" (`curadorAviso` → `curador_resultado`).
+- **O vinho NOVO também** (30/09/2026, o dono: "escolho obter da pesquisa
+  valores que já vêm do catálogo e substituo esses valores… devia atualizar
+  no catálogo"). A gravar não há "antes", e a `juntar` só enche o vazio; mas
+  o "Procurar informação" MOSTROU a linha do catálogo (`_catBaseNovo`, os
+  valores que o `pqCatalogoUsar` trouxe), e o que o curador gravou diferente
+  disso — o valor da IA, ou escrito à mão — é uma correção:
+  `curadorNovo` → `garrafeira.curador_levar_novo(vinho, base)` → a mesma
+  `curador_levar`. Um campo que o catálogo não mostrou não vai.
   Quem não é curador continua a alimentar o catálogo como sempre.
 
 ## O detalhe do vinho é uma PÁGINA, não um modal

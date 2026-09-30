@@ -1301,6 +1301,14 @@ async function curadorAviso(vid){
   if(n.size)partes.push(n.size===1?'1 campo':n.size+' campos');
   if(partes.length){toast('Corrigido também no catálogo: '+partes.join(' e ')+' ✓');CAT_VINHOS=null;}
 }
+/* Um curador grava um vinho NOVO depois de ver a linha do catálogo no
+   "Procurar informação": o que escolheu diferente do que o catálogo lhe
+   mostrou (o valor da IA, ou escrito à mão) é uma correção e vai à linha
+   ligada. O resto é o de sempre — a `juntar` só enche o que está vazio. */
+async function curadorNovo(vid,base){
+  try{await sbRpc('curador_levar_novo',{p_vinho_id:vid,p_base:base});}catch(e){return;}
+  curadorAviso(vid);
+}
 async function modoAlternar(){
   if(!modoCat()){
     if(!CAT_VINHOS){
@@ -3386,6 +3394,7 @@ function renderConsumidos(){
 // mostrar (resumo, notas de prova, link do Vivino). Vive só entre a procura
 // e o gravar do MESMO formulário.
 let _iaExtraNovo=null;
+let _catBaseNovo=null;   // os valores que o catálogo mostrou no vinho novo (curadores)
 let VINHO_ABERTO=null;
 function verVinho(id){
   const v=IDXV[id];
@@ -4779,6 +4788,7 @@ function abrirEditarVinho(id,modo){
   const comGarrafa=((!id&&!paraDesejo)||conv)&&!noCat;
   const titulo=noCat?'Novo vinho no catálogo':conv?'Passar para a garrafeira':id?'Editar vinho':paraDesejo?'Novo vinho na wishlist':'Novo vinho';
   const rotulo=noCat?'Criar no catálogo':conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
+  _catBaseNovo=null;
   _iaExtraNovo=null;   // o que a procura trouxe é de UM formulário, não fica de um para o outro
   const o=(k,d)=>v?(v[k]==null?'':v[k]):(d==null?'':d);
   const opts=(arr,sel)=>arr.map(x=>`<option value="${esc(x)}"${String(sel)===String(x)?' selected':''}>${esc(x||'—')}</option>`).join('');
@@ -5049,6 +5059,8 @@ async function guardarVinho(id,modo){
     if(tabAtiva==='locais')renderMapa();
     toast(conv?'Na garrafeira ✓':id?'Guardado ✓':paraDesejo?'Na wishlist ⭐':'Vinho adicionado ✓');
     if(id&&EU.curador)curadorAviso(vinhoId);
+    else if(!id&&EU.curador&&_catBaseNovo)curadorNovo(vinhoId,_catBaseNovo);
+    _catBaseNovo=null;
     // Quem comprou um vinho da wishlist e o pôs pelo "Novo vinho" (em vez
     // de o passar a partir da wishlist) fica com o desejo lá esquecido.
     if(!id&&!paraDesejo)await oferecerRetirarDesejos([IDXV[vinhoId]]);
@@ -6316,6 +6328,9 @@ async function pqCatalogoUsar(c){
   // Com ano e outra colheita no catálogo, só servem os factos estáveis.
   const outraColheita=P.id.ano!=null&&r.ano!==P.id.ano;
   if(outraColheita)CAT_DA_COLHEITA.forEach(k=>delete val[k]);
+  // No vinho novo, o que o catálogo MOSTROU: se um curador gravar outro
+  // valor num destes campos, é uma correção e vai à linha (`curadorNovo`).
+  if(P.novo)_catBaseNovo=Object.assign({},val);
   // Os preços das LOJAS não são um campo: a app lê-os do catálogo sempre que
   // carrega (`precos_lojas`). No vinho novo diz-se que existem.
   const lojas=Object.entries(val.precos&&typeof val.precos==='object'?val.precos:{})
