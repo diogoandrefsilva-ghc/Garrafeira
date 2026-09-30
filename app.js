@@ -2662,6 +2662,10 @@ function faixaIndice(valor){
    sem imagem o cartão fica com a garrafa desenhada em vez do rótulo. */
 const FALTAS=[
   {k:'Sem imagem do rótulo',tem:imagemFuncional},
+  // Só no catálogo: a imagem ainda é o link de uma loja, não a cópia no
+  // Supabase (migração 34). O cron copia-a sozinho; as que ficam aqui são as
+  // que falharam (link morto, loja que recusa) ou as que ainda não passou.
+  {k:'Imagem ainda por link (fora da BD)',tem:v=>!modoCat()||!!v.imagem_path||!v.imagem_url||imagemNaBD(v.imagem_url)},
   {k:'Sem castas',          tem:v=>(v.castas||[]).length>0},
   {k:'Sem preço',           tem:v=>precoVinho(v)!=null},
   {k:'Sem classificação',   tem:v=>!!v.classificacao},
@@ -2670,6 +2674,7 @@ const FALTAS=[
   // Sem colheita não há janela de consumo (ver `IA_JANELA`) — não é falta.
   {k:'Sem informação de intervalo de consumo',tem:v=>v.ano==null||v.beber_de!=null||v.beber_ate!=null}
 ];
+function imagemNaBD(url){return String(url||'').startsWith(SB_URL+'/storage/');}
 function faltasDe(v){return FALTAS.filter(f=>!f.tem(v)).map(f=>f.k);}
 
 function renderResumo(){
@@ -10680,6 +10685,40 @@ async function renderDiag(){
   }
 }
 
+/* As imagens das lojas copiadas para o Supabase (migração 34,
+   `garrafeira-imagens`). O cron copia de hora a hora sozinho; isto é para
+   ver como vai e para copiar já — a função pára ao fim de ~40s, e este botão
+   chama-a outra vez enquanto houver progresso. */
+async function renderImagens(){
+  const box=document.getElementById('img-box');
+  box.innerHTML='<div class="note">A ler…</div>';
+  let r;
+  try{r=await sbRpc('imagens_resumo',{});}
+  catch(e){box.innerHTML=`<div class="note">${/does not exist|404/i.test(e.message)
+    ?'Falta correr a migração 34 (db/migracao-imagens.sql).':esc(e.message)}</div>`;return;}
+  box.innerHTML=`<div class="diag-l"><b>Imagens no Supabase</b>
+    <div class="note">copiadas <b>${r.copiadas}</b> (${esc(String(r.mb))} MB) · por reduzir <b>${r.por_reduzir||0}</b> · à espera <b>${r.pendentes}</b> · falhadas <b>${r.falhadas}</b></div>
+    ${r.pendentes||r.por_reduzir?'<button class="btn ghost" onclick="imagensCopiar()">⬇️ Copiar agora</button>':''}
+    ${(r.erros||[]).map(x=>`<div class="note">✕ ${escLink(x.url)} · ${esc(x.erro||'')}</div>`).join('')}</div>`;
+}
+async function imagensCopiar(){
+  const box=document.getElementById('img-box');
+  let tot=0;
+  for(let volta=0;volta<30;volta++){
+    box.innerHTML=`<div class="note">A copiar… ${tot} até agora.</div>`;
+    let d={};
+    try{
+      const r=await sbFetch(`${SB_URL}/functions/v1/garrafeira-imagens`,{method:'POST',
+        headers:{'Content-Type':'application/json','apikey':SB_KEY},body:'{}'});
+      try{d=await r.json();}catch(_){}
+      if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    }catch(e){toast('Cópia das imagens: '+e.message);break;}
+    tot+=d.copiadas||0;
+    if(!d.restantes||!(d.copiadas||d.falhadas||d.reduzidas))break;
+  }
+  await renderImagens();
+}
+
 /* ── INIT ──────────────────────────────────────────────────────────── */
 
 /* O HTML E O JS TÊM DE SER DA MESMA VERSÃO — e quando não são, não pode ser
@@ -10698,7 +10737,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='148';
+const APP_BUILD='151';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

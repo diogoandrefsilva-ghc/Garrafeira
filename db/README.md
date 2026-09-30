@@ -533,6 +533,34 @@ Sugestões do Catálogo — ver `db/functions.sql` de lá. Corre a nova
 `is_allowed()` e volta a publicar as duas Edge Functions (`sugerir-vinho`,
 `verificar-vinhos`), que passam a perguntar-lhe.
 
+### Migração 34 — as imagens das lojas passam a viver no Supabase
+
+`db/migracao-imagens.sql`. Um bucket PÚBLICO, `garrafeira-imagens` (só a
+service_role escreve), e `garrafeira.imagens_copia`: um link de origem por
+linha, com a cópia, o estado e o erro. A Edge Function
+`garrafeira-imagens` (deploy: `supabase functions deploy garrafeira-imagens`,
+verify_jwt ligado) descarrega cada link e a `imagem_resultado` troca-o pelo
+da cópia no catálogo e em todas as garrafeiras (`imagem_trocar`, sem voltar
+ao catálogo nem carimbar `atualizado_em`). O cron `garrafeira-imagens`
+(minuto 17 de cada hora) apanha os links novos; o admin vê o estado e copia
+já em Definições › Diagnóstico (`imagens_resumo`). Publica a função ANTES de
+correr o SQL, senão o cron chama uma função que não existe.
+
+A primeira corrida (30/09/2026): 307 links, 300 copiados (35 MB), 7 com o
+link morto (404), recusado (403) — esses ficam com o
+link de origem.
+
+### Migração 35 — as imagens copiadas ficam pequenas
+
+`db/migracao-imagens-reduzir.sql`. `imagens_copia.reduzida`, e a
+`garrafeira-imagens` passa cada imagem pelas transformações de imagem do
+Supabase (no máximo 800×800, WebP a 80), guarda o resultado e apaga a
+original; as já copiadas reduzem-se na volta seguinte
+(`imagens_por_reduzir` → `imagem_reduzida`, que troca o link velho do
+Supabase pelo novo em todo o lado). A `imagem_resultado` ganha
+`p_reduzida` (outra assinatura: a velha sai). Publica a função depois do
+SQL.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as

@@ -32,6 +32,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
 - `sw.js` — service worker (cache PWA).
 - `vinho-info.ts` — a Edge Function que procura a ficha do vinho na net
   (deploy à parte: `supabase functions deploy vinho-info`).
+- `garrafeira-imagens.ts` — a Edge Function que copia as imagens das lojas
+  para o bucket `garrafeira-imagens` (migração 34). Deploy:
+  `supabase functions deploy garrafeira-imagens`.
 - `garrafeira-push.ts` — a Edge Function das notificações push (a chave
   pública VAPID para a app, e o envio da caixa de saída `push_avisos`; ver
   "Comentários e sugestões"). Deploy: `supabase functions deploy garrafeira-push`.
@@ -97,6 +100,11 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-notas-catalogo.sql` é a 33: as notas (0 a 5) de quem usa a
   Garrafeira aos vinhos do catálogo (ver "O Catálogo dentro da app" ›
   "As notas da casa").
+  `migracao-imagens.sql` é a 34: as imagens das lojas copiadas para o
+  Supabase (ver "A imagem de cada vinho" › "As imagens das lojas vivem no
+  Supabase").
+  `migracao-imagens-reduzir.sql` é a 35: essas imagens ficam pequenas
+  (800×800 em WebP, pelas transformações de imagem do Supabase).
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1349,6 +1357,35 @@ garrafas altas na grelha 3:4 (ficava o ombro e meio rótulo — parecia imagem
 mal carregada); `contain` para todas encolhia as quadradas na lista, cuja
 moldura é alta e estreita (a garrafa, um terço da foto, ficava um risco no
 meio do papel).
+
+### As imagens das lojas vivem no Supabase (migração 34, 30/09/2026)
+O dono: "tendo link fico sempre refém dos sites mudarem o link". Um link
+morto não se via — o `onerror` troca-o pela garrafa desenhada, calado. Agora
+a Edge Function `garrafeira-imagens` descarrega cada `imagem_url` de fora
+para o bucket PÚBLICO `garrafeira-imagens` e a BD troca o link pelo da cópia
+no catálogo e em TODAS as garrafeiras que tinham o mesmo (`imagem_trocar`).
+A app não sabe de nada disto: continua a ler `imagem_url`, e a minha
+fotografia continua a ganhar.
+- **O link de origem fica** em `garrafeira.imagens_copia` (uma linha por
+  link, não por vinho), com o estado e o erro. Um link já copiado que volte
+  a aparecer (a IA voltou a propô-lo) troca-se sem descarregar outra vez.
+- **O cron de hora a hora** (`garrafeira-imagens`, minuto 17) apanha os
+  links novos; o admin vê como vai e copia já em Definições › Diagnóstico
+  › 🖼️ (`renderImagens`). Três tentativas e desiste: o link fica como
+  estava.
+- **Só o que os BYTES dizem ser imagem** (JPEG/PNG/WebP/GIF/AVIF, nunca
+  SVG), até 6 MB, com a prudência da `abrirPagina` da `vinho-info`: quem
+  escreve os links é qualquer editor.
+- **E ficam PEQUENAS** (migração 35, o dono: "uma imagem de 3 MBs para um
+  vinho não faz sentido"): cada cópia passa pelas transformações de imagem
+  do Supabase (`/storage/v1/render/image`, ligadas neste projeto) — no
+  máximo 800×800, WebP a 80 — e guarda-se o RESULTADO, apagando a original
+  (`reduzir` na função). A PNG de 3,3 MB ficou em 17 KB; as 302 do primeiro
+  lote passaram de 39 MB para uns poucos. Transforma-se UMA vez por imagem,
+  não a cada visita: o Supabase cobra por imagem de origem diferente por
+  mês. Se a transformação falhar, fica a original.
+- **Público e não privado** porque são fotografias de lojas, iguais para
+  toda a gente; as minhas continuam no `garrafeira-rotulos`, privado.
 
 O bucket é **privado** (as fotos são tiradas em casa e apanham a prateleira
 à volta), por isso um `<img src>` não lhe chega com o JWT. A saída são links
