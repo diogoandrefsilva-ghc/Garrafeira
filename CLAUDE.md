@@ -998,8 +998,20 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
   continua a ser a distinção. A
   página troca o "Onde está" por **"Na tua garrafeira"** com **Pôr na
   garrafeira / Pôr na wishlist** (`catPor`: o formulário do vinho novo de
-  sempre, já preenchido e aberto por inteiro). Sai o Editar, o Procurar, as
-  minhas notas, o comentário e o Apagar; a capa é verde (`.mhero-cat`).
+  sempre, já preenchido e aberto por inteiro). Sai o Editar, as minhas
+  notas, o comentário e o Apagar; a capa é verde (`.mhero-cat`).
+- **O "Procurar informação" num vinho do catálogo** (30/09/2026, o dono:
+  "quando entro no detalhe de um vinho, não tenho opção de procurar
+  informação") — só aos curadores e ao admin do catálogo (`catPodeCriar`), e
+  com IA. É o MESMO ecrã (`catAbrirProcura`), sem a etapa do Catálogo (é a
+  linha: "✓ é este") nem a da cor, sem o aviso da última procura e sem
+  `vinhoId` na `vinho-info` (o id é do catálogo, não de uma garrafeira). O
+  que se marcar corrige a LINHA pela `winecatalog.editar` (`pqGuardarCat`,
+  origem `catalogo-curador`/`catalogo-admin`); o produtor vai à parte, com o
+  interruptor da identidade — se a linha passar a ser outra, a `editar`
+  recusa e o resto fica. Como em qualquer procura da Garrafeira, a
+  `vinho-info` já enche sozinha, com força 2, os campos vazios de um nome que
+  o catálogo conhece: o Guardar é o que decide por cima.
 - **O "+" só onde se acrescenta** (`fabSincronizar`): o Detalhe da
   garrafeira e a Wishlist (aí vai direto a "Adicionar à wishlist"). Nem no
   Resumo (o separador "Garrafeira" passou a chamar-se **Resumo**), nem em
