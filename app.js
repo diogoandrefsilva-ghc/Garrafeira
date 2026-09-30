@@ -7637,7 +7637,11 @@ async function pqIA(repetir){
     P.res.ia=res;
     // O que havia antes desta resposta, para a poder deitar fora (`pqOutraPesquisa`).
     P.antesIA={iguais:[...P.iguais],ultima:P.ultima};P.jaPesquisou=true;
-    const n=pqJuntar(P,'ia',res);
+    // O que veio sem página, com "só estes sites", não entrou na ficha mas
+    // mostra-se na mesma — nunca marcado onde já há valor (`pqDefeito`):
+    // quem pede um campo que tem quer ver alternativas (30/09/2026, o dono).
+    const sfv=res.semFonteValores&&typeof res.semFonteValores==='object'?res.semFonteValores:{};
+    const n=pqJuntar(P,'ia',{...sfv,...res});
     P.et.ia={estado:'feito',n:n.novos,dif:n.dif,outro:n.outro,memoria:res.pesquisaWeb===false,
       sites:Array.isArray(res.sites)?res.sites:[],confianca:res.confianca||null,
       paginas:Array.isArray(res.paginas)?res.paginas:[],soSites:!!res.soSites,
@@ -7773,7 +7777,7 @@ function pqRelatoHTML(P){
     const n=pqLinhasIA(P).length;
     out.push(`${quem} terminou e ${n?`trouxe informação nova em ${pqQtd(n,'campo','campos')}.`:'não trouxe nada de novo.'}`);
     if(f.aviso)caixas+=`<div class="rv-aviso">⚠️ ${esc(f.aviso)}</div>`;
-    if(f.semFonte&&f.semFonte.length)caixas+=`<div class="rv-aviso">${f.semFonte.length===1?'1 campo veio':f.semFonte.length+' campos vieram'} sem a IA dizer de que página o tirou (${esc(f.semFonte.map(pqRot).join(', '))}) — com “só estes sites”, ficou de fora.</div>`;
+    if(f.semFonte&&f.semFonte.length)caixas+=`<div class="rv-aviso">${f.semFonte.length===1?'1 campo veio':f.semFonte.length+' campos vieram'} sem a IA dizer de que página o tirou (${esc(f.semFonte.map(pqRot).join(', '))}) — pode não ser dos sites escolhidos. Mostra-se para comparares; onde já havia valor, não vem marcado.</div>`;
     if(f.memoria)caixas+='<div class="rv-aviso">🧠 A IA respondeu <b>de memória</b>, sem pesquisar na net — confere antes de guardar.</div>';
   }
   return out.map(t=>`<p>${t}</p>`).join('')+caixas;
@@ -8042,6 +8046,8 @@ function pqFonteHTML(k,f,P){
   // anterior) não tem página — diz-se isso, e não se inventa uma.
   if(Array.isArray(ia.catalogoCampos)&&ia.catalogoCampos.includes(k))
     return '<span class="rv-de">↳ do Catálogo <i>· de uma pesquisa anterior</i></span>';
+  if(ia.soSites&&Array.isArray(ia.semFonte)&&ia.semFonte.includes(k))
+    return '<span class="rv-de">↳ da IA <i>(sem dizer de que página — pode não ser dos sites escolhidos)</i></span>';
   return '<span class="rv-de">↳ da IA <i>(sem dizer de onde)</i></span>';
 }
 function pqLinhasHTML(P){
@@ -10692,7 +10698,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='147';
+const APP_BUILD='148';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

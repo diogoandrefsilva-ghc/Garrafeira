@@ -1756,7 +1756,7 @@ tirou cada campo) → `origemCampos` no resultado → a opção da IA diz
 sites** (`soSites`; foi um visto, e desde 30/09/2026 é o caminho "Em sites
 concretos" — ver "2. IA", mais abaixo): sem a consulta geral,
 sem a do Vivino se ele não for um dos sites, sem o grounding, sem a cache e
-sem o catálogo; um campo sem origem sai (`semFonte`). **Com sites, a cache e o
+sem o catálogo; um campo sem origem sai da ficha e do catálogo (`semFonte`), mas a app mostra-o na mesma (`semFonteValores`), sem o marcar onde já há valor — quem pede um campo que tem quer ver alternativas (30/09/2026, o dono). **Com sites, a cache e o
 catálogo do servidor não respondem** (`semAtalhos`): quem os escreve quer que
 se leiam agora, e o catálogo já respondeu na etapa 1 do ecrã. O Vivino não se
 abre (recusa servidores); uma loja que recuse fica com o resumo do Google.

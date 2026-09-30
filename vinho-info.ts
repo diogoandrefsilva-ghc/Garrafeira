@@ -2114,14 +2114,19 @@ async function produzirFicha(
      um nome novo (a wishlist não vai ao catálogo — é a regra dela). */
   /* DE ONDE VEIO CADA CAMPO (27/09/2026): o número que o modelo deu em
      `deOnde` → a página ou o resultado; o que só o grounding trouxe diz-se
-     como tal. Com o "só estes sites", um campo sem origem sai — não há como
-     dizer que veio deles (o ano e o aviso não são campos da ficha). */
+     como tal. Com o "só estes sites", um campo sem origem sai da FICHA — não
+     há como dizer que veio deles, e por isso não vai ao catálogo — mas volta
+     à app à parte (`semFonteValores`): quem pediu um campo que já tem quer
+     ver alternativas, e a app mostra-o sem o marcar (30/09/2026, o dono).
+     O ano e o aviso não são campos da ficha. */
   const origemCampos: Record<string, Origem> = ficha ? origemDosCampos(f1.deOnde, ev.lista, ficha, ano) : {};
   for (const k of doGround) if (ficha && k in ficha && !origemCampos[k]) origemCampos[k] = { url: "", site: "", titulo: "pesquisa Google", google: true };
   const semFonte: string[] = [];
+  const semFonteValores: Record<string, unknown> = {};
   if (soSites && ficha) {
     for (const k of Object.keys(ficha)) {
       if (k === "aviso" || k === "ano" || origemCampos[k]) continue;
+      semFonteValores[k] = (ficha as Record<string, unknown>)[k];
       delete (ficha as Record<string, unknown>)[k];
       semFonte.push(k);
     }
@@ -2199,7 +2204,7 @@ async function produzirFicha(
       ...(sites.length ? {
         sites, confianca,
         ...(paginasRes.length ? { paginas: paginasRes } : {}),
-        ...(soSites ? { soSites: true, ...(semFonte.length ? { semFonte } : {}) } : {}),
+        ...(soSites ? { soSites: true, ...(semFonte.length ? { semFonte, semFonteValores } : {}) } : {}),
       } : {}),
       // De onde veio cada campo (a página, o resultado, ou o grounding) —
       // a app mostra-o ao lado de cada proposta.
