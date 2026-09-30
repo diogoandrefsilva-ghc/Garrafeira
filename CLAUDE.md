@@ -1993,8 +1993,19 @@ de botões que apareciam e desapareciam. Agora:
   a IA trouxer passa pela lista acima, comparado com o formulário de AGORA
   (`P.atual` relido antes de pesquisar), e só o marcado vai para o
   formulário (`pqPassarForm`, por cima do que lá estava se foi marcado à
-  mão), que se abre inteiro para gravar. Até 29/09/2026 a IA enchia os
-  vazios sozinha e dizia numa linha de que site tinham vindo.
+  mão) e o vinho **grava-se logo** (`pqGravarNovo`, 30/09/2026, o dono:
+  "prefiro que guarde logo e, se o user quiser, depois abre o vinho em
+  edição" — como na WineCatalog): abre-se a página do vinho, onde está o
+  Editar. A primeira garrafa fica com a omissão (uma, sem lugar — por
+  arrumar). "✏️ Rever antes de gravar" abre o formulário inteiro, como era;
+  se a gravação recusar (falta a cor, a rede), o formulário abre-se e diz
+  porquê. Até 29/09/2026 a IA enchia os vazios sozinha e dizia numa linha
+  de que site tinham vindo.
+- **O Editar tem TODOS os campos da ficha** (30/09/2026): também o país, as
+  avaliações do Vivino (colheita e todas), o resumo e as notas de prova —
+  estes quatro viviam só no `_iaExtraNovo`, gravavam-se sem nunca se verem
+  nem se poderem corrigir. Agora são campos do formulário (`PQ_FORM`,
+  `CAT_FICHA_FORM`), e o `_iaExtraNovo` ficou só com o carimbo da procura.
 - **Num vinho gravado** há valores a proteger: cada fonte acrescenta
   PROPOSTAS a essa lista (`PQ.hist[campo][fonte]`). Nada entra sem Guardar;
   num campo vazio vem marcado o catálogo, senão a IA (`PQ_FORCA`). Tudo por

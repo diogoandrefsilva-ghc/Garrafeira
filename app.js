@@ -1338,6 +1338,9 @@ function catPor(id,modo){
    gravado pela `winecatalog.criar` — a mesma do "+ Vinho novo" da
    WineCatalog, que recusa se o vinho e a colheita já lá estiverem. */
 let FORM_CAT=false;
+// O modo do formulário aberto ('', 'desejo', 'catalogo'…): o vinho novo que
+// vem da procura grava-se sozinho (`pqGravarNovo`) e tem de saber como.
+let FORM_MODO='';
 function catPodeCriar(){return !!(EU.curador||EU.admin_catalogo);}
 function catNovoVinho(){
   if(!catPodeCriar())return;
@@ -1347,8 +1350,7 @@ function catNovoVinho(){
 // as minhas notas.
 const CAT_FICHA_FORM=['tipo','estilo','mencao','classificacao','regiao','sub_regiao','teor','estagio_meses',
   'estagio_texto','beber_de','beber_ate','preco_medio','vivino_nota','vivino_nota_global','vivino_url',
-  'imagem_url','harmonizacao'];
-const CAT_FICHA_EXTRA=['notas_prova','ai_resumo','vivino_avaliacoes','vivino_avaliacoes_global','pais'];
+  'imagem_url','harmonizacao','notas_prova','ai_resumo','vivino_avaliacoes','vivino_avaliacoes_global','pais'];
 async function catGuardarNovo(){
   const f=lerFormVinho();
   if(!f.nome){toast('Falta o nome do vinho',1);return;}
@@ -1358,7 +1360,6 @@ async function catGuardarNovo(){
   const campos={};
   CAT_FICHA_FORM.forEach(k=>{if(f[k]!=null&&f[k]!=='')campos[k]=f[k];});
   if(f._castas&&f._castas.length)campos.castas=f._castas.slice().sort((a,b)=>a.localeCompare(b,'pt'));
-  if(_iaExtraNovo)CAT_FICHA_EXTRA.forEach(k=>{const x=_iaExtraNovo[k];if(x!=null&&x!==''&&campos[k]==null)campos[k]=x;});
   if(campos.vivino_url&&!vivinoLink(campos.vivino_url))delete campos.vivino_url;
   const btn=document.getElementById('e-guardar');
   btn.disabled=true;btn.textContent='A criar…';
@@ -1403,10 +1404,6 @@ async function catGuardarEditar(id){
   const cs=(f._castas||[]).slice().sort((a,b)=>a.localeCompare(b,'pt'));
   const chaveCs=a=>a.map(x=>String(x).toLowerCase()).sort().join('|');
   if(chaveCs(cs)!==chaveCs(v.castas||[]))campos.castas=cs;
-  // O que a resposta colada trouxe sem campo no formulário: só onde o
-  // catálogo não tinha nada (a regra do Editar da garrafeira).
-  if(_iaExtraNovo)CAT_FICHA_EXTRA.forEach(k=>{const x=_iaExtraNovo[k];
-    if(x!=null&&x!==''&&(v[k]==null||v[k]===''))campos[k]=x;});
   const idt=f.nome!==(v.nome||'')||(f.produtor||'')!==(v.produtor||'')||(f.ano??null)!==(v.ano??null);
   if(!Object.keys(campos).length&&!idt){fecharModal('modal-edit');toast('Nada mudou');return;}
   const WC={'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'};
@@ -5802,7 +5799,7 @@ function abrirEditarVinho(id,modo){
   // (`catGuardarEditar`), e só quem o admin fez curador.
   const catEd=id<0;
   if((noCat||catEd)?!catPodeCriar():roGuard())return;
-  FORM_CAT=noCat;
+  FORM_CAT=noCat;FORM_MODO=modo||'';
   const v=id?IDXV[id]:null;
   if(id&&!v)return;
   const conv=!!id&&modo==='converter';
@@ -5889,11 +5886,15 @@ function abrirEditarVinho(id,modo){
     </div>
     <div class="mrow">
       <div><label>Preço de referência (€)</label><input type="text" id="e-preco" inputmode="decimal" value="${esc(o('preco_medio'))}" placeholder="18.50"></div>
+      <div><label>País</label><input type="text" id="e-pais" value="${esc(o('pais',noCat?'':'Portugal'))}" placeholder="Portugal"></div>
+    </div>
+    <div class="mrow">
       <div><label>Nota Vivino (colheita)</label><input type="text" id="e-vivino" inputmode="decimal" value="${esc(o('vivino_nota'))}" placeholder="4.1"></div>
+      <div><label>Avaliações (colheita)</label><input type="number" id="e-vivino-av" inputmode="numeric" value="${esc(o('vivino_avaliacoes'))}" placeholder="250"></div>
     </div>
     <div class="mrow">
       <div><label>Nota Vivino (todas as colheitas)</label><input type="text" id="e-vivino-g" inputmode="decimal" value="${esc(o('vivino_nota_global'))}" placeholder="4.0"></div>
-      <div></div>
+      <div><label>Avaliações (todas)</label><input type="number" id="e-vivino-av-g" inputmode="numeric" value="${esc(o('vivino_avaliacoes_global'))}" placeholder="5000"></div>
     </div>
     <label>Link do Vivino</label>
     <input type="url" id="e-vivino-url" value="${esc(o('vivino_url'))}" placeholder="https://www.vivino.com/…">
@@ -5902,6 +5903,10 @@ function abrirEditarVinho(id,modo){
     <input type="url" id="e-imagem" value="${esc(o('imagem_url'))}" placeholder="https://…/rotulo.jpg">
     <div class="note">O link da fotografia, não o da página da loja — e sem nenhum, a app desenha a garrafa com a cor do tipo e o ano no rótulo.</div>`:''}
 
+    <label>Resumo</label>
+    <textarea id="e-resumo" placeholder="O que é este vinho, em duas ou três frases">${esc(o('ai_resumo'))}</textarea>
+    <label>Notas de prova</label>
+    <textarea id="e-notas-prova" placeholder="Aroma, boca, final…">${esc(o('notas_prova'))}</textarea>
     <label>Harmoniza com</label>
     <textarea id="e-harmonizacao" placeholder="Queijos curados, carnes grelhadas…">${esc(o('harmonizacao'))}</textarea>
 
@@ -5966,7 +5971,12 @@ function lerFormVinho(){
     preco_medio:num(g('e-preco')),
     vivino_nota:num(g('e-vivino')),
     vivino_nota_global:num(g('e-vivino-g')),
+    vivino_avaliacoes:inteiro(g('e-vivino-av')),
+    vivino_avaliacoes_global:inteiro(g('e-vivino-av-g')),
     vivino_url:g('e-vivino-url'),
+    pais:g('e-pais'),
+    ai_resumo:g('e-resumo'),
+    notas_prova:g('e-notas-prova'),
     harmonizacao:g('e-harmonizacao'),
     notas:g('e-notas'),
     _castas:g('e-castas').split(',').map(s=>s.trim()).filter(Boolean)
@@ -6011,9 +6021,9 @@ async function guardarVinho(id,modo){
     if(erroPos){toast(erroPos,1);return;}
   }
   const castas=f._castas;delete f._castas;
-  // O formulário não tem campos para o resumo/notas de prova/avaliações:
-  // a procura da IA deixou-os em `_iaExtraNovo` e é aqui que se juntam. Só na
-  // CRIAÇÃO — a editar, quem manda nesses campos é o painel de confirmação.
+  // O carimbo da procura (modelo, fontes, quando) não é um campo do
+  // formulário: a procura da IA deixou-o em `_iaExtraNovo` e é aqui que se
+  // junta. Só na CRIAÇÃO — a editar, quem manda é o painel de confirmação.
   // Num vinho já gravado (a resposta colada no Editar) só entram onde ele
   // não tinha nada: as notas de prova de alguém não se tapam daqui.
   if(_iaExtraNovo){
@@ -6088,6 +6098,7 @@ async function guardarVinho(id,modo){
     // Quem comprou um vinho da wishlist e o pôs pelo "Novo vinho" (em vez
     // de o passar a partir da wishlist) fica com o desejo lá esquecido.
     if(!id&&!paraDesejo)await oferecerRetirarDesejos([IDXV[vinhoId]]);
+    return vinhoId;
   }catch(e){
     toast('Não foi possível guardar: '+e.message,1);
     btn.disabled=false;btn.textContent=rotulo;
@@ -7106,16 +7117,13 @@ function iaPreencherForm(res,substituir){
   // estivesse escrito à mão era tapado pelo da procura (ou por nada).
   por('e-vivino-url',res.vivino_url?vivinoLink(res.vivino_url):'');
   por('e-imagem',res.imagem_url);por('e-harmonizacao',res.harmonizacao);
-  // O resumo e as notas de prova só entram quando o vinho for gravado (o
-  // formulário não tem campos para eles) — ficam aqui à espera disso.
-  // Por cima do que já lá estava (o catálogo antes da IA): uma volta que
-  // não traga as notas de prova não apaga as que a anterior trouxe.
+  por('e-vivino-av',res.vivino_avaliacoes);por('e-vivino-av-g',res.vivino_avaliacoes_global);
+  por('e-pais',res.pais);por('e-resumo',res.ai_resumo);por('e-notas-prova',res.notas_prova);
+  // O carimbo da procura só entra quando o vinho for gravado (não é um
+  // campo do formulário) — fica aqui à espera disso. Por cima do que já lá
+  // estava (o catálogo antes da IA).
   const ant=_iaExtraNovo||{};
   _iaExtraNovo={
-    notas_prova:res.notas_prova||ant.notas_prova||'',
-    ai_resumo:res.ai_resumo||ant.ai_resumo||'',
-    vivino_avaliacoes:res.vivino_avaliacoes||ant.vivino_avaliacoes||null,
-    vivino_avaliacoes_global:res.vivino_avaliacoes_global||ant.vivino_avaliacoes_global||null,
     ai_fontes:res.fontes||ant.ai_fontes||null,ai_modelo:res.modelo||ant.ai_modelo||'',
     ai_atualizado_em:new Date().toISOString()
   };
@@ -7162,15 +7170,15 @@ function iaPreencherForm(res,substituir){
 const PQ_NOMES={cat:'Catálogo',ia:'IA'};
 // Num campo vazio, qual das propostas vem escolhida.
 const PQ_FORCA=['cat','ia'];
-// O formulário de vinho novo: que campo do ecrã recebe cada chave. As
-// restantes que ele sabe guardar vão pelo `_iaExtraNovo` (ver
-// `iaPreencherForm`); o que não está em nenhum dos dois não se propõe.
+// O formulário de vinho novo: que campo do ecrã recebe cada chave. O que
+// não está aqui não se propõe no vinho novo.
 const PQ_FORM={produtor:'e-produtor',estilo:'e-estilo',regiao:'e-regiao',sub_regiao:'e-subregiao',
   mencao:'e-mencao',classificacao:'e-classificacao',castas:'e-castas',estagio_meses:'e-estagio',
   estagio_texto:'e-estagio-txt',teor:'e-teor',beber_de:'e-beber-de',beber_ate:'e-beber-ate',
   preco_medio:'e-preco',vivino_nota:'e-vivino',vivino_nota_global:'e-vivino-g',
-  vivino_url:'e-vivino-url',imagem_url:'e-imagem',harmonizacao:'e-harmonizacao'};
-const PQ_FORM_EXTRA=['notas_prova','ai_resumo','vivino_avaliacoes','vivino_avaliacoes_global'];
+  vivino_url:'e-vivino-url',imagem_url:'e-imagem',harmonizacao:'e-harmonizacao',
+  vivino_avaliacoes:'e-vivino-av',vivino_avaliacoes_global:'e-vivino-av-g',pais:'e-pais',
+  ai_resumo:'e-resumo',notas_prova:'e-notas-prova'};
 let PQ=null;
 
 function pqVazio(x){return x==null||x===''||(Array.isArray(x)&&!x.length);}
@@ -7183,7 +7191,7 @@ function pqChaves(P){
     .filter((k,i,a)=>a.indexOf(k)===i&&k!=='ano'&&k!=='tipo');
   return ks.filter(k=>{
     if(!P.id.ano&&IA_JANELA.includes(k))return false;          // sem colheita não há janela
-    if(P.novo)return k in PQ_FORM||PQ_FORM_EXTRA.includes(k);
+    if(P.novo)return k in PQ_FORM;
     return true;
   });
 }
@@ -7199,8 +7207,6 @@ function pqAtualVinho(v){
 function pqAtualForm(){
   const a={};
   Object.entries(PQ_FORM).forEach(([k,id])=>{const e=document.getElementById(id);a[k]=e?e.value.trim():'';});
-  const x=_iaExtraNovo||{};
-  PQ_FORM_EXTRA.forEach(k=>{a[k]=x[k]||'';});
   return a;
 }
 function pqNovoEstado(novo,id,atual){
@@ -8091,7 +8097,9 @@ function pqContar(){
   if(P.novo){
     const n=pqEscolhas(P).length;
     b.disabled=!!P.corre;
-    b.textContent=n?`Pôr ${n} ${n===1?'campo':'campos'} no formulário`:'Ir para o formulário';
+    b.textContent=pqNovoGrava(P)?pqNovoRotulo():'Ir para o formulário';
+    const r=document.getElementById('pq-rever');
+    if(r){r.disabled=!!P.corre;r.style.display=pqNovoGrava(P)?'':'none';}
     return;
   }
   // A colheita escolhida (num vinho gravado sem ano) também é um campo a gravar.
@@ -8129,6 +8137,7 @@ function pqPintar(){
     ${iguais.length&&!(P.novo&&P.fase!=='fim')?`<div class="note" style="margin-top:8px">${linhas?'Mais ':''}${iguais.length===1?'1 campo veio':iguais.length+' campos vieram'} igual ao que já está (${esc(iguais.map(pqRot).join(', '))}).</div>`:''}
     ${P._fecharPosto?'':`<div class="macoes pq-fim">
       ${podeGuardar?`<button class="btn prim" id="pq-guardar" onclick="${revNovo?'pqPassarForm()':'pqGuardar()'}"></button>`:''}
+      ${podeGuardar&&revNovo?'<button class="btn ghost" id="pq-rever" onclick="pqPassarForm(true)">✏️ Rever antes de gravar</button>':''}
       ${linhas?'<button class="btn ghost" onclick="pqMarcarTudo()">Marcar tudo</button>':''}
       ${P.fase==='fim'&&!P.corre&&podeUsarIA()?'<button class="btn ghost" onclick="pqOutraPesquisa()">‹ Pesquisar de outra forma</button>':''}
       <button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button>
@@ -8257,9 +8266,12 @@ function pqPorNoForm(P,fonte){
   iaPreencherForm(res,false);
 }
 /* No vinho novo, depois da revisão: o que ficou marcado vai para o
-   formulário — por cima do que lá estava, se foi marcado à mão — e abre-se
-   o formulário inteiro para gravar. */
-function pqPassarForm(){
+   formulário — por cima do que lá estava, se foi marcado à mão — e o vinho
+   GRAVA-SE logo (30/09/2026, o dono: "prefiro que guarde logo e, se o user
+   quiser, depois abre o vinho em edição" — como na WineCatalog). Abre-se a
+   página do vinho, onde está o Editar. "Rever antes de gravar" (`rever`)
+   abre o formulário inteiro, como era. */
+function pqPassarForm(rever){
   const P=PQ;if(!P||!P.novo)return;
   const escs=pqEscolhas(P);
   if(escs.length){
@@ -8276,7 +8288,31 @@ function pqPassarForm(){
     // deixa o campo vazio: volta o que lá estava.
     Object.entries(antes).forEach(([id,v])=>{const el=document.getElementById(id);if(el&&!el.value)el.value=v;});
   }
-  pqFimNovo();
+  if(!rever&&pqNovoGrava(P))pqGravarNovo();
+  else pqFimNovo();
+}
+// Há alguma coisa da procura para gravar (o marcado, ou o que o Catálogo
+// já pôs no formulário)? Sem nada, o botão continua a ir para o formulário.
+function pqNovoGrava(P){return pqEscolhas(P).length>0||Object.keys(P.preenchidos).length>0;}
+function pqNovoRotulo(){
+  return FORM_MODO==='catalogo'?'Criar no catálogo':FORM_MODO==='desejo'?'Adicionar à wishlist':'Adicionar à garrafeira';
+}
+async function pqGravarNovo(){
+  const b=document.getElementById('pq-guardar');
+  if(b){b.disabled=true;b.textContent='A guardar…';}
+  const modo=FORM_MODO;
+  // O resto do formulário continua escondido, e o `guardarVinho` lê-o na
+  // mesma: a primeira garrafa fica com os valores de omissão (uma, sem
+  // lugar — por arrumar), e arruma-se depois.
+  const id=await guardarVinho(0,modo);
+  if(document.getElementById('modal-edit').classList.contains('on')){
+    // Não gravou (falta alguma coisa, ou a rede): o formulário diz o quê.
+    pqFimNovo();
+    return;
+  }
+  PQ=null;
+  fecharModal('modal-ia');
+  if(modo!=='catalogo'&&id&&IDXV[id])verVinho(id);
 }
 function pqFimNovo(){
   const P=PQ;
@@ -10656,7 +10692,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='146';
+const APP_BUILD='147';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
