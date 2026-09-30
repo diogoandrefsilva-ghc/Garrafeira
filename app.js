@@ -5368,7 +5368,9 @@ function abrirFoto(vinhoId){
   const v=IDXV[vinhoId];if(!v)return;
   FOTO_VINHO=vinhoId;
   const img=imagemDe(v), minha=imagemPropria(v);
+  const cat=vinhoId<0;
   const fonte=minha?'A tua fotografia'
+    :cat?(img?'A imagem do catálogo':'Sem imagem no catálogo — a garrafa desenhada')
     :(img?'Encontrada na net pela procura':'Garrafa desenhada pela app');
   document.getElementById('modal-foto-in').innerHTML=`
     <div class="mtop"><div><h3>${esc(v.nome)}</h3>
@@ -5382,7 +5384,13 @@ function abrirFoto(vinhoId){
 
     <div class="note" id="foto-estado"></div>
 
-    ${vinhoId<0?'':`<div class="macoes ro-hide">
+    ${cat?(catPodeCriar()?`<div class="macoes">
+      <label class="btn prim" style="text-align:center;cursor:pointer;margin:0">
+        📷 ${img?'Trocar a imagem':'Carregar uma imagem'}
+        <input type="file" accept="image/*" style="display:none" onchange="enviarFotoCat(this)">
+      </label>
+    </div>
+    <div class="note" style="margin-top:10px">Muda a imagem deste vinho no catálogo, para toda a gente.</div>`:''):`<div class="macoes ro-hide">
       <label class="btn prim" style="text-align:center;cursor:pointer;margin:0">
         📷 ${minha?'Trocar a imagem':'Carregar uma imagem'}
         <input type="file" accept="image/*" style="display:none" onchange="enviarFoto(this)">
@@ -5447,6 +5455,47 @@ async function enviarFoto(input){
     renderLista();refrescarVinhoAberto();abrirFoto(v.id);
     if(tabAtiva==='locais')renderMapa();
     toast('Imagem guardada ✓');
+  }catch(e){
+    est.innerHTML=`<span style="color:var(--dg)">Não foi possível: ${esc(e.message)}</span>`;
+  }
+}
+/* A imagem de um vinho do CATÁLOGO (migração 36): é a de toda a gente, por
+   isso não vai para o bucket privado de uma garrafeira — vai para o bucket
+   público das imagens das lojas (`garrafeira-imagens`, pasta `cat/`), e a
+   linha passa a apontar para lá pela `winecatalog.editar`. Só quem corrige o
+   catálogo (`catPodeCriar`; a policy do Storage confere o mesmo). A anterior
+   não se apaga: pode ser a cópia que as garrafeiras ainda usam. */
+async function enviarFotoCat(input){
+  const file=(input.files||[])[0];
+  if(!file)return;
+  input.value='';
+  const v=IDXV[FOTO_VINHO];if(!v||!(v.id<0)||!catPodeCriar())return;
+  const est=document.getElementById('foto-estado');
+  est.textContent='A preparar a imagem…';
+  try{
+    // 800 px, como as das lojas depois de reduzidas (migração 35).
+    const blob=await encolherImagem(file,800,0.82);
+    const caminho=`cat/${v.cat_id}-${Date.now().toString(36)}${Math.random().toString(36).slice(2,8)}.jpg`;
+    est.textContent=`A enviar (${Math.round(blob.size/1024)} KB)…`;
+    const r=await sbFetch(`${SB_URL}/storage/v1/object/garrafeira-imagens/${caminho}`,{
+      method:'POST',
+      headers:{'apikey':SB_KEY,'Content-Type':'image/jpeg'},
+      body:blob
+    });
+    if(!r.ok){
+      let m='HTTP '+r.status;try{m=(await r.json()).message||m;}catch(_){}
+      throw new Error(m);
+    }
+    const url=`${SB_URL}/storage/v1/object/public/garrafeira-imagens/${caminho}`;
+    await sbReq('POST','rpc/editar',{p_id:v.cat_id,p_campos:{imagem_url:url}},
+      {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
+    v.imagem_url=url;
+    est.textContent='';
+    CAT_VINHOS=null;
+    try{await catCarregar();}catch(_){}
+    renderLista();refrescarVinhoAberto();
+    if(IDXV[v.id])abrirFoto(v.id);
+    toast('Imagem do catálogo trocada ✓');
   }catch(e){
     est.innerHTML=`<span style="color:var(--dg)">Não foi possível: ${esc(e.message)}</span>`;
   }
@@ -10737,7 +10786,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='151';
+const APP_BUILD='152';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

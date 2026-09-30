@@ -561,6 +561,13 @@ Supabase pelo novo em todo o lado). A `imagem_resultado` ganha
 `p_reduzida` (outra assinatura: a velha sai). Publica a função depois do
 SQL.
 
+### Migração 36 — trocar a imagem de um vinho do catálogo pela app
+
+`db/migracao-imagem-catalogo.sql`. Uma policy no `storage.objects`: os
+curadores e o admin do catálogo (`winecatalog.sou_curador()`/`sou_admin()`)
+podem ENVIAR para `garrafeira-imagens/cat/` — e só isso. A app grava depois
+o link na linha pela `winecatalog.editar`.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as

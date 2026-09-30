@@ -105,6 +105,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   Supabase").
   `migracao-imagens-reduzir.sql` é a 35: essas imagens ficam pequenas
   (800×800 em WebP, pelas transformações de imagem do Supabase).
+  `migracao-imagem-catalogo.sql` é a 36: os curadores trocam a imagem de
+  um vinho do catálogo pela app (a pasta `cat/` do bucket público).
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1384,6 +1386,16 @@ fotografia continua a ganhar.
   lote passaram de 39 MB para uns poucos. Transforma-se UMA vez por imagem,
   não a cada visita: o Supabase cobra por imagem de origem diferente por
   mês. Se a transformação falhar, fica a original.
+- **Num vinho do CATÁLOGO troca-se no zoom** (migração 36, 30/09/2026, o
+  dono: "quando fazemos zoom à imagem do vinho, temos que ter lá um botão de
+  alterar imagem"). O `abrirFoto` escondia os botões a um id negativo; agora
+  um curador ou o admin do catálogo (`catPodeCriar`) tem "📷 Trocar a
+  imagem" (`enviarFotoCat`): encolhida no browser a 800 px, vai para
+  `garrafeira-imagens/cat/` (a policy do Storage deixa só eles, e só nessa
+  pasta) e a linha passa a apontar para lá pela `winecatalog.editar`. Não vai
+  para o `garrafeira-rotulos`: é a imagem de toda a gente, não a de uma
+  garrafeira. A anterior não se apaga — pode ser a cópia que as garrafeiras
+  ainda usam.
 - **Público e não privado** porque são fotografias de lojas, iguais para
   toda a gente; as minhas continuam no `garrafeira-rotulos`, privado.
 
