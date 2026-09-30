@@ -162,6 +162,25 @@ BEGIN
 END;
 $$;
 
+-- Os ficheiros que sobram no bucket: a original de uma imagem já reduzida
+-- cujo apagar falhou (o Storage respondeu 429). Só os que têm uma irmã
+-- reduzida em uso (o mesmo nome, outra extensão) — nunca um ficheiro de que
+-- não se sabe nada.
+CREATE OR REPLACE FUNCTION garrafeira.imagens_orfas(p_limite integer DEFAULT 50)
+  RETURNS SETOF text LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path TO 'garrafeira', 'storage', 'public'
+AS $$
+  SELECT o.name FROM storage.objects o
+   WHERE o.bucket_id = 'garrafeira-imagens'
+     AND NOT EXISTS (SELECT 1 FROM garrafeira.imagens_copia c WHERE c.caminho = o.name)
+     AND EXISTS (SELECT 1 FROM garrafeira.imagens_copia c
+                  WHERE c.estado = 'copiada' AND c.reduzida
+                    AND split_part(c.caminho, '.', 1) = split_part(o.name, '.', 1))
+   LIMIT GREATEST(1, LEAST(COALESCE(p_limite, 50), 200));
+$$;
+
+REVOKE ALL ON FUNCTION garrafeira.imagens_orfas(integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION garrafeira.imagens_orfas(integer) TO service_role;
 REVOKE ALL ON FUNCTION garrafeira.imagens_por_reduzir(integer) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION garrafeira.imagem_reduzida(text, text, text, integer, text, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION garrafeira.imagem_resultado(text, boolean, text, text, integer, text, text, boolean) FROM PUBLIC, anon, authenticated;

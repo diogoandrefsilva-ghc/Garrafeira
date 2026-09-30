@@ -234,6 +234,9 @@ async function copiar(orcamentoMs: number) {
       await new Promise((ok) => setTimeout(ok, 400));
     }
   }
+  // E os ficheiros que sobraram de um apagar que falhou (`imagens_orfas`).
+  const orfas = await rpc<string[]>("imagens_orfas", { p_limite: 50 }).catch(() => [] as string[]);
+  for (const o of orfas ?? []) await apagar(o);
   // As que falharam há menos de 10 minutos também contam: voltam a ser
   // tentadas na volta seguinte (até 3 vezes).
   const restantes = await rpc<number>("imagens_descobrir", {});
