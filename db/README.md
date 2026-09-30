@@ -550,6 +550,17 @@ A primeira corrida (30/09/2026): 307 links, 300 copiados (35 MB), 7 com o
 link morto (404), recusado (403) — esses ficam com o
 link de origem.
 
+### Migração 35 — as imagens copiadas ficam pequenas
+
+`db/migracao-imagens-reduzir.sql`. `imagens_copia.reduzida`, e a
+`garrafeira-imagens` passa cada imagem pelas transformações de imagem do
+Supabase (no máximo 800×800, WebP a 80), guarda o resultado e apaga a
+original; as já copiadas reduzem-se na volta seguinte
+(`imagens_por_reduzir` → `imagem_reduzida`, que troca o link velho do
+Supabase pelo novo em todo o lado). A `imagem_resultado` ganha
+`p_reduzida` (outra assinatura: a velha sai). Publica a função depois do
+SQL.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as

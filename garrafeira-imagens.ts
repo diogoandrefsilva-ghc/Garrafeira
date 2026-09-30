@@ -18,6 +18,9 @@
 // o que os BYTES dizem ser uma imagem (JPEG/PNG/WebP/GIF/AVIF — nunca SVG,
 // que é código). A mesma prudência da `abrirPagina` da `vinho-info`.
 //
+// Cada imagem fica REDUZIDA (migração 35): no máximo 800×800 em WebP, pelas
+// transformações de imagem do Supabase — ver `reduzir`.
+//
 // verify_jwt LIGADO. Deploy: supabase functions deploy garrafeira-imagens
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
@@ -27,6 +30,10 @@ const BUCKET = "garrafeira-imagens";
 const MAX_BYTES = 6 * 1024 * 1024;
 const TIMEOUT_MS = 15_000;
 const EM_PARALELO = 4;
+// A redução é mais pesada para o Storage (transformar, enviar, apagar): com
+// 4 de cada vez respondeu 429 "too_many_connections" — até às imagens
+// públicas de quem estava a usar a app.
+const RED_PARALELO = 2;
 // O admin espera pela resposta: pára a tempo e diz quantas faltam.
 const ORCAMENTO_ADMIN_MS = 40_000;
 const ORCAMENTO_CRON_MS = 120_000;
@@ -127,21 +134,63 @@ async function hashDe(s: string): Promise<string> {
   return Array.from(d.subarray(0, 16), (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
+const publico = (caminho: string) => `${SB_URL}/storage/v1/object/public/${BUCKET}/${caminho}`;
+
+async function enviar(caminho: string, bytes: Uint8Array, tipo: string) {
+  const up = await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${caminho}`, {
+    method: "POST",
+    headers: { apikey: SB_SRV, Authorization: `Bearer ${SB_SRV}`, "Content-Type": tipo,
+      "x-upsert": "true", "Cache-Control": "max-age=31536000" },
+    body: new Blob([bytes as BlobPart]),
+  });
+  if (!up.ok) throw new Error(`storage: HTTP ${up.status} ${(await up.text()).slice(0, 120)}`);
+}
+
+async function apagar(caminho: string) {
+  await fetch(`${SB_URL}/storage/v1/object/${BUCKET}`, {
+    method: "DELETE",
+    headers: { apikey: SB_SRV, Authorization: `Bearer ${SB_SRV}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ prefixes: [caminho] }),
+  }).catch(() => {});
+}
+
+// REDUZIR (migração 35): o Supabase transforma a que já está no bucket — no
+// máximo 800×800, WebP a 80 — e guarda-se o RESULTADO no lugar dela. Uma PNG
+// de 3,3 MB fica em 17 KB. Se a transformação falhar ou não poupar nada,
+// fica a original (`erro` diz porquê).
+const LADO_MAX = 800;
+async function reduzir(caminho: string, bytesAntes: number):
+    Promise<{ caminho: string; bytes: number; tipo: string } | { erro: string }> {
+  try {
+    const r = await fetch(
+      `${SB_URL}/storage/v1/render/image/public/${BUCKET}/${caminho}?width=${LADO_MAX}&height=${LADO_MAX}&resize=contain&quality=80`,
+      { headers: { Accept: "image/webp" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (!r.ok) { await r.body?.cancel().catch(() => {}); return { erro: `redução: HTTP ${r.status}` }; }
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    const t = tipoDaImagem(bytes);
+    if (!t) return { erro: "redução: não veio uma imagem" };
+    if (bytes.length >= bytesAntes) return { erro: "redução: não poupava nada" };
+    const novo = caminho.replace(/\.[a-z0-9]+$/, "") + "." + t.ext;
+    await enviar(novo, bytes, t.tipo);
+    if (novo !== caminho) await apagar(caminho);
+    return { caminho: novo, bytes: bytes.length, tipo: t.tipo };
+  } catch (e) {
+    return { erro: `redução: ${String((e as Error).message || e).slice(0, 120)}` };
+  }
+}
+
 async function copiarUma(origem: string): Promise<boolean> {
   try {
     const img = await descarregar(origem);
-    const caminho = `${await hashDe(origem)}.${img.ext}`;
-    const up = await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${caminho}`, {
-      method: "POST",
-      headers: { apikey: SB_SRV, Authorization: `Bearer ${SB_SRV}`, "Content-Type": img.tipo,
-        "x-upsert": "true", "Cache-Control": "max-age=31536000" },
-      body: new Blob([img.bytes as BlobPart]),
-    });
-    if (!up.ok) throw new Error(`storage: HTTP ${up.status} ${(await up.text()).slice(0, 120)}`);
+    let caminho = `${await hashDe(origem)}.${img.ext}`;
+    await enviar(caminho, img.bytes, img.tipo);
+    let bytes = img.bytes.length, tipo = img.tipo, erro: string | null = null;
+    const red = await reduzir(caminho, bytes);
+    if ("erro" in red) erro = red.erro;
+    else ({ caminho, bytes, tipo } = red);
     await rpc("imagem_resultado", {
-      p_origem: origem, p_ok: true, p_caminho: caminho,
-      p_url: `${SB_URL}/storage/v1/object/public/${BUCKET}/${caminho}`,
-      p_bytes: img.bytes.length, p_tipo: img.tipo,
+      p_origem: origem, p_ok: true, p_caminho: caminho, p_url: publico(caminho),
+      p_bytes: bytes, p_tipo: tipo, p_reduzida: !erro, p_erro: erro,
     });
     return true;
   } catch (e) {
@@ -164,10 +213,31 @@ async function copiar(orcamentoMs: number) {
       for (const ok of oks) ok ? copiadas++ : falhadas++;
     }
   }
+  // Depois, as que já estavam copiadas e ainda não foram reduzidas.
+  let reduzidas = 0;
+  while (Date.now() < fim - TIMEOUT_MS) {
+    const lote = await rpc<{ url_origem: string; caminho: string; bytes: number }[]>(
+      "imagens_por_reduzir", { p_limite: RED_PARALELO * 3 });
+    if (!lote || !lote.length) break;
+    for (let i = 0; i < lote.length; i += RED_PARALELO) {
+      await Promise.all(lote.slice(i, i + RED_PARALELO).map(async (l) => {
+        const red = await reduzir(l.caminho, l.bytes ?? Number.MAX_SAFE_INTEGER);
+        // 429: o Storage está com ligações a mais — não é desta imagem, fica
+        // por reduzir e volta na volta seguinte (o "em curso" expira).
+        if ("erro" in red && /429/.test(red.erro)) return;
+        await rpc("imagem_reduzida", "erro" in red
+          ? { p_origem: l.url_origem, p_erro: red.erro }
+          : { p_origem: l.url_origem, p_caminho: red.caminho, p_url: publico(red.caminho),
+              p_bytes: red.bytes, p_tipo: red.tipo }).catch(() => {});
+        if (!("erro" in red)) reduzidas++;
+      }));
+      await new Promise((ok) => setTimeout(ok, 400));
+    }
+  }
   // As que falharam há menos de 10 minutos também contam: voltam a ser
   // tentadas na volta seguinte (até 3 vezes).
   const restantes = await rpc<number>("imagens_descobrir", {});
-  return { copiadas, falhadas, restantes };
+  return { copiadas, falhadas, reduzidas, restantes };
 }
 
 Deno.serve(async (req) => {

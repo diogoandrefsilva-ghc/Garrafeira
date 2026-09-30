@@ -10691,8 +10691,8 @@ async function renderImagens(){
   catch(e){box.innerHTML=`<div class="note">${/does not exist|404/i.test(e.message)
     ?'Falta correr a migração 34 (db/migracao-imagens.sql).':esc(e.message)}</div>`;return;}
   box.innerHTML=`<div class="diag-l"><b>Imagens no Supabase</b>
-    <div class="note">copiadas <b>${r.copiadas}</b> (${esc(String(r.mb))} MB) · à espera <b>${r.pendentes}</b> · falhadas <b>${r.falhadas}</b></div>
-    ${r.pendentes?'<button class="btn ghost" onclick="imagensCopiar()">⬇️ Copiar agora</button>':''}
+    <div class="note">copiadas <b>${r.copiadas}</b> (${esc(String(r.mb))} MB) · por reduzir <b>${r.por_reduzir||0}</b> · à espera <b>${r.pendentes}</b> · falhadas <b>${r.falhadas}</b></div>
+    ${r.pendentes||r.por_reduzir?'<button class="btn ghost" onclick="imagensCopiar()">⬇️ Copiar agora</button>':''}
     ${(r.erros||[]).map(x=>`<div class="note">✕ ${escLink(x.url)} · ${esc(x.erro||'')}</div>`).join('')}</div>`;
 }
 async function imagensCopiar(){
@@ -10708,7 +10708,7 @@ async function imagensCopiar(){
       if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
     }catch(e){toast('Cópia das imagens: '+e.message);break;}
     tot+=d.copiadas||0;
-    if(!d.restantes||!(d.copiadas||d.falhadas))break;
+    if(!d.restantes||!(d.copiadas||d.falhadas||d.reduzidas))break;
   }
   await renderImagens();
 }
@@ -10731,7 +10731,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='149';
+const APP_BUILD='150';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

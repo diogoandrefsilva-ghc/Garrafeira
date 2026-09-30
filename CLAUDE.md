@@ -103,6 +103,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-imagens.sql` é a 34: as imagens das lojas copiadas para o
   Supabase (ver "A imagem de cada vinho" › "As imagens das lojas vivem no
   Supabase").
+  `migracao-imagens-reduzir.sql` é a 35: essas imagens ficam pequenas
+  (800×800 em WebP, pelas transformações de imagem do Supabase).
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1374,6 +1376,14 @@ fotografia continua a ganhar.
 - **Só o que os BYTES dizem ser imagem** (JPEG/PNG/WebP/GIF/AVIF, nunca
   SVG), até 6 MB, com a prudência da `abrirPagina` da `vinho-info`: quem
   escreve os links é qualquer editor.
+- **E ficam PEQUENAS** (migração 35, o dono: "uma imagem de 3 MBs para um
+  vinho não faz sentido"): cada cópia passa pelas transformações de imagem
+  do Supabase (`/storage/v1/render/image`, ligadas neste projeto) — no
+  máximo 800×800, WebP a 80 — e guarda-se o RESULTADO, apagando a original
+  (`reduzir` na função). A PNG de 3,3 MB ficou em 17 KB; as 302 do primeiro
+  lote passaram de 39 MB para uns poucos. Transforma-se UMA vez por imagem,
+  não a cada visita: o Supabase cobra por imagem de origem diferente por
+  mês. Se a transformação falhar, fica a original.
 - **Público e não privado** porque são fotografias de lojas, iguais para
   toda a gente; as minhas continuam no `garrafeira-rotulos`, privado.
 
