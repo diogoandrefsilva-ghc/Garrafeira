@@ -1738,8 +1738,9 @@ do produto, as etiquetas `og:` e o texto do `<main>`; as páginas vão à frente
 na base de evidência, e o Gemini devolve `deOnde` (de que página ou resultado
 tirou cada campo) → `origemCampos` no resultado → a opção da IA diz
 "IA · garrafeiranacional.com" (`pqDeOndeHTML`) e, no vinho novo, o
-`pqFimNovo` diz de onde veio cada campo que pôs no formulário. O visto
-**"Usar só a informação destes sites"** (`soSites`): sem a consulta geral,
+`pqFimNovo` diz de onde veio cada campo que pôs no formulário. **Só estes
+sites** (`soSites`; foi um visto, e desde 30/09/2026 é o caminho "Nos sites
+que eu indicar" — ver "2. IA", mais abaixo): sem a consulta geral,
 sem a do Vivino se ele não for um dos sites, sem o grounding, sem a cache e
 sem o catálogo; um campo sem origem sai (`semFonte`). **Com sites, a cache e o
 catálogo do servidor não respondem** (`semAtalhos`): quem os escreve quer que
@@ -1762,7 +1763,8 @@ página diz `secao`/`trechos`.
 
 **Procurar links** (29/09/2026, o dono das apps: "dar um link ao Gemini e
 dizer 'procura só neste link' é o que traz a informação mais fidedigna, e
-não é cara"). No pacote completo, ao pé da caixa dos sites, **🔗 Procurar
+não é cara"). No pacote completo, é o primeiro ecrã do caminho "Nos sites
+que eu indicar" (e um botão no ecrã de colar links): **🔗 Procurar
 links** (`pqLinks`) faz UMA pesquisa Serper (`vinho-info` com `links:true`:
 síncrona, sem Gemini, sem cache nem catálogo, `[nome, ano, produtor,
 "vinho"]`) e mostra até 5 links (`pqLinksHTML`): o título abre a página
@@ -1938,8 +1940,20 @@ de botões que apareciam e desapareciam. Agora:
   Function, de seguida, o Serper e depois o grounding pelo que ele não
   trouxe; o intermédio (`gratis`) faz só o grounding — o Serper gasta
   créditos que se pagam, o grounding responde quase sempre de memória e
-  custa pouco (decisão do dono, 27/09/2026). Os **sites de referência** e as
-  notas pedem-se aqui. A resposta de memória diz-se a todos.
+  custa pouco (decisão do dono, 27/09/2026). A resposta de memória diz-se
+  a todos.
+  **Primeiro COMO, depois O QUÊ** (30/09/2026, o dono: o primeiro ecrã da
+  WineCatalog, "num site ou perguntar à IA", mas com a lista dos links para
+  escolher, que lá não havia). `pqTipoHTML` → `pqTipo`: **🔗 Nos sites que
+  eu indicar** — SÓ neles (`soSites`, sempre); no pacote completo abre já a
+  lista das lojas do "Procurar links" (escolhem-se até 2) com uma caixa por
+  baixo para colar o link de uma página que já se tenha, no intermédio é só
+  a caixa (procurar dentro de um site precisa do Serper) — ou **✨ Perguntar
+  à IA**, sem sites. Depois, os campos e "Mais opções" (as notas). Os sites
+  "de referência" misturados com a pesquisa geral saíram do ecrã, como na
+  WineCatalog: não se sabia de onde vinha o quê (a `vinho-info` continua a
+  aceitá-los). O "‹ Voltar" (`pqTipoVoltar`) volta à escolha; um erro fica
+  no passo 2 do mesmo caminho, com os links que foram na caixa.
 - **O que se encontrou é o ecrã da WineCatalog** (29/09/2026, o dono das
   apps: "fica mais claro o que encontrou, onde encontrou, com links"):
   `pqLinhasHTML`, as classes `.rv-*` de lá com as cores daqui. Uma linha

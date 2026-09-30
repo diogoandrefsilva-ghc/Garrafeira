@@ -1237,6 +1237,16 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .pq-conversa{margin-top:12px;font-size:13.5px;line-height:1.55}
 .pq-conversa p{margin:0 0 7px}
 .pq-conversa p.pq-q{font-weight:600;margin-top:10px}
+/* Como procurar (`pqTipoHTML`): dois botões grandes, e o texto de cada um diz
+   o que acontece — o mesmo desenho do `.pr-tipo` da WineCatalog. */
+.pq-tipos{display:grid;gap:8px;margin-top:4px}
+.pq-tipo{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;padding:13px 14px;
+  border:1px solid var(--bo);border-radius:12px;background:var(--card);font:inherit;color:var(--tx);cursor:pointer}
+.pq-tipo:hover,.pq-tipo:focus-visible{border-color:var(--vh);outline:none}
+.pq-tipo:active{background:var(--bg)}
+.pq-tipo b{font-size:14.5px;font-weight:600}
+.pq-tipo span{font-size:12.5px;color:var(--mu);line-height:1.5}
+.pq-campos textarea{margin-top:4px}
 .pq-espera{display:flex;align-items:center;gap:12px;padding:10px 0}
 .pq-espera .gl-spin{flex-shrink:0;width:22px;height:22px;border-color:var(--vhp);border-top-color:var(--vh)}
 .pq-cor{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0}
@@ -1270,8 +1280,6 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 /* Os sites da procura, um por linha (o que se fez com cada um). */
 .pq-sites{margin:2px 0 0;padding-left:16px}
 .pq-sites li{margin:1px 0}
-/* O "Usar só a informação destes sites", logo por baixo da caixa dos sites. */
-.mbox .ia-esc.pq-so{margin-top:6px;border-bottom:none}
 /* "Procurar links": o botão ao pé da caixa dos sites, e a lista dos links
    (o título é o link que se abre para confirmar; o resumo por baixo). */
 .pq-links-bt{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
@@ -1280,6 +1288,9 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .pq-grupo{margin:12px 0 2px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
 .pq-grupo:first-child{margin-top:4px}
 .btn.pq-mais{display:block;width:100%;margin-top:10px}
+/* `.pq-link` é também o botão-link do vinho novo (o sublinhado dele passava
+   para o site e o resumo de cada link da lista). */
+.mbox .ia-esc.pq-link{text-decoration:none}
 .mbox .ia-esc.pq-link a{font-weight:600;color:var(--vh);word-break:break-word}
 .mbox .ia-esc.pq-link i{font-size:11px;line-height:1.35;margin-top:2px}
 .mbox .ia-esc.pq-link i.pq-link-m{color:var(--tx)}

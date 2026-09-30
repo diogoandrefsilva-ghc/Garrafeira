@@ -7158,10 +7158,11 @@ function iaPreencherForm(res,substituir){
         tirada dos dois lados e o produtor como um "contém") numa lista com
         o nome, o ano, as castas e o produtor; o do ano escrito vem
         destacado. Escolhe-se um — ou "Nenhum destes".
-     2. IA — uma procura só. Quem tem o pacote completo faz, na Edge
-        Function e de seguida, o Serper e depois o grounding pelo que ele
-        não trouxe; o intermédio faz só o grounding. Os sites de referência
-        pedem-se aqui (quem os usa a sério é o Serper).
+     2. IA — uma procura só, depois de escolher COMO (`pqTipo`, 30/09/2026):
+        só nos sites que se indicam (a lista das lojas do "Procurar links",
+        ou um link colado), ou perguntar à IA — que no pacote completo faz,
+        na Edge Function e de seguida, o Serper e depois o grounding pelo que
+        ele não trouxe, e no intermédio só o grounding.
    A resposta colada de outro assistente saiu daqui: vive no Editar
    (`formManualAbrir`), ao lado de onde se escreve à mão.
 
@@ -7227,7 +7228,7 @@ function pqAtualForm(){
 }
 function pqNovoEstado(novo,id,atual){
   return {novo,vid:novo?null:id.vid,id,atual,hist:{},iguais:new Set(),esc:{},et:{},res:{},
-    fase:'cat',corre:'',repetir:null,escolher:null,sites:[],soSites:false,notas:'',colheitaEsp:false,pedidoCampos:null,
+    fase:'cat',corre:'',repetir:null,escolher:null,tipo:null,sites:[],sitesPedido:[],soSites:false,notas:'',colheitaEsp:false,pedidoCampos:null,
     ultima:'',preenchidos:{},cat:null};
 }
 // Ainda há alguma coisa a fazer com esta procura (a correr, ou por rever)?
@@ -7409,13 +7410,40 @@ async function pqCatalogoUsar(c){
 function pqCamposLidos(){
   return [...document.querySelectorAll('#modal-ia-in .pq-campo:checked')].map(e=>e.value);
 }
-function pqSitesLidos(){
-  // Inteiros: um link colado é uma PÁGINA a ler (e o do Vivino é o link
-  // dele); o corte ao domínio faz-se na `vinho-info`.
-  const sites=(document.getElementById('pq-sites')?.value||'').split(/[,\n]/).map(s=>s.trim()).filter(Boolean).slice(0,5);
-  const notas=(document.getElementById('pq-notas')?.value||'').trim().slice(0,300);
-  const soSites=!!document.getElementById('pq-so-sites')?.checked;
-  return {sites,notas,soSites};
+/* As caixas de texto do passo 2 (os links colados e as notas) passam para o
+   PQ antes de o ecrã se repintar, que as reescreve. Os links vão inteiros:
+   um link colado é uma PÁGINA a ler (e o do Vivino é o link dele); o corte
+   ao domínio faz-se na `vinho-info`. */
+function pqLerCaixas(){
+  const P=PQ;if(!P)return;
+  const s=document.getElementById('pq-sites');
+  if(s)P.sites=pqColados(s.value);
+  const n=document.getElementById('pq-notas');
+  if(n)P.notas=n.value.trim().slice(0,300);
+}
+function pqColados(txt){return String(txt||'').split(/[,\n]/).map(s=>s.trim()).filter(Boolean).slice(0,5);}
+
+/* COMO se procura (30/09/2026, o dono das apps: o primeiro ecrã da
+   WineCatalog, "num site ou perguntar à IA"). Dois caminhos, e o segundo
+   passo é o de cada um:
+     · 'sites' — SÓ nos sites que se indicam (`soSites`, sempre). No pacote
+       completo começa pela lista das lojas ("Procurar links"), onde se
+       escolhem até 2; em qualquer pacote pode colar-se o link de uma página.
+     · 'ia'    — a pesquisa de sempre, sem sites.
+   Os sites "de referência" misturados com a pesquisa geral deixaram de ser
+   uma opção no ecrã, como na WineCatalog: não se sabia de onde vinha o quê. */
+function pqTipo(t){
+  const P=PQ;if(!P)return;
+  P.tipo=t;
+  if(t==='sites'&&temPremium()&&!P.links){pqLinks();return;}
+  pqPintar();
+}
+function pqTipoVoltar(){
+  const P=PQ;if(!P)return;
+  pqLerCaixas();
+  P.tipo=null;P.links=null;P.linksMarca=[];P.linksProx=null;
+  if(P.et.ia&&P.et.ia.estado==='erro')delete P.et.ia;
+  pqPintar();
 }
 
 /* ── Etapa 2: a IA — uma procura só ── */
@@ -7427,16 +7455,17 @@ async function pqIA(repetir){
     if(!campos.length){toast('Escolhe pelo menos um campo',1);return;}
     P.pedidoCampos=campos;
     P.colheitaEsp=!!document.getElementById('pq-colheita')?.checked;
-    // Com a lista do "Procurar links" à vista, os sites são os links marcados
-    // e é sempre "só estes sites" (ver `pqLinks`).
-    const {sites,notas,soSites}=P.links?{sites:pqLinksMarcados(P),notas:P.notas,soSites:true}:pqSitesLidos();
-    if(P.links&&!sites.length){toast('Marca pelo menos um link',1);return;}
-    if(soSites&&!sites.length){
-      toast('Escreve pelo menos um site (ou o link da página do vinho) para usar só esses',1);
+    pqLerCaixas();
+    // Nos sites: os links marcados na lista do "Procurar links" e os colados,
+    // sem repetir — e é sempre "só estes sites" (ver `pqTipo`).
+    const sites=P.tipo==='sites'
+      ?[...(P.links?pqLinksMarcados(P):[]),...P.sites].filter((s,i,a)=>a.indexOf(s)===i).slice(0,5):[];
+    if(P.tipo==='sites'&&!sites.length){
+      toast(P.links?'Marca um link da lista, ou cola o de uma página':'Cola o link da página do vinho (ou escreve o site)',1);
       document.getElementById('pq-sites')?.focus();
       return;
     }
-    P.sites=sites;P.notas=notas;P.soSites=soSites;
+    P.sitesPedido=sites;P.soSites=P.tipo==='sites';
     if(!P.novo&&!P.cat){
       // A cor confirma-se aqui (e grava-se no vinho, se mudou).
       const v=IDXV[P.vid];if(!v)return;
@@ -7464,11 +7493,13 @@ async function pqIA(repetir){
   if(P.pedidoCampos&&P.pedidoCampos.length<pqChavesIA(P).length)pedido.campos=P.pedidoCampos;
   pedido.colheitaEspecifica=P.colheitaEsp;
   if(P.notas)pedido.notas=P.notas;
-  if(P.sites.length)pedido.sites=P.sites;
-  if(P.soSites&&P.sites.length)pedido.soSites=true;
+  if(P.soSites&&P.sitesPedido.length){pedido.sites=P.sitesPedido;pedido.soSites=true;}
   // O resultado do Vivino que a procura de links trouxe vai junto: o link e
   // as estrelas do Google, sem outra pesquisa (o Vivino não se abre).
   if(P.links&&P.linksVivino&&pedido.soSites)pedido.vivinoGoogle=P.linksVivino;
+  // A lista já serviu: os sites da pesquisa passam para a caixa, que é com
+  // eles que se tenta outra vez se ela falhar.
+  if(P.soSites)P.sites=P.sitesPedido.slice();
   P.links=null;P.linksMarca=[];P.linksProx=null;
   P.corre='ia';P.et.ia={estado:'corre'};
   pqPintar();
@@ -7665,10 +7696,8 @@ function pqCorHTML(P){
 async function pqLinks(mais){
   const P=PQ;if(!P)return;
   if(!temPremium()){toast('Procurar links é do pacote completo',1);return;}
-  if(!mais){
-    const {sites,notas,soSites}=pqSitesLidos();
-    P.sites=sites;P.notas=notas;P.soSites=soSites;
-  }else if(!P.links||!P.linksProx)return;
+  if(mais&&(!P.links||!P.linksProx))return;
+  pqLerCaixas();
   const pedido={links:true,nome:P.id.nome};
   if(mais){
     pedido.fase=P.linksProx.fase;pedido.pagina=P.linksProx.pagina;
@@ -7715,10 +7744,14 @@ function pqLinkMarcar(el,i){
     if(m.length>=P.linksMax){el.checked=false;toast(`Escolhe no máximo ${P.linksMax} — para outros, pesquisa outra vez a seguir`);return;}
     if(!m.includes(i))m.push(i);
   }else P.linksMarca=m.filter(x=>x!==i);
-  const b=document.getElementById('pq-links-ir');
-  if(b)b.textContent=`🔎 Pesquisar só nestes (${P.linksMarca.length})`;
+  pqLinksContar();
 }
-function pqLinksVoltar(){const P=PQ;if(!P)return;P.links=null;P.linksMarca=[];P.linksProx=null;pqPintar();}
+// Quantas páginas vão: as marcadas na lista e as coladas por baixo dela.
+function pqLinksN(P,colados){return new Set([...pqLinksMarcados(P),...colados]).size;}
+function pqLinksContar(){
+  const P=PQ,b=document.getElementById('pq-links-ir');if(!P||!b)return;
+  b.textContent=`🔎 Pesquisar só nestes (${pqLinksN(P,pqColados(document.getElementById('pq-sites')?.value))})`;
+}
 // O título de cada leva de links: de onde vieram.
 function pqLinksGrupo(l){
   return l.grupo==='lojas'?'Nas lojas (Garrafeira Nacional, Granvine, Vinha.pt, Portugal Vineyards, Wine Radar)'
@@ -7748,9 +7781,34 @@ function pqLinksHTML(P){
     (<a href="${esc(P.linksVivino.url)}" target="_blank" rel="noopener">${esc(P.linksVivino.titulo||'Vivino')}</a>) vão com a pesquisa.</p>`:'';
   return `<p class="pq-q">Que páginas são deste vinho?</p>
     <p class="note">Abre os links para confirmar e marca até ${P.linksMax}. A IA lê só essas páginas; para outras, voltas aqui a seguir.</p>
-    ${pqCorHTML(P)}<div class="pq-links">${lista}</div>${mais}${viv}${pqCamposHTML(P)}
-    <div class="macoes"><button class="btn prim" id="pq-links-ir" onclick="pqIA()">🔎 Pesquisar só nestes (${(P.linksMarca||[]).length})</button>
-      <button class="btn ghost" onclick="pqLinksVoltar()">‹ Voltar</button></div>`;
+    ${pqCorHTML(P)}<div class="pq-links">${lista}</div>${mais}${viv}
+    <label for="pq-sites">Ou cola o link de uma página que já tenhas</label>
+    <textarea id="pq-sites" rows="2" oninput="pqLinksContar()" placeholder="https://…">${esc(P.sites.join('\n'))}</textarea>
+    ${pqCamposHTML(P)}${pqOpcoesHTML(P)}
+    <div class="macoes"><button class="btn prim" id="pq-links-ir" onclick="pqIA()">🔎 Pesquisar só nestes (${pqLinksN(P,P.sites)})</button>
+      <button class="btn ghost" onclick="pqTipoVoltar()">‹ Voltar</button></div>`;
+}
+// As notas para identificar o vinho: raramente fazem falta, ficam fechadas.
+function pqOpcoesHTML(P){
+  return `<details class="pq-campos"${P.notas?' open':''}><summary>Mais opções</summary>
+    <label for="pq-notas">Notas para identificar o vinho</label>
+    <textarea id="pq-notas" rows="2" maxlength="300" placeholder="ex.: edição limitada, da casa Ferreirinha">${esc(P.notas)}</textarea>
+  </details>`;
+}
+/* Passo 1: como se procura (ver `pqTipo`). */
+function pqTipoHTML(P,aMao){
+  const c=P.et.cat;
+  const prem=temPremium();
+  return `<p class="pq-q">${c&&c.estado==='feito'?'Como queres procurar o resto?':'Como queres procurar?'}</p>
+    <div class="pq-tipos">
+      <button class="pq-tipo" onclick="pqTipo('sites')"><b>🔗 Nos sites que eu indicar</b>
+        <span>${prem?'Mostro-te as páginas deste vinho nas lojas e escolhes até 2, ou colas o link de uma que já tenhas.'
+          :'Colas o link da página do vinho numa loja.'} A informação vem só dali, e cada campo diz de que página veio.</span></button>
+      <button class="pq-tipo" onclick="pqTipo('ia')"><b>✨ Perguntar à IA</b>
+        <span>${prem?'Pesquisa no Google e no Vivino, e a IA lê o que encontrar.'
+          :'A IA pesquisa no Google. Às vezes responde de memória, e diz-to.'}</span></button>
+    </div>
+    ${aMao?`<div class="macoes">${aMao}</div>`:''}`;
 }
 /* A pergunta da etapa em que se está, com os botões dela. */
 function pqPerguntaHTML(P){
@@ -7778,30 +7836,33 @@ function pqPerguntaHTML(P){
         <button class="btn ghost" onclick="PQ.repetir=null;pqPintar()">Não</button></div>`;
   }
   if(P.fase!=='ia')return '';
-  if(P.links&&temPremium())return pqLinksHTML(P);
   const aMao=P.novo
     ?`<button class="btn ghost" onclick="pqFimNovo()">Ir para o formulário</button>`
     :P.cat?''
     :`<button class="btn ghost" onclick="pqAMao()">✏️ Preencher à mão</button>`;
   if(!podeUsarIA())return `<div class="macoes">${aMao}</div>`;
+  // Passo 1: como. Passo 2: o que (e onde, nos sites).
+  if(!P.tipo)return pqTipoHTML(P,aMao);
   const e=P.et.ia;
-  const erro=e&&e.estado==='erro'?`<div class="erro">A pesquisa com IA não deu: ${esc(e.msg)}</div>`:'';
-  const c=P.et.cat;
-  const q=c&&c.estado==='feito'?'Queres completar com a IA?':'Queres pesquisar com IA?';
-  return `${erro}<p class="pq-q">${q}</p>${pqCorHTML(P)}
-    <label for="pq-sites">Sites de referência (opcional)</label>
-    <textarea id="pq-sites" rows="2" placeholder="ex.: garrafeiranacional.com, ou o link da página do vinho numa loja">${esc(P.sites.join(', '))}</textarea>
-    ${temPremium()?`<div class="pq-links-bt"><button class="btn ghost" onclick="pqLinks()">🔗 Procurar links</button>
-      <span class="note">procura as páginas deste vinho nas lojas (e, se quiseres, na internet); escolhes até 2 e a IA lê só essas</span></div>`:''}
-    <div class="note">Domínios ou links, separados por vírgula. Um link é lido tal e qual (o do Vivino do vinho certo é
-      usado como o link dele); de um domínio, a pesquisa procura o vinho só nesse site e lê a página que encontrar${
-      temPremium()?'':' — isso é do pacote completo; no teu, cola o link da página'}. No fim diz de que site veio cada campo.</div>
-    <label class="ia-esc pq-so"><input type="checkbox" id="pq-so-sites"${P.soSites?' checked':''}>
-      <span>Usar só a informação destes sites<i>sem a pesquisa geral nem a da IA: o que as páginas destes sites não disserem fica vazio</i></span></label>
-    <label for="pq-notas">Notas para identificar o vinho (opcional)</label>
-    <textarea id="pq-notas" rows="2" maxlength="300" placeholder="ex.: edição limitada, da casa Ferreirinha">${esc(P.notas)}</textarea>
-    ${pqCamposHTML(P)}
-    <div class="macoes"><button class="btn prim" onclick="pqIA()">🔎 ${e&&e.estado==='erro'?'Tentar outra vez':'Pesquisar com IA'}</button>${aMao}</div>`;
+  const falhou=e&&e.estado==='erro';
+  const erro=falhou?`<div class="erro">A pesquisa não deu: ${esc(e.msg)}</div>`:'';
+  const voltar=`<button class="btn ghost" onclick="pqTipoVoltar()">‹ Voltar</button>`;
+  if(P.tipo==='sites'){
+    if(P.links&&temPremium())return erro+pqLinksHTML(P);
+    return `${erro}<p class="pq-q">🔗 Nos sites que indicares</p>${pqCorHTML(P)}
+      <label for="pq-sites">O link da página do vinho</label>
+      <textarea id="pq-sites" rows="2" placeholder="ex.: o link da página do vinho numa loja">${esc(P.sites.join('\n'))}</textarea>
+      <div class="note">Até 5, um por linha. Um link é lido tal e qual (o do Vivino do vinho certo é usado como o
+        link dele)${temPremium()?'; de um site sem página, a pesquisa procura o vinho só nesse site':'. Só o site, sem a página, não chega: procurar dentro de um site é do pacote completo'}.
+        O que as páginas não disserem fica vazio.</div>
+      ${temPremium()?`<div class="pq-links-bt"><button class="btn ghost" onclick="pqLinks()">🔗 Procurar links nas lojas</button>
+        <span class="note">mostra as páginas deste vinho nas lojas, para escolheres até 2</span></div>`:''}
+      ${pqCamposHTML(P)}${pqOpcoesHTML(P)}
+      <div class="macoes"><button class="btn prim" onclick="pqIA()">🔎 ${falhou?'Tentar outra vez':'Pesquisar nestes sites'}</button>${voltar}</div>`;
+  }
+  return `${erro}<p class="pq-q">✨ Perguntar à IA</p>${pqCorHTML(P)}
+    ${pqCamposHTML(P)}${pqOpcoesHTML(P)}
+    <div class="macoes"><button class="btn prim" onclick="pqIA()">🔎 ${falhou?'Tentar outra vez':'Pesquisar com IA'}</button>${voltar}</div>`;
 }
 function pqDefeito(P,k){
   if(P.esc[k])return P.esc[k];
@@ -10449,7 +10510,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='140';
+const APP_BUILD='141';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
