@@ -964,7 +964,8 @@ mais simples e mais seguro.
 "Quero incluir na garrafeira o catálogo de vinhos" — a WineCatalog passa a
 ser o back-office. **Tocar no título do cabeçalho ("Garrafeira ⇄") troca
 para o Catálogo** (`modoAlternar`, `MODO`): o cabeçalho fica verde-garrafa,
-o título passa a "Catálogo", e só ficam o Detalhe e as Definições. Não se
+o título passa a "Catálogo", e só ficam o Resumo, o Detalhe e as Definições
+(abre no Detalhe). Não se
 grava: a app abre sempre na garrafeira. Decisões do dono:
 - **É o MESMO Detalhe e a MESMA página do vinho**, com outra fonte. Os
   filtros varrem `vinhosUniverso()`/`vinhosBase()` (o catálogo ou a
@@ -986,8 +987,14 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
   garrafeira e a Wishlist (aí vai direto a "Adicionar à wishlist"). Nem no
   Resumo (o separador "Garrafeira" passou a chamar-se **Resumo**), nem em
   Locais, Consumidos, Definições, nem no catálogo.
-- **Fase 2** (por fazer): o Resumo do catálogo e a Atualização massiva no
-  FAB do catálogo. O Vinho novo já lá está, para os curadores (a seguir).
+- **O Resumo do catálogo** (30/09/2026, o dono) é o MESMO `renderResumo`
+  sobre o catálogo inteiro (`cat`), com três diferenças: sem **Valor
+  estimado**; os cartões **Tintos** e **Brancos** (abrem "Vinhos por cor");
+  e, em vez da região e da casta preferidas, **Top Região Tintos / Brancos**
+  e **Top Casta Tintos / Brancos** (painéis `regiao_tinto`… com a contagem
+  só dessa cor). O que está aberto fecha-se ao trocar de modo.
+- **Fase 2** (por fazer): a Atualização massiva no FAB do catálogo. O Vinho
+  novo já lá está, para os curadores (a seguir).
 
 ### Os curadores do catálogo (30/09/2026, migração 32)
 O dono das apps: "eu quero definir quem cria novos vinhos no catálogo… e se

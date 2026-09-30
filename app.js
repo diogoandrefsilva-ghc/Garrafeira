@@ -1323,6 +1323,7 @@ async function modoAlternar(){
   }else{
     MODO='garrafeira';
   }
+  RESUMO_ABERTO=null;RESUMO_DRILL=null;
   // O Local é um filtro da garrafeira: no catálogo cortava tudo.
   if(F.local)F.local='';
   if(FILTRO_CAMPO==='local')FILTRO_CAMPO=null;
@@ -1446,7 +1447,9 @@ function scCardFav(rotulo,nome,sub,qual){
 
    `filtroFn` decide quem entra na lista e `listaBase` é de onde se filtra:
    os monocasta para o card do meio, todos os com stock para os outros. */
-const RESUMO_NOME={mono:'Monocasta',regiao:'Regiões',casta:'Castas',valor:'Valor',falta:'A completar'};
+const RESUMO_NOME={mono:'Monocasta',regiao:'Regiões',casta:'Castas',valor:'Valor',falta:'A completar',
+  cor:'Cores',regiao_tinto:'Tintos por região',regiao_branco:'Brancos por região',
+  casta_tinto:'Tintos por casta',casta_branco:'Brancos por casta'};
 function resumoPainel(id,titulo,rows,filtroFn,listaBase,notaTop){
   const fechar=`<button class="rdet-x" onclick="resumoFechar()" title="Fechar">✕</button>`;
   if(RESUMO_DRILL){
@@ -1718,7 +1721,12 @@ function faltasDe(v){return FALTAS.filter(f=>!f.tem(v)).map(f=>f.k);}
 function renderResumo(){
   const box=document.getElementById('resumo-cards');
   if(!box)return;
-  const comStock=db.vinhos.filter(v=>stockDe(v.id)>0);
+  // No catálogo (o título trocado) é o mesmo Resumo sobre o catálogo
+  // inteiro, com as diferenças que o dono pediu (30/09/2026): sem valor
+  // estimado, o número de tintos e de brancos, e os quatro "Top" por cor em
+  // vez das duas preferidas.
+  const cat=modoCat();
+  const comStock=cat?(CAT_VINHOS||[]):db.vinhos.filter(v=>stockDe(v.id)>0);
   const totalVinhos=comStock.length;
 
   const monoWines=comStock.filter(v=>(v.castas||[]).length===1);
@@ -1758,20 +1766,40 @@ function renderResumo(){
   const topCasta=casRows.length?casRows[0]:null;
   const topCastaMono=topCasta?(monoRows.find(m=>m.nome===topCasta.nome)||{n:0}).n:0;
   let favHtml='';
-  if(topRegiao)favHtml+=scCardFav('Região preferida',topRegiao.nome,
+  // No catálogo: os tintos e os brancos, e o topo de cada um.
+  const daCor=c=>comStock.filter(v=>chave(v.tipo||'')===c);
+  const tintos=cat?daCor('tinto'):[], brancos=cat?daCor('branco'):[];
+  const RC={};   // painéis por cor: 'regiao_tinto' → {lista, rows, casta?}
+  if(cat){
+    [['tinto',tintos,'Tintos'],['branco',brancos,'Brancos']].forEach(([c,lista,nome])=>{
+      const rr=contarPor(lista,v=>[v.regiao||'Sem região'])
+        .sort((a,b)=>(a.nome==='Sem região')-(b.nome==='Sem região')||b.n-a.n||a.nome.localeCompare(b.nome,'pt'));
+      const cr=contarPor(lista,v=>v.castas||[]);
+      RC['regiao_'+c]={lista,rows:rr,titulo:nome+' por região',rot:'Top Região '+nome};
+      RC['casta_'+c]={lista,rows:cr,titulo:nome+' por casta',rot:'Top Casta '+nome,casta:true};
+    });
+    ['regiao_tinto','regiao_branco','casta_tinto','casta_branco'].forEach(q=>{
+      const r=RC[q], top=r.rows.find(x=>x.nome!=='Sem região');
+      if(top)favHtml+=scCardFav(r.rot,top.nome,`${top.n} vinho${top.n===1?'':'s'}`,q);
+    });
+  }
+  if(topRegiao&&!cat)favHtml+=scCardFav('Região preferida',topRegiao.nome,
     `${topRegiao.n} vinho${topRegiao.n===1?'':'s'}`,'regiao');
-  if(topCasta)favHtml+=scCardFav('Casta preferida',topCasta.nome,
+  if(topCasta&&!cat)favHtml+=scCardFav('Casta preferida',topCasta.nome,
     `${topCasta.n} vinho${topCasta.n===1?'':'s'}${topCastaMono?`, ${topCastaMono} monocasta`:''}`,'casta');
 
+  const onde=cat?'no catálogo':'na garrafeira';
   let html=
-    scCard('','Vinhos',totalVinhos,totalVinhos===1?'vinho na garrafeira':'vinhos na garrafeira',null)+
+    scCard('','Vinhos',totalVinhos,(totalVinhos===1?'vinho ':'vinhos ')+onde,null)+
+    (cat?scCard('cv','Tintos',tintos.length,totalVinhos?`de ${totalVinhos} vinhos`:'','cor')+
+         scCard('cb','Brancos',brancos.length,totalVinhos?`de ${totalVinhos} vinhos`:'','cor'):'')+
     scCard('co','Monocasta',monoWines.length,totalVinhos?`de ${totalVinhos} vinhos`:'','mono')+
     scCard('cv','Regiões',nRegioes,'diferentes','regiao')+
     scCard('cb','Castas',casRows.length,'diferentes','casta')+
     favHtml+
-    scCard('co','Valor estimado',`<span class="sc-eur">${esc(eur0(valorTotal))}</span>`,
+    (cat?'':scCard('co','Valor estimado',`<span class="sc-eur">${esc(eur0(valorTotal))}</span>`,
       comPreco.length===ativas.length?`${ativas.length} garrafa${ativas.length===1?'':'s'}`
-        :`${comPreco.length} de ${ativas.length} garrafas com preço`,'valor')+
+        :`${comPreco.length} de ${ativas.length} garrafas com preço`,'valor'))+
     scCard('cb','A completar',faltosos.length,
       faltosos.length?'vinhos com dados em falta':'está tudo preenchido','falta');
 
@@ -1786,6 +1814,15 @@ function renderResumo(){
       v=>garrafasDe(v.id,true).some(g=>{const x=valorGarrafa(g);return x!=null&&FAIXAS_PRECO[faixaIndice(x)].nome===RESUMO_DRILL;}),
       comStock,
       comPreco.length?`Valor médio: <b>${esc(eur0(valorMedio))}</b> por garrafa, sobre ${comPreco.length} garrafa${comPreco.length===1?'':'s'} com preço conhecido.`:'');
+  if(RESUMO_ABERTO==='cor'){
+    const corRows=contarPor(comStock,v=>[v.tipo||'Sem cor']);
+    html+=resumoPainel('cor','Vinhos por cor',corRows,v=>(v.tipo||'Sem cor')===RESUMO_DRILL,comStock);
+  }
+  if(RC[RESUMO_ABERTO]){
+    const r=RC[RESUMO_ABERTO];
+    html+=resumoPainel(RESUMO_ABERTO,r.titulo,r.rows,
+      r.casta?v=>(v.castas||[]).includes(RESUMO_DRILL):v=>(v.regiao||'Sem região')===RESUMO_DRILL,r.lista);
+  }
   if(RESUMO_ABERTO==='falta')
     html+=resumoPainel('falta','O que falta preencher',falRows,
       v=>faltasDe(v).includes(RESUMO_DRILL),comStock);
