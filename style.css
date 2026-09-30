@@ -1928,3 +1928,27 @@ body.sem-desejo .desejo-only{display:none!important}
    pela moldura, a recortada da GN (≈ 1:2) enchia a altura e perdia os
    ombros. */
 .vc-thumb img.alta,.mhero-g img.alta,.mspot-thumb img.alta{object-fit:contain;padding:4px 3px;mix-blend-mode:multiply}
+
+/* ── O CATÁLOGO DENTRO DA GARRAFEIRA (fase 1, 30/09/2026) ──────────
+   O título do cabeçalho é o interruptor (`modoAlternar`). No catálogo o
+   cabeçalho muda de cor — verde-garrafa, a mesma família do verde que já
+   diz "veio do catálogo" (`.ia-cat`) — e o título passa a "Catálogo". O
+   bordô continua a ser a garrafeira; o dourado não se gasta aqui. */
+.modo-sw{display:inline-flex;align-items:center;gap:7px;cursor:pointer;border-radius:8px;
+  padding:1px 6px 1px 0;-webkit-tap-highlight-color:transparent;max-width:100%}
+.modo-sw:focus-visible{outline:2px solid rgba(255,255,255,.6);outline-offset:2px}
+.modo-ic{font-size:14px;line-height:1;opacity:.8;border:1px solid rgba(255,255,255,.35);
+  border-radius:99px;padding:3px 7px;transition:transform .25s ease}
+.modo-sw:hover .modo-ic{opacity:1}
+body.cat .modo-ic{transform:rotate(180deg)}
+body.cat-a-abrir .modo-ic{animation:catgira 1s linear infinite}
+@keyframes catgira{to{transform:rotate(360deg)}}
+body.cat>header{background:linear-gradient(160deg,#0f2a22 0%,#1d4a3b 50%,#2f6e57 130%)}
+/* No catálogo só há o Detalhe (e as Definições): o Resumo, os Locais, os
+   Consumidos e a Wishlist são da garrafeira. */
+body.cat .itabs .so-gar{display:none!important}
+body.cat .it.on{background:#1d4a3b;box-shadow:0 4px 12px -4px rgba(29,74,59,.8)}
+.bdg.cat-tens{background:#eaf3ee;color:#1d4a3b;border-color:#cfe3d7;font-weight:600}
+/* Um vinho do catálogo abre na mesma página, com a capa verde do catálogo
+   — venha de onde vier, diz-se logo que não é uma garrafa minha. */
+.mhero.mhero-cat{background:linear-gradient(155deg,#0f2a22,#1d4a3b 55%,#2f6e57)}

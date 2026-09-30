@@ -499,6 +499,14 @@ nenhuma ligação mudada, nada mexido nas garrafeiras.
 abriu (o `detalhe.paginas` do `sync_log`). Serve o "Procurar links" e o
 Diagnóstico. Sem tabela nova, nada mexido. Aplicada a 29/09/2026.
 
+### Migração 31 — o Catálogo dentro da Garrafeira (já aplicada)
+
+`db/migracao-catalogo-na-app.sql`. Só uma função, `garrafeira.catalogo_vinhos`
+(quem entra na app, `is_allowed()`), que devolve a ficha de todas as linhas
+vivas do catálogo (sem os fundidos, sem `origens`/`fontes`/`vezes`) e os
+preços das lojas no formato da `precos_lojas`. É o separador Catálogo da app.
+Aplicada a 30/09/2026.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as

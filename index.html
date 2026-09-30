@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="133">
+<body data-build="135">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone.svg" alt="">
@@ -97,7 +97,13 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
     <div class="brand">
       <div class="escudo"><img src="icone.svg" alt=""></div>
       <div style="min-width:0">
-        <h1>Garrafeira</h1>
+        <!-- O TÍTULO É O INTERRUPTOR entre a garrafeira e o catálogo
+             (`modoAlternar`): um toque, à vista em todos os separadores. -->
+        <div class="modo-sw" role="button" tabindex="0" onclick="modoAlternar()"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();modoAlternar();}"
+             title="Trocar entre a garrafeira e o catálogo">
+          <h1 id="hdr-titulo">Garrafeira</h1><span class="modo-ic" aria-hidden="true">⇄</span>
+        </div>
         <!-- De quem é a garrafeira que está aberta. Escrito por
              `aplicarCabecalho()` e escondido quando só há uma que é minha —
              repetir "Garrafeira do Barrona" por baixo de "Garrafeira" não
@@ -110,14 +116,14 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 
 <div class="wrap">
   <div class="itabs">
-    <button class="it on" onclick="tab('garrafeira',this)"><span class="ic">🍷</span> Garrafeira</button>
+    <button class="it on so-gar" onclick="tab('garrafeira',this)"><span class="ic">🍷</span> Resumo</button>
     <button class="it" onclick="tab('detalhe',this)"><span class="ic">📋</span> Detalhe</button>
-    <button class="it" onclick="tab('locais',this)"><span class="ic">📍</span> Locais</button>
-    <button class="it" onclick="tab('consumidos',this)"><span class="ic">📖</span> Consumidos</button>
+    <button class="it so-gar" onclick="tab('locais',this)"><span class="ic">📍</span> Locais</button>
+    <button class="it so-gar" onclick="tab('consumidos',this)"><span class="ic">📖</span> Consumidos</button>
     <!-- A WISHLIST (migração 15): escondida enquanto a coluna não existir
          (`body.sem-desejo`, ver `detetarDesejo`). Fica ANTES do ⚙️ porque o
          `restaurarTab` casa a posição do botão com o `ORDEM_TABS`. -->
-    <button class="it desejo-only" onclick="tab('desejos',this)"><span class="ic">⭐</span> Wishlist</button>
+    <button class="it desejo-only so-gar" onclick="tab('desejos',this)"><span class="ic">⭐</span> Wishlist</button>
     <button class="it so-ic" onclick="tab('cfg',this)" title="Definições" aria-label="Definições">⚙️<span class="it-n" id="cfg-n"></span></button>
   </div>
 

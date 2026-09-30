@@ -228,6 +228,12 @@ function aplicarPermissoes(){
 function aplicarCabecalho(){
   const el=document.getElementById('hdr-garrafeira');
   if(!el)return;
+  const t=document.getElementById('hdr-titulo');
+  if(t)t.textContent=modoCat()?'Catálogo':'Garrafeira';
+  if(modoCat()){
+    el.textContent=`Todos os vinhos conhecidos · ${(CAT_VINHOS||[]).length}`;
+    el.style.display='';ajustarSticky();return;
+  }
   const g=garrafeiraAtiva();
   const mostrar=!!g&&(GA_LISTA.length>1||!souDonoDaGarrafeira(g));
   el.textContent=mostrar?(souDonoDaGarrafeira(g)?g.nome:`${g.nome} · de ${g.dono}`
@@ -454,6 +460,9 @@ function desejado(v){return !!(TEM_DESEJO&&v&&v.desejado);}
 let IDXV={}, IDXL={}, GARV={};
 function reindexar(){
   IDXV={};db.vinhos.forEach(v=>IDXV[v.id]=v);
+  // Os vinhos do CATÁLOGO entram com o id NEGATIVO (ver `catNormalizar`):
+  // nunca colidem com um da garrafeira, e a página do vinho acha-os igual.
+  (CAT_VINHOS||[]).forEach(v=>IDXV[v.id]=v);
   IDXL={};db.locais.forEach(l=>IDXL[l.id]=l);
   GARV={};db.garrafas.forEach(g=>(GARV[g.vinho_id]=GARV[g.vinho_id]||[]).push(g));
 }
@@ -1121,6 +1130,120 @@ document.addEventListener('click',e=>{
   if(MAPA_POP_LOCAL&&!e.target.closest('#mapa-pop,.msdot.cheia'))mapaPopupFechar();
 });
 
+/* ── O CATÁLOGO DENTRO DA GARRAFEIRA (fase 1, 30/09/2026) ──────────
+   O dono das apps: "um separador idêntico ao Detalhe da Garrafeira, que
+   em vez de ler os vinhos da garrafeira está a ler o Catálogo". É isso à
+   letra: o MESMO Detalhe (procura, filtros, grupos, lista/grelha) e a MESMA
+   página do vinho, só com outra fonte. Troca-se tocando no título do
+   cabeçalho ("Garrafeira ⇄"), que muda de cor e passa a dizer "Catálogo".
+   - Os vinhos do catálogo vêm TODOS de uma vez (`garrafeira.catalogo_vinhos`,
+     migração 31, ~300 linhas): é o que deixa os filtros serem os de cá, do
+     lado do browser, sem uma segunda cópia deles em SQL.
+   - Levam o id NEGATIVO (`-id` do catálogo). É a marca "isto é do catálogo"
+     em todo o lado (`v.id<0`), e nunca colide com um vinho da garrafeira no
+     `IDXV`, nos `onclick` e nos preços (`CAT_PRECOS`).
+   - Não se grava: o modo começa sempre na garrafeira. */
+let MODO='garrafeira';
+let CAT_VINHOS=null, CAT_PRECOS={}, CAT_A_CARREGAR=null;
+let TAB_GARRAFEIRA='garrafeira';   // o separador da garrafeira de onde se saiu
+function modoCat(){return MODO==='catalogo';}
+// Tudo o que os filtros varrem: no catálogo, o catálogo todo; na garrafeira,
+// os vinhos dela (o `passaFiltros` ainda corta os que não têm garrafas).
+function vinhosUniverso(){return modoCat()?(CAT_VINHOS||[]):db.vinhos;}
+// O que a lista mostra sem filtro nenhum.
+function vinhosBase(){return modoCat()?(CAT_VINHOS||[]):db.vinhos.filter(v=>stockDe(v.id)>0);}
+// O "Local" não é pergunta que se faça ao catálogo.
+function camposVisiveis(){return modoCat()?F_CAMPOS.filter(([k])=>k!=='local'):F_CAMPOS;}
+function catNormalizar(c){
+  const v=Object.assign({},c);
+  v.cat_id=c.id; v.id=-c.id;
+  v.cat_ids=(c.ids||[c.id]).map(Number);
+  v.castas=Array.isArray(c.castas)?c.castas.filter(Boolean).sort((a,b)=>String(a).localeCompare(String(b),'pt')):[];
+  CAT_PRECOS[v.id]=Array.isArray(c.precos)?c.precos:[];
+  delete v.precos; delete v.ids;
+  return v;
+}
+function catCarregar(){
+  if(CAT_VINHOS)return Promise.resolve(CAT_VINHOS);
+  if(CAT_A_CARREGAR)return CAT_A_CARREGAR;
+  CAT_A_CARREGAR=sbRpc('catalogo_vinhos',{}).then(r=>{
+    CAT_PRECOS={};
+    CAT_VINHOS=(Array.isArray(r)?r:[]).map(catNormalizar);
+    reindexar();
+    return CAT_VINHOS;
+  }).finally(()=>{CAT_A_CARREGAR=null;});
+  return CAT_A_CARREGAR;
+}
+// Os vinhos DESTA garrafeira ligados a esta linha do catálogo (`catalogo_id`,
+// migração 28) — também os ligados a uma linha fundida nela.
+function catMeus(v){
+  const ids=v.cat_ids||[];
+  return db.vinhos.filter(x=>x.catalogo_id!=null&&ids.includes(Number(x.catalogo_id)));
+}
+// No rodapé do cartão: o que tenho deste vinho, se tiver.
+function catTensHTML(v,curto){
+  const meus=catMeus(v);
+  if(!meus.length)return '';
+  const n=meus.reduce((s,m)=>s+stockDe(m.id),0);
+  const txt=n?(curto?`🍾 ${n}`:`🍾 Tens ${n} garrafa${n>1?'s':''}`)
+    :meus.some(desejado)?(curto?'⭐':'⭐ Na tua wishlist'):(curto?'📖':'📖 Já bebido');
+  return `<span class="bdg cat-tens">${txt}</span>`;
+}
+// Na página do vinho do catálogo, no lugar do "Onde está".
+function catNaMinhaHTML(v){
+  const meus=catMeus(v);
+  const linhas=meus.map(m=>{
+    const n=stockDe(m.id);
+    const txt=n?`🍾 ${n} garrafa${n>1?'s':''} na garrafeira`:desejado(m)?'⭐ Na wishlist':'📖 Já bebido';
+    return `<div class="mgar"><div class="g-onde"><b>${txt}</b>
+      <i>${esc(m.nome)}${m.ano?' · '+m.ano:''}</i></div>
+      <button class="mini" onclick="verVinho(${m.id})">Ver</button></div>`;
+  }).join('');
+  return `<div class="msec">${garrafeiraAtiva()&&!souDonoDaGarrafeira()?esc(nomeGarrafeira()):'Na tua garrafeira'}</div>
+    ${linhas||'<div class="note" style="padding:8px 0">Ainda não está na garrafeira.</div>'}
+    <div class="macoes ro-hide">
+      <button class="btn prim" onclick="catPor(${v.id},'')">🍷 Pôr na garrafeira</button>
+      ${TEM_DESEJO?`<button class="btn ghost" onclick="catPor(${v.id},'desejo')">⭐ Pôr na wishlist</button>`:''}
+    </div>`;
+}
+/* "Pôr na garrafeira" / "Pôr na wishlist": o formulário do vinho novo de
+   sempre, já com a ficha do catálogo nos campos (o nome e a colheita DELE),
+   aberto por inteiro para se rever e dizer onde fica a garrafa. Grava-se
+   pelo caminho de sempre, e o trigger liga-o a esta linha. */
+function catPor(id,modo){
+  const v=IDXV[id];
+  if(!v||roGuard())return;
+  if(modo==='desejo'&&!TEM_DESEJO)return;
+  abrirEditarVinho(0,modo);
+  const por=(eid,val)=>{const e=document.getElementById(eid);if(e&&val!=null)e.value=val;};
+  por('e-nome',v.nome);por('e-ano',v.ano||'');
+  if(TIPOS.includes(v.tipo))por('e-tipo',v.tipo);
+  iaPreencherForm(Object.assign({},v,{modelo:'catálogo partilhado'}),false);
+  formMostrarResto();
+}
+async function modoAlternar(){
+  if(!modoCat()){
+    if(!CAT_VINHOS){
+      document.body.classList.add('cat-a-abrir');
+      try{await catCarregar();}
+      catch(e){toast('Não foi possível abrir o catálogo: '+(e.message||e),1);return;}
+      finally{document.body.classList.remove('cat-a-abrir');}
+    }
+    if(LOTE_SEL_MODO)loteSelCancelar();
+    TAB_GARRAFEIRA=tabAtiva;
+    MODO='catalogo';
+  }else{
+    MODO='garrafeira';
+  }
+  // O Local é um filtro da garrafeira: no catálogo cortava tudo.
+  if(F.local)F.local='';
+  if(FILTRO_CAMPO==='local')FILTRO_CAMPO=null;
+  document.body.classList.toggle('cat',modoCat());
+  aplicarCabecalho();
+  const alvo=modoCat()?'detalhe':(TAB_GARRAFEIRA||'garrafeira');
+  tab(alvo,document.querySelector(`.itabs .it[onclick^="tab('${alvo}'"]`));
+}
+
 /* ── NAVEGAÇÃO ─────────────────────────────────────────────────────── */
 let tabAtiva='garrafeira';
 const ORDEM_TABS=['garrafeira','detalhe','locais','consumidos','desejos','cfg'];
@@ -1139,6 +1262,7 @@ function tab(nome,btn){
   if(nome==='consumidos')renderConsumidos();
   if(nome==='desejos')renderDesejos();
   if(nome==='cfg')renderCfg();
+  fabSincronizar();
   window.scrollTo({top:0,behavior:'instant'});
 }
 function restaurarTab(){
@@ -1325,7 +1449,7 @@ function mediana(xs){
   return n?(n%2?a[(n-1)/2]:(a[n/2-1]+a[n/2])/2):null;
 }
 function precosLojaDe(v){
-  const ps=((v&&PRECOS_LOJA[v.id])||[]).filter(p=>p&&Number(p.preco)>0)
+  const ps=((v&&(v.id<0?CAT_PRECOS[v.id]:PRECOS_LOJA[v.id]))||[]).filter(p=>p&&Number(p.preco)>0)
     .map(p=>({...p,preco:Number(p.preco),colheita:colheitaPreco(p)}))
     .sort((a,b)=>lojaOrdem(a.loja)-lojaOrdem(b.loja)||(b.colheita||0)-(a.colheita||0));
   ps.forEach((p,i)=>{
@@ -1601,10 +1725,12 @@ function renderFiltrados(){
     info.classList.add('on');fl.style.display='';
     const res=vinhosFiltrados();
     const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
-    fc.textContent=`${res.length} vinho${res.length===1?'':'s'} · ${nGar} garrafa${nGar===1?'':'s'}`;
+    fc.textContent=`${res.length} vinho${res.length===1?'':'s'}`+(modoCat()?'':` · ${nGar} garrafa${nGar===1?'':'s'}`);
   }
   renderDetalhe();
-  renderMapa();
+  // No catálogo não há Locais à vista: o mapa volta a desenhar-se ao
+  // regressar à garrafeira (o `modoAlternar` chama isto outra vez).
+  if(!modoCat())renderMapa();
 }
 
 /* ── FILTROS ───────────────────────────────────────────────────────
@@ -1748,7 +1874,7 @@ function valorDe(v,k){
    (preço, grau, Vivino) e os fechados (maturação, nº de castas) têm lista
    própria, que é o que os torna perguntas em vez de valores. */
 function valoresDe(k){
-  const comStock=db.vinhos.filter(v=>stockDe(v.id)>0);
+  const comStock=vinhosBase();
   const dados=()=>[...new Set([].concat(...comStock.map(v=>valorDe(v,k))))];
   const pt=(a,b)=>String(a).localeCompare(String(b),'pt');
   switch(k){
@@ -1798,7 +1924,7 @@ function rotuloFiltro(k,val){
    desenhar uma fita de doze nomes era trabalho que ninguém ia ler. */
 function opcoesCampo(k){
   const termos=termosProcura();
-  const base=db.vinhos.filter(v=>passaFiltros(v,termos,k));
+  const base=vinhosUniverso().filter(v=>passaFiltros(v,termos,k));
   const m=new Map();
   base.forEach(v=>{
     const cs=v.castas||[];
@@ -1855,7 +1981,7 @@ function renderFiltros(){
   /* A FITA. Cada campo diz-se pelo nome, e leva o número dos valores que
      tem ligados — é o que permite ver, sem abrir nenhum, onde é que está o
      filtro que está a cortar a lista. */
-  document.getElementById('f-campos').innerHTML=F_CAMPOS.map(([k,ico,nome])=>{
+  document.getElementById('f-campos').innerHTML=camposVisiveis().map(([k,ico,nome])=>{
     const n=ligados(k).length;
     return `<button class="fcampo${n?' ativo':''}${FILTRO_CAMPO===k?' aberto':''}"
       onclick="abrirCampo('${escJs(k)}')">${ico} ${esc(nome)}${
@@ -2198,10 +2324,10 @@ function trechoRealcado(txt,termos,max=72){
    aplicados mas não com o seu. */
 function vinhosFiltrados(ignorar){
   const termos=termosProcura();
-  return db.vinhos.filter(v=>passaFiltros(v,termos,ignorar));
+  return vinhosUniverso().filter(v=>passaFiltros(v,termos,ignorar));
 }
 function passaFiltros(v,termos,ignorar){
-  if(!garrafasDe(v.id,true).length)return false;   // só o que está lá
+  if(v.id>0&&!garrafasDe(v.id,true).length)return false;   // só o que está lá (o catálogo é todo)
   for(const [k] of F_CAMPOS){
     if(k===ignorar)continue;
     const sel=ligados(k);
@@ -2358,10 +2484,13 @@ function vinhoCardHTML(v,termos,loteSel){
           ${v.mencao?`<span class="bdg men">${esc(v.mencao)}</span>`:''}
           ${precoBadge(v)}
         </div>
-        <div class="vc-foot">
-          ${sitios.map(x=>`<span class="vc-l"><span class="vc-pip" style="background:${esc(x.cor)}"></span><b>${esc(x.txt)}</b></span>`).join('')}
-          ${janelaBadge(v,jan)}
-        </div>
+        ${(()=>{
+          // No catálogo o rodapé pode não ter nada (nem garrafas, nem janela):
+          // sem isto ficava o filete sozinho a separar coisa nenhuma.
+          const pe=sitios.map(x=>`<span class="vc-l"><span class="vc-pip" style="background:${esc(x.cor)}"></span><b>${esc(x.txt)}</b></span>`).join('')
+            +(v.id<0?catTensHTML(v):'')+janelaBadge(v,jan);
+          return pe.trim()||v.id>0?`<div class="vc-foot">${pe}</div>`:'';
+        })()}
       </div>
     </div>
     ${trechosMatch(v,termos)}
@@ -2403,7 +2532,7 @@ function vinhoGrelhaHTML(v,termos,loteSel){
     <div class="vg-sub">${vinhoMetaHTML(v,desejado(v)&&!v.ano?'':(v.ano||'s/a'))}</div>
     ${v.produtor?`<div class="vg-prod">${esc(v.produtor)}</div>`:''}
     <div class="vg-foot">
-      ${notaVivinoBadge(v)}
+      ${notaVivinoBadge(v)}${v.id<0?catTensHTML(v,true):''}
     </div>
     ${trechosMatch(v,termos)}
   </article>`;
@@ -2434,15 +2563,21 @@ function renderDetalhe(){
   const box=document.getElementById('detalhe-grupos');
   if(!box)return;
   const filtrando=haFiltros();
-  const res=filtrando?vinhosFiltrados():db.vinhos.filter(v=>stockDe(v.id)>0);
+  const res=filtrando?vinhosFiltrados():vinhosBase();
   const termos=termosProcura();
   const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
+  if(modoCat()){
+    document.getElementById('det-count').innerHTML=
+      `${res.length} vinho${res.length===1?'':'s'}<span class="det-gar"> no catálogo</span>`;
+    if(!CAT_VINHOS){box.innerHTML='<div class="vazio"><b>A abrir o catálogo…</b></div>';return;}
+    if(!res.length){box.innerHTML='<div class="vazio"><b>Nada encontrado</b>Nenhum vinho do catálogo corresponde a esta procura.</div>';return;}
+  }
   /* As GARRAFAS vão num `<span>` próprio porque no telemóvel desaparecem
      (ver `.det-gar` no style.css): a barra tem de caber numa linha, e
      "170 vinhos · 210 garrafas" não cabia ao lado dos comandos. O número
      que fica é o dos VINHOS, que é o que a lista mostra; as garrafas
      continuam à vista no painel da procura logo acima. */
-  document.getElementById('det-count').innerHTML=
+  if(!modoCat())document.getElementById('det-count').innerHTML=
     `${res.length} vinho${res.length===1?'':'s'}`+
     `<span class="det-gar"> · ${nGar} garrafa${nGar===1?'':'s'}</span>`;
   if(!res.length){
@@ -2454,7 +2589,7 @@ function renderDetalhe(){
   const grupos=agruparVinhos(res,DET_AGRUPAR);
   const grelha=DET_VISTA==='grelha';
   box.innerHTML=grupos.map(g=>{
-    const itens=g.vinhos.map(v=>(grelha?vinhoGrelhaHTML:vinhoCardHTML)(v,termos,LOTE_SEL_MODO)).join('');
+    const itens=g.vinhos.map(v=>(grelha?vinhoGrelhaHTML:vinhoCardHTML)(v,termos,LOTE_SEL_MODO&&!modoCat())).join('');
     return `<div class="dgrupo">
       <div class="dgrupo-tit">${esc(g.titulo)} <span class="dgrupo-n">${g.vinhos.length}</span></div>
       ${grelha?`<div class="vgrelha">${itens}</div>`:itens}
@@ -2470,6 +2605,7 @@ function renderLista(){
   renderResumo();
   renderFiltrados();
   if(tabAtiva==='desejos')renderDesejos();
+  fabSincronizar();
   verificarImagens();
 }
 
@@ -3184,7 +3320,7 @@ function verVinho(id){
   // Pede-se a comparação DEPOIS de a ficha já estar no ecrã — nunca antes,
   // que o catálogo é uma poupança e um espelho, nunca uma dependência no
   // caminho de abrir um vinho. A marca aparece quando a resposta chegar.
-  catComparar(id);
+  if(id>0)catComparar(id);
 }
 function refrescarVinhoAberto(){
   if(VINHO_ABERTO!=null&&document.getElementById('modal-vinho').classList.contains('on')){
@@ -3940,6 +4076,10 @@ function linha(rot,val,id,campos){
    rolar (ver "PÁGINA DO VINHO"). Só tem o ✕ — um ‹ à esquerda recuava a
    coluna do nome 40px para repetir o que o ✕ e o arrastar já fazem. */
 function vinhoDetalheHTML(v){
+  // Um vinho do CATÁLOGO (id negativo) abre nesta mesma página: sai o que é
+  // da garrafa e de quem a tem (onde está, as minhas notas, as bebidas,
+  // editar, apagar) e entra o "Na tua garrafeira" (`catNaMinhaHTML`).
+  const cat=v.id<0;
   const ativas=garrafasDe(v.id,true), bebidas=garrafasDe(v.id,false).filter(g=>g.estado==='consumida');
   const cl=castaLabel(v), jan=janelaBeber(v);
   const estagio=v.estagio_texto||(v.estagio_meses?`${v.estagio_meses} meses`:'');
@@ -3959,7 +4099,7 @@ function vinhoDetalheHTML(v){
     linkItens.push(`<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.titulo||l.url)}</a><button class="mlink-x ro-hide" onclick="removerLink(${v.id},${i})" title="Remover">✕</button>`);
   });
 
-  return `<div class="mhero">
+  return `<div class="mhero${cat?' mhero-cat':''}">
       <button class="mx" onclick="fecharModal('modal-vinho')">✕</button>
       <div class="mhero-in">
         <button class="mhero-g" onclick="abrirFoto(${v.id})" title="Ver a imagem em grande">
@@ -3967,7 +4107,7 @@ function vinhoDetalheHTML(v){
           <span class="mhero-lupa">⤢</span>
         </button>
         <div class="mhero-tx">
-          <div class="mhero-k">${desejado(v)?'⭐ Wishlist · ':''}${esc([v.estilo,v.classificacao].filter(Boolean).join(' · '))||(desejado(v)?'':'&nbsp;')}</div>
+          <div class="mhero-k">${cat?esc(['📚 Catálogo',v.estilo,v.classificacao].filter(Boolean).join(' · ')):`${desejado(v)?'⭐ Wishlist · ':''}${esc([v.estilo,v.classificacao].filter(Boolean).join(' · '))||(desejado(v)?'':'&nbsp;')}`}</div>
           <h3>${esc(v.nome)}${v.tipo?` <span class="mhero-cor">${esc(v.tipo)}</span>`:''}</h3>
           <div class="mhero-s"><span class="mhero-o">${origem}${origem&&v.ano?' · ':''}</span>${v.ano?`<b>${v.ano}</b>`:''}</div>
           ${v.ano?`<div class="mhero-ab">${v.ano}</div>`:''}
@@ -3983,13 +4123,13 @@ function vinhoDetalheHTML(v){
       ${(v.castas||[]).map(c=>`<span class="bdg cas" onclick="filtrarPorCasta('${escJs(c)}')" style="cursor:pointer" title="Ver tudo com esta casta">🍇 ${esc(c)}</span>`).join('')}
     </div>
 
-    <div class="macoes ro-hide">
+    ${cat?'':`<div class="macoes ro-hide">
       <button class="btn prim" onclick="iaAbrirProcura(${v.id})">🔎 Procurar informação</button>
       <button class="btn ghost" onclick="abrirEditarVinho(${v.id})">✏️ Editar</button>
     </div>
-    ${catTiraHTML(v)}
+    ${catTiraHTML(v)}`}
 
-    ${desejado(v)?`<div class="msec">Wishlist</div>
+    ${cat?catNaMinhaHTML(v):desejado(v)?`<div class="msec">Wishlist</div>
     <div class="desejo-faixa">
       <div class="note">${bebidas.length?'⭐ Já foi bebido e quer-se voltar a ter.'
         :`⭐ Ainda não está na garrafeira — é um vinho que se quer ter.${v.criado_em?` Na wishlist desde ${dataPT(String(v.criado_em).slice(0,10))}.`:''}`}</div>
@@ -4043,7 +4183,8 @@ function vinhoDetalheHTML(v){
       Fontes: ${v.ai_fontes.map(f=>`<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo||f.url)}</a>`).join(' · ')}
     </div>`:''}
 
-    ${(TEM_LINKS||v.vivino_url)?`<div class="msec">Links</div>
+    ${cat?(v.vivino_url?`<div class="msec">Links</div><div class="mlinks">${linkItens.join(', ')}</div>`:'')
+    :(TEM_LINKS||v.vivino_url)?`<div class="msec">Links</div>
       ${linkItens.length
         ? `<div class="mlinks">${linkItens.join(', ')}</div>`
         : '<div class="note" style="padding:8px 0">Sem links guardados.</div>'}
@@ -4054,6 +4195,9 @@ function vinhoDetalheHTML(v){
         <div class="mgar"><div class="g-onde"><b>${dataPT(g.consumido_em)}${g.consumo_local?' · '+esc(g.consumo_local):''}</b>
           <i>${g.consumo_avaliacao?estrelas(g.consumo_avaliacao)+' '+avalFmt(g.consumo_avaliacao)+' ':''}${(g.notas||[]).map(n=>esc(n.nota)).join(' · ')}</i></div></div>`).join('')}`:''}
 
+    ${cat?`<div class="msec">Atualizações</div>
+    <div class="ia-fontes">Última alteração no catálogo: ${dataHoraLocal(v.atualizado_em||v.criado_em)}</div>
+    <div class="macoes"><button class="btn ghost" onclick="fecharModal('modal-vinho')">Fechar</button></div>`:`
     <div class="msec">Atualizações</div>
     <div class="ia-fontes">
       Pesquisa com IA: ${v.ai_atualizado_em&&/^gemini/i.test(String(v.ai_modelo||''))
@@ -4069,7 +4213,7 @@ function vinhoDetalheHTML(v){
     <div class="macoes">
       <button class="btn ghost" onclick="fecharModal('modal-vinho')">Fechar</button>
       ${desejado(v)?'':`<button class="btn danger ro-hide" onclick="apagarVinho(${v.id})">🗑 Apagar vinho</button>`}
-    </div>`;
+    </div>`}`;
 }
 // Diferente de `ai_fontes` (o que a IA encontrou, substituído por inteiro a
 // cada procura): isto é do utilizador — a corrigir um link errado que a IA
@@ -4128,7 +4272,7 @@ function abrirFoto(vinhoId){
 
     <div class="note" id="foto-estado"></div>
 
-    <div class="macoes ro-hide">
+    ${vinhoId<0?'':`<div class="macoes ro-hide">
       <label class="btn prim" style="text-align:center;cursor:pointer;margin:0">
         📷 ${minha?'Trocar a imagem':'Carregar uma imagem'}
         <input type="file" accept="image/*" style="display:none" onchange="enviarFoto(this)">
@@ -4137,7 +4281,7 @@ function abrirFoto(vinhoId){
     </div>
     <div class="note" style="margin-top:10px">${minha
       ? 'Se removeres a tua, volta a aparecer a imagem que a procura encontrou (ou a garrafa desenhada).'
-      : 'A tua imagem fica guardada na garrafeira e passa a ser a que aparece em todo o lado.'}</div>`;
+      : 'A tua imagem fica guardada na garrafeira e passa a ser a que aparece em todo o lado.'}</div>`}`;
   abrirModal('modal-foto');
 }
 
@@ -4512,6 +4656,7 @@ function limparPosicaoLayout(prefix){
    (`podeUsarIA()`), como no `loteAbrir()`: em `sem_ia` a opção aparece e
    diz porque é que não dá, em vez de desaparecer sem explicação. */
 function fabToggle(){
+  if(tabAtiva==='desejos'){novoDesejo();return;}
   const w=document.getElementById('fab-wrap');
   if(w)w.classList.toggle('open');
 }
@@ -7094,7 +7239,13 @@ let IA_LOTE_ATIVO=false;        // `iaMostrarResultado`/`iaAplicar` leem isto pa
 
 function fabSincronizar(){
   const w=document.getElementById('fab-wrap');
-  if(w)w.style.display=LOTE_SEL_MODO?'none':'';
+  /* O "+" só onde se acrescenta alguma coisa (o dono das apps, 30/09/2026):
+     no Detalhe da garrafeira (novo vinho, atualização massiva, importar) e
+     na Wishlist (e aí vai direto a "Adicionar à wishlist"). Nem no Resumo,
+     nem em Locais, Consumidos ou Definições, nem no catálogo (fase 1). */
+  const ha=!modoCat()&&(tabAtiva==='detalhe'||(tabAtiva==='desejos'&&TEM_DESEJO));
+  if(w)w.style.display=(LOTE_SEL_MODO||!ha)?'none':'';
+  if(!ha)fabFechar();
   // No mapa dos locais o `ajustarEstantes` reserva espaço para o FAB — se
   // ele aparece/desaparece sem um redesenho a seguir, a última prateleira
   // ficava a discordar do que se vê (por baixo ou por cima do "+").
@@ -9075,7 +9226,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='133';
+const APP_BUILD='135';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

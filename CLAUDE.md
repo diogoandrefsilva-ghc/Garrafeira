@@ -89,6 +89,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-desejos-catalogo.sql` é a 29: a wishlist também alimenta o
   catálogo, com força 1 (ver "A wishlist é um vinho sem garrafas");
   corre depois da `garrafeira-desejo` na `forca()` da WineCatalog.
+  `migracao-catalogo-na-app.sql` é a 31: `catalogo_vinhos`, o catálogo
+  inteiro para o separador Catálogo (ver "O Catálogo dentro da app").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -954,6 +956,35 @@ mutação (guardar, apagar, consumir, mover): chama `renderResumo()` e
 `renderFiltrados()` (que por sua vez refaz Detalhe e Locais), sem tentar
 adivinhar qual separador está aberto — o dataset é pequeno, refazer tudo é
 mais simples e mais seguro.
+
+## O Catálogo dentro da app (fase 1, 30/09/2026, o dono das apps)
+"Quero incluir na garrafeira o catálogo de vinhos" — a WineCatalog passa a
+ser o back-office. **Tocar no título do cabeçalho ("Garrafeira ⇄") troca
+para o Catálogo** (`modoAlternar`, `MODO`): o cabeçalho fica verde-garrafa,
+o título passa a "Catálogo", e só ficam o Detalhe e as Definições. Não se
+grava: a app abre sempre na garrafeira. Decisões do dono:
+- **É o MESMO Detalhe e a MESMA página do vinho**, com outra fonte. Os
+  filtros varrem `vinhosUniverso()`/`vinhosBase()` (o catálogo ou a
+  garrafeira), e o campo Local não aparece no catálogo (`camposVisiveis`).
+- **Toda a gente que entra vê o catálogo inteiro** (decisão de 30/09/2026):
+  `garrafeira.catalogo_vinhos` (migração 31) dá a FICHA de cada linha, nunca
+  quem a tem nem de onde veio cada campo. ~300 linhas de uma vez (~380 KB,
+  só da primeira vez que se abre); se passar dos milhares, pagina-se ali.
+- **Os vinhos do catálogo têm o id NEGATIVO** (`catNormalizar`: `-id`). É a
+  marca `v.id<0` em todo o lado, não colide no `IDXV` nem nos `onclick`, e os
+  preços deles vivem em `CAT_PRECOS` (o `precosLojaDe` escolhe).
+- **O cartão diz o que tenho** ("🍾 Tens 2 garrafas", "⭐ Na tua wishlist",
+  `catTensHTML`) pela ligação `catalogo_id` (e as linhas fundidas nela). A
+  página troca o "Onde está" por **"Na tua garrafeira"** com **Pôr na
+  garrafeira / Pôr na wishlist** (`catPor`: o formulário do vinho novo de
+  sempre, já preenchido e aberto por inteiro). Sai o Editar, o Procurar, as
+  minhas notas, o comentário e o Apagar; a capa é verde (`.mhero-cat`).
+- **O "+" só onde se acrescenta** (`fabSincronizar`): o Detalhe da
+  garrafeira e a Wishlist (aí vai direto a "Adicionar à wishlist"). Nem no
+  Resumo (o separador "Garrafeira" passou a chamar-se **Resumo**), nem em
+  Locais, Consumidos, Definições, nem no catálogo.
+- **Fase 2** (por fazer): o Resumo do catálogo e, só para o admin, o Vinho
+  novo e a Atualização massiva no FAB do catálogo.
 
 ## O detalhe do vinho é uma PÁGINA, não um modal
 Tocar num vinho não abre uma folha por cima da lista: entra-se numa
