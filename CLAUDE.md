@@ -990,7 +990,12 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
   marca `v.id<0` em todo o lado, não colide no `IDXV` nem nos `onclick`, e os
   preços deles vivem em `CAT_PRECOS` (o `precosLojaDe` escolhe).
 - **O cartão diz o que tenho** ("🍾 Tens 2 garrafas", "⭐ Na tua wishlist",
-  `catTensHTML`) pela ligação `catalogo_id` (e as linhas fundidas nela). A
+  `catTensHTML`) pela ligação `catalogo_id` (e as linhas fundidas nela). E o
+  FUNDO do cartão (lista e grelha) di-lo também (`catFundoCls`, 30/09/2026,
+  o dono): verde suave no que tenho ou já tive (bebido), dourado suave no que
+  está na wishlist — a mesma regra do crachá (`catEstado`). O dourado é
+  pedido dele e fica em tom de papel, no fundo: o dourado cheio dos crachás
+  continua a ser a distinção. A
   página troca o "Onde está" por **"Na tua garrafeira"** com **Pôr na
   garrafeira / Pôr na wishlist** (`catPor`: o formulário do vinho novo de
   sempre, já preenchido e aberto por inteiro). Sai o Editar, o Procurar, as
