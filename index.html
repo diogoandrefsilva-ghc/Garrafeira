@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="136">
+<body data-build="137">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone.svg" alt="">
@@ -128,6 +128,9 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
          (`body.sem-desejo`, ver `detetarDesejo`). Fica ANTES do ⚙️ porque o
          `restaurarTab` casa a posição do botão com o `ORDEM_TABS`. -->
     <button class="it desejo-only so-gar" onclick="tab('desejos',this)"><span class="ic">⭐</span> Wishlist</button>
+    <!-- AS SUGESTÕES (a WineSelection, 30/09/2026): só no catálogo e só com
+         IA (`body.sem-sugestoes`). Também antes do ⚙️, pela mesma razão. -->
+    <button class="it so-cat it-sugestoes" onclick="tab('sugestoes',this)"><span class="ic">🍽️</span> Sugestões</button>
     <button class="it so-ic" onclick="tab('cfg',this)" title="Definições" aria-label="Definições">⚙️<span class="it-n" id="cfg-n"></span></button>
   </div>
 
@@ -229,6 +232,53 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       </div>
     </div>
     <div id="desejos"></div>
+  </section>
+
+  <!-- ═══ SUGESTÕES (a página "Sugerir" da WineSelection, no catálogo) ═══
+       As fotos da carta, o prato e o orçamento vão à Edge Function
+       `sugerir-vinho` (repo WineSelection); ver "SUGESTÕES" no app.js. -->
+  <section class="sec" id="s-sugestoes">
+    <div class="ws-card">
+      <div class="ws-card-label">1. Fotos da carta de vinhos <em>(mais do que uma, se o menu não couber numa só)</em></div>
+      <div id="ws-img-grid" class="img-grid"></div>
+      <div id="ws-img-meta" class="img-meta" style="display:none"></div>
+      <input type="file" id="ws-img-input" accept="image/*" multiple style="display:none" onchange="wsImagensEscolhidas(event)">
+      <div id="ws-img-status" class="ws-note" style="display:none"></div>
+
+      <div class="ws-card-label" style="margin-top:18px">2. O que vais comer? <em>(opcional, mas ajuda)</em></div>
+      <input type="text" id="ws-prato" placeholder="ex: bacalhau à Brás, bife grelhado, sushi…">
+
+      <div class="ws-card-label" style="margin-top:18px">3. Orçamento máximo por garrafa <em>(opcional — desliza)</em></div>
+      <div class="orc-picker">
+        <button type="button" class="orc-arrow" onclick="wsOrcamentoMover(-1)" aria-label="Valor anterior">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="orc-track" id="ws-orc-track">
+          <div class="orc-item">Sem limite</div>
+          <div class="orc-item">10 €</div>
+          <div class="orc-item">15 €</div>
+          <div class="orc-item">20 €</div>
+          <div class="orc-item">25 €</div>
+          <div class="orc-item">30 €</div>
+          <div class="orc-item">40 €</div>
+          <div class="orc-item">50 €</div>
+        </div>
+        <button type="button" class="orc-arrow" onclick="wsOrcamentoMover(1)" aria-label="Valor seguinte">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+      <div class="orc-dots" id="ws-orc-dots"></div>
+
+      <button class="btn prim full" id="ws-btn-sugerir" onclick="wsSugerir()" style="margin-top:18px" disabled>🍷 Sugerir vinho</button>
+      <div id="ws-sugerir-status" class="ws-note" style="display:none"></div>
+    </div>
+
+    <div id="ws-resultado"></div>
+
+    <details class="ws-hist" id="ws-hist" ontoggle="if(this.open)wsCarregarHistorico()">
+      <summary>Cartas anteriores</summary>
+      <div id="ws-historico"></div>
+    </details>
   </section>
 
   <!-- ═══ DEFINIÇÕES ═══ -->

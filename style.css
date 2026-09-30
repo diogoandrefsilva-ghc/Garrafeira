@@ -1951,9 +1951,140 @@ body.cat .itabs .so-gar{display:none!important}
 body.sem-locais .itabs .it-locais,body.sem-consumidos .itabs .it-consumidos{display:none!important}
 body.cat .it.on{background:#1d4a3b;box-shadow:0 4px 12px -4px rgba(29,74,59,.8)}
 .bdg.cat-tens{background:#eaf3ee;color:#1d4a3b;border-color:#cfe3d7;font-weight:600}
+/* A média das notas de quem usa a Garrafeira (migração 33): em papel, não
+   em dourado — o dourado é a nota do Vivino, e isto é a opinião da casa. */
+.bdg.cat-nota{background:var(--bg2);color:var(--tx);border-color:var(--bo2);font-weight:600}
+.cat-nota-media{margin-top:6px}
 /* Um vinho do catálogo abre na mesma página, com a capa verde do catálogo
    — venha de onde vier, diz-se logo que não é uma garrafa minha. */
 .mhero.mhero-cat{background:linear-gradient(155deg,#0f2a22,#1d4a3b 55%,#2f6e57)}
 /* O "+" do Catálogo (só aos curadores): cria um vinho no catálogo, e é
    verde como tudo o que é do catálogo. */
 body.cat .fab{background:linear-gradient(160deg,#2f6e57,#0f2a22);box-shadow:0 8px 26px -6px rgba(15,42,34,.7)}
+
+/* ── SUGESTÕES (a WineSelection dentro do catálogo, 30/09/2026) ─────
+   A página "Sugerir" da WineSelection, com o CSS de lá e as cores daqui:
+   o bordô dela é o `--vh`, o dourado o `--ou` (a nota do Vivino continua
+   a ser a única coisa dourada). Tudo debaixo de `#s-sugestoes`: os nomes
+   das classes vieram tal e qual, e nada disto pode pisar o resto da app.
+   Só no catálogo e só com IA (`body.sem-sugestoes`). */
+body:not(.cat) .itabs .so-cat{display:none!important}
+body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
+#s-sugestoes .ws-card{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:16px 18px;margin-bottom:14px;box-shadow:var(--sh)}
+#s-sugestoes .ws-card-label{font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-bottom:9px;line-height:1.45}
+#s-sugestoes .ws-card-label em{font-weight:500;text-transform:none;letter-spacing:0;font-style:italic}
+#s-sugestoes .ws-note{font-size:12.5px;color:var(--mu);line-height:1.55;margin:6px 0}
+#s-sugestoes .ws-card input[type=text]{width:100%;padding:10px 12px;border:1px solid var(--bo);border-radius:9px;font-size:14.5px;
+  font-family:inherit;background:var(--bg);color:var(--tx)}
+#s-sugestoes .ws-card input[type=text]:focus{outline:none;border-color:var(--vh);background:#fff;box-shadow:0 0 0 3px var(--vhp)}
+/* o orçamento: uma roda que desliza */
+#s-sugestoes .orc-picker{display:flex;align-items:center;gap:8px}
+#s-sugestoes .orc-arrow{flex:0 0 auto;width:36px;height:36px;border-radius:50%;border:1px solid var(--bo);background:var(--bg);
+  color:var(--vh);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+#s-sugestoes .orc-arrow:active{background:var(--bg2)}
+#s-sugestoes .orc-track{flex:1;min-width:0;display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;
+  border:1px solid var(--bo);border-radius:12px;background:var(--bg);padding:0 16%;scroll-padding-inline:16%}
+#s-sugestoes .orc-track::-webkit-scrollbar{display:none}
+#s-sugestoes .orc-item{flex:0 0 68%;scroll-snap-align:center;white-space:nowrap;display:flex;align-items:center;justify-content:center;
+  font-family:var(--fd);font-size:17px;font-weight:600;color:var(--mu);padding:13px 4px;user-select:none;-webkit-user-select:none;
+  opacity:.4;transform:scale(.86);transition:color .15s,opacity .15s,transform .15s}
+#s-sugestoes .orc-item.on{color:var(--vh);opacity:1;transform:scale(1);font-size:21px}
+#s-sugestoes .orc-dots{display:flex;justify-content:center;gap:6px;margin-top:9px}
+#s-sugestoes .orc-dot{width:6px;height:6px;border-radius:50%;background:var(--bo2);transition:background .15s}
+#s-sugestoes .orc-dot.on{background:var(--vh)}
+/* as fotos da carta */
+#s-sugestoes .img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+#s-sugestoes .img-add{aspect-ratio:1;border:2px dashed var(--bo2);border-radius:12px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:5px;color:var(--mu);font-size:10.5px;line-height:1.3;text-align:center;
+  cursor:pointer;padding:6px;background:var(--bg);transition:border-color .15s}
+#s-sugestoes .img-add:active{border-color:var(--vh)}
+#s-sugestoes .img-thumb{position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;border:1px solid var(--bo);background:var(--bg)}
+#s-sugestoes .img-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+#s-sugestoes .img-thumb-del{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(20,10,12,.6);
+  color:#fff;border:none;font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+#s-sugestoes .img-meta{font-size:11.5px;color:var(--mu);margin-top:9px}
+#s-sugestoes .img-meta a{color:var(--vh);font-weight:600}
+/* o resultado */
+#s-sugestoes .vinho-card{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;
+  position:relative;box-shadow:var(--sh)}
+#s-sugestoes .vinho-card.destaque{border-color:#e3cf9f;box-shadow:0 4px 18px -6px rgba(176,132,44,.35)}
+#s-sugestoes .vinho-ribbon{display:inline-block;background:var(--ou);color:#fff;font-size:10.5px;font-weight:700;padding:3px 9px;
+  border-radius:20px;margin-bottom:9px;letter-spacing:.2px}
+#s-sugestoes .vinho-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+#s-sugestoes .vinho-nome{font-family:var(--fd);font-size:17px;font-weight:600;line-height:1.25}
+#s-sugestoes .vinho-sub{font-size:12px;color:var(--mu);margin-top:2px}
+#s-sugestoes .vinho-preco{font-size:15.5px;font-weight:700;color:var(--vh);white-space:nowrap}
+#s-sugestoes .vinho-txt{font-size:13px;color:var(--tx);line-height:1.55;margin:8px 0 0}
+#s-sugestoes .pont-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+#s-sugestoes .pont-badge{display:inline-flex;align-items:center;gap:4px;background:var(--oup);border:1px solid #eddfba;color:var(--ou2);
+  font-size:12px;font-weight:600;padding:5px 10px;border-radius:20px;text-decoration:none}
+#s-sugestoes .pont-fonte{color:var(--mu);font-weight:500}
+#s-sugestoes .vinho-alerta{margin-top:9px;padding:8px 10px;border-radius:9px;background:var(--oup);border-left:3px solid var(--ou2)}
+#s-sugestoes .vinho-alerta p{margin:0;font-size:12.5px;line-height:1.5;color:var(--ou2);font-weight:600}
+#s-sugestoes .vinho-alerta p+p{margin-top:5px}
+#s-sugestoes .preco-badge{display:inline-block;font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:20px;margin-top:9px}
+#s-sugestoes .bg-ok{background:var(--vdp);color:var(--vd)}
+#s-sugestoes .bg-warn{background:var(--oup);color:var(--ou2)}
+#s-sugestoes .bg-bad{background:var(--dgp);color:var(--dg)}
+#s-sugestoes .bg-mu{background:var(--bg2);color:var(--mu)}
+#s-sugestoes .carta-list{display:flex;flex-direction:column}
+#s-sugestoes .carta-item{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto auto;gap:8px;align-items:center;
+  font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--bo)}
+#s-sugestoes .carta-item:last-child{border-bottom:none}
+#s-sugestoes .carta-check{width:16px;height:16px;margin:0;flex:0 0 auto;accent-color:var(--vh)}
+#s-sugestoes .carta-check-vazio{width:16px;height:16px}
+#s-sugestoes .carta-nome{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#s-sugestoes .carta-sub{display:block;color:var(--mu);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#s-sugestoes .carta-score{color:var(--mu);white-space:nowrap;font-weight:600;font-size:11.5px}
+#s-sugestoes .carta-score.conhecida{color:var(--ou2);text-decoration:none}
+#s-sugestoes .carta-score.sem-dados{font-weight:500;font-style:italic;opacity:.8}
+#s-sugestoes .carta-ano{color:var(--mu);font-weight:500;font-size:10.5px;margin-left:3px}
+#s-sugestoes .carta-preco{color:var(--mu);white-space:nowrap}
+#s-sugestoes .carta-preco.preco-barato,#s-sugestoes .carta-preco.preco-justo{color:var(--vd);font-weight:600}
+#s-sugestoes .carta-preco.preco-caro{color:var(--ou2);font-weight:600}
+#s-sugestoes .carta-preco.preco-muito_caro{color:var(--dg);font-weight:600}
+#s-sugestoes .carta-memoria{font-size:11px;cursor:help}
+#s-sugestoes .carta-amigos{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;white-space:normal}
+#s-sugestoes .am-chip{font-size:10.5px;line-height:1.5;color:var(--vh);background:var(--vhp);border:1px solid #ecd3dc;border-radius:10px;
+  padding:0 7px;cursor:pointer;white-space:nowrap}
+#s-sugestoes .am-legenda{margin:-4px 0 10px;font-size:11px}
+#s-sugestoes .tipo-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+#s-sugestoes .tipo-legenda{display:flex;flex-wrap:wrap;gap:11px;margin:2px 0 12px}
+#s-sugestoes .tipo-legenda-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--mu)}
+#s-sugestoes .verif-bar{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+#s-sugestoes .ws-profunda{border-color:var(--ou)}
+#s-sugestoes .verif-origem{font-size:11.5px;color:var(--vd);background:var(--vdp);border-radius:8px;padding:5px 9px;margin:6px 0 2px}
+#s-sugestoes .verif-card{padding:12px 14px}
+#s-sugestoes .ws-fontes{font-size:11px;color:var(--mu);line-height:1.7;margin:6px 2px 14px}
+#s-sugestoes .ws-fontes a{color:var(--vh)}
+/* a caixa resumo: um <details> por vinho, só o primeiro aberto */
+#s-sugestoes .sug-titulo{margin:2px 4px 8px}
+#s-sugestoes .sug-titulo em{font-weight:500;text-transform:none;letter-spacing:0}
+#s-sugestoes .sug-det{padding:12px 14px}
+#s-sugestoes .sug-det>summary{list-style:none;cursor:pointer}
+#s-sugestoes .sug-det>summary::-webkit-details-marker{display:none}
+#s-sugestoes .sug-sum{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:start}
+#s-sugestoes .sug-pos{width:24px;height:24px;border-radius:50%;background:var(--bg2);color:var(--mu);font-size:12px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;margin-top:2px}
+#s-sugestoes .sug-det.destaque .sug-pos{background:var(--ou);color:#fff}
+#s-sugestoes .sug-cab{min-width:0;display:flex;flex-direction:column;gap:2px}
+#s-sugestoes .sug-cab .vinho-nome{font-size:16px}
+#s-sugestoes .sug-cab .vinho-sub{margin-top:0}
+#s-sugestoes .sug-dir{display:flex;flex-direction:column;align-items:flex-end;gap:3px;white-space:nowrap}
+#s-sugestoes .sug-nota{font-size:12px;font-weight:700;color:var(--ou2)}
+#s-sugestoes .sug-nota .sem-dados{color:var(--mu);font-weight:500;font-style:italic}
+#s-sugestoes .sug-marca{align-self:flex-start;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ou2);
+  background:var(--oup);border-radius:10px;padding:2px 8px}
+#s-sugestoes .sug-marca.topo{color:#fff;background:var(--ou)}
+#s-sugestoes .sug-corpo{margin-top:6px;padding-left:34px}
+#s-sugestoes .sug-det:not([open]) .sug-dir .vinho-preco{font-size:14px}
+/* as cartas anteriores: fechadas, como as garrafas por posicionar */
+#s-sugestoes .ws-hist{margin-top:6px}
+#s-sugestoes .ws-hist>summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;
+  padding:10px 4px}
+#s-sugestoes .hist-item{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);margin-bottom:10px;overflow:hidden}
+#s-sugestoes .hist-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
+#s-sugestoes .hist-prato{font-weight:600;font-size:14px}
+#s-sugestoes .hist-top{font-size:12px;color:var(--mu);margin-top:2px}
+#s-sugestoes .hist-data{font-size:11px;color:var(--mu);white-space:nowrap}
+#s-sugestoes .hist-body{padding:0 12px 12px}

@@ -507,7 +507,7 @@ vivas do catálogo (sem os fundidos, sem `origens`/`fontes`/`vezes`) e os
 preços das lojas no formato da `precos_lojas`. É o separador Catálogo da app.
 Aplicada a 30/09/2026.
 
-### Migração 32 — os curadores do catálogo
+### Migração 32 — os curadores do catálogo (já aplicada)
 
 `db/migracao-curadores.sql`, DEPOIS do `db/curadores.sql` da WineCatalog (a
 lista `winecatalog.curadores` e a `sou_curador`, e a `criar`/`editar` a
@@ -516,6 +516,22 @@ corrige na sua garrafeira chega à linha ligada do catálogo: `ficha_da_linha`
 (a `ficha_catalogo` passa a usá-la), `curador_levar`, `curador_resultado`, e
 novas versões do trigger `vinhos_catalogo` e da `definir_castas` (também em
 `functions.sql`).
+
+### Migração 33 — as notas de quem usa a Garrafeira aos vinhos do catálogo
+
+`db/migracao-notas-catalogo.sql`. Uma tabela, `garrafeira.notas_catalogo`
+(uma nota de 0 a 5, com uma casa decimal, por pessoa e por linha do
+catálogo), com RLS e nenhum GRANT a quem tem login — só as duas funções lhe
+chegam: `catalogo_notas()` (a média, o número de notas e a MINHA, de cada
+vinho; nunca quem deu qual) e `catalogo_nota_definir(id, nota)` (`NULL`
+tira-a). Um vinho fundido responde pela linha que ficou. Não mexe no
+catálogo: uma nota é de uma pessoa, não do vinho.
+
+**E, ao lado, no repo WineSelection**: a `wineselection.is_allowed()` passa a
+deixar entrar quem tem IA aqui (`garrafeira.plano_ia()`), para o separador
+Sugestões do Catálogo — ver `db/functions.sql` de lá. Corre a nova
+`is_allowed()` e volta a publicar as duas Edge Functions (`sugerir-vinho`,
+`verificar-vinhos`), que passam a perguntar-lhe.
 
 ## Regra de ouro
 

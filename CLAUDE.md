@@ -94,6 +94,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-curadores.sql` é a 32: os curadores do catálogo — o que um
   curador corrige na sua garrafeira chega à linha ligada (ver "Os
   curadores do catálogo"); corre depois do `db/curadores.sql` da WineCatalog.
+  `migracao-notas-catalogo.sql` é a 33: as notas (0 a 5) de quem usa a
+  Garrafeira aos vinhos do catálogo (ver "O Catálogo dentro da app" ›
+  "As notas da casa").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -973,8 +976,8 @@ mais simples e mais seguro.
 "Quero incluir na garrafeira o catálogo de vinhos" — a WineCatalog passa a
 ser o back-office. **Tocar no título do cabeçalho ("Garrafeira ⇄") troca
 para o Catálogo** (`modoAlternar`, `MODO`): o cabeçalho fica verde-garrafa,
-o título passa a "Catálogo", e só ficam o Resumo, o Detalhe e as Definições
-(abre no Detalhe). Não se
+o título passa a "Catálogo", e só ficam o Resumo, o Detalhe, as **Sugestões**
+(ver abaixo) e as Definições (abre no Detalhe). Não se
 grava: a app abre sempre na garrafeira. Decisões do dono:
 - **É o MESMO Detalhe e a MESMA página do vinho**, com outra fonte. Os
   filtros varrem `vinhosUniverso()`/`vinhosBase()` (o catálogo ou a
@@ -1004,6 +1007,50 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
   só dessa cor). O que está aberto fecha-se ao trocar de modo.
 - **Fase 2** (por fazer): a Atualização massiva no FAB do catálogo. O Vinho
   novo já lá está, para os curadores (a seguir).
+
+### As notas da casa (30/09/2026, migração 33)
+O dono das apps: "gostava que os utilizadores da garrafeira pudessem dar
+notas/avaliações aos vinhos do catálogo (notas de 0 a 5, com possibilidade de
+colocar valores decimais - uma casa apenas)". Na página de um vinho do
+catálogo, **"A tua nota"** (`catNotasHTML`): as cinco estrelas e a caixa com a
+casa decimal, a mesma pele da nota de um consumo (`.stars`), e por baixo a
+**média de quem usa a Garrafeira** e quantas notas são. Tocar na estrela da
+nota que já se deu tira-a; a caixa vazia também. No cartão, **👥 4.2**
+(`catNotaBdgHTML`, em papel e não em dourado — o dourado é o Vivino).
+- **Não é do vinho, é de uma pessoa**: vive em `garrafeira.notas_catalogo`,
+  nunca na ficha do catálogo (a invariante 1 da WineCatalog). Só se lê pela
+  `catalogo_notas()` — a média, o número e a MINHA; nunca quem deu qual
+  (invariante 2) — e escreve-se pela `catalogo_nota_definir`. Um vinho
+  fundido responde pela linha que ficou.
+- **Não é a nota de um consumo** (`garrafas.consumo_avaliacao`, 1 a 5, de uma
+  garrafa bebida): esta vai de 0 a 5 e é dada no Catálogo, sem garrafa.
+- Lê-se com o catálogo (`catCarregar`); sem a migração, a secção não aparece
+  (`TEM_NOTAS_CAT`).
+
+### As Sugestões: a WineSelection dentro do Catálogo (30/09/2026)
+O dono das apps: "dentro da componente de Catálogo da garrafeira, queria
+igualmente transpôr a WineSelection 🙂 ou seja, teríamos um separador de
+Sugestões, onde importaríamos aquela página da WineSelection (que depois
+descontinuarei)". É a página "Sugerir" de lá, tal e qual (secção
+"SUGESTÕES" no app.js, `ws*`; o CSS debaixo de `#s-sugestoes`): as fotos da
+carta, o prato e o orçamento vão à MESMA Edge Function `sugerir-vinho` (repo
+WineSelection), e volta a recomendação e a lista da carta, com as marcas dos
+amigos e a pesquisa a sério de até 4 vinhos (`verificar-vinhos`). As
+"Cartas anteriores" são as minhas análises, cada uma desenhada só quando se
+abre.
+- **Só no catálogo** (`.so-cat`): é "que vinho peço?", não "o que tenho".
+- **Só com IA** (`body.sem-sugestoes`, no `sincronizarTabs`): quem é `sem_ia`
+  não vê o separador. Do lado de lá, a `wineselection.is_allowed()` — que as
+  duas Edge Functions perguntam, e a policy das análises também — deixa
+  passar quem tem IA aqui (`garrafeira.plano_ia()`). A regra vive nessa
+  função (`db/functions.sql` do repo WineSelection).
+- **Os dados continuam no schema `wineselection`** (`WS_H` nos pedidos): a
+  app WineSelection pode ser desligada sem se perder nada disto. O contrato
+  do `resultado` é o do `CLAUDE.md` de lá ("Contrato do pedido e da
+  resposta") — mexer nele é mexer nas duas Edge Functions e aqui.
+- O que a pesquisa a sério encontra fica no catálogo; a lista do Catálogo
+  relê-se a seguir (`wsVerifConcluida`).
+- O `gf_tab` nunca reabre as Sugestões: a app abre sempre na garrafeira.
 
 ### Os curadores do catálogo (30/09/2026, migração 32)
 O dono das apps: "eu quero definir quem cria novos vinhos no catálogo… e se
