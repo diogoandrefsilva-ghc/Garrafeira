@@ -1753,8 +1753,8 @@ na base de evidência, e o Gemini devolve `deOnde` (de que página ou resultado
 tirou cada campo) → `origemCampos` no resultado → a opção da IA diz
 "IA · garrafeiranacional.com" (`pqDeOndeHTML`) e, no vinho novo, o
 `pqFimNovo` diz de onde veio cada campo que pôs no formulário. **Só estes
-sites** (`soSites`; foi um visto, e desde 30/09/2026 é o caminho "Nos sites
-que eu indicar" — ver "2. IA", mais abaixo): sem a consulta geral,
+sites** (`soSites`; foi um visto, e desde 30/09/2026 é o caminho "Em sites
+concretos" — ver "2. IA", mais abaixo): sem a consulta geral,
 sem a do Vivino se ele não for um dos sites, sem o grounding, sem a cache e
 sem o catálogo; um campo sem origem sai (`semFonte`). **Com sites, a cache e o
 catálogo do servidor não respondem** (`semAtalhos`): quem os escreve quer que
@@ -1777,8 +1777,9 @@ página diz `secao`/`trechos`.
 
 **Procurar links** (29/09/2026, o dono das apps: "dar um link ao Gemini e
 dizer 'procura só neste link' é o que traz a informação mais fidedigna, e
-não é cara"). No pacote completo, é o primeiro ecrã do caminho "Nos sites
-que eu indicar" (e um botão no ecrã de colar links): **🔗 Procurar
+não é cara"). No pacote completo, é um botão no ecrã de colar links do
+caminho "Em sites concretos", **💡 Sugere-me sites** — só a pedido, nunca ao
+entrar (o dono, 30/09/2026: cada lista gasta Serper). **Procurar
 links** (`pqLinks`) faz UMA pesquisa Serper (`vinho-info` com `links:true`:
 síncrona, sem Gemini, sem cache nem catálogo, `[nome, ano, produtor,
 "vinho"]`) e mostra até 5 links (`pqLinksHTML`): o título abre a página
@@ -1958,11 +1959,15 @@ de botões que apareciam e desapareciam. Agora:
   a todos.
   **Primeiro COMO, depois O QUÊ** (30/09/2026, o dono: o primeiro ecrã da
   WineCatalog, "num site ou perguntar à IA", mas com a lista dos links para
-  escolher, que lá não havia). `pqTipoHTML` → `pqTipo`: **🔗 Nos sites que
-  eu indicar** — SÓ neles (`soSites`, sempre); no pacote completo abre já a
-  lista das lojas do "Procurar links" (escolhem-se até 2) com uma caixa por
-  baixo para colar o link de uma página que já se tenha, no intermédio é só
-  a caixa (procurar dentro de um site precisa do Serper) — ou **✨ Perguntar
+  escolher, que lá não havia). `pqTipoHTML` → `pqTipo`: **🔗 Em sites
+  concretos** ("Colas o link de 1 ou 2 páginas que já tenhas copiado, ou a
+  app sugere-te alguns sites") — SÓ neles (`soSites`, sempre); abre a caixa
+  para colar os links e, no pacote completo, o botão **💡 Sugere-me sites**,
+  que abre a lista das lojas do "Procurar links" (escolhem-se até 2). **A
+  lista só se pede, nunca abre sozinha** (o dono, 30/09/2026: cada lista é
+  uma pesquisa Serper, que se paga); fechada com "‹ Voltar" não se perde
+  (`pqLinksVer`), e o que lá se marcou continua a ir. No intermédio é só a
+  caixa (procurar dentro de um site precisa do Serper) — ou **✨ Perguntar
   à IA**, sem sites. Depois, os campos e "Mais opções" (as notas). Os sites
   "de referência" misturados com a pesquisa geral saíram do ecrã, como na
   WineCatalog: não se sabia de onde vinha o quê (a `vinho-info` continua a
