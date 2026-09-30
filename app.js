@@ -5834,7 +5834,7 @@ function abrirEditarVinho(id,modo){
       <div><label>Ano</label><input type="number" id="e-ano" inputmode="numeric" value="${esc(o('ano'))}" placeholder="${paraDesejo?'opcional':'2021'}" oninput="janelaSincronizarForm()"></div>
       <div>${id
         ?`<label>Produtor</label><input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado">`
-        // A cor tem de vir de quem procura (ver `iaCorGuard`): fica em cima,
+        // A cor tem de vir de quem procura: fica em cima,
         // no formulário compacto, com o que só a PESSOA sabe.
         :'<label>Cor</label><select id="e-tipo"><option value="">— escolhe a cor —</option>'+opts(TIPOS,o('tipo',''))+'</select>'
       }</div>
@@ -6689,31 +6689,6 @@ async function iaUltimaProcura(vinhoId){
 }
 
 
-// A COR ANTES DA PROCURA
-//
-// O `tipo` nasce 'Tinto' por omissão nesta app, e a cor faz parte da
-// identidade de um vinho no catálogo partilhado: um branco que ninguém
-// corrigiu ia procurar — e gravar — com a chave do tinto. Não há maneira de
-// a BD distinguir um 'Tinto' escolhido de um 'Tinto' por defeito, por isso
-// a resposta é perguntar: uma vez, no sítio onde se carrega em Procurar.
-// Devolve a cor confirmada, ou '' se ainda não há nenhuma.
-async function iaCorGuard(v){
-  const sel=document.getElementById('ia-cor-sel');
-  if(!sel)return v.tipo||'';        // chamado de fora do seletor
-  const cor=sel.value;
-  if(!cor){toast('Escolhe primeiro a cor do vinho',1);sel.focus();return '';}
-  if(cor===v.tipo)return cor;
-  // Optimista no `db` e desfaz se a rede falhar — o padrão de sempre.
-  const antes=v.tipo;
-  v.tipo=cor;
-  try{
-    await sbReq('PATCH',`vinhos?id=eq.${v.id}`,{tipo:cor});
-    renderLista();
-  }catch(e){
-    v.tipo=antes;toast('Não deu para gravar a cor',1);return '';
-  }
-  return cor;
-}
 
 
 
@@ -7276,7 +7251,7 @@ function catAbrirProcura(vinhoId){
 function pqAbrirNovo(soVer){
   const nome=document.getElementById('e-nome').value.trim();
   if(!nome){toast('Escreve primeiro o nome do vinho',1);document.getElementById('e-nome').focus();return;}
-  // A cor antes de procurar (ver `iaCorGuard`): é ela que separa o tinto do
+  // A cor antes de procurar: é ela que separa o tinto do
   // branco do mesmo nome, e o catálogo ainda não a tem na chave.
   const elTipo=document.getElementById('e-tipo');
   if(elTipo&&!elTipo.value){toast('Escolhe primeiro a cor do vinho',1);elTipo.focus();return;}
@@ -7523,6 +7498,11 @@ function pqLerCaixas(){
   if(n)P.notas=n.value.trim().slice(0,300);
 }
 function pqColados(txt){return String(txt||'').split(/[,\n]/).map(s=>s.trim()).filter(Boolean).slice(0,5);}
+// Um link de uma PÁGINA, não só o endereço do site.
+function pqEPagina(x){
+  try{const u=new URL(/^https?:\/\//i.test(x)?x:'https://'+x);return u.pathname.replace(/\/+$/,'')!==''||!!u.search;}
+  catch(e){return false;}
+}
 
 /* COMO se procura (30/09/2026, o dono das apps: o primeiro ecrã da
    WineCatalog, "num site ou perguntar à IA"). Dois caminhos, e o segundo
@@ -7571,16 +7551,25 @@ async function pqIA(repetir){
     const sites=P.tipo==='sites'
       ?[...(P.links?pqLinksMarcados(P):[]),...P.sites].filter((s,i,a)=>a.indexOf(s)===i).slice(0,5):[];
     if(P.tipo==='sites'&&!sites.length){
-      toast(P.links?'Marca um link da lista, ou cola o de uma página':'Cola o link da página do vinho (ou escreve o site)',1);
+      toast(P.links?'Marca um link da lista, ou cola o de uma página':'Cola o link da página do vinho',1);
+      document.getElementById('pq-sites')?.focus();
+      return;
+    }
+    // Links concretos (o dono, 30/09/2026): só o site, sem a página, obrigava
+    // a procurar lá o vinho — uma pesquisa Serper que ninguém pediu.
+    const soSite=P.tipo==='sites'?P.sites.filter(x=>!pqEPagina(x)):[];
+    if(soSite.length){
+      toast(`“${soSite[0]}” é só o site: cola o link da página do vinho`,1);
       document.getElementById('pq-sites')?.focus();
       return;
     }
     P.sitesPedido=sites;P.soSites=P.tipo==='sites';
     if(!P.novo&&!P.cat){
-      // A cor confirma-se aqui (e grava-se no vinho, se mudou).
+      // A cor é a do vinho: gravar um vinho já a exige (fase 4 dos nomes),
+      // e deixou de se confirmar aqui (o dono, 30/09/2026).
       const v=IDXV[P.vid];if(!v)return;
-      const cor=await iaCorGuard(v);
-      if(!cor||PQ!==P)return;
+      const cor=v.tipo||'';
+      if(!cor){toast('Falta a cor deste vinho: escolhe-a no Editar',1);return;}
       P.id.tipo=cor;
       // Cada procura custa dinheiro, e a ficha de um vinho não muda de uma
       // semana para a outra: se foi há pouco, pergunta-se (`iaUltimaProcura`).
@@ -7738,7 +7727,7 @@ function pqRelatoHTML(P){
       if(c.vivinoMau)out.push(`<span class="note">O link do Vivino que o Catálogo tem não está no formato do Vivino — não o trouxe.</span>`);
       if(c.lojas&&c.lojas.length)out.push(`<span class="note">💶 Nas lojas: ${c.lojas.map(([k,p])=>
         `<b>${esc(lojaInfo(k).nome)}</b> ${esc(eur(p.preco))}${p.colheita?' ('+esc(p.colheita)+')':''}`).join(' · ')}. Não se copiam: o vinho lê-os do Catálogo, sempre atualizados.</span>`);
-    }else if(c.estado==='ligado')out.push('Este vinho já está ligado ao Catálogo: o que lá está chega-lhe sozinho, não é preciso escolhê-lo outra vez.');
+    }else if(c.estado==='ligado')out.push('Este vinho já existe no Catálogo.');
     else if(c.estado==='nada')out.push(P.naCat?'Não há no Catálogo nenhum vinho parecido: é mesmo novo.':'O vinho não existe no Catálogo.');
     else if(c.estado==='recusado')out.push(P.naCat?'Nenhum dos parecidos é este: é um vinho novo.':'Nenhum dos vinhos do Catálogo é este.');
     else if(c.estado==='cor')out.push(`O Catálogo tem um <b>${esc(c.nome)}</b>, mas ${esc(c.cor.toLowerCase())} — deve ser outro vinho, não trouxe nada.`);
@@ -7782,13 +7771,6 @@ function pqCamposHTML(P){
     <label class="ia-esc" style="margin-top:6px"><input type="checkbox" id="pq-colheita"${P.colheitaEsp?' checked':''}>
       <span>Tem de ser exatamente a colheita de ${esc(String(P.id.ano||'este ano'))}<i>para o teor, o estágio, o preço e as notas de prova — a nota do Vivino vem sempre às duas (a da colheita e a de todas)</i></span></label>
   </details>`;
-}
-function pqCorHTML(P){
-  if(P.novo||P.cat)return '';
-  const opts=['<option value="">— escolhe a cor —</option>'].concat(
-    TIPOS.map(x=>`<option value="${esc(x)}"${P.id.tipo===x?' selected':''}>${esc(x)}</option>`)).join('');
-  return `<div class="pq-cor"><label for="ia-cor-sel">Cor</label><select id="ia-cor-sel">${opts}</select>
-    <span class="note">Confirma-a antes de pesquisar: um branco não é o tinto do mesmo nome.</span></div>`;
 }
 /* ── PROCURAR LINKS (29/09/2026, o dono das apps) ──
    "Dar um link à IA e dizer 'lê só isto'" é o que traz a informação mais
@@ -7893,12 +7875,12 @@ function pqLinksHTML(P){
     (<a href="${esc(P.linksVivino.url)}" target="_blank" rel="noopener">${esc(P.linksVivino.titulo||'Vivino')}</a>) vão com a pesquisa.</p>`:'';
   return `<p class="pq-q">Que páginas são deste vinho?</p>
     <p class="note">Abre os links para confirmar e marca até ${P.linksMax}. A IA lê só essas páginas; para outras, voltas aqui a seguir.</p>
-    ${pqCorHTML(P)}<div class="pq-links">${lista}</div>${mais}${viv}
+    <div class="pq-links">${lista}</div>${mais}${viv}
     <label for="pq-sites">Ou cola o link de uma página que já tenhas</label>
     <textarea id="pq-sites" rows="2" oninput="pqLinksContar()" placeholder="https://…">${esc(P.sites.join('\n'))}</textarea>
     ${pqCamposHTML(P)}${pqOpcoesHTML(P)}
-    <div class="macoes"><button class="btn prim" id="pq-links-ir" onclick="pqIA()">🔎 Pesquisar só nestes (${pqLinksN(P,P.sites)})</button>
-      <button class="btn ghost" onclick="pqLinksVer(false)">‹ Voltar</button></div>`;
+    <div class="macoes"><button class="btn prim" id="pq-links-ir" onclick="pqIA()">🔎 Pesquisar (${pqLinksN(P,P.sites)})</button>
+      <button class="btn ghost" onclick="pqLinksVer(false)">‹ Voltar</button>${pqFecharJunto(P)}</div>`;
 }
 // As notas para identificar o vinho: raramente fazem falta, ficam fechadas.
 function pqOpcoesHTML(P){
@@ -7966,21 +7948,18 @@ function pqPerguntaHTML(P){
   if(P.tipo==='sites'){
     if(P.links&&P.linksVer&&temPremium())return erro+pqLinksHTML(P);
     const nMarca=P.links?pqLinksMarcados(P).length:0;
-    return `${erro}<p class="pq-q">🔗 Em sites concretos</p>${pqCorHTML(P)}
+    return `${erro}<p class="pq-q">🔗 Em sites concretos</p>
       <label for="pq-sites">O link da página do vinho</label>
       <textarea id="pq-sites" rows="2" placeholder="ex.: o link da página do vinho numa loja">${esc(P.sites.join('\n'))}</textarea>
-      <div class="note">Um por linha.${temPremium()?' Só o site, sem a página, também serve: procura-se lá o vinho.':' Tem de ser a página do vinho, não só o site.'}</div>
       ${!temPremium()?'':P.links
-        ?`<div class="pq-links-bt"><button class="btn ghost" onclick="pqLinksVer(true)">💡 Ver os sites sugeridos</button>
-          <span class="note">${nMarca?`${nMarca} ${nMarca===1?'página marcada vai':'páginas marcadas vão'} também na pesquisa`:'nenhuma marcada'}</span></div>`
-        :`<div class="pq-links-bt"><button class="btn ghost" onclick="pqLinks()">💡 Sugere-me sites</button>
-          <span class="note">só se precisares: procura as páginas deste vinho nas lojas, para escolheres até 2</span></div>`}
+        ?`<div class="pq-links-bt"><button class="btn ghost" onclick="pqLinksVer(true)">💡 Ver os sites sugeridos${nMarca?` (${nMarca} ${nMarca===1?'marcado':'marcados'})`:''}</button></div>`
+        :`<div class="pq-links-bt"><button class="btn ghost" onclick="pqLinks()">💡 Sugere-me sites</button></div>`}
       ${pqCamposHTML(P)}${pqOpcoesHTML(P)}
-      <div class="macoes"><button class="btn prim" onclick="pqIA()">🔎 ${falhou?'Tentar outra vez':'Pesquisar nestes sites'}</button>${voltar}</div>`;
+      <div class="macoes"><button class="btn prim" onclick="pqIA()">🔎 ${falhou?'Tentar de novo':'Pesquisar'}</button>${voltar}${pqFecharJunto(P)}</div>`;
   }
-  return `${erro}<p class="pq-q">✨ Perguntar à IA</p>${pqCorHTML(P)}
+  return `${erro}<p class="pq-q">✨ Perguntar à IA</p>
     ${pqCamposHTML(P)}${pqOpcoesHTML(P)}
-    <div class="macoes"><button class="btn prim" onclick="pqIA()">🔎 ${falhou?'Tentar outra vez':'Pesquisar com IA'}</button>${voltar}</div>`;
+    <div class="macoes"><button class="btn prim" onclick="pqIA()">🔎 ${falhou?'Tentar de novo':'Pesquisar'}</button>${voltar}${pqFecharJunto(P)}</div>`;
 }
 function pqDefeito(P,k){
   if(P.esc[k])return P.esc[k];
@@ -8095,6 +8074,14 @@ function pqContar(){
   b.disabled=!n||!!P.corre;
   b.textContent=n?`Guardar ${n} ${n===1?'campo':'campos'}`:'Nada escolhido';
 }
+// Com nada para rever, o "Fechar" vai na linha dos botões da pergunta (o
+// dono, 30/09/2026: "cabem os 3 botões na mesma linha") em vez de ficar
+// sozinho por baixo.
+function pqFecharJunto(P){
+  if(!P._fecharJunto)return '';
+  P._fecharPosto=true;
+  return `<button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button>`;
+}
 function pqPintar(){
   const P=PQ;if(!P)return;
   const box=document.getElementById('modal-ia-in');
@@ -8102,22 +8089,24 @@ function pqPintar(){
   const iguais=[...P.iguais].filter(k=>!P.hist[k]||(P.novo&&!('ia' in P.hist[k])));
   const revNovo=P.novo&&P.fase==='fim'&&!P.corre;
   const podeGuardar=revNovo||(!P.novo&&(linhas||P.anoEscolhido));
+  P._fecharJunto=!podeGuardar&&!linhas;P._fecharPosto=false;
+  const conversa=pqRelatoHTML(P)+pqPerguntaHTML(P);
   box.innerHTML=`
     <div class="mtop"><div><h3>🔎 Procurar informação</h3>
       <div class="note" style="margin-top:3px">${esc(P.id.nome)} ${P.id.ano||''}</div></div>
       <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
     ${P.cat?'':`<div class="pq-passos">${(podeUsarIA()&&!P.soVer?['cat','ia']:['cat']).map(k=>pqPassoHTML(k,P)).join('<span class="pq-seta">›</span>')}</div>`}
-    <div class="pq-conversa">${pqRelatoHTML(P)}${pqPerguntaHTML(P)}</div>
+    <div class="pq-conversa">${conversa}</div>
     ${linhas?`<p class="note rv-intro"><b>${P.novo?'Ainda não está no formulário.':'Ainda não foi gravado nada.'}</b>
         Só ${P.novo?'passa':'entra'} o que ficar marcado${P.cat?', e muda o vinho no Catálogo para toda a gente':''}. Já vêm marcados os campos que estavam <b>vazios</b>;
         para trocar o que já lá estava, marca à mão.</p>
       <div class="rv-lista">${linhas}</div>`:''}
     ${iguais.length&&!(P.novo&&P.fase!=='fim')?`<div class="note" style="margin-top:8px">${linhas?'Mais ':''}${iguais.length===1?'1 campo veio':iguais.length+' campos vieram'} igual ao que já está (${esc(iguais.map(pqRot).join(', '))}).</div>`:''}
-    <div class="macoes pq-fim">
+    ${P._fecharPosto?'':`<div class="macoes pq-fim">
       ${podeGuardar?`<button class="btn prim" id="pq-guardar" onclick="${revNovo?'pqPassarForm()':'pqGuardar()'}"></button>`:''}
       ${linhas?'<button class="btn ghost" onclick="pqMarcarTudo()">Marcar tudo</button>':''}
       <button class="btn ghost" onclick="fecharModal('modal-ia')">Fechar</button>
-    </div>
+    </div>`}
     ${pqRodapeHTML(P)}`;
   pqContar();
 }
@@ -10635,7 +10624,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='143';
+const APP_BUILD='144';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

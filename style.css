@@ -1249,10 +1249,6 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .pq-campos textarea{margin-top:4px}
 .pq-espera{display:flex;align-items:center;gap:12px;padding:10px 0}
 .pq-espera .gl-spin{flex-shrink:0;width:22px;height:22px;border-color:var(--vhp);border-top-color:var(--vh)}
-.pq-cor{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0}
-.mbox .pq-cor label{margin:0}
-.pq-cor select{width:auto;flex:0 0 auto}
-.pq-cor .note{flex:1 1 180px}
 .pq-campos{margin-top:8px;border:1px solid var(--bo);border-radius:11px;padding:8px 11px;background:var(--card)}
 .pq-campos summary{cursor:pointer;font-size:12.5px;color:var(--tx)}
 .pq-link{display:block;margin-top:10px;padding:0;border:0;background:none;font:inherit;font-size:12.5px;color:var(--in);text-align:left;cursor:pointer;text-decoration:underline}

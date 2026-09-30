@@ -353,7 +353,7 @@ escondida a filtrar por baixo na escolha seguinte.
 
 
 O grupo da cor chama-se **"Cor"** e não "Tipo": é assim que a app já lhe
-chama onde interessa (o `iaCorGuard`, antes de qualquer procura), e é a
+chama onde interessa (o vinho novo pede-a antes de qualquer procura), e é a
 pergunta que uma pessoa faz. Que Espumante e Licoroso não sejam cores é
 verdade, e é o mesmo compromisso que o `db/schema.sql` já faz — a coluna
 chama-se `tipo` e a pergunta chama-se cor.
@@ -1962,7 +1962,10 @@ de botões que apareciam e desapareciam. Agora:
   escolher, que lá não havia). `pqTipoHTML` → `pqTipo`: **🔗 Em sites
   concretos** ("Colas o link de 1 ou 2 páginas que já tenhas copiado, ou a
   app sugere-te alguns sites") — SÓ neles (`soSites`, sempre); abre a caixa
-  para colar os links e, no pacote completo, o botão **💡 Sugere-me sites**,
+  para colar os links — um por linha ou separados por vírgula
+  (`pqColados`), e têm de ser PÁGINAS: só o site recusa-se (`pqEPagina`; o
+  dono: "queremos links concretos" — procurar dentro de um site era uma
+  pesquisa Serper) — e, no pacote completo, o botão **💡 Sugere-me sites**,
   que abre a lista das lojas do "Procurar links" (escolhem-se até 2). **A
   lista só se pede, nunca abre sozinha** (o dono, 30/09/2026: cada lista é
   uma pesquisa Serper, que se paga); fechada com "‹ Voltar" não se perde
@@ -2153,17 +2156,16 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   Vivino vai para o campo `e-vivino-url`, à vista: ia só para o
   `_iaExtraNovo`, o campo ficava em branco e, ao gravar, o que lá estivesse
   escrito à mão era tapado pelo da procura.
-- **A COR diz-se ANTES de se procurar** (`iaCorGuard`). O `tipo` nasce
-  'Tinto' por omissão e a cor faz parte da identidade do vinho no catálogo
-  partilhado — um branco que ninguém corrigiu ia procurar (e gravar) com a
-  chave do tinto. A BD não consegue distinguir um 'Tinto' escolhido de um
-  'Tinto' por defeito, por isso a resposta é PERGUNTAR, uma vez, onde se
-  carrega em Procurar: na etapa da IA (`pqCorHTML`) há uma linha
-  **Cor**, já com a do vinho, e mudá-la ali grava-a no vinho; no
-  formulário de **vinho novo** o seletor nasce vazio ("— escolhe a cor —") e
-  o botão de procurar recusa sem ela, tal como já recusava sem o nome.
-  Desde a fase 4 dos nomes (27/09/2026) gravar também exige a cor: é parte
-  da chave do catálogo (ver "O nome, a cor e o produtor").
+- **A COR diz-se ANTES de se procurar.** A cor faz parte da identidade do
+  vinho no catálogo partilhado — um branco com a cor errada ia procurar (e
+  gravar) com a chave do tinto. No formulário de **vinho novo** o seletor
+  nasce vazio ("— escolhe a cor —") e o botão de procurar recusa sem ela,
+  tal como já recusava sem o nome. Desde a fase 4 dos nomes (27/09/2026)
+  gravar também exige a cor (ver "O nome, a cor e o produtor"), por isso num
+  vinho gravado a procura usa a dele. Houve uma linha **Cor** a confirmá-la
+  na etapa da IA (`pqCorHTML`/`iaCorGuard`, do tempo em que o `tipo` nascia
+  'Tinto' por omissão); saiu a 30/09/2026 (o dono: "já não seleciona atrás,
+  logo na pesquisa inicial?"). Muda-se no Editar.
 - **Nada é gravado sem confirmação.** O resultado abre campo a campo
   (`iaMostrarResultado`), com o que está agora ao lado do que a IA propõe.
   Vêm marcados **só os campos vazios**: substituir o que alguém escreveu à
