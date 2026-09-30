@@ -46,7 +46,7 @@ const GAPI = "https://generativelanguage.googleapis.com/v1beta";
 const MODELO_BARATO = Deno.env.get("GEMINI_CHEAP_MODEL") || "gemini-flash-lite-latest";
 const MODELO_ESCALADO = Deno.env.get("GEMINI_FALLBACK_MODEL") || Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
 const CACHE_TTL_HORAS = Math.max(1, Math.min(24 * 90, Number(Deno.env.get("VINHO_CACHE_TTL_HOURS") ?? 24 * 30) || 24 * 30));
-const CACHE_VERSAO = "v4"; // v4 (27/09/2026): as duas notas do Vivino (colheita e todas) · v3: o pacote completo passou a Serper + grounding
+const CACHE_VERSAO = "v5"; // v5 (30/09/2026): o texto sempre em português · v4 (27/09/2026): as duas notas do Vivino (colheita e todas) · v3: o pacote completo passou a Serper + grounding
 const SEARCH_RESULTADOS = 5;
 // "Procurar links": quantos se mostram, e quantos se podem escolher.
 const LINKS_MOSTRAR = 5;
@@ -438,6 +438,17 @@ const regraCuvee = `Se o produtor tiver mais do que um vinho com este nome
    gama, normalmente tem mais do que uma edição especial) e diz no "aviso"
    que outras versões encontraste e qual escolheste.`;
 
+/* Recebia-se texto em inglês e espanhol (30/09/2026, o dono): as páginas
+   de lojas e do Vivino estão muitas vezes noutra língua, e o modelo copiava
+   o que lia. Vai em TODOS os prompts, e no app.js (IA_MANUAL_IDIOMA). */
+const regraIdioma = `IDIOMA: escreve TODO o texto do JSON em português de Portugal — "notasProva",
+"harmonizacao", "resumo", "estagioTexto", "subRegiao" e "aviso" — mesmo que as
+páginas e os resultados estejam em inglês, espanhol, francês ou outra língua:
+TRADUZ, nunca copies nem deixes frases noutra língua. Os nomes próprios (o nome
+do vinho, o produtor, as castas) ficam como são; a região e a sub-região com o
+nome português ("Douro", nunca "Douro Valley"; "Península de Setúbal", nunca
+"Setubal Peninsula").`;
+
 const prompt = (
   nome: string, ano: number | null, produtor: string, regiao: string, tipo: string, notas: string, hoje: string,
   campos: string[] | null, textosPesquisa: string, colheitaEspecifica: boolean, sites: string[] = [], soSites = false,
@@ -493,6 +504,8 @@ ${colheitaEspecifica && ano ? `10. ${regraColheita(ano)}
    a nota do Vivino.
 ${colheitaEspecifica && ano ? 12 : 11}. "deOnde" diz, para CADA campo que preencheres, o número [n] da página ou do
    resultado de onde o tiraste — ex.: "castas": 1, "precoMedio": 3.${soSites ? " Um campo sem número em \"deOnde\" é deitado fora." : ""}
+
+${regraIdioma}
 
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
 {
@@ -556,6 +569,8 @@ REGRAS:
 7. ${ano ? `"beberDe"/"beberAte" são anos (a janela DESTA colheita).` : `Este vinho não tem ano: sem colheita NÃO há janela de consumo — deixa "beberDe"/"beberAte" de fora.`}
 ${colheitaEspecifica && ano ? `8. ${regraColheita(ano)}
 ` : ""}
+${regraIdioma}
+
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código:
 {
   "encontrado": true,
@@ -647,6 +662,8 @@ REGRAS, e são a sério:
 8. O "id" de cada resultado tem de ser EXATAMENTE o "id" da lista acima — é assim que se sabe a que vinho corresponde cada objeto, nunca pela posição na lista.
 9. Se não conseguires identificar um vinho de todo, o objeto dele fica só {"id": <id>, "encontrado": false, "aviso": "porquê"} — sem inventar os outros campos.
 
+${regraIdioma}
+
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código, com exatamente ${vinhos.length} objeto${vinhos.length > 1 ? "s" : ""} em "resultados" (um por vinho, pela mesma ordem):
 {
   "resultados": [
@@ -685,6 +702,8 @@ REGRAS, e são a sério:
 6. "beberDe"/"beberAte" são anos, a janela da colheita indicada. Um vinho SEM ano não tem janela de consumo: deixa "beberDe"/"beberAte" de fora do objeto dele.
 7. O "id" de cada resultado tem de ser EXATAMENTE o "id" indicado acima — é assim que se sabe a que vinho corresponde cada objeto, nunca pela posição na lista.
 8. Se a evidência de um vinho não chegar para o identificar, o objeto dele fica só {"id": <id>, "encontrado": false, "aviso": "porquê"}.
+
+${regraIdioma}
 
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código, com exatamente ${vinhos.length} objeto${vinhos.length > 1 ? "s" : ""} em "resultados" (um por vinho):
 {

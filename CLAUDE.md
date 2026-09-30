@@ -2175,6 +2175,13 @@ mesmo motor, dois caminhos diferentes até ao JSON:
   na etapa da IA (`pqCorHTML`/`iaCorGuard`, do tempo em que o `tipo` nascia
   'Tinto' por omissão); saiu a 30/09/2026 (o dono: "já não seleciona atrás,
   logo na pesquisa inicial?"). Muda-se no Editar.
+- **O texto vem sempre em português** (30/09/2026, o dono: chegavam notas
+  de prova em inglês e espanhol, copiadas das páginas das lojas). Uma regra
+  de IDIOMA em todos os prompts — `regraIdioma` nos quatro da `vinho-info`,
+  `IA_MANUAL_IDIOMA` nos dois manuais do `app.js`, uma linha na
+  `importar-vinhos`: traduz, nunca copia; o nome, o produtor e as castas
+  ficam como são; a região com o nome português. A cache subiu para `v5`
+  para não servir respostas antigas noutra língua.
 - **Nada é gravado sem confirmação.** O resultado abre campo a campo
   (`iaMostrarResultado`), com o que está agora ao lado do que a IA propõe.
   Vêm marcados **só os campos vazios**: substituir o que alguém escreveu à

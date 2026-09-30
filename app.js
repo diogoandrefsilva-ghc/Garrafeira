@@ -8412,6 +8412,8 @@ function iaManualRegraColheita(ano){
 /* A pesquisa manual é grátis (é a conta do admin num assistente), por isso
    pede-se SEMPRE a pesquisa a sério — o equivalente à "pesquisa profunda"
    da automática. Mesmo texto no prompt de um vinho e no do lote. */
+/* O mesmo que a `regraIdioma` da vinho-info: o texto sempre em português. */
+const IA_MANUAL_IDIOMA='IDIOMA: escreve TODO o texto do JSON em português de Portugal ("notasProva", "harmonizacao", "resumo", "estagioTexto", "subRegiao", "aviso") mesmo que as páginas estejam em inglês, espanhol ou outra língua — TRADUZ, nunca copies. O nome do vinho, o produtor e as castas ficam como são; a região com o nome português ("Douro", nunca "Douro Valley").';
 const IA_MANUAL_PESQUISA='PESQUISA OBRIGATÓRIA: antes de responderes, pesquisa MESMO na internet (Pesquisa Google ou a pesquisa web que tiveres) — pelo menos o Vivino do vinho e o preço em lojas portuguesas. NÃO respondas de memória: um valor que não vejas numa página fica vazio, mesmo que aches que sabes. Se não tiveres acesso à internet, diz isso em "aviso" e não preenchas nada.';
 const IA_MANUAL_REGRA_CUVEE='Se o produtor tiver mais do que um vinho com este nome (variantes de gama: Reserva, Grande Reserva, Colheita, Terroir, etc.) e não se souber qual, prefere a versão SEM qualificador extra; se essa não existir, escolhe a que tiver mais avaliações no Vivino (a principal da gama, normalmente) e diz no "aviso" que outras versões encontraste e qual escolheste.';
 
@@ -8445,6 +8447,8 @@ REGRAS, e são a sério:
 7. ${v.ano?'"beberDe"/"beberAte" são ANOS (ex.: 2026 e 2034), a janela em que ESTA colheita está no ponto.':'Este vinho não tem ano: sem colheita NÃO há janela de consumo — deixa "beberDe"/"beberAte" de fora.'}
 8. "imagemUrl" é o link DIRETO de uma fotografia (acaba em .jpg/.jpeg/.png/.webp/.avif), nunca o link da página. Sem certeza, deixa vazio.
 ${colheitaEspecifica&&v.ano?`9. ${iaManualRegraColheita(v.ano)}\n`:''}
+${IA_MANUAL_IDIOMA}
+
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código \`\`\`:
 {
   "encontrado": true,
@@ -8922,6 +8926,8 @@ ${linhas}
 
 REGRAS, e são a sério:
 ${regras}
+
+${IA_MANUAL_IDIOMA}
 
 Responde SÓ com este JSON, sem texto à volta e sem blocos de código \`\`\`, com exatamente ${vinhos.length} objeto${vinhos.length>1?'s':''} em "resultados" (um por vinho, pela mesma ordem):
 {
@@ -10650,7 +10656,7 @@ async function renderDiag(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='145';
+const APP_BUILD='146';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
