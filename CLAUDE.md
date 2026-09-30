@@ -1005,7 +1005,9 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
   "quando entro no detalhe de um vinho, não tenho opção de procurar
   informação") — só aos curadores e ao admin do catálogo (`catPodeCriar`), e
   com IA. É o MESMO ecrã (`catAbrirProcura`), sem a etapa do Catálogo (é a
-  linha: "✓ é este") nem a da cor, sem o aviso da última procura e sem
+  linha) nem a frase a dizê-lo — estando no Catálogo, "este vinho é do
+  Catálogo" não diz nada (o dono, 30/09/2026); a revisão diz só que guardar
+  muda o vinho para toda a gente —, sem a da cor, sem o aviso da última procura e sem
   `vinhoId` na `vinho-info` (o id é do catálogo, não de uma garrafeira). O
   que se marcar corrige a LINHA pela `winecatalog.editar` (`pqGuardarCat`,
   origem `catalogo-curador`/`catalogo-admin`); o produtor vai à parte, com o
@@ -1095,8 +1097,20 @@ correção deverá atualizar também o vinho no catálogo".
   admin do catálogo) e abre o formulário do vinho novo em modo `catalogo`
   (`catNovoVinho`, `FORM_CAT`): sem garrafa nem notas minhas, gravado pela
   `winecatalog.criar` (`catGuardarNovo`), que recusa um vinho e colheita que
-  já lá estejam. No "Procurar informação", um candidato da mesma colheita É
-  este vinho: abre-se em vez de nascer outra linha.
+  já lá estejam. **Antes de criar, os PARECIDOS** (30/09/2026, o dono: "uma
+  pesquisa prévia… só para o utilizador ter certeza que o vinho não existe
+  antes de o inserir"): a 1.ª etapa do "Procurar informação" — e o "Preencher
+  à mão" também passa por ela (`pqAbrirNovo(true)`, `soVer`: só essa etapa,
+  e depois o formulário) — mostra os do mesmo nome (`colheitas`) e os
+  parecidos (`catParecidos`, no catálogo que já está na app): palavras
+  iguais, a uma letra ("Cristo"/"Crasto") ou o princípio de outra
+  ("Harvest"/"Harvested"); tem de bater metade das palavras do nome que
+  identificam um vinho (nem gama, cor, casta, região nem "quinta" —
+  `PAR_GENERICAS`), e outra cor fica de fora. Até 8. Um da mesma colheita
+  (ou escolhido sem ano escrito) É este vinho: abre-se em vez de nascer
+  outra linha; de outra colheita, cria-se a nossa com os factos desse (e o
+  nome dele). "Nenhum destes: é um vinho novo" segue. Na garrafeira a
+  etapa continua a ser "qual destes é o teu?", só com o mesmo nome.
 - **As correções chegam ao catálogo pela BD, não pela app**: o trigger
   `vinhos_catalogo`, a um curador, leva o que MUDOU nessa gravação (o antes e
   o depois da linha, `ficha_da_linha`) à linha ligada, pela `winecatalog.editar`
