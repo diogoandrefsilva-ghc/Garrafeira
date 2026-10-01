@@ -1973,12 +1973,13 @@ body.cat .it.on{background:#1d4a3b;box-shadow:0 4px 12px -4px rgba(29,74,59,.8)}
 .vcard.cor-rose:hover,.vgcard.cor-rose:hover{border-color:#e6c2b0}
 /* O que um vinho do CATÁLOGO é para mim (`catSeloHTML`): um selo no canto
    de cima à esquerda da garrafa — o espelho do ×N das garrafas da
-   garrafeira, no canto oposto. Verde-garrafa com o número = tenho; estrela
+   garrafeira, no canto oposto. Verde-garrafa com uma garrafinha = tenho
+   (sem o número: esse fica na página do vinho); estrela
    dourada = wishlist; visto em papel = já bebido. */
 .cat-selo{position:absolute;top:-1px;left:-1px;z-index:1;display:inline-flex;align-items:center;gap:2px;
   font-size:10px;font-weight:700;line-height:1;padding:3px 6px 3px 5px;border-radius:9px 0 9px 0;letter-spacing:.2px}
 .cat-selo svg{width:5px;height:10px;display:block}
-.cat-selo.tenho{background:#1d4a3b;color:#fff}
+.cat-selo.tenho{background:#1d4a3b;color:#fff;padding:3px 7px}
 .cat-selo.desejo{background:var(--ou);color:#fff;font-size:11px;padding:2px 6px}
 .cat-selo.bebido{background:var(--card);color:var(--mu);border:1px solid var(--bo2)}
 .vgcard .cat-selo{font-size:11px;padding:4px 7px 4px 6px}

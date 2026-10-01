@@ -1209,9 +1209,10 @@ function catEstado(v){
 // No rodapé do cartão: o que tenho deste vinho, se tiver.
 // E a média das notas de quem usa a Garrafeira (`catNotaBdgHTML`).
 function catTensHTML(v,curto){
-  const {n,que}=catEstado(v);
+  const {que}=catEstado(v);
   if(!que)return catNotaBdgHTML(v,curto);
-  const txt=que==='tenho'?(curto?`🍾 ${n}`:`🍾 Tens ${n} garrafa${n>1?'s':''}`)
+  // Sem o número de garrafas (01/10/2026, o dono): esse fica na página.
+  const txt=que==='tenho'?(curto?'🍾':'🍾 Na tua garrafeira')
     :que==='desejo'?(curto?'⭐':'⭐ Na tua wishlist'):(curto?'📖':'📖 Já bebido');
   return `<span class="bdg cat-tens ${que}">${txt}</span>`+catNotaBdgHTML(v,curto);
 }
@@ -1222,16 +1223,16 @@ function catTensHTML(v,curto){
 // passou para o selo no canto da garrafa (`catSeloHTML`).
 const COR_FUNDO={Tinto:'cor-tinto',Branco:'cor-branco','Rosé':'cor-rose'};
 function corFundoCls(v){const c=COR_FUNDO[(v||{}).tipo];return c?' '+c:'';}
-// O selo no canto da garrafa, só no catálogo: verde-garrafa com o número de
-// garrafas que tenho, uma estrela dourada se está na wishlist, um visto em
+// O selo no canto da garrafa, só no catálogo: uma garrafinha em
+// verde-garrafa se o tenho (sem o número — esse fica na página), uma estrela dourada se está na wishlist, um visto em
 // papel se já o bebi. A mesma regra do crachá (`catEstado`).
 const SELO_GARRAFA='<svg viewBox="0 0 8 16" aria-hidden="true"><path d="M3 0h2v4.2c1.6.7 3 2 3 4V15a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V8.2c0-2 1.4-3.3 3-4z" fill="currentColor"/></svg>';
 function catSeloHTML(v){
   if(!(v.id<0))return '';
-  const {n,que}=catEstado(v);
+  const {que}=catEstado(v);
   if(!que)return '';
-  const t=que==='tenho'?`Tens ${n} garrafa${n>1?'s':''}`:que==='desejo'?'Na tua wishlist':'Já bebido';
-  const c=que==='tenho'?SELO_GARRAFA+n:que==='desejo'?'★':'✓';
+  const t=que==='tenho'?'Na tua garrafeira':que==='desejo'?'Na tua wishlist':'Já bebido';
+  const c=que==='tenho'?SELO_GARRAFA:que==='desejo'?'★':'✓';
   return `<span class="cat-selo ${que}" title="${t}">${c}</span>`;
 }
 // Na página do vinho do catálogo, no lugar do "Onde está".
@@ -10798,7 +10799,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='153';
+const APP_BUILD='154';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

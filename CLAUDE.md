@@ -1004,14 +1004,15 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
 - **Os vinhos do catálogo têm o id NEGATIVO** (`catNormalizar`: `-id`). É a
   marca `v.id<0` em todo o lado, não colide no `IDXV` nem nos `onclick`, e os
   preços deles vivem em `CAT_PRECOS` (o `precosLojaDe` escolhe).
-- **O cartão diz o que tenho** ("🍾 Tens 2 garrafas", "⭐ Na tua wishlist",
+- **O cartão diz o que tenho** ("🍾 Na tua garrafeira", "⭐ Na tua wishlist",
   `catTensHTML`) pela ligação `catalogo_id` (e as linhas fundidas nela). E
   di-lo também um **selo no canto de cima à esquerda da garrafa**
   (`catSeloHTML`, 01/10/2026, o dono), o espelho do ×N da garrafeira:
-  verde-garrafa com o número de garrafas = tenho, estrela dourada = wishlist,
+  uma garrafinha em verde-garrafa = tenho, estrela dourada = wishlist,
   visto em papel = já bebido — a mesma regra do crachá (`catEstado`), que na
   lista fica (com o texto, e com a cor do estado) e na grelha sai (o selo
-  já o diz). Foi o FUNDO do cartão (`catFundoCls`, verde/dourado) até o
+  já o diz). **O número de garrafas não vai no cartão** (o dono, 01/10/2026):
+  só na página do vinho, em "Na tua garrafeira". Foi o FUNDO do cartão (`catFundoCls`, verde/dourado) até o
   fundo passar a ser a COR do vinho (ver "A linguagem visual"). A
   página troca o "Onde está" por **"Na tua garrafeira"** com **Pôr na
   garrafeira / Pôr na wishlist** (`catPor`: o formulário do vinho novo de
