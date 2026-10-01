@@ -612,7 +612,7 @@ function vinhoThumb(v,qtd){
   const img=imagemDe(v);
   return `<div class="vc-thumb">${garrafaSVG(v)}
     ${img?`<img src="${esc(img)}" alt="" loading="lazy" onload="fotoCarregou(this)" onerror="this.remove()">`:''}
-    ${qtd>1?`<span class="vc-qtd">\u00d7${qtd}</span>`:''}${catSeloHTML(v)}</div>`;
+    ${qtd>1?`<span class="vc-qtd">\u00d7${qtd}</span>`:''}</div>`;
 }
 // "Nível 2" tem de vir antes de "Nível 10" — a ordenação alfabética punha o
 // 10 primeiro, e o mapa da garrafeira ficava com os níveis baralhados.
@@ -1220,13 +1220,15 @@ function catTensHTML(v,curto){
 // de vinho no tinto, dourado no branco, cor-de-rosa no rosé; o fundo fica
 // branco. Os outros (espumante, licoroso, frisante) ficam como sempre.
 // Vale na garrafeira e no catálogo; o que um vinho do catálogo é para MIM
-// passou para o selo no canto da garrafa (`catSeloHTML`).
+// passou para o selo no canto do cartão (`catSeloHTML`).
 const COR_FUNDO={Tinto:'cor-tinto',Branco:'cor-branco','Rosé':'cor-rose'};
 function corFundoCls(v){const c=COR_FUNDO[(v||{}).tipo];return c?' '+c:'';}
-// O selo no canto da garrafa, só no catálogo: uma garrafinha em
-// verde-garrafa se o tenho (sem o número — esse fica na página), uma estrela dourada se está na wishlist, um visto em
-// papel se já o bebi. A mesma regra do crachá (`catEstado`).
-const SELO_GARRAFA='<svg viewBox="0 0 8 16" aria-hidden="true"><path d="M3 0h2v4.2c1.6.7 3 2 3 4V15a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V8.2c0-2 1.4-3.3 3-4z" fill="currentColor"/></svg>';
+// O selo no canto de cima à esquerda do CARTÃO, só no catálogo: um círculo
+// verde-garrafa com uma garrafa se o tenho (sem o número — esse fica na
+// página), uma estrela dourada se está na wishlist, um visto em papel se já
+// o bebi. A mesma regra do crachá (`catEstado`). Esteve no canto da
+// imagem e passou para o do cartão (01/10/2026, o dono).
+const SELO_GARRAFA='<svg viewBox="0 0 10 26" aria-hidden="true"><path d="M3.5 0h3v2.6h-.3v3.6c0 1.5 3.8 2.7 3.8 6.9v11.4A1.5 1.5 0 0 1 8.5 26h-7A1.5 1.5 0 0 1 0 24.5V13.1c0-4.2 3.8-5.4 3.8-6.9V2.6h-.3z" fill="currentColor"/><rect x="1.3" y="14.5" width="7.4" height="6" rx=".8" fill="#fff" fill-opacity=".38"/></svg>';
 function catSeloHTML(v){
   if(!(v.id<0))return '';
   const {que}=catEstado(v);
@@ -3568,7 +3570,7 @@ function vinhoCardHTML(v,termos,loteSel){
   // "s/a" lia-se como um dado em branco. Cala-se, e a nota do Vivino sobe
   // para o lugar dele. Um desejo COM ano (uma colheita em concreto) mostra-o.
   const semAno=!v.ano&&desejado(v);
-  return `<article class="vcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${corFundoCls(v)}" onclick="${clique}">
+  return `<article class="vcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${corFundoCls(v)}" onclick="${clique}">${catSeloHTML(v)}
     <div class="vc-top">
       ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
       <div class="vc-main">
@@ -3623,7 +3625,7 @@ function vinhoGrelhaHTML(v,termos,loteSel){
   const on=loteSel&&loteSelTem(v.id);
   const cheio=loteSel&&!on&&loteSelCheio();
   const clique=loteSel?`loteSelToggle(${v.id})`:`verVinho(${v.id})`;
-  return `<article class="vgcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${corFundoCls(v)}" onclick="${clique}">
+  return `<article class="vgcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${corFundoCls(v)}" onclick="${clique}">${catSeloHTML(v)}
     ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
     <div class="vg-nome">${esc(v.nome)}</div>
     <div class="vg-sub">${vinhoMetaHTML(v,desejado(v)&&!v.ano?'':(v.ano||'s/a'))}</div>
@@ -10799,7 +10801,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='155';
+const APP_BUILD='156';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

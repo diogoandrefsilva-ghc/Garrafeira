@@ -1006,9 +1006,9 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
   preços deles vivem em `CAT_PRECOS` (o `precosLojaDe` escolhe).
 - **O cartão diz o que tenho** ("🍾 Na tua garrafeira", "⭐ Na tua wishlist",
   `catTensHTML`) pela ligação `catalogo_id` (e as linhas fundidas nela). E
-  di-lo também um **selo no canto de cima à esquerda da garrafa**
-  (`catSeloHTML`, 01/10/2026, o dono), o espelho do ×N da garrafeira:
-  uma garrafinha em verde-garrafa = tenho, estrela dourada = wishlist,
+  di-lo também um **selo redondo no canto de cima à esquerda do CARTÃO**,
+  meio fora dele (`catSeloHTML`, 01/10/2026, o dono; esteve no canto da
+  imagem e tapava a garrafa): uma garrafa em verde-garrafa = tenho, estrela dourada = wishlist,
   visto em papel = já bebido — a mesma regra do crachá (`catEstado`), que na
   lista fica (com o texto, e com a cor do estado) e na grelha sai (o selo
   já o diz). **O número de garrafas não vai no cartão** (o dono, 01/10/2026):
@@ -1269,7 +1269,7 @@ vinho no tinto, dourado no branco, cor-de-rosa no rosé; espumante,
 licoroso e frisante ficam com o rebordo de sempre. **O fundo fica
 branco**: esteve tingido (tinto num cor-de-vinho suave, branco num
 amarelo) e o dono preferiu voltar atrás. O que um vinho do catálogo é para
-mim (tenho, wishlist, bebido) vive no selo da garrafa.
+mim (tenho, wishlist, bebido) vive no selo do canto do cartão.
 
 Não voltes a dar cor própria a cada crachá: a versão anterior tinha sete
 famílias de cor lado a lado no mesmo cartão e nenhuma queria dizer nada.
