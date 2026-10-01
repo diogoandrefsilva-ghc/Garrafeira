@@ -112,6 +112,10 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   "Alentejo"/"Setúbal", e a sub-região que traziam vai para a `sub_regiao`
   (a regra é a `winecatalog.normalizar_regiao`, `db/regioes.sql` da
   WineCatalog; o trigger é o da 21).
+  `migracao-castas.sql` é a 38: uma grafia por casta ("Aragonês" →
+  "Aragonez", "Souzão" → "Sousão", "Touriga Nacional e Merlot" → duas);
+  corre depois do `db/castas.sql` da WineCatalog (ver "Monocasta / várias
+  castas é CALCULADO" › "Uma grafia por casta").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1957,6 +1961,20 @@ Bousquet" (as duas grafias aparecem nos dados de origem) eram coisas
 diferentes e a procura perdia metade dos vinhos. Quem grava é a função SQL
 `definir_castas(vinho_id, nomes[])` — uma transação, com `ON CONFLICT` a
 resolver duas pessoas a criar a mesma casta ao mesmo tempo.
+
+**Uma grafia por casta** (migração 38, 01/10/2026, o dono das apps): o
+filtro tinha "Aragonez"/"Aragonês"/"Aragonêz", "Castelao"/"Castelão",
+"Sousão"/"Souzão", "Shiraz/Syrah"/"Syrah", "Tinta Cão"/"Tinto Cão" e uma
+"Touriga Nacional e Merlot". A regra é a do catálogo
+(`winecatalog.normalizar_castas`, `db/castas.sql` da WineCatalog), e a
+`definir_castas`/`casta_id` passam por ela (`castas_normalizadas`): separa
+por " e ", "&", "/", "+", ";" e vírgulas, compara sem acentos (a
+`casta_chave`), troca a grafia pela de referência e tira o que não é casta
+("Vinhas Velhas"). No catálogo é um trigger na ficha. **Não junta
+sinónimos regionais** (Tinta Roriz/Aragonez/Tempranillo — o nome diz de
+onde é o vinho). Uma grafia nova entra na `winecatalog.casta_referencia`,
+não se corrige à mão. A app **relê** as castas depois de gravar
+(`gravarCastas`), porque não tem cópia da regra.
 
 ## O vocabulário do "tipo"
 São quatro eixos, e misturá-los num campo só dá cabo dos filtros:

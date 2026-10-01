@@ -6180,9 +6180,7 @@ async function guardarVinho(id,modo){
     // As castas passam pela função SQL: ela cria as que faltam e apaga as
     // que saíram numa transação só, e é ela que resolve duas pessoas a
     // gravar a mesma casta ao mesmo tempo (ON CONFLICT).
-    await sbRpc('definir_castas',{p_vinho_id:vinhoId,p_nomes:castas});
-    IDXV[vinhoId].castas=castas.slice().sort((a,b)=>a.localeCompare(b,'pt'));
-    await recarregarCastas();
+    IDXV[vinhoId].castas=await gravarCastas(vinhoId,castas);
 
     if(comGarrafa){
       const qtd=Math.max(1,Math.min(60,inteiro(document.getElementById('e-qtd').value)||1));
@@ -6217,6 +6215,19 @@ async function guardarVinho(id,modo){
 // dela que sai o filtro de castas, por isso tem de ser relida.
 async function recarregarCastas(){
   try{db.castas=await sbReq('GET','castas?select=*&order=nome.asc')||[];}catch(e){}
+}
+// As castas de um vinho, gravadas pela `definir_castas` e LIDAS DE VOLTA. A BD
+// normaliza-as (migração 38: "Aragonês" → "Aragonez", "Touriga Nacional e
+// Merlot" são duas) e a app não tem cópia da regra — sem reler, o ecrã ficava
+// com o que se escreveu até recarregar (a mesma razão dos nomes, migração 20).
+async function gravarCastas(vinhoId,castas){
+  await sbRpc('definir_castas',{p_vinho_id:vinhoId,p_nomes:castas});
+  await recarregarCastas();
+  try{
+    const vc=await sbReq('GET',`vinho_castas?vinho_id=eq.${vinhoId}&select=casta_id`)||[];
+    const nome={};db.castas.forEach(c=>nome[c.id]=c.nome);
+    return vc.map(l=>nome[l.casta_id]).filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt'));
+  }catch(e){return castas.slice().sort((a,b)=>a.localeCompare(b,'pt'));}
 }
 
 /* ── CONSUMIR GARRAFA ──────────────────────────────────────────────
@@ -7171,9 +7182,7 @@ async function iaAplicar(){
     const r=await sbReq('PATCH',`vinhos?id=eq.${IA_VINHO}`,patch,{'Prefer':'return=representation'});
     Object.assign(v,patch,(r&&r[0])||{});
     if(castasNovas){
-      await sbRpc('definir_castas',{p_vinho_id:IA_VINHO,p_nomes:castasNovas});
-      v.castas=castasNovas.slice().sort((a,b)=>a.localeCompare(b,'pt'));
-      await recarregarCastas();
+      v.castas=await gravarCastas(IA_VINHO,castasNovas);
     }
     // A meio de um lote, guardar não fecha — avança para o vinho seguinte
     // (ou fecha sozinho, se este era o último). `loteAoFecharModalIA` é que
@@ -8296,9 +8305,7 @@ async function pqGuardar(){
       Object.assign(v,patch,(r&&r[0])||{});
     }
     if(castas){
-      await sbRpc('definir_castas',{p_vinho_id:P.vid,p_nomes:castas});
-      v.castas=castas.slice().sort((a,b)=>a.localeCompare(b,'pt'));
-      await recarregarCastas();
+      v.castas=await gravarCastas(P.vid,castas);
     }
     PQ=null;
     fecharModal('modal-ia');
@@ -10841,7 +10848,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='162';
+const APP_BUILD='163';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

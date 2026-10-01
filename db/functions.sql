@@ -554,16 +554,42 @@ $$;
 -- de N pedidos "cria" — e duas pessoas a gravar ao mesmo tempo rebentavam
 -- na constraint UNIQUE. Aqui o ON CONFLICT resolve a corrida.
 -- Devolve sempre o id, tenha sido criada agora ou não.
+-- A regra das castas é a do catálogo (`winecatalog.normalizar_castas`,
+-- `db/castas.sql` da WineCatalog; migração 38): separa "X e Y", compara sem
+-- acentos, troca a grafia pela de referência. Sem o schema `winecatalog`,
+-- fica só o trim — guardar castas nunca depende do catálogo.
+CREATE OR REPLACE FUNCTION garrafeira.castas_normalizadas(p_nomes text[])
+  RETURNS text[] LANGUAGE plpgsql STABLE SECURITY INVOKER
+  SET search_path TO 'garrafeira', 'public'
+AS $$
+BEGIN
+  RETURN winecatalog.normalizar_castas(p_nomes);
+EXCEPTION WHEN OTHERS THEN
+  RETURN ARRAY(SELECT regexp_replace(trim(x), '\s+', ' ', 'g')
+                 FROM unnest(COALESCE(p_nomes, ARRAY[]::text[])) x
+                WHERE trim(COALESCE(x, '')) <> '');
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION garrafeira.casta_id(p_nome text)
   RETURNS bigint LANGUAGE plpgsql SECURITY INVOKER
   SET search_path TO 'garrafeira', 'public'
 AS $$
 DECLARE
-  v_nome text := regexp_replace(trim(COALESCE(p_nome, '')), '\s+', ' ', 'g');
+  v_nome text := (garrafeira.castas_normalizadas(ARRAY[p_nome]))[1];
   v_id   bigint;
 BEGIN
-  IF v_nome = '' THEN RETURN NULL; END IF;
-  SELECT id INTO v_id FROM garrafeira.castas WHERE lower(nome) = lower(v_nome);
+  IF COALESCE(v_nome, '') = '' THEN RETURN NULL; END IF;
+  SELECT id INTO v_id FROM garrafeira.castas WHERE nome = v_nome;
+  IF v_id IS NOT NULL THEN RETURN v_id; END IF;
+  BEGIN
+    SELECT id INTO v_id FROM garrafeira.castas
+     WHERE winecatalog.casta_chave(nome) = winecatalog.casta_chave(v_nome)
+     ORDER BY id LIMIT 1;
+  EXCEPTION WHEN OTHERS THEN
+    SELECT id INTO v_id FROM garrafeira.castas WHERE lower(nome) = lower(v_nome)
+     ORDER BY id LIMIT 1;
+  END;
   IF v_id IS NOT NULL THEN RETURN v_id; END IF;
   INSERT INTO garrafeira.castas (nome) VALUES (v_nome)
   ON CONFLICT (nome) DO UPDATE SET nome = EXCLUDED.nome
@@ -587,7 +613,8 @@ DECLARE
 BEGIN
   -- ARRAY[]::text[] e não '{}': o literal sem tipo deixa o Postgres a
   -- adivinhar, e num FOREACH sobre um COALESCE isso dá erro de tipo.
-  FOREACH v_nome IN ARRAY COALESCE(p_nomes, ARRAY[]::text[]) LOOP
+  -- A lista já separada e normalizada ("Touriga Nacional e Merlot" são duas).
+  FOREACH v_nome IN ARRAY garrafeira.castas_normalizadas(p_nomes) LOOP
     v_id := garrafeira.casta_id(v_nome);
     IF v_id IS NOT NULL AND NOT (v_id = ANY(v_ids)) THEN
       v_ids := array_append(v_ids, v_id);

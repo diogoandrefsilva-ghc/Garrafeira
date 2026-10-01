@@ -582,6 +582,15 @@ está vazia. A migração corrige o que já estava escrito (com a marca
 `atualizado_em`), e os dois "Beiras" com a sub-região escrita (Silgueiros →
 Dão; Bairrada). Aplicada a 30/09/2026: 14 vinhos.
 
+### Migração 38 — uma grafia por casta (POR APLICAR)
+
+`db/migracao-castas.sql`, depois do `db/castas.sql` do WineCatalog (a
+regra, já aplicada a 01/10/2026: 19 fichas do catálogo arrumadas). A
+`casta_id` e a `definir_castas` passam pela `winecatalog.normalizar_castas`
+("Aragonês" → "Aragonez", "Touriga Nacional e Merlot" → duas castas), e as
+castas que já lá estavam juntam-se na de referência. Cola-se inteira no SQL
+Editor (o MCP do Supabase não a corre: tem `DELETE`).
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -631,6 +640,8 @@ Numa base de dados limpa:
    do WineCatalog.
 10. **`migracao-regioes-sinonimos.sql`** — os sinónimos de região já
    gravados (migração 37). Só depois do `db/regioes.sql` do WineCatalog.
+11. **`migracao-castas.sql`** — uma grafia por casta (migração 38). Só
+   depois do `db/castas.sql` do WineCatalog.
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)
