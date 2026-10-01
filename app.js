@@ -1276,30 +1276,29 @@ function catNotaBdgHTML(v,curto){
   return `<span class="bdg cat-nota" title="Média das notas de quem usa a Garrafeira (${x.n} nota${x.n>1?'s':''})">${avalFmt(x.media)}${
     curto?'':` · ${x.n} nota${x.n>1?'s':''}`}</span>`;
 }
-const CAT_NOTA_VAZIO='Sem nota — toca numa estrela (outra vez na mesma para tirar) ou escreve-a ao lado, de 0 a 5.';
 function catNotaLer(s){
   if(String(s??'').trim()==='')return null;
   const n=num(s);
   if(n==null||n<0||n>5)return NaN;
   return Math.round(n*10)/10;
 }
-function catNotaMediaHTML(v){
-  const x=catNota(v);
-  return x&&x.n?`Média de quem usa a Garrafeira: <b>${avalFmt(x.media)}</b> · ${x.n} nota${x.n>1?'s':''}`
-    :'Ainda ninguém lhe deu nota.';
-}
+/* "A tua nota" é só as estrelas e o número, sem texto nenhum à volta
+   (01/10/2026, o dono das apps). O número é um SELETOR que se roda (no
+   iPhone, a roda nativa do <select>) e não uma caixa de texto: de 5,0 a
+   0,0, de décima em décima, mais o "—" de sem nota. De cima para baixo,
+   porque as notas que se dão a um vinho estão quase sempre lá em cima. A
+   média de quem usa a Garrafeira lê-se no cartão (o G). */
+const CAT_NOTA_OPCOES=['',...Array.from({length:51},(_,i)=>((50-i)/10).toFixed(1))];
 function catNotasHTML(v){
   if(!TEM_NOTAS_CAT)return '';
-  const x=catNota(v);
+  const x=catNota(v), minha=x&&x.minha!=null?avalFmt(x.minha):'';
   return `<div class="msec">A tua nota</div>
     <div class="stars" id="cn-stars">
       ${[1,2,3,4,5].map(n=>`<button type="button" class="star" onclick="catNotaEstrela(${v.id},${n})" title="${n}"><span>★</span></button>`).join('')}
-      <input type="text" id="cn-aval" inputmode="decimal" autocomplete="off" placeholder="—"
-        aria-label="A tua nota, de 0 a 5" value="${x&&x.minha!=null?avalFmt(x.minha):''}"
-        oninput="catNotaPintar()" onchange="catNotaGuardar(${v.id})" onkeydown="if(event.key==='Enter')this.blur()">
-    </div>
-    <div class="stars-l" id="cn-stars-l">${CAT_NOTA_VAZIO}</div>
-    <div class="note cat-nota-media" id="cn-media">${catNotaMediaHTML(v)}</div>`;
+      <select id="cn-aval" class="cn-roda" aria-label="A tua nota, de 0 a 5"
+        onchange="catNotaPintar();catNotaGuardar(${v.id})">${
+        CAT_NOTA_OPCOES.map(o=>`<option value="${o}"${o===minha?' selected':''}>${o||'—'}</option>`).join('')}</select>
+    </div>`;
 }
 function catNotaPintar(){
   const inp=document.getElementById('cn-aval');if(!inp)return;
@@ -1310,9 +1309,6 @@ function catNotaPintar(){
     b.classList.toggle('parte',p>0&&p<1);
     b.style.setProperty('--p',String(p));
   });
-  document.getElementById('cn-stars-l').textContent=v==null?CAT_NOTA_VAZIO
-    :isNaN(v)?'A nota vai de 0 a 5, com uma casa decimal (4,2).'
-    :[estrelas(v),avalFmt(v),AVAL_TXT[Math.round(v)]||''].filter(Boolean).join('  ·  ');
 }
 function catNotaEstrela(id,n){
   const inp=document.getElementById('cn-aval');if(!inp)return;
@@ -1330,7 +1326,6 @@ async function catNotaGuardar(id){
   try{
     const r=await sbRpc('catalogo_nota_definir',{p_catalogo_id:v.cat_id,p_nota:nota});
     CAT_NOTAS[String(v.cat_id)]={media:r.media,n:r.n,minha:r.minha};
-    const m=document.getElementById('cn-media');if(m)m.innerHTML=catNotaMediaHTML(v);
     renderFiltrados();
     toast(nota==null?'Nota retirada':'Nota guardada ✓');
   }catch(e){
@@ -10822,7 +10817,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='158';
+const APP_BUILD='159';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

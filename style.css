@@ -1222,6 +1222,16 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .mbox .stars input{width:62px;flex:0 0 auto;height:34px;padding:0 8px;margin-left:3px;text-align:center;
   font-family:var(--fd);font-size:15px;font-weight:600}
 .estrelas .aval-n{letter-spacing:0;margin-left:6px;font-family:var(--fd);font-weight:600;color:var(--ou2)}
+/* O número de "A tua nota" (catálogo) é um seletor que se RODA — no iPhone,
+   a roda nativa do <select> — e não uma caixa de texto (`catNotasHTML`).
+   Com o mesmo feitio da caixa do consumo, e as duas setas (para cima e para
+   baixo) a dizer que se roda. Vem depois da `.mbox select:focus`, que com o
+   `background:#fff` apagava as setas. */
+.mbox .stars select.cn-roda{width:78px;flex:0 0 auto;height:34px;padding:0 22px 0 10px;margin-left:3px;
+  text-align:center;text-align-last:center;font-family:var(--fd);font-size:15px;font-weight:600;color:var(--tx);
+  -webkit-appearance:none;appearance:none;cursor:pointer;
+  background:var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 12'%3E%3Cpath d='M1 4.5l3-3 3 3M1 7.5l3 3 3-3' fill='none' stroke='%237a6d68' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") right 9px center/8px 12px no-repeat}
+.mbox .stars select.cn-roda:focus{background-color:#fff}
 
 /* Seletor do que procurar (antes da procura).
    Prefixado com `.mbox` de propósito: `.mbox label` põe TUDO em maiúsculas,
@@ -2034,7 +2044,6 @@ body.cat .it.on{background:#1d4a3b;box-shadow:0 4px 12px -4px rgba(29,74,59,.8)}
 .bdg.cat-nota{background:#fff;color:var(--ou2);border-color:#e3d2a2;font-weight:700}
 .bdg.cat-nota::before{content:'';width:1.3em;height:1.3em;flex-shrink:0;
   background:url(nota-g.png) center/contain no-repeat}
-.cat-nota-media{margin-top:6px}
 /* Um vinho do catálogo abre na mesma página, com a capa verde do catálogo
    — venha de onde vier, diz-se logo que não é uma garrafa minha. */
 .mhero.mhero-cat{background:linear-gradient(155deg,#0f2a22,#1d4a3b 55%,#2f6e57)}

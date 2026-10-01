@@ -1081,10 +1081,16 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
 O dono das apps: "gostava que os utilizadores da garrafeira pudessem dar
 notas/avaliações aos vinhos do catálogo (notas de 0 a 5, com possibilidade de
 colocar valores decimais - uma casa apenas)". Na página de um vinho do
-catálogo, **"A tua nota"** (`catNotasHTML`): as cinco estrelas e a caixa com a
-casa decimal, a mesma pele da nota de um consumo (`.stars`), e por baixo a
-**média de quem usa a Garrafeira** e quantas notas são. Tocar na estrela da
-nota que já se deu tira-a; a caixa vazia também. No cartão, o **G** da app
+catálogo, **"A tua nota"** (`catNotasHTML`): as cinco estrelas e, ao lado,
+um **seletor que se roda** (`select.cn-roda` — no iPhone, a roda nativa do
+`<select>`) de 5,0 a 0,0, de décima em décima, mais o "—" de sem nota; de
+cima para baixo, porque as notas que se dão estão quase sempre lá em cima.
+**E mais nada** (01/10/2026, o dono das apps: "retira todos os comentários,
+deixa só as estrelas e o campo"): saíram a linha de ajuda por baixo das
+estrelas e a média de quem usa a Garrafeira — essa lê-se no cartão. Era uma
+caixa de texto livre, e o dono pediu "daqueles seletores que rodo para cima
+ou para baixo". Tocar na estrela da nota que já se deu tira-a; o "—" também.
+No cartão, o **G** da app
 e a média (`catNotaBdgHTML`; o G é o `nota-g.png`, no `::before` do
 `.cat-nota`): branco com a letra dourada, ao lado da do Vivino, que é
 dourada com a letra cor de vinho (01/10/2026, o dono das apps; era 👥 em
