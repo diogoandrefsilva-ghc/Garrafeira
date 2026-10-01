@@ -1169,7 +1169,16 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .mhero-s{font-size:12px;color:rgba(255,255,255,.78);margin-top:4px}
 .mhero-n{display:inline-flex;align-items:center;gap:5px;margin-top:8px;background:rgba(255,255,255,.12);
   border:1px solid rgba(255,255,255,.22);border-radius:99px;padding:3px 10px;font-size:11px;font-weight:600;color:#f6dfa8}
-.mhero-n .viv-uvas{color:inherit}
+/* As pastilhas da capa (a nota do Vivino, a maturação) estão numa LINHA de
+   texto, e um `inline-flex` alinha-se pela linha de base do primeiro filho.
+   Com as uvas à frente — um SVG, que não tem linha de base — a da pastilha
+   passava a ser o FUNDO das uvas, e a do Vivino ficava mais acima do que a
+   do "No ponto" ao lado (visto pelo dono das apps, 01/10/2026). Alinham-se
+   pelo topo, e as uvas não passam da altura da letra para as duas pastilhas
+   medirem o mesmo. O espaço entre elas é margem: o `font-size:0` do
+   `.mhero-tx` come o espaço em branco do HTML. */
+.mhero-n{vertical-align:top;margin-right:6px}
+.mhero-n .viv-uvas{color:inherit;height:1.15em}
 
 /* A imagem em grande (toca-se na capa do modal do vinho). O palco tem
    altura fixa e a imagem entra em `contain`: umas fotos são da garrafa
