@@ -1958,17 +1958,31 @@ body.cat .itabs .so-gar{display:none!important}
 body.sem-locais .itabs .it-locais,body.sem-consumidos .itabs .it-consumidos{display:none!important}
 body.cat .it.on{background:#1d4a3b;box-shadow:0 4px 12px -4px rgba(29,74,59,.8)}
 .bdg.cat-tens{background:#eaf3ee;color:#1d4a3b;border-color:#cfe3d7;font-weight:600}
-/* O fundo de um vinho do catálogo diz o que ele é para mim (`catFundoCls`,
-   30/09/2026, o dono das apps): verde suave no que tenho ou já tive, e
-   dourado suave no que está na wishlist. O dourado aqui é pedido dele e
-   fica no FUNDO, em tom de papel: a distinção do vinho (menção, Vivino)
-   continua a ser o dourado cheio dos crachás. Vêm depois do `:hover` de
-   propósito: passar por cima não lhes tira a cor. */
-.vcard.cat-tenho,.vgcard.cat-tenho{background:#eef6f1;border-color:#cfe3d7}
-.vcard.cat-desejo,.vgcard.cat-desejo{background:#fbf2dc;border-color:#ead7a4}
-.vcard.cat-tenho:hover,.vgcard.cat-tenho:hover{border-color:#b5d3c1}
-.vcard.cat-desejo:hover,.vgcard.cat-desejo:hover{border-color:#dcc27e}
-.cat-tenho .bdg.cat-tens,.cat-desejo .bdg.cat-tens{background:#fff}
+.bdg.cat-tens.desejo{background:var(--oup);color:var(--ou2);border-color:#ead7a4}
+.bdg.cat-tens.bebido{background:var(--bg2);color:var(--mu);border-color:var(--bo2)}
+/* O FUNDO do cartão é a COR do vinho (`corFundoCls`, 01/10/2026, o dono das
+   apps), na garrafeira e no catálogo: tinto num cor-de-vinho muito suave,
+   branco num amarelo-dourado suave, rosé num salmão. Sempre em tom de
+   papel — a cor cheia continua a ser só a da app (bordô) e a da distinção
+   (dourado dos crachás). Vem depois do `:hover` de propósito. */
+.vcard.cor-tinto,.vgcard.cor-tinto{background:#f8ecee;border-color:#ebd2d8}
+.vcard.cor-branco,.vgcard.cor-branco{background:#fcf7e5;border-color:#eee0b4}
+.vcard.cor-rose,.vgcard.cor-rose{background:#fdf1e7;border-color:#f0d9c6}
+.vcard.cor-tinto:hover,.vgcard.cor-tinto:hover{border-color:#e2bfc8}
+.vcard.cor-branco:hover,.vgcard.cor-branco:hover{border-color:#e0cb8c}
+.vcard.cor-rose:hover,.vgcard.cor-rose:hover{border-color:#e6c2b0}
+/* O que um vinho do CATÁLOGO é para mim (`catSeloHTML`): um selo no canto
+   de cima à esquerda da garrafa — o espelho do ×N das garrafas da
+   garrafeira, no canto oposto. Verde-garrafa com o número = tenho; estrela
+   dourada = wishlist; visto em papel = já bebido. */
+.cat-selo{position:absolute;top:-1px;left:-1px;z-index:1;display:inline-flex;align-items:center;gap:2px;
+  font-size:10px;font-weight:700;line-height:1;padding:3px 6px 3px 5px;border-radius:9px 0 9px 0;letter-spacing:.2px}
+.cat-selo svg{width:5px;height:10px;display:block}
+.cat-selo.tenho{background:#1d4a3b;color:#fff}
+.cat-selo.desejo{background:var(--ou);color:#fff;font-size:11px;padding:2px 6px}
+.cat-selo.bebido{background:var(--card);color:var(--mu);border:1px solid var(--bo2)}
+.vgcard .cat-selo{font-size:11px;padding:4px 7px 4px 6px}
+.vgcard .cat-selo svg{width:6px;height:12px}
 /* A média das notas de quem usa a Garrafeira (migração 33): em papel, não
    em dourado — o dourado é a nota do Vivino, e isto é a opinião da casa. */
 .bdg.cat-nota{background:var(--bg2);color:var(--tx);border-color:var(--bo2);font-weight:600}

@@ -612,7 +612,7 @@ function vinhoThumb(v,qtd){
   const img=imagemDe(v);
   return `<div class="vc-thumb">${garrafaSVG(v)}
     ${img?`<img src="${esc(img)}" alt="" loading="lazy" onload="fotoCarregou(this)" onerror="this.remove()">`:''}
-    ${qtd>1?`<span class="vc-qtd">\u00d7${qtd}</span>`:''}</div>`;
+    ${qtd>1?`<span class="vc-qtd">\u00d7${qtd}</span>`:''}${catSeloHTML(v)}</div>`;
 }
 // "Nível 2" tem de vir antes de "Nível 10" — a ordenação alfabética punha o
 // 10 primeiro, e o mapa da garrafeira ficava com os níveis baralhados.
@@ -1199,8 +1199,8 @@ function catMeus(v){
 }
 // O que este vinho do catálogo é para mim: 'tenho' (garrafas na
 // garrafeira), 'desejo' (na wishlist), 'bebido' (já o tive) ou '' (nada).
-// Uma regra só para o crachá (`catTensHTML`) e para o fundo do cartão
-// (`catFundoCls`): duas cópias desta ordem divergiam.
+// Uma regra só para o crachá (`catTensHTML`) e para o selo na garrafa
+// (`catSeloHTML`): duas cópias desta ordem divergiam.
 function catEstado(v){
   const meus=catMeus(v);
   const n=meus.reduce((s,m)=>s+stockDe(m.id),0);
@@ -1213,14 +1213,26 @@ function catTensHTML(v,curto){
   if(!que)return catNotaBdgHTML(v,curto);
   const txt=que==='tenho'?(curto?`🍾 ${n}`:`🍾 Tens ${n} garrafa${n>1?'s':''}`)
     :que==='desejo'?(curto?'⭐':'⭐ Na tua wishlist'):(curto?'📖':'📖 Já bebido');
-  return `<span class="bdg cat-tens">${txt}</span>`+catNotaBdgHTML(v,curto);
+  return `<span class="bdg cat-tens ${que}">${txt}</span>`+catNotaBdgHTML(v,curto);
 }
-// O fundo do cartão no catálogo (30/09/2026, o dono das apps): verde suave
-// no que tenho ou já tive (bebido), dourado suave no que está na wishlist.
-function catFundoCls(v){
+// O FUNDO do cartão diz a COR do vinho (01/10/2026, o dono das apps): o
+// tinto num cor-de-vinho muito suave, o branco num amarelo-dourado suave, o
+// rosé num salmão. Os outros (espumante, licoroso, frisante) ficam em papel.
+// Vale na garrafeira e no catálogo; o que um vinho do catálogo é para MIM
+// passou para o selo no canto da garrafa (`catSeloHTML`).
+const COR_FUNDO={Tinto:'cor-tinto',Branco:'cor-branco','Rosé':'cor-rose'};
+function corFundoCls(v){const c=COR_FUNDO[(v||{}).tipo];return c?' '+c:'';}
+// O selo no canto da garrafa, só no catálogo: verde-garrafa com o número de
+// garrafas que tenho, uma estrela dourada se está na wishlist, um visto em
+// papel se já o bebi. A mesma regra do crachá (`catEstado`).
+const SELO_GARRAFA='<svg viewBox="0 0 8 16" aria-hidden="true"><path d="M3 0h2v4.2c1.6.7 3 2 3 4V15a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V8.2c0-2 1.4-3.3 3-4z" fill="currentColor"/></svg>';
+function catSeloHTML(v){
   if(!(v.id<0))return '';
-  const q=catEstado(v).que;
-  return q==='desejo'?' cat-desejo':q?' cat-tenho':'';
+  const {n,que}=catEstado(v);
+  if(!que)return '';
+  const t=que==='tenho'?`Tens ${n} garrafa${n>1?'s':''}`:que==='desejo'?'Na tua wishlist':'Já bebido';
+  const c=que==='tenho'?SELO_GARRAFA+n:que==='desejo'?'★':'✓';
+  return `<span class="cat-selo ${que}" title="${t}">${c}</span>`;
 }
 // Na página do vinho do catálogo, no lugar do "Onde está".
 function catNaMinhaHTML(v){
@@ -3555,7 +3567,7 @@ function vinhoCardHTML(v,termos,loteSel){
   // "s/a" lia-se como um dado em branco. Cala-se, e a nota do Vivino sobe
   // para o lugar dele. Um desejo COM ano (uma colheita em concreto) mostra-o.
   const semAno=!v.ano&&desejado(v);
-  return `<article class="vcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${catFundoCls(v)}" onclick="${clique}">
+  return `<article class="vcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${corFundoCls(v)}" onclick="${clique}">
     <div class="vc-top">
       ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
       <div class="vc-main">
@@ -3610,13 +3622,13 @@ function vinhoGrelhaHTML(v,termos,loteSel){
   const on=loteSel&&loteSelTem(v.id);
   const cheio=loteSel&&!on&&loteSelCheio();
   const clique=loteSel?`loteSelToggle(${v.id})`:`verVinho(${v.id})`;
-  return `<article class="vgcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${catFundoCls(v)}" onclick="${clique}">
+  return `<article class="vgcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${corFundoCls(v)}" onclick="${clique}">
     ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
     <div class="vg-nome">${esc(v.nome)}</div>
     <div class="vg-sub">${vinhoMetaHTML(v,desejado(v)&&!v.ano?'':(v.ano||'s/a'))}</div>
     ${v.produtor?`<div class="vg-prod">${esc(v.produtor)}</div>`:''}
     <div class="vg-foot">
-      ${notaVivinoBadge(v)}${v.id<0?catTensHTML(v,true):''}
+      ${notaVivinoBadge(v)}${v.id<0?catNotaBdgHTML(v,true):''}
     </div>
     ${trechosMatch(v,termos)}
   </article>`;
@@ -10786,7 +10798,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='152';
+const APP_BUILD='153';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

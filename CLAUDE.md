@@ -1005,12 +1005,14 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
   marca `v.id<0` em todo o lado, não colide no `IDXV` nem nos `onclick`, e os
   preços deles vivem em `CAT_PRECOS` (o `precosLojaDe` escolhe).
 - **O cartão diz o que tenho** ("🍾 Tens 2 garrafas", "⭐ Na tua wishlist",
-  `catTensHTML`) pela ligação `catalogo_id` (e as linhas fundidas nela). E o
-  FUNDO do cartão (lista e grelha) di-lo também (`catFundoCls`, 30/09/2026,
-  o dono): verde suave no que tenho ou já tive (bebido), dourado suave no que
-  está na wishlist — a mesma regra do crachá (`catEstado`). O dourado é
-  pedido dele e fica em tom de papel, no fundo: o dourado cheio dos crachás
-  continua a ser a distinção. A
+  `catTensHTML`) pela ligação `catalogo_id` (e as linhas fundidas nela). E
+  di-lo também um **selo no canto de cima à esquerda da garrafa**
+  (`catSeloHTML`, 01/10/2026, o dono), o espelho do ×N da garrafeira:
+  verde-garrafa com o número de garrafas = tenho, estrela dourada = wishlist,
+  visto em papel = já bebido — a mesma regra do crachá (`catEstado`), que na
+  lista fica (com o texto, e com a cor do estado) e na grelha sai (o selo
+  já o diz). Foi o FUNDO do cartão (`catFundoCls`, verde/dourado) até o
+  fundo passar a ser a COR do vinho (ver "A linguagem visual"). A
   página troca o "Onde está" por **"Na tua garrafeira"** com **Pôr na
   garrafeira / Pôr na wishlist** (`catPor`: o formulário do vinho novo de
   sempre, já preenchido e aberto por inteiro). Saem as minhas notas, o
@@ -1259,6 +1261,14 @@ devagar — nomes de vinhos, anos, números, títulos; **Inter** para a
 interface. A cor é informação, não decoração: **bordô** = a app, **dourado**
 = distinção (menção portuguesa e nota do Vivino), e o resto vive em tons de
 papel. O fundo tem uma textura de pontos em CSS puro (nada de imagens).
+
+**O FUNDO do cartão é a cor do vinho** (`corFundoCls`, 01/10/2026, o dono
+das apps), na lista e na grelha, na garrafeira e no catálogo: o tinto num
+cor-de-vinho muito suave, o branco num amarelo-dourado suave, o rosé num
+salmão; espumante, licoroso e frisante ficam em papel. É um tom de papel,
+nunca uma cor cheia — e por isso não pode servir para mais nada: o que um
+vinho do catálogo é para mim (tenho, wishlist, bebido) vive no selo da
+garrafa, não no fundo.
 
 Não voltes a dar cor própria a cada crachá: a versão anterior tinha sete
 famílias de cor lado a lado no mesmo cartão e nenhuma queria dizer nada.
