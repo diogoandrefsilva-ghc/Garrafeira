@@ -116,6 +116,11 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   "Aragonez", "Souzão" → "Sousão", "Touriga Nacional e Merlot" → duas);
   corre depois do `db/castas.sql` da WineCatalog (ver "Monocasta / várias
   castas é CALCULADO" › "Uma grafia por casta").
+  `migracao-catalogo-fiel.sql` é a 39: o Catálogo fidedigno — o nome e o
+  produtor de um vinho gravado não se mudam na garrafeira, e o resto só
+  corrige o catálogo na linha que é só desse vinho; nas outras, enche o
+  vazio e a divergência vai ao admin (ver "Os curadores do catálogo" ›
+  "E quem não é curador").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1191,7 +1196,39 @@ correção deverá atualizar também o vinho no catálogo".
   disso — o valor da IA, ou escrito à mão — é uma correção:
   `curadorNovo` → `garrafeira.curador_levar_novo(vinho, base)` → a mesma
   `curador_levar`. Um campo que o catálogo não mostrou não vai.
-  Quem não é curador continua a alimentar o catálogo como sempre.
+  Quem não é curador continua a alimentar o catálogo — com as regras a seguir.
+
+### E quem não é curador (01/10/2026, migração 39)
+O dono das apps: "o meu objetivo é que o Catálogo fique fidedigno". Até
+aqui cada gravação levava a ficha INTEIRA à `juntar`, que substitui com
+força igual ou maior — a garrafeira (3/2) tapava as lojas, o Vivino e a IA,
+em qualquer gravação de qualquer pessoa (até ao mudar uma garrafa de
+lugar). Agora:
+- **O nome e o produtor de um vinho gravado não se mudam na garrafeira.**
+  No Editar ficam só de leitura (com a nota a apontar para o "Algo não está
+  bem?"), a procura com IA e a atualização massiva já não propõem o
+  produtor, e a BD deixa-os como estavam a quem escreve pela API
+  (`vinhos_identidade_fixa`, SECURITY INVOKER: o `current_user` de um PATCH
+  é `authenticated`; as funções da BD e a `service_role` passam). Chegam do
+  catálogo pela `receber_identidade`, como antes. O ano e a cor continuam a
+  mudar-se (são outro vinho: a ligação procura-se outra vez).
+- **O resto só corrige o catálogo quando a linha é SÓ deste vinho**
+  (`linha_so_minha`): nasceu com ele, mais nenhum vinho está ligado a ela,
+  nada foi fundido nela, e só a garrafeira e a procura com IA lhe
+  escreveram (as `origens`; e nenhum `editar` no `sync_log` do catálogo).
+  O catálogo guarda a ORIGEM de cada campo, não a pessoa — daí as quatro
+  perguntas.
+- **Nas outras linhas, a garrafeira só enche o que o catálogo tem vazio**
+  (`catalogar_e_ligar(…, p_so_vazios)`), e o que a pessoa MUDOU para um
+  valor diferente do que o catálogo tem é uma **divergência**: fica na
+  garrafeira dela e o admin recebe um comentário ("Divergência automática",
+  motivo `atributos`, com os valores dela e os do catálogo) e o push
+  (`catalogo_divergencia`; as castas pela `castas_mudaram`). A nota e o
+  preço (`winecatalog.volatil`) não contam, e um vinho acabado de criar não
+  avisa ninguém (enche o vazio e mais nada).
+- A app diz o que aconteceu a seguir a gravar (`curadorAviso`, para toda a
+  gente: "Corrigido também no catálogo" ou "Fica diferente do Catálogo em …
+  — o admin foi avisado para rever").
 
 ## O detalhe do vinho é uma PÁGINA, não um modal
 Tocar num vinho não abre uma folha por cima da lista: entra-se numa

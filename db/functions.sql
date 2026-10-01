@@ -638,6 +638,9 @@ BEGIN
     IF cardinality(v_ids) > 0
        AND v_antes IS DISTINCT FROM (SELECT array_agg(x ORDER BY x) FROM unnest(v_ids) x) THEN
       PERFORM garrafeira.curador_levar(p_vinho_id, '{"castas": null}'::jsonb);
+      -- Quem não é curador (migração 39, `migracao-catalogo-fiel.sql`): o
+      -- dono da linha corrige-a; os outros avisam o admin da divergência.
+      PERFORM garrafeira.castas_mudaram(p_vinho_id);
     END IF;
   EXCEPTION WHEN OTHERS THEN
     NULL;
