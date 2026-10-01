@@ -1238,22 +1238,29 @@ function catSeloHTML(v){
   const c=que==='tenho'?SELO_GARRAFA:que==='desejo'?'★':'✓';
   return `<span class="cat-selo ${que}" title="${t}">${c}</span>`;
 }
-// Na página do vinho do catálogo, no lugar do "Onde está".
+// Na página do vinho do catálogo, no lugar do "Onde está". Uma linha por
+// vinho meu ligado a este: o que é (garrafas, wishlist, bebido) e o "Ver" —
+// sem o nome, que é o da página (01/10/2026, o dono das apps). A colheita só
+// aparece quando não é a desta linha do catálogo: aí é o que distingue.
+// E os dois botões só quando ainda não o tenho nem o quero: com ele na
+// garrafeira ou na wishlist, o caminho é o "Ver" (de lá passa-se um desejo
+// para a garrafeira, ou acrescenta-se uma garrafa). Já bebido conta como
+// não o ter — voltar a comprá-lo é uma pergunta legítima.
 function catNaMinhaHTML(v){
-  const meus=catMeus(v);
+  const meus=catMeus(v), {que}=catEstado(v);
   const linhas=meus.map(m=>{
     const n=stockDe(m.id);
     const txt=n?`🍾 ${n} garrafa${n>1?'s':''} na garrafeira`:desejado(m)?'⭐ Na wishlist':'📖 Já bebido';
-    return `<div class="mgar"><div class="g-onde"><b>${txt}</b>
-      <i>${esc(m.nome)}${m.ano?' · '+m.ano:''}</i></div>
+    const ano=m.ano&&String(m.ano)!==String(v.ano||'')?` <i>· ${esc(String(m.ano))}</i>`:'';
+    return `<div class="mgar cat-meu"><div class="g-onde"><b>${txt}${ano}</b></div>
       <button class="mini" onclick="verVinho(${m.id})">Ver</button></div>`;
   }).join('');
   return `<div class="msec">${garrafeiraAtiva()&&!souDonoDaGarrafeira()?esc(nomeGarrafeira()):'Na tua garrafeira'}</div>
     ${linhas||'<div class="note" style="padding:8px 0">Ainda não está na garrafeira.</div>'}
-    <div class="macoes ro-hide">
+    ${que==='tenho'||que==='desejo'?'':`<div class="macoes ro-hide">
       <button class="btn prim" onclick="catPor(${v.id},'')">🍷 Pôr na garrafeira</button>
       ${TEM_DESEJO?`<button class="btn ghost" onclick="catPor(${v.id},'desejo')">⭐ Pôr na wishlist</button>`:''}
-    </div>`;
+    </div>`}`;
 }
 /* ── AS NOTAS AOS VINHOS DO CATÁLOGO (migração 33, 30/09/2026) ──
    O dono das apps: "gostava que os utilizadores da garrafeira pudessem dar
@@ -10817,7 +10824,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='159';
+const APP_BUILD='160';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

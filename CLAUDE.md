@@ -1033,9 +1033,14 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
   já o diz). **O número de garrafas não vai no cartão** (o dono, 01/10/2026):
   só na página do vinho, em "Na tua garrafeira". Foi o FUNDO do cartão (`catFundoCls`, verde/dourado) até o
   cartão passar a dizer a COR do vinho (ver "A linguagem visual"). A
-  página troca o "Onde está" por **"Na tua garrafeira"** com **Pôr na
-  garrafeira / Pôr na wishlist** (`catPor`: o formulário do vinho novo de
-  sempre, já preenchido e aberto por inteiro). Saem as minhas notas, o
+  página troca o "Onde está" por **"Na tua garrafeira"** (`catNaMinhaHTML`):
+  uma linha baixa por vinho meu ligado — "🍾 2 garrafas na garrafeira",
+  "⭐ Na wishlist" ou "📖 Já bebido" — e o **Ver**, sem o nome (é o da
+  página; a colheita só quando não é a desta linha). **Pôr na garrafeira /
+  Pôr na wishlist** (`catPor`: o formulário do vinho novo de sempre, já
+  preenchido e aberto por inteiro) só aparecem quando ainda não o tenho nem
+  o quero (01/10/2026, o dono das apps): com ele na garrafeira ou na
+  wishlist o caminho é o Ver; já bebido conta como não o ter. Saem as minhas notas, o
   comentário e o Apagar (o Procurar e o Editar só a quem corrige o catálogo,
   a seguir); a capa é verde (`.mhero-cat`).
 - **O "Procurar informação" num vinho do catálogo** (30/09/2026, o dono:

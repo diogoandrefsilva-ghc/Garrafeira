@@ -1101,6 +1101,12 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 /* A posição na prateleira é a SEGUNDA linha: o sítio primeiro, depois o
    nível e o lugar. Numa linha só, o nome do local partia-se a meio. */
 .mgar .g-onde .g-pos{display:block;font-size:12px;color:var(--tx);margin-top:1px}
+/* "Na tua garrafeira" num vinho do catálogo (`catNaMinhaHTML`): uma linha só
+   — o que é e o "Ver" — e por isso mais baixa do que a caixa de uma garrafa. */
+.mgar.cat-meu{padding:6px 6px 6px 12px;flex-wrap:nowrap}
+.mgar.cat-meu .g-onde{min-width:0}
+.mgar.cat-meu .g-onde b{display:inline}
+.mgar.cat-meu .g-onde i{display:inline;margin:0;font-size:12px}
 /* PREÇOS NAS LOJAS (página do vinho): uma linha por loja, o preço em serifa
    à direita. A que CONTA leva uma nota pequena à frente do nome, "(preço de
    referência)", em bordô (é a app a dizer "é este que uso"), não dourado —
