@@ -1013,7 +1013,7 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
   lista fica (com o texto, e com a cor do estado) e na grelha sai (o selo
   já o diz). **O número de garrafas não vai no cartão** (o dono, 01/10/2026):
   só na página do vinho, em "Na tua garrafeira". Foi o FUNDO do cartão (`catFundoCls`, verde/dourado) até o
-  fundo passar a ser a COR do vinho (ver "A linguagem visual"). A
+  cartão passar a dizer a COR do vinho (ver "A linguagem visual"). A
   página troca o "Onde está" por **"Na tua garrafeira"** com **Pôr na
   garrafeira / Pôr na wishlist** (`catPor`: o formulário do vinho novo de
   sempre, já preenchido e aberto por inteiro). Saem as minhas notas, o
@@ -1263,13 +1263,13 @@ interface. A cor é informação, não decoração: **bordô** = a app, **dourad
 = distinção (menção portuguesa e nota do Vivino), e o resto vive em tons de
 papel. O fundo tem uma textura de pontos em CSS puro (nada de imagens).
 
-**O FUNDO do cartão é a cor do vinho** (`corFundoCls`, 01/10/2026, o dono
-das apps), na lista e na grelha, na garrafeira e no catálogo: o tinto num
-cor-de-vinho muito suave, o branco num amarelo-dourado suave, o rosé num
-salmão; espumante, licoroso e frisante ficam em papel. É um tom de papel,
-nunca uma cor cheia — e por isso não pode servir para mais nada: o que um
-vinho do catálogo é para mim (tenho, wishlist, bebido) vive no selo da
-garrafa, não no fundo.
+**O REBORDO do cartão é a cor do vinho** (`corFundoCls`, 01/10/2026, o
+dono das apps), na lista e na grelha, na garrafeira e no catálogo: cor de
+vinho no tinto, dourado no branco, cor-de-rosa no rosé; espumante,
+licoroso e frisante ficam com o rebordo de sempre. **O fundo fica
+branco**: esteve tingido (tinto num cor-de-vinho suave, branco num
+amarelo) e o dono preferiu voltar atrás. O que um vinho do catálogo é para
+mim (tenho, wishlist, bebido) vive no selo da garrafa.
 
 Não voltes a dar cor própria a cada crachá: a versão anterior tinha sete
 famílias de cor lado a lado no mesmo cartão e nenhuma queria dizer nada.

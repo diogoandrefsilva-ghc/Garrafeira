@@ -1216,9 +1216,9 @@ function catTensHTML(v,curto){
     :que==='desejo'?(curto?'⭐':'⭐ Na tua wishlist'):(curto?'📖':'📖 Já bebido');
   return `<span class="bdg cat-tens ${que}">${txt}</span>`+catNotaBdgHTML(v,curto);
 }
-// O FUNDO do cartão diz a COR do vinho (01/10/2026, o dono das apps): o
-// tinto num cor-de-vinho muito suave, o branco num amarelo-dourado suave, o
-// rosé num salmão. Os outros (espumante, licoroso, frisante) ficam em papel.
+// O REBORDO do cartão diz a COR do vinho (01/10/2026, o dono das apps): cor
+// de vinho no tinto, dourado no branco, cor-de-rosa no rosé; o fundo fica
+// branco. Os outros (espumante, licoroso, frisante) ficam como sempre.
 // Vale na garrafeira e no catálogo; o que um vinho do catálogo é para MIM
 // passou para o selo no canto da garrafa (`catSeloHTML`).
 const COR_FUNDO={Tinto:'cor-tinto',Branco:'cor-branco','Rosé':'cor-rose'};
@@ -10799,7 +10799,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='154';
+const APP_BUILD='155';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
