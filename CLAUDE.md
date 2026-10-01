@@ -120,7 +120,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
   sem login). Traz escrito o que NÃO se revoga e porquê; lê-o antes de
   "arrumar" mais algum aviso do linter.
-- Não mexer à mão: `apple-touch-icon.png` (é gerado — ver "Ícones").
+- Não mexer à mão: `apple-touch-icon.png`, `icone.png`, `icone-512.png`,
+  `icone-maskable.png` e `nota-g.png` (são gerados — ver "Ícones").
 
 ## Os cinco separadores (o ecrã inicial não é a lista)
 **Locais e Consumidos só aparecem quando fazem falta** (30/09/2026, o dono):
@@ -872,6 +873,24 @@ vinho virava um poster e a grelha deixava de dar muitos rótulos de uma vez.
 O `sitiosDe()` saiu para fora do cartão da lista para as duas vistas
 contarem os sítios da mesma maneira.
 
+**Os cartões de uma mesma linha da grelha têm a mesma altura, e o que está
+dentro deles alinha** (01/10/2026, o dono das apps: um nome de duas linhas
+ao lado de um de uma deixava a origem, o produtor e as notas
+desencontrados). É `subgrid`: cada `.vgcard` ocupa SEIS filas da
+`.vgrelha` — garrafa, nome, origem, produtor, notas, faixa da procura — e
+partilha-as com os vizinhos da mesma linha. Cada fila mede o que mede a
+mais alta dessa linha, e o que é mais baixo fica centrado nela: o nome de
+uma linha fica a meio das duas do vizinho. Três coisas que isto obriga:
+- **o produtor e as notas vão SEMPRE no HTML, mesmo vazios**
+  (`vinhoGrelhaHTML`), e dentro do `@supports` não podem ter
+  `display:none` — um item que desaparece faz subir os seguintes para a
+  fila errada. A faixa da procura pode faltar porque é a última;
+- **o `row-gap:0` do cartão** é o que impede as peças de herdarem os 10px
+  que separam os cartões; o espaço entre elas é o das margens de sempre;
+- **a faixa da procura estica-se** (`align-self:stretch`) para chegar ao
+  rebordo de baixo mesmo quando a do vizinho tem mais linhas.
+Sem `subgrid` (browsers antigos) fica como era, cada cartão com a sua altura.
+
 Por **casta** vêm primeiro os monocasta, um grupo por casta ("100% Syrah",
 "100% Touriga Nacional", por ordem alfabética), e só no fim "Várias Castas"
 — é a pergunta "o que é isto, puro?" antes da mistura. Dentro de QUALQUER
@@ -1065,8 +1084,13 @@ colocar valores decimais - uma casa apenas)". Na página de um vinho do
 catálogo, **"A tua nota"** (`catNotasHTML`): as cinco estrelas e a caixa com a
 casa decimal, a mesma pele da nota de um consumo (`.stars`), e por baixo a
 **média de quem usa a Garrafeira** e quantas notas são. Tocar na estrela da
-nota que já se deu tira-a; a caixa vazia também. No cartão, **👥 4.2**
-(`catNotaBdgHTML`, em papel e não em dourado — o dourado é o Vivino).
+nota que já se deu tira-a; a caixa vazia também. No cartão, o **G** da app
+e a média (`catNotaBdgHTML`; o G é o `nota-g.png`, no `::before` do
+`.cat-nota`): branco com a letra dourada, ao lado da do Vivino, que é
+dourada com a letra cor de vinho (01/10/2026, o dono das apps; era 👥 em
+papel). Na LISTA as duas vão à direita do nome, uma por baixo da outra
+(`.vc-anofloat`); na GRELHA lado a lado. Nos cartões só a média — quantas
+notas são diz o `title` e a página do vinho.
 - **Não é do vinho, é de uma pessoa**: vive em `garrafeira.notas_catalogo`,
   nunca na ficha do catálogo (a invariante 1 da WineCatalog). Só se lê pela
   `catalogo_notas()` — a média, o número e a MINHA; nunca quem deu qual
@@ -1895,8 +1919,14 @@ nunca `v.vivino_nota` à mão nesses sítios (a mesma disciplina do
 2. senão, a que tiver **mais avaliações** — quase sempre a global — e em
    empate a global. É o caso de nenhuma chegar às 100.
 Sem contagem conta zero; havendo só uma, é essa. Nunca uma média das duas.
-O crachá diz "todas" quando é a global; na página do vinho, havendo as duas,
-vêm as duas, cada uma dita pelo nome. A regra é a MESMA do `wcNotaVivino` da
+O crachá é só as **uvas do Vivino** (`VIVINO_UVAS`, desenhadas a partir do
+logo — as dez bagas nas mesmas posições — e não uma imagem) e a nota: disse
+"todas" quando era a global, e saiu a 01/10/2026 (o dono das apps:
+"interessa-me a classificação Vivino; se vem da global ou da colheita,
+vê-se no detalhe") — fica no `title`. Na página do vinho, havendo as duas,
+vêm as duas, cada uma dita pelo nome. As uvas são `currentColor`: vermelho
+do Vivino no crachá e na fita dos filtros, a cor do texto na capa da
+página. A regra é a MESMA do `wcNotaVivino` da
 WineCatalog (ver o `CLAUDE.md` de lá, "A nota do Vivino são duas") — mexer
 numa é mexer na outra, no mesmo dia.
 
@@ -2585,9 +2615,22 @@ o que é preciso saber para não partir nada:
 - Faz **edições cirúrgicas** (diffs pequenos).
 
 ## Ícones
-`icone.svg` é a fonte. O `apple-touch-icon.png` (iOS não aceita SVG) é
-**gerado** — o script que o desenha está no histórico do commit inicial;
-para o mudar, muda o SVG e volta a rasterizar com o mesmo desenho.
+**O ícone é o G com o copo de vinho** (01/10/2026, o dono das apps; até aí
+era a estante redonda do `icone.svg`, que saiu). A fonte é o
+`icone-fonte.png` — o desenho que o dono mandou, recortado ao quadrado e
+com o fundo transparente. Tudo o resto é **gerado** dele (Pillow, LANCZOS
+com alfa pré-multiplicado), e para o mudar muda-se a fonte e volta-se a
+gerar:
+- `icone.png` — 256px, transparente: o cabeçalho (`.escudo`), o ecrã de
+  arranque (`.gl-splash-logo`) e o `badge` das notificações. O G é bordô e
+  nos fundos bordô/verde não se lia, por isso os dois primeiros põem-no num
+  **azulejo de papel** em CSS, como o do ecrã principal do telemóvel;
+- `apple-touch-icon.png` — 180px, opaco (o G a 72% em branco): o iPhone, o
+  favicon e o `icon` das notificações. O iOS guarda-o quando se põe a app
+  no ecrã principal: quem já a tinha só vê o novo depois de a tirar e pôr;
+- `icone-512.png` (o G a 72%) e `icone-maskable.png` (a 56%, dentro da zona
+  segura do Android) — o `manifest.json`;
+- `nota-g.png` — 48px, transparente, o G do crachá da nota da casa.
 
 ## Deploy
 GitHub Pages a partir de `main`. Um push para `main` publica.

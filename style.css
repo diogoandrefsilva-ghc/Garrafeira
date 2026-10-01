@@ -32,7 +32,11 @@ body{font-family:var(--ff);color:var(--tx);min-height:100vh;-webkit-font-smoothi
 /* ── SPLASH ─────────────────────────────────────────────────────── */
 #gl-splash{position:fixed;inset:0;z-index:9999;background:linear-gradient(165deg,#3d0e20 0%,var(--vhd) 45%,var(--vh) 120%);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity .28s ease}
-.gl-splash-logo{width:76px;height:76px;filter:drop-shadow(0 3px 10px rgba(0,0,0,.35))}
+/* O G da app (01/10/2026) é bordô sobre transparente: num fundo bordô não
+   se lia, por isso vai num azulejo de papel — como no ecrã principal do
+   telemóvel (`apple-touch-icon.png`). O mesmo no cabeçalho (`.escudo`). */
+.gl-splash-logo{width:84px;height:84px;padding:10px;background:var(--card);border-radius:20px;
+  box-shadow:0 6px 22px rgba(0,0,0,.35)}
 .gl-splash-title{font-family:var(--fd);font-weight:600;font-size:30px;letter-spacing:.5px;color:#fff}
 .gl-spin{width:26px;height:26px;border:3px solid rgba(255,255,255,.28);border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -69,11 +73,11 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
   background:linear-gradient(90deg,transparent,var(--ou),transparent);opacity:.75}
 .hdr{max-width:1040px;margin:0 auto;padding:11px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .brand{display:flex;align-items:center;gap:11px;min-width:0}
-.escudo{width:34px;height:34px;flex-shrink:0;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))}
+.escudo{width:34px;height:34px;flex-shrink:0;padding:3px;background:var(--card);border-radius:9px;
+  box-shadow:0 2px 6px rgba(0,0,0,.3)}
 .escudo img{width:100%;height:100%;object-fit:contain;display:block}
 .brand h1{font-family:var(--fd);font-weight:600;font-size:22px;letter-spacing:.3px;line-height:1.1;white-space:nowrap}
 .brand p{font-size:11px;opacity:.72;font-weight:300;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.escudo img{border-radius:8px}
 
 /* ── LAYOUT ─────────────────────────────────────────────────────── */
 .wrap{max-width:1040px;margin:0 auto;padding:18px 18px 96px}
@@ -273,8 +277,10 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
    o float (senão, com um nome curto, o float podia sair por baixo do
    cartão) sem cortar nada, ao contrário de `overflow:hidden`. */
 .vc-main{flex:1;min-width:0;display:flow-root}
-.vc-anofloat{float:right;display:flex;flex-direction:column;align-items:flex-end;gap:3px;margin-left:10px;margin-top:2px}
-.vc-anofloat .bdg{font-size:9px;padding:2px 8px}
+/* As duas notas, uma por baixo da outra e da mesma largura (a do Vivino e,
+   no catálogo, a da casa). */
+.vc-anofloat{float:right;display:flex;flex-direction:column;align-items:stretch;gap:4px;margin-left:10px;margin-top:2px}
+.vc-anofloat .bdg{font-size:10px;padding:2px 8px;justify-content:center}
 .vc-nome{font-family:var(--fd);font-weight:600;font-size:16px;line-height:1.3;letter-spacing:.1px;color:var(--tx)}
 /* [cor] [região] [ano] ao lado do nome (lista) ou por baixo dele (grelha)
    — `vinhoMetaHTML`. Cada pedaço é `nowrap`: a linha quebra entre eles. */
@@ -354,7 +360,7 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
   overflow-wrap:anywhere}
 .vg-sub{font-size:10.5px;color:var(--mu);margin-top:3px;line-height:1.4;overflow-wrap:anywhere}
 .vg-foot{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:5px 8px;margin-top:8px;width:100%}
-.vg-foot:empty{display:none}
+.vg-prod:empty,.vg-foot:empty{display:none}
 .vg-foot .vc-l{max-width:100%}
 .vg-mais{font-style:normal;font-size:10px;color:var(--mu)}
 /* A faixa da procura sangra até às bordas do cartão como na lista — as
@@ -367,6 +373,29 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .vgcard .vc-match{width:calc(100% + 24px);margin:10px -12px -11px;padding:7px 11px 8px;text-align:left}
 .vgcard .vcm-l{display:block}
 .vgcard .vcm-k{display:block;margin-bottom:1px}
+/* OS CARTÕES DE UMA LINHA TÊM A MESMA ALTURA, e o que está dentro deles
+   alinha (01/10/2026, o dono das apps: com um nome de duas linhas ao lado
+   de um de uma, a origem, o produtor e as notas ficavam desencontrados e
+   os cartões com alturas diferentes). Cada cartão ocupa SEIS filas da
+   `.vgrelha` e partilha-as com os vizinhos (`subgrid`): garrafa, nome,
+   origem, produtor, notas e a faixa da procura. Cada fila mede o que mede
+   a mais alta dessa linha da grelha, e o que é mais baixo fica CENTRADO
+   nela — um nome de uma linha ao lado de um de duas fica a meio das duas.
+   Por isso o produtor e as notas vão sempre no HTML, mesmo vazios
+   (`vinhoGrelhaHTML`), e aqui NÃO podem ter `display:none`: um item que
+   desaparece faz subir os seguintes para a fila errada. O `row-gap:0` é o
+   do próprio cartão (sem ele herdava os 10px entre cartões); o espaço
+   entre as peças continua a ser o das margens de sempre. A faixa da
+   procura estica-se a fila toda, para o fundo dela chegar ao rebordo
+   mesmo quando a do vizinho tem mais linhas.
+   Sem `subgrid` (browsers antigos) fica como era: cada cartão com a sua
+   altura. */
+@supports (grid-template-rows:subgrid){
+  .vgcard{display:grid;grid-template-rows:subgrid;grid-row:span 6;row-gap:0;align-items:center}
+  .vg-prod:empty,.vg-foot:empty{display:block}
+  .vg-foot:empty{margin-top:0}
+  .vgcard .vc-match{align-self:stretch}
+}
 
 /* Crachás: um só desenho. A cor é excepção, não regra —
    dourado = distinção (menção/nota), o resto vive em tons de papel. */
@@ -375,10 +404,14 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .bdg.cas{background:#f7f3f8;color:#5c4166;border-color:#e9dfec}
 .bdg.mono{background:transparent;color:var(--mu);border-color:var(--bo2);border-style:dashed;
   font-size:9.5px;letter-spacing:.6px;text-transform:uppercase;font-weight:600}
-.bdg.men,.bdg.viv{background:var(--oup);color:var(--ou2);border-color:#eddfba;font-weight:600}
-.bdg.viv{background:#fff;border-color:#e6d7ad}
-/* "todas": a nota que conta é a de todas as colheitas (`notaVivino`). */
-.bdg.viv .viv-de{font-size:.78em;font-weight:500;opacity:.8}
+.bdg.men{background:var(--oup);color:var(--ou2);border-color:#eddfba;font-weight:600}
+/* AS DUAS NOTAS (01/10/2026, o dono das apps). A do Vivino é DOURADA, com a
+   letra cor de vinho e as uvas do Vivino à frente (`VIVINO_UVAS`); a de
+   quem usa a Garrafeira é BRANCA, com a letra dourada e o G da app à frente
+   (`nota-g.png`). As duas continuam no dourado da distinção — uma cheia, a
+   outra só na letra — e é o logo que diz de quem é cada uma. */
+.bdg.viv{background:linear-gradient(180deg,#f4dfa3,#e4c470);color:var(--vh);border-color:#cfa84c;font-weight:700}
+.viv-uvas{height:1.4em;width:auto;flex-shrink:0;vertical-align:-.22em;color:#a50d24}
 .bdg.loc{background:var(--inp);color:var(--in);border-color:#d7e4f0}
 .bdg.reg{background:var(--vhp);color:var(--vh);border-color:#f0dbe2}
 .bdg.qtd{background:var(--vh);color:#fff;border-color:var(--vh);font-weight:600}
@@ -489,6 +522,7 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    o preenchimento. */
 .fcampo.ativo{border-color:var(--vh);color:var(--vh);background:var(--vhp)}
 .fcampo.aberto{background:var(--vh);border-color:var(--vh);color:#fff}
+.fcampo.aberto .viv-uvas{color:inherit}
 .fcn{font-style:normal;font-size:10px;font-weight:700;min-width:16px;height:16px;
   border-radius:99px;display:inline-flex;align-items:center;justify-content:center;
   padding:0 4px;background:var(--vh);color:#fff}
@@ -1135,6 +1169,7 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .mhero-s{font-size:12px;color:rgba(255,255,255,.78);margin-top:4px}
 .mhero-n{display:inline-flex;align-items:center;gap:5px;margin-top:8px;background:rgba(255,255,255,.12);
   border:1px solid rgba(255,255,255,.22);border-radius:99px;padding:3px 10px;font-size:11px;font-weight:600;color:#f6dfa8}
+.mhero-n .viv-uvas{color:inherit}
 
 /* A imagem em grande (toca-se na capa do modal do vinho). O palco tem
    altura fixa e a imagem entra em `contain`: umas fotos são da garrafa
@@ -1985,9 +2020,11 @@ body.cat .it.on{background:#1d4a3b;box-shadow:0 4px 12px -4px rgba(29,74,59,.8)}
 .cat-selo.tenho{background:#1d4a3b;color:#fff}
 .cat-selo.desejo{background:var(--ou);color:#fff;font-size:13px}
 .cat-selo.bebido{background:var(--card);color:var(--mu);border:1px solid var(--bo2)}
-/* A média das notas de quem usa a Garrafeira (migração 33): em papel, não
-   em dourado — o dourado é a nota do Vivino, e isto é a opinião da casa. */
-.bdg.cat-nota{background:var(--bg2);color:var(--tx);border-color:var(--bo2);font-weight:600}
+/* A média das notas de quem usa a Garrafeira (migração 33): branca, com a
+   letra dourada e o G da app à frente — ver as duas notas, lá em cima. */
+.bdg.cat-nota{background:#fff;color:var(--ou2);border-color:#e3d2a2;font-weight:700}
+.bdg.cat-nota::before{content:'';width:1.3em;height:1.3em;flex-shrink:0;
+  background:url(nota-g.png) center/contain no-repeat}
 .cat-nota-media{margin-top:6px}
 /* Um vinho do catálogo abre na mesma página, com a capa verde do catálogo
    — venha de onde vier, diz-se logo que não é uma garrafa minha. */

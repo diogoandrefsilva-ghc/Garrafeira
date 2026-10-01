@@ -1206,15 +1206,16 @@ function catEstado(v){
   const n=meus.reduce((s,m)=>s+stockDe(m.id),0);
   return {meus,n,que:!meus.length?'':n?'tenho':meus.some(desejado)?'desejo':'bebido'};
 }
-// No rodapé do cartão: o que tenho deste vinho, se tiver.
-// E a média das notas de quem usa a Garrafeira (`catNotaBdgHTML`).
+// No rodapé do cartão: o que tenho deste vinho, se tiver. A média das
+// notas de quem usa a Garrafeira já não vem aqui: passou para a direita do
+// nome, por baixo da do Vivino (01/10/2026, o dono das apps).
 function catTensHTML(v,curto){
   const {que}=catEstado(v);
-  if(!que)return catNotaBdgHTML(v,curto);
+  if(!que)return '';
   // Sem o número de garrafas (01/10/2026, o dono): esse fica na página.
   const txt=que==='tenho'?(curto?'🍾':'🍾 Na tua garrafeira')
     :que==='desejo'?(curto?'⭐':'⭐ Na tua wishlist'):(curto?'📖':'📖 Já bebido');
-  return `<span class="bdg cat-tens ${que}">${txt}</span>`+catNotaBdgHTML(v,curto);
+  return `<span class="bdg cat-tens ${que}">${txt}</span>`;
 }
 // O REBORDO do cartão diz a COR do vinho (01/10/2026, o dono das apps): cor
 // de vinho no tinto, dourado no branco, cor-de-rosa no rosé; o fundo fica
@@ -1265,10 +1266,14 @@ function catNaMinhaHTML(v){
    estrela tocada, ou a caixa ao sair dela. */
 let CAT_NOTAS={}, TEM_NOTAS_CAT=false;   // {id do catálogo: {media, n, minha}}
 function catNota(v){return (v&&CAT_NOTAS[String(v.cat_id)])||null;}
+// O crachá da nota da casa: o G da app (o `::before` do `.cat-nota`, a
+// imagem `nota-g.png`) e a média — 01/10/2026, o dono das apps; era 👥.
+// Nos cartões vai CURTO (só a média), ao lado da do Vivino; quantas notas
+// são diz o `title` e a página do vinho.
 function catNotaBdgHTML(v,curto){
   const x=catNota(v);
   if(!x||!x.n)return '';
-  return `<span class="bdg cat-nota" title="Média das notas de quem usa a Garrafeira (${x.n})">👥 ${avalFmt(x.media)}${
+  return `<span class="bdg cat-nota" title="Média das notas de quem usa a Garrafeira (${x.n} nota${x.n>1?'s':''})">${avalFmt(x.media)}${
     curto?'':` · ${x.n} nota${x.n>1?'s':''}`}</span>`;
 }
 const CAT_NOTA_VAZIO='Sem nota — toca numa estrela (outra vez na mesma para tirar) ou escreve-a ao lado, de 0 a 5.';
@@ -2569,7 +2574,7 @@ function notaVivinoHeroHTML(v){
   const x=notaVivino(v);
   if(!x)return '';
   const duas=v.vivino_nota!=null&&v.vivino_nota_global!=null;
-  const pill=y=>`<span class="mhero-n" title="${esc(notaVivinoTitulo(y,v.ano))}">★ ${y.nota.toFixed(2)} Vivino${
+  const pill=y=>`<span class="mhero-n" title="${esc(notaVivinoTitulo(y,v.ano))}">${VIVINO_UVAS}${y.nota.toFixed(2)} Vivino${
     y.aval?` · ${y.aval}`:''}${y.de==='global'?' · todas as colheitas':duas&&v.ano?' · '+v.ano:''}</span>`;
   if(!duas)return pill(x);
   const outra=x.de==='global'?notaVivino({...v,vivino_nota_global:null}):notaVivino({...v,vivino_nota:null});
@@ -2582,19 +2587,24 @@ function notaVivinoTitulo(x,ano){
   return x.de==='global'?`Nota do Vivino de todas as colheitas${q}`
     :`Nota do Vivino${ano?' da colheita '+ano:''}${q}`;
 }
-/* O crachá: a estrela e, quando é a de todas as colheitas MAS há também
-   uma da colheita (só perdeu por não chegar às 100 avaliações), a palavra
-   "todas" — é o que distingue as duas. Sem nota de colheita nenhuma, "todas"
-   não diz nada a ninguém: só há uma nota, e é essa. A da colheita não leva
-   nada — até 26/09/2026 era a única, e muita veio de pesquisas que não
-   sabiam a colheita; chamar-lhe "da colheita" no cartão era dizer o que não
-   se sabe. */
+/* As uvas do Vivino (01/10/2026, o dono das apps: o logo no lugar da
+   estrela). Desenhadas e não uma imagem, como a garrafa: as dez bagas
+   medidas no logo que o dono mandou, nas mesmas posições. `currentColor`
+   para cada sítio dar a cor — vermelho do Vivino no crachá dourado e na
+   fita dos filtros, a cor do texto na capa da página do vinho. */
+const VIVINO_UVAS='<svg class="viv-uvas" viewBox="0 0 65.6 110.1" fill="currentColor" aria-hidden="true">'
+  +'<circle cx="46.9" cy="9.6" r="9.6"/><circle cx="33.2" cy="26.9" r="9.9"/><circle cx="21.8" cy="45.1" r="10"/>'
+  +'<circle cx="44.5" cy="45.1" r="10"/><circle cx="10.1" cy="63.6" r="10.1"/><circle cx="32.9" cy="63.6" r="10.1"/>'
+  +'<circle cx="55.6" cy="63.6" r="10.1"/><circle cx="21.4" cy="82.1" r="10"/><circle cx="44.2" cy="82.1" r="10"/>'
+  +'<circle cx="32.7" cy="100.1" r="10"/></svg>';
+/* O crachá: as uvas e a nota que CONTA, e mais nada. Teve a palavra "todas"
+   quando a que contava era a de todas as colheitas; saiu a 01/10/2026 (o
+   dono das apps: "interessa-me a classificação Vivino; se vem da global ou
+   da colheita, vê-se no detalhe") — fica no `title` e na página do vinho. */
 function notaVivinoBadge(v){
   const x=notaVivino(v);
   if(!x)return '';
-  const mostraTodas=x.de==='global'&&v.vivino_nota!=null&&v.vivino_nota!=='';
-  return `<span class="bdg viv" title="${esc(notaVivinoTitulo(x,v.ano))}">★ ${x.nota.toFixed(1)}${
-    mostraTodas?' <small class="viv-de">todas</small>':''}</span>`;
+  return `<span class="bdg viv" title="${esc(notaVivinoTitulo(x,v.ano))}">${VIVINO_UVAS}${x.nota.toFixed(1)}</span>`;
 }
 // De onde veio, em poucas palavras: "Granvine", "Granvine · 2019" (outra
 // colheita), "Vivino · média" (sem colheita, o Vivino dá a média das
@@ -2921,7 +2931,7 @@ const F_CAMPOS=[
   ['tipo','🍷','Cor',1],['regiao','🗺️','Região',1],['casta','🍇','Castas',1],
   ['local','📍','Local',0],['produtor','🏭','Produtor',0],['ano','📅','Ano',0],
   ['mencao','🏅','Menção',0],['preco','💶','Preço',0],['teor','🌡️','Grau',0],
-  ['estagio','🪵','Estágio',0],['janela','⏱️','Maturação',0],['vivino','★','Vivino',0]
+  ['estagio','🪵','Estágio',0],['janela','⏱️','Maturação',0],['vivino',VIVINO_UVAS,'Vivino',0]
 ];
 const F_META={};
 F_CAMPOS.forEach(([k,ico,nome])=>{F_META[k]=[ico,nome];});
@@ -3574,7 +3584,12 @@ function vinhoCardHTML(v,termos,loteSel){
     <div class="vc-top">
       ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
       <div class="vc-main">
-        ${notaVivino(v)?`<div class="vc-anofloat">${notaVivinoBadge(v)}</div>`:''}
+        ${(()=>{
+          // As duas notas à direita do nome, uma por baixo da outra: a do
+          // Vivino e, no catálogo, a da casa (01/10/2026, o dono das apps).
+          const notas=notaVivinoBadge(v)+(v.id<0?catNotaBdgHTML(v,true):'');
+          return notas?`<div class="vc-anofloat">${notas}</div>`:'';
+        })()}
         <div class="vc-nome">${esc(v.nome)} ${vinhoMetaHTML(v,semAno?'':(v.ano||'s/a'))}</div>
         ${v.produtor?`<div class="vc-prod">${esc(v.produtor)}</div>`:''}
         <div class="vc-badges">
@@ -3619,7 +3634,15 @@ function vinhoCardHTML(v,termos,loteSel){
    O rodapé ficou só com a NOTA, numa linha só dela: o "onde está" saiu
    daqui porque numa coluna de 150px ele e a nota disputavam a mesma linha
    e a nota — que é o que faz escolher entre dois rótulos — ficava a
-   competir com um "Sala +1" que se lê na lista e na ficha do vinho. */
+   competir com um "Sala +1" que se lê na lista e na ficha do vinho.
+   OS CARTÕES DE UMA MESMA LINHA TÊM A MESMA ALTURA (01/10/2026, o dono das
+   apps), e o que está dentro deles alinha de cartão para cartão: o nome
+   ocupa o espaço do nome mais comprido da linha, centrado nele, e a origem,
+   o produtor e as notas ficam todos à mesma altura. Faz-se no CSS (cada
+   cartão é uma `subgrid` de seis filas da `.vgrelha`), e é por isso que o
+   produtor e as notas vão SEMPRE no HTML, mesmo vazios: são as filas 4 e 5
+   do cartão, e um que faltasse fazia subir os de baixo para a fila errada.
+   A faixa da procura é a fila 6 e pode faltar — é a última. */
 function vinhoGrelhaHTML(v,termos,loteSel){
   const gs=garrafasDe(v.id,true);
   const on=loteSel&&loteSelTem(v.id);
@@ -3629,10 +3652,8 @@ function vinhoGrelhaHTML(v,termos,loteSel){
     ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
     <div class="vg-nome">${esc(v.nome)}</div>
     <div class="vg-sub">${vinhoMetaHTML(v,desejado(v)&&!v.ano?'':(v.ano||'s/a'))}</div>
-    ${v.produtor?`<div class="vg-prod">${esc(v.produtor)}</div>`:''}
-    <div class="vg-foot">
-      ${notaVivinoBadge(v)}${v.id<0?catNotaBdgHTML(v,true):''}
-    </div>
+    <div class="vg-prod">${esc(v.produtor||'')}</div>
+    <div class="vg-foot">${notaVivinoBadge(v)}${v.id<0?catNotaBdgHTML(v,true):''}</div>
     ${trechosMatch(v,termos)}
   </article>`;
 }
@@ -10801,7 +10822,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='156';
+const APP_BUILD='157';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
