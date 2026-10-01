@@ -153,3 +153,11 @@ BEGIN
   END LOOP;
 END;
 $$;
+
+-- ---------------------------------------------------------------------
+-- Limpeza: duas funções de teste vazias que ficaram de uma tentativa de
+-- correr esta migração pelo conector do Supabase (01/10/2026). Sem efeito
+-- se já não existirem.
+-- ---------------------------------------------------------------------
+DROP FUNCTION IF EXISTS garrafeira.zz_teste();
+DROP FUNCTION IF EXISTS garrafeira.zz_teste2();
