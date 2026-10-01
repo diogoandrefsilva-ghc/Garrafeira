@@ -591,6 +591,24 @@ regra, já aplicada a 01/10/2026: 19 fichas do catálogo arrumadas). A
 castas que já lá estavam juntam-se na de referência. Cola-se inteira no SQL
 Editor (o MCP do Supabase não a corre: tem `DELETE`).
 
+### Migração 39 — o Catálogo fidedigno (POR APLICAR)
+
+`db/migracao-catalogo-fiel.sql`, depois da 32 e da 38. O nome e o produtor
+de um vinho gravado deixam de se mudar pela app (`vinhos_identidade_fixa`:
+a quem escreve pela API, ficam como estavam). O resto da ficha só corrige o
+catálogo quando a linha é só deste vinho (`linha_so_minha`); nas outras, a
+garrafeira só enche o que o catálogo tem vazio (`catalogar_e_ligar` com
+`p_so_vazios`), e o que se mudou para um valor diferente do catálogo vai ao
+admin como comentário, com push (`catalogo_divergencia`, `castas_mudaram`).
+Novas versões do `vinhos_catalogo`, da `catalogar_vinho`, da
+`definir_castas` (também em `functions.sql`) e da `curador_resultado`. Sem
+DROP: a `catalogar_e_ligar` de dois argumentos fica, a chamar a de três.
+Ensaiada a 01/10/2026 numa transação desfeita no fim, contra a base real
+(sem a `definir_castas`): um vinho de linha só sua corrigiu o catálogo; outro, com
+dados das lojas, deixou o catálogo como estava e abriu o comentário (e o
+push) ao admin; o nome e o produtor ficaram como estavam. Cola-se inteira no
+SQL Editor (o MCP do Supabase não a corre: tem `DELETE`, na `definir_castas`).
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as

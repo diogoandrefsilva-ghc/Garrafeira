@@ -1462,11 +1462,11 @@ async function catGuardarEditar(id){
   if(erroIdt)toast((n?`Corrigido no catálogo (${n} campo${n>1?'s':''}), mas o nome, o produtor e o ano ficaram: `:'O nome, o produtor e o ano ficaram: ')+erroIdt,1);
   else toast('Corrigido no catálogo ✓');
 }
-/* Um curador grava um vinho da SUA garrafeira: a BD leva o que mudou à
-   linha ligada do catálogo (trigger `vinhos_catalogo`, migração 32). Diz-se
-   o que aconteceu — sobretudo quando NÃO foi (outra colheita, outra cor, o
-   nome novo já é de outra linha). Só depois do "Guardado", e calado se não
-   houve nada a levar. */
+/* Gravou-se um vinho da garrafeira: o que aconteceu no Catálogo (trigger
+   `vinhos_catalogo`, migrações 32 e 39). Um curador leva o que mudou à
+   linha ligada; quem é o único dono da linha corrige-a; os outros ficam
+   diferentes do Catálogo e o admin é avisado. Diz-se só depois do
+   "Guardado", e calado se não houve nada a levar. */
 const CURADOR_MOTIVO={
   sem_ligacao:'este vinho não está ligado a nenhuma linha do catálogo',
   outra_colheita:'está ligado a outra colheita no catálogo',
@@ -1476,13 +1476,19 @@ async function curadorAviso(vid){
   let r=null;
   try{r=await sbRpc('curador_resultado',{p_vinho_id:vid});}catch(e){return;}
   if(!Array.isArray(r)||!r.length)return;
-  const erro=r.find(x=>x.estado!=='ok');
+  const div=new Set();
+  r.filter(x=>x.acao==='catalogo_divergencia'&&x.estado==='ok').forEach(x=>(x.campos||[]).forEach(k=>div.add(k)));
+  if(div.size){
+    toast('Fica diferente do Catálogo em '+[...div].map(catNome).join(', ')+' — o admin foi avisado para rever.');
+    return;
+  }
+  const erro=r.find(x=>x.estado!=='ok'&&x.acao!=='catalogo_divergencia');
   if(erro){
     toast('Não chegou ao catálogo: '+(CURADOR_MOTIVO[erro.motivo]||erro.erro||'erro desconhecido'),1);
     return;
   }
   const n=new Set();let idt=false;
-  r.forEach(x=>{(x.campos||[]).forEach(k=>n.add(k));if(x.identidade)idt=true;});
+  r.filter(x=>x.acao!=='catalogo_divergencia').forEach(x=>{(x.campos||[]).forEach(k=>n.add(k));if(x.identidade)idt=true;});
   const partes=[];
   if(idt)partes.push('o nome');
   if(n.size)partes.push(n.size===1?'1 campo':n.size+' campos');
@@ -5914,6 +5920,10 @@ function abrirEditarVinho(id,modo){
   const conv=!!id&&modo==='converter';
   const paraDesejo=!id&&modo==='desejo';
   const comGarrafa=((!id&&!paraDesejo)||conv)&&!noCat;
+  // O nome e o produtor de um vinho gravado vêm do Catálogo (migração 39):
+  // na garrafeira não se mudam — a BD também os deixa como estavam
+  // (`vinhos_identidade_fixa`). No Catálogo, quem o corrige é o curador.
+  const idFixa=id>0;
   const titulo=noCat?'Novo vinho no catálogo':catEd?'Corrigir no catálogo':conv?'Passar para a garrafeira':id?'Editar vinho':paraDesejo?'Novo vinho na wishlist':'Novo vinho';
   const rotulo=noCat?'Criar no catálogo':catEd?'Guardar no catálogo':conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
   _catBaseNovo=null;
@@ -5935,11 +5945,11 @@ function abrirEditarVinho(id,modo){
       <button class="mx" onclick="fecharModal('modal-edit')">✕</button></div>
 
     <label>Nome</label>
-    <input type="text" id="e-nome" value="${esc(o('nome'))}" placeholder="Quinta do Vallado Touriga Nacional">
+    <input type="text" id="e-nome" value="${esc(o('nome'))}" placeholder="Quinta do Vallado Touriga Nacional"${idFixa?' readonly':''}>
     <div class="mrow">
       <div><label>Ano</label><input type="number" id="e-ano" inputmode="numeric" value="${esc(o('ano'))}" placeholder="${paraDesejo?'opcional':'2021'}" oninput="janelaSincronizarForm()"></div>
       <div>${id
-        ?`<label>Produtor</label><input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado">`
+        ?`<label>Produtor</label><input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado"${idFixa?' readonly':''}>`
         // A cor tem de vir de quem procura: fica em cima,
         // no formulário compacto, com o que só a PESSOA sabe.
         :'<label>Cor</label><select id="e-tipo"><option value="">— escolhe a cor —</option>'+opts(TIPOS,o('tipo',''))+'</select>'
@@ -5947,6 +5957,7 @@ function abrirEditarVinho(id,modo){
     </div>
     ${id?'':`<label>Produtor <span style="text-transform:none;font-weight:400">— opcional, ajuda a acertar</span></label>
       <input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado">`}
+    ${idFixa?`<div class="note">O nome e o produtor vêm do Catálogo. Se estiverem errados, avisa em <b>Algo não está bem?</b>, no fim da página do vinho.</div>`:''}
 
     ${conv?`<div class="aviso">Revê a ficha (o ano, sobretudo — o que se quer e o que se comprou nem sempre são a mesma colheita) e diz onde fica a garrafa. Sai da wishlist e entra na garrafeira.</div>`:''}
     ${id&&!conv&&!catEd?`<div class="mrow">
@@ -6158,9 +6169,9 @@ async function guardarVinho(id,modo){
   try{
     let vinhoId=id;
     if(id){
-      // A BD arruma o nome e o produtor (trigger `vinhos_nomes`: nada de
-      // CAPS LOCK, "do/da/de" pequenos) e a região — no ecrã fica o que ela
-      // gravou, não o que se escreveu.
+      // O nome e o produtor não se mudam aqui (vêm do Catálogo, migração 39).
+      // A BD arruma a região — no ecrã fica o que ela gravou.
+      delete f.nome;delete f.produtor;
       const r=await sbReq('PATCH',`vinhos?id=eq.${id}`,f,{'Prefer':'return=representation'});
       Object.assign(IDXV[id],f,(r&&r[0])||{});
       const feEl=document.getElementById('e-formato-edit');   // não existe ao passar um desejo
@@ -6199,7 +6210,7 @@ async function guardarVinho(id,modo){
     if(outraChave)recarregarPrecosLoja();
     if(tabAtiva==='locais')renderMapa();
     toast(conv?'Na garrafeira ✓':id?'Guardado ✓':paraDesejo?'Na wishlist ⭐':'Vinho adicionado ✓');
-    if(id&&EU.curador)curadorAviso(vinhoId);
+    if(id)curadorAviso(vinhoId);
     else if(!id&&EU.curador&&_catBaseNovo)curadorNovo(vinhoId,_catBaseNovo);
     _catBaseNovo=null;
     // Quem comprou um vinho da wishlist e o pôs pelo "Novo vinho" (em vez
@@ -7032,6 +7043,7 @@ function iaMostrarResultado(res,vinhoId){
 
   const comAno=v.ano||IA_RES.ano||(IA_RES2&&IA_RES2.ano);
   const linhas=IA_CAMPOS.map(c=>{
+    if(c.k==='produtor')return '';                            // vem do Catálogo (migração 39)
     if(!comAno&&IA_JANELA.includes(c.k))return '';          // sem colheita não há janela
     const ant=atual(c.k), g=iaTxt(c,IA_RES), p=cmp?iaTxt(c,IA_RES2):'';
     const novoG=g&&chave(g)!==chave(ant), novoP=p&&chave(p)!==chave(ant);
@@ -7145,6 +7157,7 @@ async function iaAplicar(){
   let castasNovas=null;
   const usados=[];                 // que leituras é que acabaram por entrar
   IA_CAMPOS.forEach(c=>{
+    if(c.k==='produtor')return;    // vem do Catálogo (migração 39)
     let res;
     const r=document.querySelector(`input[name="iap-${c.k}"]:checked`);
     if(r){                         // linha de escolha entre as duas leituras
@@ -7193,6 +7206,7 @@ async function iaAplicar(){
     }else{
       fecharModal('modal-ia');renderLista();refrescarVinhoAberto();
       toast('Ficha atualizada ✓');
+      curadorAviso(v.id);
     }
   }catch(e){
     toast('Não foi possível guardar: '+e.message,1);
@@ -7303,10 +7317,11 @@ function pqVazio(x){return x==null||x===''||(Array.isArray(x)&&!x.length);}
 function pqTxt(x){return pqVazio(x)?'':Array.isArray(x)?x.join(', '):String(x);}
 function pqRot(k){const c=IA_CAMPOS.find(c=>c.k===k);return c?c.rot:catNome(k);}
 /* Os campos que se podem propor. Nunca o ANO (é de quem escreve, ou da
-   colheita escolhida) nem a COR (confirma-se antes de procurar). */
+   colheita escolhida) nem a COR (confirma-se antes de procurar). Num vinho
+   GRAVADO da garrafeira também não o produtor: vem do Catálogo (migração 39). */
 function pqChaves(P){
   const ks=[...IA_CAMPOS.map(c=>c.k),...Object.keys(CAT_NOMES)]
-    .filter((k,i,a)=>a.indexOf(k)===i&&k!=='ano'&&k!=='tipo');
+    .filter((k,i,a)=>a.indexOf(k)===i&&k!=='ano'&&k!=='tipo'&&!(k==='produtor'&&!P.novo&&!P.cat));
   return ks.filter(k=>{
     if(!P.id.ano&&IA_JANELA.includes(k))return false;          // sem colheita não há janela
     if(P.novo)return k in PQ_FORM;
@@ -8313,6 +8328,7 @@ async function pqGuardar(){
     catComparar(P.vid,true);
     const nG=escs.length+(patch.ano?1:0);
     toast(`${nG} ${nG===1?'campo guardado':'campos guardados'} ✓`);
+    curadorAviso(P.vid);
     return true;
   }catch(e){
     toast('Não foi possível guardar: '+e.message,1);
@@ -10848,7 +10864,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='163';
+const APP_BUILD='164';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
