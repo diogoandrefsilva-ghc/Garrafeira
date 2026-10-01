@@ -32,11 +32,12 @@ body{font-family:var(--ff);color:var(--tx);min-height:100vh;-webkit-font-smoothi
 /* ── SPLASH ─────────────────────────────────────────────────────── */
 #gl-splash{position:fixed;inset:0;z-index:9999;background:linear-gradient(165deg,#3d0e20 0%,var(--vhd) 45%,var(--vh) 120%);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity .28s ease}
-/* O G da app (01/10/2026) é bordô sobre transparente: num fundo bordô não
-   se lia, por isso vai num azulejo de papel — como no ecrã principal do
-   telemóvel (`apple-touch-icon.png`). O mesmo no cabeçalho (`.escudo`). */
-.gl-splash-logo{width:84px;height:84px;padding:10px;background:var(--card);border-radius:20px;
-  box-shadow:0 6px 22px rgba(0,0,0,.35)}
+/* O G da app nos fundos escuros é a versão CLARA (`icone-claro.png`, 01/10/2026,
+   o dono): o G branco com o copo de vinho, sobre transparente. Houve um
+   azulejo de papel à volta do G bordô — no bordô e no verde ele não se lia —
+   e saiu: o G claro assenta direto no cabeçalho e no splash. A sombra é só
+   para o copo não se perder no bordô. O mesmo no cabeçalho (`.escudo`). */
+.gl-splash-logo{width:96px;height:96px;filter:drop-shadow(0 4px 14px rgba(0,0,0,.35))}
 .gl-splash-title{font-family:var(--fd);font-weight:600;font-size:30px;letter-spacing:.5px;color:#fff}
 .gl-spin{width:26px;height:26px;border:3px solid rgba(255,255,255,.28);border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -73,8 +74,7 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
   background:linear-gradient(90deg,transparent,var(--ou),transparent);opacity:.75}
 .hdr{max-width:1040px;margin:0 auto;padding:11px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .brand{display:flex;align-items:center;gap:11px;min-width:0}
-.escudo{width:34px;height:34px;flex-shrink:0;padding:3px;background:var(--card);border-radius:9px;
-  box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.escudo{width:36px;height:36px;flex-shrink:0;filter:drop-shadow(0 1px 3px rgba(0,0,0,.35))}
 .escudo img{width:100%;height:100%;object-fit:contain;display:block}
 .brand h1{font-family:var(--fd);font-weight:600;font-size:22px;letter-spacing:.3px;line-height:1.1;white-space:nowrap}
 .brand p{font-size:11px;opacity:.72;font-weight:300;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

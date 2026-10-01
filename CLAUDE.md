@@ -120,7 +120,7 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   exposto — qualquer pessoa com a chave `anon` lia os vinhos de toda a gente
   sem login). Traz escrito o que NÃO se revoga e porquê; lê-o antes de
   "arrumar" mais algum aviso do linter.
-- Não mexer à mão: `apple-touch-icon.png`, `icone.png`, `icone-512.png`,
+- Não mexer à mão: `apple-touch-icon.png`, `icone.png`, `icone-claro.png`, `icone-512.png`,
   `icone-maskable.png` e `nota-g.png` (são gerados — ver "Ícones").
 
 ## Os cinco separadores (o ecrã inicial não é a lista)
@@ -2632,10 +2632,12 @@ era a estante redonda do `icone.svg`, que saiu). A fonte é o
 com o fundo transparente. Tudo o resto é **gerado** dele (Pillow, LANCZOS
 com alfa pré-multiplicado), e para o mudar muda-se a fonte e volta-se a
 gerar:
-- `icone.png` — 256px, transparente: o cabeçalho (`.escudo`), o ecrã de
-  arranque (`.gl-splash-logo`) e o `badge` das notificações. O G é bordô e
-  nos fundos bordô/verde não se lia, por isso os dois primeiros põem-no num
-  **azulejo de papel** em CSS, como o do ecrã principal do telemóvel;
+- `icone.png` — 256px, transparente: o `badge` das notificações;
+- `icone-claro.png` — 256px, transparente, gerado do `icone-claro-fonte.png`
+  (o G BRANCO com o copo, que o dono mandou a 01/10/2026): o cabeçalho
+  (`.escudo`) e o ecrã de arranque (`.gl-splash-logo`), direto no bordô e no
+  verde, só com uma sombra. Antes era o G bordô num azulejo de papel — no
+  fundo escuro não se lia sem ele;
 - `apple-touch-icon.png` — 180px, opaco (o G a 72% em branco): o iPhone, o
   favicon e o `icon` das notificações. O iOS guarda-o quando se põe a app
   no ecrã principal: quem já a tinha só vê o novo depois de a tirar e pôr;
