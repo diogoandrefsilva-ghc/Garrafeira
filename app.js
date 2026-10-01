@@ -1164,7 +1164,15 @@ function vinhosUniverso(){return modoCat()?(CAT_VINHOS||[]):db.vinhos;}
 // O que a lista mostra sem filtro nenhum.
 function vinhosBase(){return modoCat()?(CAT_VINHOS||[]):db.vinhos.filter(v=>stockDe(v.id)>0);}
 // O "Local" não é pergunta que se faça ao catálogo.
-function camposVisiveis(){return (modoCat()||!temLocaisDesenhados())?F_CAMPOS.filter(([k])=>k!=='local'):F_CAMPOS;}
+// As notas da casa (`notacasa`, `minhanota`) são só do catálogo — e só com
+// a migração 33 (`TEM_NOTAS_CAT`).
+const F_SO_CAT=['notacasa','minhanota'];
+function campoVisivel(k){
+  if(k==='local')return !modoCat()&&temLocaisDesenhados();
+  if(F_SO_CAT.includes(k))return modoCat()&&TEM_NOTAS_CAT;
+  return true;
+}
+function camposVisiveis(){return F_CAMPOS.filter(([k])=>campoVisivel(k));}
 function catNormalizar(c){
   const v=Object.assign({},c);
   v.cat_id=c.id; v.id=-c.id;
@@ -1503,9 +1511,10 @@ async function modoAlternar(){
     MODO='garrafeira';
   }
   RESUMO_ABERTO=null;RESUMO_DRILL=null;
-  // O Local é um filtro da garrafeira: no catálogo cortava tudo.
-  if(F.local)F.local='';
-  if(FILTRO_CAMPO==='local')FILTRO_CAMPO=null;
+  // O Local é um filtro da garrafeira (no catálogo cortava tudo), e as
+  // notas da casa são do catálogo (na garrafeira cortavam tudo).
+  ['local',...F_SO_CAT].forEach(k=>{if(!campoVisivel(k))F[k]='';});
+  if(FILTRO_CAMPO&&!campoVisivel(FILTRO_CAMPO))FILTRO_CAMPO=null;
   document.body.classList.toggle('cat',modoCat());
   aplicarCabecalho();
   const alvo=modoCat()?'detalhe':(TAB_GARRAFEIRA||'garrafeira');
@@ -2869,7 +2878,7 @@ function renderFiltrados(){
    É a mesma decisão, o mesmo desenho e o mesmo vocabulário do Catálogo da
    WineCatalog: quem anda nas duas apps não aprende dois nomes para a mesma
    coisa. */
-let F={local:'',tipo:[],regiao:[],casta:[],produtor:'',ano:'',mencao:'',preco:'',teor:'',estagio:'',janela:'',vivino:''};
+let F={local:'',tipo:[],regiao:[],casta:[],produtor:'',ano:'',mencao:'',preco:'',teor:'',estagio:'',janela:'',vivino:'',notacasa:'',minhanota:''};
 let CASTAS_TODAS=false;
 try{CASTAS_TODAS=localStorage.getItem('gf_castas_todas')==='1';}catch(e){}
 /* "Só monocasta" foi um VALOR do campo "Nº de castas" e agora é um estado
@@ -2933,7 +2942,10 @@ const F_CAMPOS=[
   ['tipo','🍷','Cor',1],['regiao','🗺️','Região',1],['casta','🍇','Castas',1],
   ['local','📍','Local',0],['produtor','🏭','Produtor',0],['ano','📅','Ano',0],
   ['mencao','🏅','Menção',0],['preco','💶','Preço',0],['teor','🌡️','Grau',0],
-  ['estagio','🪵','Estágio',0],['janela','⏱️','Maturação',0],['vivino',VIVINO_UVAS,'Vivino',0]
+  ['estagio','🪵','Estágio',0],['janela','⏱️','Maturação',0],['vivino',VIVINO_UVAS,'Vivino',0],
+  // Só no catálogo (`F_SO_CAT`): a média de quem usa a Garrafeira, e os
+  // vinhos a que EU já dei nota (ou ainda não).
+  ['notacasa','<i class="fg-g"></i>','Nota da casa',0],['minhanota','⭐','A minha nota',0]
 ];
 const F_META={};
 F_CAMPOS.forEach(([k,ico,nome])=>{F_META[k]=[ico,nome];});
@@ -2963,6 +2975,9 @@ function valorDe(v,k){
     case 'teor':    return v.teor==null?[]:[String(faixaTeorIndice(v.teor))];
     case 'estagio': return estagioDe(v);
     case 'vivino':  {const x=notaVivinoNum(v);return x==null?[]:[String(faixaVivinoIndice(x))];}
+    // A média das notas da casa, nas mesmas faixas do Vivino (vai de 0 a 5).
+    case 'notacasa':{const x=catNota(v);return x&&x.n?[String(faixaVivinoIndice(Number(x.media)))]:[];}
+    case 'minhanota':{const x=catNota(v);return [x&&x.minha!=null?'sim':'nao'];}
     /* A maturação não filtra por "No ponto" — filtra pelo TERÇO da janela.
        "No ponto" sozinho está em quase todos os vinhos e devolvia a lista
        quase inteira; a pergunta que sobra é em que parte da janela se está.
@@ -3003,7 +3018,9 @@ function valoresDe(k){
     // quem filtra por uma tem de a reconhecer quando abre o vinho.
     case 'janela':return [...FASES.map(f=>['ponto:'+f[1],'No ponto · '+f[2]]),
       ['cedo','Ainda cedo'],['passou','Já passou']];
-    case 'vivino':return FAIXAS_VIVINO.map((f,i)=>[String(i),f.nome]);
+    case 'vivino':
+    case 'notacasa':return FAIXAS_VIVINO.map((f,i)=>[String(i),f.nome]);
+    case 'minhanota':return [['sim','Dei nota'],['nao','Ainda sem nota minha']];
     case 'preco':return FAIXAS_PRECO.map((f,i)=>[String(i),f.nome]);
     case 'teor':return FAIXAS_TEOR.map((f,i)=>[String(i),f.nome]);
     case 'estagio':return ESTAGIO_OPCOES;
@@ -3440,7 +3457,7 @@ function vinhosFiltrados(ignorar){
 function passaFiltros(v,termos,ignorar){
   if(v.id>0&&!garrafasDe(v.id,true).length)return false;   // só o que está lá (o catálogo é todo)
   for(const [k] of F_CAMPOS){
-    if(k===ignorar)continue;
+    if(k===ignorar||!campoVisivel(k))continue;
     const sel=ligados(k);
     if(!sel.length)continue;
     const tem=valorDe(v,k);
@@ -10824,7 +10841,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='161';
+const APP_BUILD='162';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

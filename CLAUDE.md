@@ -1111,6 +1111,11 @@ notas são diz o `title` e a página do vinho.
   garrafa bebida): esta vai de 0 a 5 e é dada no Catálogo, sem garrafa.
 - Lê-se com o catálogo (`catCarregar`); sem a migração, a secção não aparece
   (`TEM_NOTAS_CAT`).
+- **Dois filtros só do Catálogo** (01/10/2026, o dono das apps): **Nota da
+  casa** (a média, nas faixas do Vivino) e **A minha nota** (dei nota · ainda
+  sem nota minha). Estão no `F_CAMPOS` mas só aparecem no catálogo e com a
+  migração (`F_SO_CAT`, `campoVisivel`); fora disso o `passaFiltros` salta-os,
+  e trocar de modo limpa-os — como o Local, ao contrário.
 
 ### As Sugestões: a WineSelection dentro do Catálogo (30/09/2026)
 O dono das apps: "dentro da componente de Catálogo da garrafeira, queria

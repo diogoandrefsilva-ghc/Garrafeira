@@ -2050,6 +2050,9 @@ body.cat .it.on{background:#1d4a3b;box-shadow:0 4px 12px -4px rgba(29,74,59,.8)}
 .bdg.cat-nota{background:#fff;color:var(--ou2);border-color:#e3d2a2;font-weight:700}
 .bdg.cat-nota::before{content:'';width:1.3em;height:1.3em;flex-shrink:0;
   background:url(nota-g.png) center/contain no-repeat}
+/* O mesmo G no ícone do filtro "Nota da casa" (fita e pastilhas). */
+.fg-g{display:inline-block;width:1.15em;height:1.15em;vertical-align:-.2em;
+  background:url(nota-g.png) center/contain no-repeat;font-style:normal}
 /* Um vinho do catálogo abre na mesma página, com a capa verde do catálogo
    — venha de onde vier, diz-se logo que não é uma garrafa minha. */
 .mhero.mhero-cat{background:linear-gradient(155deg,#0f2a22,#1d4a3b 55%,#2f6e57)}
