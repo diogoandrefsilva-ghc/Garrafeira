@@ -2703,23 +2703,44 @@ function faixaIndice(valor){
 
 /* O que falta preencher num vinho. É a lista do que a app mostra e a
    procura usa — sem casta não há filtro por casta, sem preço não há valor,
-   sem imagem o cartão fica com a garrafa desenhada em vez do rótulo. */
+   sem imagem o cartão fica com a garrafa desenhada em vez do rótulo.
+   É também o filtro "Em falta" da fita (02/10/2026, o dono: "as
+   atualizações massivas são interessantes principalmente para filtros
+   sobre dados em falta"), e por isso UMA lista para as duas perguntas — o
+   card "A completar" e o filtro a dizerem números diferentes para "sem
+   preço" era o que acontecia no dia em que alguém mexesse só numa:
+   - `f` é o valor no filtro (e `fr` o rótulo curto, quando o do Resumo não
+     cabe num cartão da fita);
+   - `ia` são os campos da procura com IA que a preenchem: com o filtro
+     ligado, a atualização massiva abre com eles marcados (`loteCampos`);
+   - `resumo:false` fica só no filtro: o card "A completar" é o que a app
+     USA (o cartão, os filtros, o valor) e não tudo o que se pode encher. */
 const FALTAS=[
-  {k:'Sem imagem do rótulo',tem:imagemFuncional},
+  {k:'Sem imagem do rótulo',f:'imagem',fr:'Sem imagem',ia:['imagem_url'],tem:imagemFuncional},
   // Só no catálogo: a imagem ainda é o link de uma loja, não a cópia no
   // Supabase (migração 34). O cron copia-a sozinho; as que ficam aqui são as
   // que falharam (link morto, loja que recusa) ou as que ainda não passou.
   {k:'Imagem ainda por link (fora da BD)',tem:v=>!modoCat()||!!v.imagem_path||!v.imagem_url||imagemNaBD(v.imagem_url)},
-  {k:'Sem castas',          tem:v=>(v.castas||[]).length>0},
-  {k:'Sem preço',           tem:v=>precoVinho(v)!=null},
-  {k:'Sem classificação',   tem:v=>!!v.classificacao},
-  {k:'Sem nota Vivino',     tem:v=>notaVivinoNum(v)!=null},
-  {k:'Sem informação de harmonização',       tem:v=>!!v.harmonizacao},
+  {k:'Sem castas',          f:'castas',ia:['castas'],tem:v=>(v.castas||[]).length>0},
+  {k:'Sem preço',           f:'preco',ia:['preco_medio'],tem:v=>precoVinho(v)!=null},
+  {k:'Sem classificação',   f:'classificacao',ia:['classificacao'],tem:v=>!!v.classificacao},
+  {k:'Sem nota Vivino',     f:'vivino',ia:['vivino_nota'],tem:v=>notaVivinoNum(v)!=null},
+  // Um link fora do formato do Vivino (sem `/w/<nº>`) não abre o vinho: é o
+  // mesmo que não o ter (`vivinoLink`).
+  {k:'Sem link do Vivino',  f:'vivino_url',ia:['vivino_url'],resumo:false,tem:v=>!!vivinoLink(v.vivino_url)},
+  {k:'Sem informação de harmonização',f:'harmonizacao',fr:'Sem harmonização',ia:['harmonizacao'],tem:v=>!!v.harmonizacao},
+  {k:'Sem notas de prova',  f:'notas_prova',ia:['notas_prova'],resumo:false,tem:v=>!!v.notas_prova},
+  {k:'Sem resumo',          f:'ai_resumo',ia:['ai_resumo'],resumo:false,tem:v=>!!v.ai_resumo},
+  {k:'Sem grau',            f:'teor',ia:['teor'],resumo:false,tem:v=>v.teor!=null},
+  // O mesmo "Sem informação" do filtro do Estágio (`estagioDe`).
+  {k:'Sem estágio',         f:'estagio',ia:['estagio_texto','estagio_meses'],resumo:false,tem:v=>!estagioDe(v).includes('nd')},
   // Sem colheita não há janela de consumo (ver `IA_JANELA`) — não é falta.
-  {k:'Sem informação de intervalo de consumo',tem:v=>v.ano==null||v.beber_de!=null||v.beber_ate!=null}
+  {k:'Sem informação de intervalo de consumo',f:'janela',fr:'Sem janela de consumo',ia:['beber_de','beber_ate'],
+    tem:v=>v.ano==null||v.beber_de!=null||v.beber_ate!=null}
 ];
+const FALTAS_RESUMO=FALTAS.filter(f=>f.resumo!==false);
 function imagemNaBD(url){return String(url||'').startsWith(SB_URL+'/storage/');}
-function faltasDe(v){return FALTAS.filter(f=>!f.tem(v)).map(f=>f.k);}
+function faltasDe(v){return FALTAS_RESUMO.filter(f=>!f.tem(v)).map(f=>f.k);}
 
 function renderResumo(){
   const box=document.getElementById('resumo-cards');
@@ -2760,7 +2781,7 @@ function renderResumo(){
 
   // A COMPLETAR: os vinhos a quem falta alguma coisa que a app usa.
   const faltosos=comStock.filter(v=>faltasDe(v).length);
-  const falRows=FALTAS.map(f=>({nome:f.k,n:comStock.filter(v=>!f.tem(v)).length}))
+  const falRows=FALTAS_RESUMO.map(f=>({nome:f.k,n:comStock.filter(v=>!f.tem(v)).length}))
     .filter(r=>r.n>0).sort((a,b)=>b.n-a.n);
 
   // PREFERIDAS: a região e a casta com mais vinhos agora mesmo — não é
@@ -2886,7 +2907,7 @@ function renderFiltrados(){
    É a mesma decisão, o mesmo desenho e o mesmo vocabulário do Catálogo da
    WineCatalog: quem anda nas duas apps não aprende dois nomes para a mesma
    coisa. */
-let F={local:'',tipo:[],regiao:[],casta:[],produtor:'',ano:'',mencao:'',preco:'',teor:'',estagio:'',janela:'',vivino:'',notacasa:'',minhanota:''};
+let F={local:'',tipo:[],regiao:[],casta:[],produtor:'',ano:'',mencao:'',preco:'',teor:'',estagio:'',janela:'',vivino:'',falta:[],notacasa:'',minhanota:''};
 let CASTAS_TODAS=false;
 try{CASTAS_TODAS=localStorage.getItem('gf_castas_todas')==='1';}catch(e){}
 /* "Só monocasta" foi um VALOR do campo "Nº de castas" e agora é um estado
@@ -2943,7 +2964,9 @@ function abrirCampo(k){
    únicas onde escolher duas opções quer dizer alguma coisa. "Tinto ou
    Branco" e "Douro ou Alentejo" são perguntas legítimas; "2019 ou 2021"
    responde-se melhor pela organização por ano, e "Reserva ou Grande
-   Reserva" quase nunca se pergunta.
+   Reserva" quase nunca se pergunta. O "Em falta" também aceita: não é uma
+   pergunta sobre o vinho mas sobre a ficha, e "sem preço OU sem nota" é o
+   lote que se quer encher de uma vez.
    A ORDEM é a da fita, e não é alfabética: as três de sempre primeiro,
    porque são as que se abrem. */
 const F_CAMPOS=[
@@ -2951,6 +2974,9 @@ const F_CAMPOS=[
   ['local','📍','Local',0],['produtor','🏭','Produtor',0],['ano','📅','Ano',0],
   ['mencao','🏅','Menção',0],['preco','💶','Preço',0],['teor','🌡️','Grau',0],
   ['estagio','🪵','Estágio',0],['janela','⏱️','Maturação',0],['vivino',VIVINO_UVAS,'Vivino',0],
+  // O que falta na ficha (`FALTAS`): é a pergunta antes de uma atualização
+  // massiva. Lista, como a cor: "sem preço OU sem nota" é o lote a encher.
+  ['falta','🧩','Em falta',1],
   // Só no catálogo (`F_SO_CAT`): a média de quem usa a Garrafeira, e os
   // vinhos a que EU já dei nota (ou ainda não).
   ['notacasa','<i class="fg-g"></i>','Nota da casa',0],['minhanota','⭐','A minha nota',0]
@@ -2986,6 +3012,7 @@ function valorDe(v,k){
     // A média das notas da casa, nas mesmas faixas do Vivino (vai de 0 a 5).
     case 'notacasa':{const x=catNota(v);return x&&x.n?[String(faixaVivinoIndice(Number(x.media)))]:[];}
     case 'minhanota':{const x=catNota(v);return [x&&x.minha!=null?'sim':'nao'];}
+    case 'falta':   return FALTAS.filter(f=>f.f&&!f.tem(v)).map(f=>f.f);
     /* A maturação não filtra por "No ponto" — filtra pelo TERÇO da janela.
        "No ponto" sozinho está em quase todos os vinhos e devolvia a lista
        quase inteira; a pergunta que sobra é em que parte da janela se está.
@@ -3032,6 +3059,7 @@ function valoresDe(k){
     case 'preco':return FAIXAS_PRECO.map((f,i)=>[String(i),f.nome]);
     case 'teor':return FAIXAS_TEOR.map((f,i)=>[String(i),f.nome]);
     case 'estagio':return ESTAGIO_OPCOES;
+    case 'falta':return FALTAS.filter(f=>f.f).map(f=>[f.f,f.fr||f.k]);
     default:return dados().sort(pt).map(x=>[x,x]);
   }
 }
@@ -8945,10 +8973,32 @@ function loteSelToggle(id){
   loteSelBarra();
   renderDetalhe();
 }
+/* "Marcar 10": de uma vez os vinhos que a lista mostra, pela ordem em que se vêem,
+   até encher (`LOTE_MAX_VINHOS`). Com o filtro "Em falta" a lista já É o
+   lote; tocar dez cartões um a um era o passo que sobrava. Os que já
+   estavam marcados ficam, e um segundo toque leva os seguintes depois de
+   se desmarcar os vistos. */
+function loteSelVisiveis(){
+  const lista=agruparVinhos(haFiltros()?vinhosFiltrados():vinhosBase(),DET_AGRUPAR).flatMap(g=>g.vinhos);
+  let n=0;
+  for(const v of lista){
+    if(loteSelCheio())break;
+    if(LOTE_SEL.has(v.id))continue;
+    LOTE_SEL.set(v.id,{id:v.id,nome:v.nome,ano:v.ano,produtor:v.produtor,tipo:v.tipo,regiao:v.regiao});
+    n++;
+  }
+  if(!n)toast(loteSelCheio()?'Já tens '+LOTE_MAX_VINHOS+' vinhos escolhidos':'Não há mais vinhos nesta lista',1);
+  loteSelBarra();
+  renderDetalhe();
+}
 function loteSelBarra(){
   const n=LOTE_SEL.size;
   const et=document.getElementById('lotebar-n');
-  if(et)et.textContent=n+'/'+LOTE_MAX_VINHOS+' selecionados';
+  // O "selecionados" cala-se no telemóvel (`.lotebar-sel`): com o "Marcar
+  // 10" a barra deixou de caber numa linha a 390px.
+  if(et)et.innerHTML=n+'/'+LOTE_MAX_VINHOS+'<span class="lotebar-sel"> selecionados</span>';
+  const todos=document.getElementById('lotebar-todos');
+  if(todos){todos.disabled=loteSelCheio();todos.textContent='Marcar '+LOTE_MAX_VINHOS;}
   const btn=document.getElementById('lotebar-seguinte');
   if(btn)btn.disabled=!n;
 }
@@ -8992,6 +9042,10 @@ function loteCampos(){
       <span>${esc(c.rot)}${vazios?` <i>vazio em ${vazios} de ${n}</i>`:' <i>já têm todos</i>'}</span>
     </label>`;
   }).join('');
+  // Com o filtro "Em falta" ligado, a pergunta já foi feita: os campos que
+  // enchem essas faltas vêm marcados (até ao máximo). Mexe-se à vontade.
+  const doFiltro=[...new Set(ligados('falta').flatMap(x=>(FALTAS.find(f=>f.f===x)||{}).ia||[]))]
+    .filter(k=>loteCamposPossiveis().some(c=>c.k===k)).slice(0,LOTE_MAX_CAMPOS);
   document.getElementById('modal-lote-in').innerHTML=`
     <div class="mtop"><h3>🔎 Atualização massiva</h3><button class="mx" onclick="fecharModal('modal-lote')">✕</button></div>
     <div class="note" style="margin-top:3px">${n} vinho${n>1?'s':''} escolhido${n>1?'s':''}</div>
@@ -9005,6 +9059,10 @@ function loteCampos(){
       <button class="btn ghost" onclick="loteVoltarSelecao()">‹ Voltar aos vinhos</button>
     </div>`;
   abrirModal('modal-lote');
+  doFiltro.forEach(k=>{
+    const cx=document.querySelector('.lote-esc-c[value="'+CSS.escape(k)+'"]');
+    if(cx){cx.checked=true;loteToggleCampo(k);}
+  });
 }
 function loteToggleCampo(k){
   const cx=document.querySelector('.lote-esc-c[value="'+CSS.escape(k)+'"]');
@@ -11028,7 +11086,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='165';
+const APP_BUILD='166';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

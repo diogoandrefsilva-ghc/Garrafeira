@@ -263,6 +263,8 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
   align-items:center;gap:10px}
 .lotebar.on{display:flex}
 .lotebar-n{font-size:13px;font-weight:700;color:var(--mu);margin-right:auto}
+.lotebar .btn{white-space:nowrap}
+@media(max-width:560px){.lotebar{gap:8px}.lotebar-sel{display:none}.lotebar .btn{padding-left:12px;padding-right:12px}}
 /* Os vinhos escolhidos, no modal de campos/prompt — mesmo desenho da
    WineCatalog (`.lote-chip`), de propósito. */
 .lote-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
