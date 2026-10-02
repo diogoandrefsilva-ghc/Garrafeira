@@ -1081,15 +1081,39 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
 - **O "+" só onde se acrescenta** (`fabSincronizar`): o Detalhe da
   garrafeira e a Wishlist (aí vai direto a "Adicionar à wishlist"). Nem no
   Resumo (o separador "Garrafeira" passou a chamar-se **Resumo**), nem em
-  Locais, Consumidos, Definições, nem no catálogo.
+  Locais, Consumidos, Definições. No catálogo, no Detalhe e só aos
+  curadores (ver "A atualização massiva e a importação no Catálogo").
 - **O Resumo do catálogo** (30/09/2026, o dono) é o MESMO `renderResumo`
   sobre o catálogo inteiro (`cat`), com três diferenças: sem **Valor
   estimado**; os cartões **Tintos** e **Brancos** (abrem "Vinhos por cor");
   e, em vez da região e da casta preferidas, **Top Região Tintos / Brancos**
   e **Top Casta Tintos / Brancos** (painéis `regiao_tinto`… com a contagem
   só dessa cor). O que está aberto fecha-se ao trocar de modo.
-- **Fase 2** (por fazer): a Atualização massiva no FAB do catálogo. O Vinho
-  novo já lá está, para os curadores (a seguir).
+- **A atualização massiva e a importação no Catálogo** (02/10/2026, o dono:
+  "no separador do Catálogo, não tenho atualização massiva ou importação por
+  fotos"). O "+" do Catálogo é o MESMO menu da garrafeira, menos a wishlist
+  (`.so-gar`): Vinho novo, Atualização massiva, Importar por imagens — aos
+  curadores e ao admin do catálogo (`catPodeCriar`), mesmo com uma
+  garrafeira emprestada aberta (o `fabSincronizar` tira-lhe o `ro-hide` no
+  catálogo). São os mesmos ecrãs; muda para onde se grava:
+  - **a atualização massiva** escolhe na lista do Catálogo e grava cada
+    vinho pela `winecatalog.editar` (`iaAplicarCat`, origem
+    `catalogo-curador`/`catalogo-admin`), como o "Procurar informação" de um
+    vinho do catálogo. Sem o produtor nem o ano (identidade — vão pelo
+    Editar, `iaCampoFora`); o catálogo relê-se UMA vez no fim do lote
+    (`LOTE_CAT_MUDOU`). Os ids vão à `vinho-info` e ao prompt manual em
+    valor absoluto (`loteIdPedido`): o "-123" é o que um modelo copia mal.
+    Como na procura de um vinho, a `vinho-info` responde primeiro com o
+    catálogo — num campo que a linha já tem (e não envelheceu), a IA não é
+    chamada e não há nada a propor;
+  - **a importação por imagens** lê pela mesma `importar-vinhos` (que grava
+    o pedido numa garrafeira em que se pode mexer: a aberta se for minha,
+    senão a minha — `importarGid`) e cria cada vinho escolhido pela
+    `winecatalog.criar` (`importarGuardarCat`), sem garrafas. A cor é
+    obrigatória — é chave da linha, e a leitura põe "Tinto" quando não a vê
+    —, por isso a revisão pede-a no lugar das garrafas e do formato. Uma
+    recusa (o vinho e a colheita já lá estão) não pára os outros: fica dita
+    ao pé do botão, com esse vinho ainda marcado.
 
 ### As notas da casa (30/09/2026, migração 33)
 O dono das apps: "gostava que os utilizadores da garrafeira pudessem dar
@@ -1161,7 +1185,7 @@ correção deverá atualizar também o vinho no catálogo".
   só o admin dele a vê: a quem é só admin da Garrafeira o visto não aparece.
   `EU.curador`/`EU.admin_catalogo` leem-se no `carregar()`.
 - **Vinho novo no Catálogo**: o "+" do Catálogo aparece a um curador (e ao
-  admin do catálogo) e abre o formulário do vinho novo em modo `catalogo`
+  admin do catálogo) e o "Novo vinho" abre o formulário do vinho novo em modo `catalogo`
   (`catNovoVinho`, `FORM_CAT`): sem garrafa nem notas minhas, gravado pela
   `winecatalog.criar` (`catGuardarNovo`), que recusa um vinho e colheita que
   já lá estejam. **Antes de criar, os PARECIDOS** (30/09/2026, o dono: "uma
@@ -2549,7 +2573,9 @@ A **"📷 Importar por imagens"** vive no **FAB**, ao lado do "Novo vinho" e da
 "Atualização massiva" — as três formas de ACRESCENTAR vinhos no mesmo sítio.
 Esteve em Definições › Dados e veio de lá: aquele cartão é o das cópias de
 segurança, por onde os dados SAEM, e quem acabou de fotografar a prateleira
-procura o "+". Aceita uma a três fotos de rótulos, listas ou prateleiras. `encolherImagem()` reduz cada uma no
+procura o "+". No Catálogo (aos curadores) o que se escolhe nasce no
+catálogo, sem garrafas (ver "A atualização massiva e a importação no
+Catálogo"). Aceita uma a três fotos de rótulos, listas ou prateleiras. `encolherImagem()` reduz cada uma no
 browser; a função recebe os base64 apenas em memória, envia-os ao Gemini e
 descarta-os no fim. Não há upload para Storage nem imagens dentro da tabela
 `garrafeira.importacoes`: essa tabela guarda somente os metadados do pedido e
