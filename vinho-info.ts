@@ -298,41 +298,6 @@ function vivinoDeQue(url: string, ano: number | null): string {
     return `página do Vivino da colheita ${y}, que NÃO é a nossa: não uses a nota nem as avaliações daqui`;
   } catch { return ""; }
 }
-async function obterResultadosPesquisa(query: string, signal: AbortSignal,
-  ano: number | null = null, dominios: string[] = []): Promise<PesquisaWeb> {
-  if (!SEARCH_API_KEY) throw new Error("a pesquisa externa não está configurada: falta SEARCH_API_KEY");
-  const { signal: ss, limpar } = comLimiteProprio(signal, 12_000);
-  try {
-    const r = await fetch(SEARCH_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-API-KEY": SEARCH_API_KEY },
-      body: JSON.stringify({ q: query, gl: "pt", hl: "pt", num: SEARCH_RESULTADOS }),
-      signal: ss,
-    });
-    limpar();
-    if (!r.ok) throw new Error(`pesquisa externa ${r.status}`);
-    const d = await r.json();
-    const rows = Array.isArray(d?.organic) ? d.organic : [];
-    const fontes: Fonte[] = rows.slice(0, SEARCH_RESULTADOS).map((x: any) => ({
-      titulo: String(x?.title || x?.link || "").slice(0, 120),
-      url: String(x?.link || "").slice(0, 400),
-    })).filter((x: Fonte) => /^https?:\/\//i.test(x.url));
-    if (!fontes.length) throw new Error("pesquisa externa sem resultados");
-    const texto = rows.slice(0, SEARCH_RESULTADOS).map((x: any, i: number) => {
-      const title = String(x?.title || "").trim();
-      const snip = String(x?.snippet || "").replace(/\s+/g, " ").trim();
-      const link = String(x?.link || "").trim();
-      const conf = dominios.some((d) => doSite(link, d)) ? " ★ FONTE DE CONFIANÇA" : "";
-      const viv = vivinoDeQue(link, ano);
-      return `[${i + 1}]${conf} ${title}\nURL: ${link}\n` + (viv ? `(${viv})\n` : "") + `Resumo: ${snip}` + (x?.rating != null ? `\nEstrelas no Google: ${x.rating}${x.ratingCount != null ? ` (${x.ratingCount} avaliações)` : ""}` : "");
-    }).join("\n\n");
-    const estado = `search-api:${extrairHost(SEARCH_API_URL) || "externa"}`;
-    return { texto: texto.slice(0, 6000), fontes, status: estado };
-  } catch (e) {
-    limpar();
-    throw e;
-  }
-}
 
 /* ── Vocabulário fechado ──
    O que o modelo devolver fora destas listas é deitado fora na
@@ -676,11 +641,11 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código, com exat
   ]
 }`;
 
-// Espelho do `prompt` (sem grounding) de um vinho só, para o modo `gratis`:
-// aqui a pesquisa externa corre à mesma UMA VEZ POR VINHO (cada um precisa da
-// sua própria pesquisa Google), mas o Gemini só é chamado UMA VEZ no fim,
-// para ler as evidências de todos e extrair o JSON de todos — é aí que está
-// a poupança desta função, mesmo neste motor.
+// Espelho do `prompt` (com o Serper) de um vinho só, para o pacote completo
+// (02/10/2026, o dono): a pesquisa corre UMA VEZ POR VINHO — a geral, e a do
+// Vivino só quando se pediu um campo do Vivino —, e o Gemini é chamado UMA
+// VEZ no fim, para ler a evidência de todos e dizer de onde tirou cada campo
+// (`deOnde`, numerado DENTRO de cada vinho, como a base de evidência dele).
 const promptLote = (vinhos: (VinhoLote & { evidencia: string })[], campos: string[], hoje: string) => `
 Ajuda a preencher a ficha de vários vinhos para a garrafeira de uma casa particular, um enólogo a ler o que
 já se pesquisou sobre cada um.
@@ -688,20 +653,23 @@ já se pesquisou sobre cada um.
 Hoje é ${hoje}.
 CAMPOS A PEDIR (só estes, para todos os vinhos): ${campos.map((k) => CAMPOS[k]).join(", ")}.
 
-${vinhos.map((v) => `VINHO id ${v.id} — ${v.nome}${v.produtor ? ` (${v.produtor})` : ""}${v.ano ? `, ${v.ano}` : ""}:
-BASE DE EVIDÊNCIA:
+${vinhos.map((v) => `VINHO id ${v.id} — ${v.nome}${v.produtor ? ` (${v.produtor})` : ""}${v.ano ? `, ${v.ano}` : ""}${v.tipo ? `, ${v.tipo}` : ""}:
+BASE DE EVIDÊNCIA DESTE VINHO (numerada a partir de [1]):
 ${v.evidencia || "(sem resultados de pesquisa para este vinho)"}
 `).join("\n")}
 
 REGRAS, e são a sério:
-1. RESPONDE APENAS COM BASE NA BASE DE EVIDÊNCIA de cada vinho. Não procures na net.
-2. NÃO INVENTES. Um campo que não consigas confirmar fica FORA do objeto desse vinho (ou null).
+1. RESPONDE APENAS COM BASE NA BASE DE EVIDÊNCIA de cada vinho. Não procures na net nem completes de memória.
+2. NÃO INVENTES. Um campo que a evidência desse vinho não confirme fica FORA do objeto dele — há outra procura para o que faltar.
 3. ${regraCuvee}
 4. ${regraVivino(undefined)}
 5. Castas separadas por nome (nunca "blend"/"lote"/"várias castas").
 6. "beberDe"/"beberAte" são anos, a janela da colheita indicada. Um vinho SEM ano não tem janela de consumo: deixa "beberDe"/"beberAte" de fora do objeto dele.
-7. O "id" de cada resultado tem de ser EXATAMENTE o "id" indicado acima — é assim que se sabe a que vinho corresponde cada objeto, nunca pela posição na lista.
-8. Se a evidência de um vinho não chegar para o identificar, o objeto dele fica só {"id": <id>, "encontrado": false, "aviso": "porquê"}.
+7. O preço é o de UMA garrafa de 0,75 L, em EUROS, em Portugal. A avaliação dos clientes de uma loja NÃO é a nota do Vivino.
+8. Um resultado de OUTRO vinho (outro nome, outra gama, outra cor) não serve: ignora-o.
+9. "deOnde" diz, para CADA campo que preencheres, o número [n] do resultado de onde o tiraste, na base de evidência DESSE vinho — ex.: "harmonizacao": 2, "precoMedio": 1.
+10. O "id" de cada resultado tem de ser EXATAMENTE o "id" indicado acima — é assim que se sabe a que vinho corresponde cada objeto, nunca pela posição na lista.
+11. Se a evidência de um vinho não chegar para o identificar, o objeto dele fica só {"id": <id>, "encontrado": false, "aviso": "porquê"}.
 
 ${regraIdioma}
 
@@ -712,6 +680,7 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código, com exat
       "id": ${vinhos[0]?.id ?? 0},
       "encontrado": true,
       ${campos.map((k) => `"${CAMPOS[k]}": ${CAMPO_EXEMPLO[k] ?? "null"}`).join(",\n      ")},
+      "deOnde": {"${CAMPOS[campos[0]] ?? "castas"}": 1},
       "aviso": "vazio, ou o que ficou por confirmar"
     }
   ]
@@ -921,9 +890,9 @@ function vivinoDuas(out: Record<string, unknown>, ano: number | null): void {
   }
 }
 
-/* Uma consulta ao Serper, em linhas (a `obterResultadosPesquisa` devolve
-   já o texto, e o lote continua a usá-la): é o que deixa numerar tudo de
-   seguida para o `deOnde`, e escolher a página de cada site. */
+/* Uma consulta ao Serper, em linhas: é o que deixa numerar tudo de seguida
+   para o `deOnde`, e escolher a página de cada site. O lote usa-a também,
+   vinho a vinho (ver `produzirFichaLote`). */
 type Resultado = { url: string; titulo: string; snippet: string; rating: unknown; ratingCount: unknown };
 async function serperConsulta(q: string, signal: AbortSignal, num = SEARCH_RESULTADOS, page = 1): Promise<Resultado[]> {
   if (!SEARCH_API_KEY) throw new Error("a pesquisa externa não está configurada: falta SEARCH_API_KEY");
@@ -2221,10 +2190,27 @@ async function produzirFicha(
 
 /* ── O TRABALHO A SÉRIO, EM LOTE ──
    Mesma lógica do `produzirFicha` de um vinho só — catálogo primeiro, IA só
-   pelo que falta — aplicada a uma LISTA de vinhos, com no máximo UMA
-   chamada ao Gemini no total (nunca uma por vinho). Se o catálogo já
-   resolver todos os vinhos para os campos pedidos, nem essa chamada
-   acontece. */
+   pelo que falta — aplicada a uma LISTA de vinhos, com o Gemini chamado no
+   máximo DUAS vezes no total (nunca uma por vinho). Se o catálogo já
+   resolver todos os vinhos para os campos pedidos, nem essas acontecem.
+
+   OS DOIS PACOTES, como no vinho só (02/10/2026, o dono: "só iria à memória
+   da IA se as duas linhas do site do Serper não trouxessem nada"):
+   · COMPLETO (`premium`): primeiro a pesquisa NOSSA, vinho a vinho — a
+     geral, e a do Vivino SÓ quando se pediu um campo do Vivino; pedidos só
+     campos do Vivino, só essa —, e UMA chamada ao Gemini a ler tudo e a
+     dizer de onde tirou cada campo (`deOnde`). Depois, SÓ pelo que a
+     pesquisa não trouxe, UMA chamada com grounding para os vinhos todos.
+     Até 02/10/2026 era só o grounding, que muitas vezes não pesquisa: um
+     lote de 7 harmonizações voltou todo de memória, sem fonte nenhuma.
+   · INTERMÉDIO (`gratis`): só o grounding, numa chamada. O Serper gasta
+     créditos que se pagam — a mesma decisão do vinho só (27/09/2026). Até
+     02/10/2026 o lote fazia ao contrário dos dois.
+   De onde veio cada campo vai na resposta de cada vinho (`origemCampos`):
+   o resultado da pesquisa (com o link), a "pesquisa Google" do grounding
+   SÓ quando ele pesquisou mesmo, ou nada — e nada quer dizer "da IA, sem
+   dizer de onde". */
+const CAMPOS_VIVINO = new Set(["vivino_nota", "vivino_avaliacoes", "vivino_nota_global", "vivino_avaliacoes_global", "vivino_url"]);
 async function produzirFichaLote(
   modoIA: "gratis" | "premium", vinhos: VinhoLote[], campos: string[],
   quem: string | null, signal: AbortSignal, budgetMs: number,
@@ -2232,7 +2218,11 @@ async function produzirFichaLote(
   if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
   const inicio = Date.now();
 
-  type Item = { v: VinhoLote; conhecido: Conhecido | null; doCatalogo: Record<string, unknown>; emFalta: string[] };
+  type Item = {
+    v: VinhoLote; conhecido: Conhecido | null; doCatalogo: Record<string, unknown>; emFalta: string[];
+    ev: ReturnType<typeof montarEvidencia> | null; ficha: Record<string, unknown> | null;
+    origem: Record<string, Origem>; pesquisou: boolean | null; aviso: string;
+  };
   const itens: Item[] = [];
   for (const v of vinhos) {
     // Sem colheita, a janela de consumo não se pede (ver `produzirFicha`).
@@ -2241,7 +2231,7 @@ async function produzirFichaLote(
     const conhecido = await catalogoProcurar(v.nome, v.produtor, v.ano, signal, v.tipo);
     const doCatalogo = conhecido ? catalogoResponde(conhecido, pedidosV) : {};
     const emFalta = pedidosV.filter((k) => !(k in doCatalogo));
-    itens.push({ v, conhecido, doCatalogo, emFalta });
+    itens.push({ v, conhecido, doCatalogo, emFalta, ev: null, ficha: null, origem: {}, pesquisou: null, aviso: "" });
   }
   const precisamIA = itens.filter((it) => it.emFalta.length > 0);
   const catalogoVinhos = itens.length - precisamIA.length;
@@ -2250,7 +2240,7 @@ async function produzirFichaLote(
   if (!precisamIA.length) {
     const resultados = itens.map((it) => ({
       id: it.v.id, encontrado: true, ...it.doCatalogo,
-      origem: "catalogo", catalogoEm: it.conhecido?.atualizadoEm ?? "",
+      origem: "catalogo", catalogoCampos: Object.keys(it.doCatalogo), catalogoEm: it.conhecido?.atualizadoEm ?? "",
     }));
     await registar("ok", {
       nome: `lote de ${vinhos.length}`, modo: "catalogo-lote", ms: Date.now() - inicio,
@@ -2262,118 +2252,180 @@ async function produzirFichaLote(
     };
   }
 
-  // A IA só é chamada pelos campos que ainda faltam a PELO MENOS UM vinho —
-  // a mesma poupança do `campos_ia` de um vinho só, aplicada ao lote.
-  const camposIA = [...new Set(precisamIA.flatMap((it) => it.emFalta))];
   const hoje = new Date().toISOString().slice(0, 10);
+  const tentativas: { modelo: string; modo: string; estado: number | string; usageMetadata?: UsageMetadata }[] = [];
+  let usageTotal: UsageMetadata | null = null;
+  const modelosUsados: string[] = [];
+  let escalou = false;
+  let erroUltimo = "";
+  let fontesGround: Fonte[] = [];
 
-  const pesquisasPorVinho = new Map<number, PesquisaWeb>();
-  if (modoIA === "gratis") {
-    // Cada vinho precisa da SUA pesquisa (não há como pedir "isto tudo" a um
-    // motor de busca) — mas o Gemini que lê essas pesquisas só é chamado
-    // UMA vez, no fim, para todos. É aí que está a poupança neste motor.
-    for (const it of precisamIA) {
-      const query = [it.v.nome, it.v.ano || "", it.v.produtor, it.v.regiao, "vivino garrafeira nacional vinho portugal"]
-        .filter(Boolean).join(" ");
+  // Uma pergunta ao Gemini para os vinhos todos: o barato, e o maior só se o
+  // barato falhar TECNICAMENTE — nunca por "poucos campos" (um modelo maior
+  // não inventa o que a pesquisa não encontrou, e no grounding escalar por
+  // qualidade pagava a pesquisa a dobrar sem ganho).
+  const chamar = async (textoPrompt: string, comGrounding: boolean, n: number) => {
+    const run = async (modelo: string, modo: string, maxTokens: number, semThinking: boolean) => {
+      const ms = Math.max(8_000, Math.min(GEMINI_TIMEOUT_MS_LOTE, budgetMs - (Date.now() - inicio) - 2_000));
+      if (ms < 2_000) return null;
+      const { signal: sp, limpar } = comLimiteProprio(signal, ms);
       try {
-        pesquisasPorVinho.set(it.v.id, await obterResultadosPesquisa(query, signal, it.v.ano));
-      } catch (_) {
-        // Um vinho sem resultados não deita o lote todo abaixo — fica sem
-        // evidência, e o prompt já sabe responder "não encontrei" para ele.
-        pesquisasPorVinho.set(it.v.id, { texto: "", fontes: [], status: "sem-resultados" });
+        const g = await chamarGemini(modelo, textoPrompt, sp, maxTokens, semThinking, comGrounding);
+        limpar();
+        usageTotal = somarUsage(usageTotal, g.usage ?? null);
+        tentativas.push({ modelo, modo: (comGrounding ? "grounding-" : "serper-") + modo, estado: g.ok ? 200 : g.status, ...(g.usage ? { usageMetadata: g.usage } : {}) });
+        return g;
+      } catch (e) {
+        limpar();
+        if (signal.aborted) throw e;
+        tentativas.push({ modelo, modo, estado: "presa" });
+        return null;
+      }
+    };
+    // Teto de tokens proporcional ao tamanho do lote — um prompt de vários
+    // vinhos devolve um JSON bem maior do que o de um vinho só.
+    let g = await run(MODELO_BARATO, "barato", Math.min(8000, 700 + 450 * n), true);
+    let modelo = MODELO_BARATO;
+    if (g && !g.ok) erroUltimo = g.erro;
+    if ((!g || !g.ok) && MODELO_ESCALADO !== MODELO_BARATO) {
+      const g2 = await run(MODELO_ESCALADO, "escalado", Math.min(8000, 1000 + 600 * n), false);
+      if (g2 && g2.ok) { g = g2; modelo = MODELO_ESCALADO; escalou = true; }
+      else if (g2 && !g2.ok) erroUltimo = g2.erro;
+    }
+    if (!g || !g.ok) return null;
+    modelosUsados.push(modelo);
+    const lista: any[] = g.parsed && Array.isArray(g.parsed.resultados) ? g.parsed.resultados : [];
+    return { lista, pesquisou: g.pesquisou, fontes: g.fontes ?? [] };
+  };
+
+  // 1. A PESQUISA, vinho a vinho (só o pacote completo).
+  const usarSerper = modoIA === "premium" && !!SEARCH_API_KEY;
+  let serperConsultas = 0;
+  const consultasFeitas: string[] = [];
+  if (usarSerper) {
+    await Promise.all(precisamIA.map(async (it) => {
+      const qs: string[] = [];
+      // A geral só quando se pediu alguma coisa que não é do Vivino; a do
+      // Vivino só quando se pediu um campo do Vivino.
+      if (it.emFalta.some((k) => !CAMPOS_VIVINO.has(k))) {
+        qs.push([it.v.nome, it.v.ano || "", it.v.produtor, it.v.regiao, "vinho garrafeira nacional portugal"].filter(Boolean).join(" "));
+      }
+      if (it.emFalta.some((k) => CAMPOS_VIVINO.has(k))) {
+        qs.push(`"${it.v.nome.replace(/"/g, "")}" ${it.v.produtor} site:vivino.com`.replace(/\s+/g, " ").trim());
+      }
+      serperConsultas += qs.length;
+      consultasFeitas.push(...qs);
+      const rs = await Promise.allSettled(qs.map((q) => serperConsulta(q, signal)));
+      const resultados = rs.flatMap((r) => r.status === "fulfilled" ? r.value : []);
+      if (resultados.length) it.ev = montarEvidencia([], resultados, it.v.ano, []);
+    }));
+    if (signal.aborted) throw new DOMException("timeout", "AbortError");
+    const comEv = precisamIA.filter((it) => it.ev && it.ev.texto);
+    if (comEv.length) {
+      const camposF1 = [...new Set(comEv.flatMap((it) => it.emFalta))];
+      const r1 = await chamar(promptLote(comEv.map((it) => ({ ...it.v, evidencia: it.ev!.texto })), camposF1, hoje), false, comEv.length);
+      const porId = new Map((r1?.lista ?? []).map((r) => [Number(r?.id), r]));
+      for (const it of comEv) {
+        const raw = porId.get(it.v.id);
+        if (!raw) continue;
+        if (raw.aviso) it.aviso = texto(raw.aviso, 300);
+        if (raw.encontrado === false) continue;
+        const f = normalizar(raw, it.v.ano, it.emFalta);
+        if (!f) continue;
+        delete f.aviso;
+        it.ficha = f;
+        it.origem = origemDosCampos(raw.deOnde, it.ev!.lista, f, it.v.ano);
+        // Com o Serper a pesquisa foi nossa: houve pesquisa, garantida.
+        it.pesquisou = true;
       }
     }
   }
 
-  const texto0 = modoIA === "premium"
-    ? promptLoteComGrounding(precisamIA.map((it) => it.v), camposIA, hoje)
-    : promptLote(precisamIA.map((it) => ({ ...it.v, evidencia: pesquisasPorVinho.get(it.v.id)?.texto || "" })), camposIA, hoje);
-
-  const tentativas: { modelo: string; modo: string; estado: number | string; usageMetadata?: UsageMetadata }[] = [];
-  let usageTotal: UsageMetadata | null = null;
-  let fontesGround: Fonte[] = [];
-  const run = async (modelo: string, modo: string, maxTokens: number, semThinking: boolean) => {
-    const ms = Math.max(8_000, Math.min(GEMINI_TIMEOUT_MS_LOTE, budgetMs - (Date.now() - inicio) - 2_000));
-    if (ms < 2_000) return null;
-    const { signal: sp, limpar } = comLimiteProprio(signal, ms);
-    try {
-      const g = await chamarGemini(modelo, texto0, sp, maxTokens, semThinking, modoIA === "premium");
-      limpar();
-      usageTotal = somarUsage(usageTotal, g.usage ?? null);
-      tentativas.push({ modelo, modo, estado: g.ok ? 200 : g.status, ...(g.usage ? { usageMetadata: g.usage } : {}) });
-      if (g.ok && g.fontes?.length) fontesGround = g.fontes;
-      return g;
-    } catch (e) {
-      limpar();
-      if (signal.aborted) throw e;
-      tentativas.push({ modelo, modo, estado: "presa" });
-      return null;
+  // 2. O GROUNDING, só pelo que falta: no completo, o que a pesquisa não
+  // trouxe (e só se ainda houver tempo); no intermédio, é a única volta.
+  const faltamDe = (it: Item) => it.emFalta.filter((k) => !(it.ficha && !vazioCampo(it.ficha[k])));
+  const paraG = precisamIA.filter((it) => faltamDe(it).length);
+  if (paraG.length && (!usarSerper || budgetMs - (Date.now() - inicio) > 15_000)) {
+    const faltas = new Map(paraG.map((it) => [it.v.id, faltamDe(it)]));
+    const camposF2 = [...new Set(paraG.flatMap((it) => faltas.get(it.v.id)!))];
+    const r2 = await chamar(promptLoteComGrounding(paraG.map((it) => it.v), camposF2, hoje), true, paraG.length);
+    if (r2) {
+      if (r2.pesquisou) fontesGround = r2.fontes;
+      const porId = new Map(r2.lista.map((r) => [Number(r?.id), r]));
+      for (const it of paraG) {
+        const raw = porId.get(it.v.id);
+        if (!raw) continue;
+        if (raw.aviso && !it.aviso) it.aviso = texto(raw.aviso, 300);
+        if (raw.encontrado === false) continue;
+        const f = normalizar(raw, it.v.ano, faltas.get(it.v.id)!);
+        if (!f) continue;
+        delete f.aviso;
+        const junta: Record<string, unknown> = { ...(it.ficha ?? {}) };
+        for (const [k, val] of Object.entries(f)) {
+          if (!vazioCampo(junta[k])) continue;   // o que a pesquisa trouxe manda
+          junta[k] = val;
+          // "Pesquisa Google" só quando o grounding pesquisou mesmo; de
+          // memória fica sem origem, que é o que a app diz "sem dizer de onde".
+          if (r2.pesquisou) it.origem[k] = { url: "", site: "", titulo: "pesquisa Google", google: true };
+        }
+        it.ficha = junta;
+        if (it.pesquisou === null) it.pesquisou = r2.pesquisou;
+      }
     }
-  };
-
-  // Teto de tokens proporcional ao tamanho do lote — um prompt de vários
-  // vinhos devolve um JSON bem maior do que o de um vinho só.
-  const maxTokBarato = Math.min(8000, 700 + 450 * precisamIA.length);
-  const maxTokEscalado = Math.min(8000, 1000 + 600 * precisamIA.length);
-
-  const primeira = await run(MODELO_BARATO, "barato", maxTokBarato, true);
-  let usadoModelo = MODELO_BARATO, usadoModo = "barato";
-  let pesquisouLote: boolean | null = primeira && primeira.ok ? primeira.pesquisou : null;
-  let parsed: any = primeira && primeira.ok ? primeira.parsed : null;
-  let erroUltimo = primeira && !primeira.ok ? primeira.erro : "";
-
-  // Mesma regra do vinho só: só escala em falha TÉCNICA, nunca por
-  // "poucos campos" — um modelo maior não inventa o que não se encontrou, e
-  // no premium escalar por qualidade pagava a pesquisa a dobrar sem ganho.
-  const falhouTecnicamente = !primeira || !primeira.ok;
-  if (falhouTecnicamente && MODELO_ESCALADO !== MODELO_BARATO) {
-    const segunda = await run(MODELO_ESCALADO, "escalado", maxTokEscalado, false);
-    if (segunda && segunda.ok) { usadoModelo = MODELO_ESCALADO; usadoModo = "escalado"; parsed = segunda.parsed; pesquisouLote = segunda.pesquisou; }
-    else if (segunda && !segunda.ok) erroUltimo = segunda.erro;
   }
 
-  const lista: any[] = parsed && Array.isArray(parsed.resultados) ? parsed.resultados : [];
-  if (!lista.length && !catalogoVinhos) {
+  const temAlgo = (it: Item) => !!(it.ficha && Object.keys(it.ficha).length) || Object.keys(it.doCatalogo).length > 0;
+  if (!itens.some(temAlgo)) {
     await registar("erro", {
-      passo: "vazio", nome: `lote de ${vinhos.length}`, modo: usadoModo, modelo: usadoModelo,
+      passo: "vazio", nome: `lote de ${vinhos.length}`, modo: escalou ? "escalado" : "barato", modelo: modelosUsados.join(" + "),
       tentativas, erro: erroUltimo.slice(0, 300), ms: Date.now() - inicio,
+      ...(serperConsultas ? { serper_consultas: serperConsultas, consultas: consultasFeitas } : {}),
       ...(usageTotal ? { usageMetadata: usageTotal } : {}),
     }, quem);
     return { ok: false, status: 404, erro: "não consegui pesquisar nenhum destes vinhos — tenta outra vez daqui a pouco" };
   }
 
-  const porId = new Map(lista.map((r) => [Number(r?.id), r]));
   const resultados: Record<string, unknown>[] = [];
+  let comFonte = 0;
   for (const it of itens) {
+    const doCat = Object.keys(it.doCatalogo);
     if (!it.emFalta.length) {
-      resultados.push({ id: it.v.id, encontrado: true, ...it.doCatalogo, origem: "catalogo", catalogoEm: it.conhecido?.atualizadoEm ?? "" });
+      resultados.push({ id: it.v.id, encontrado: true, ...it.doCatalogo, origem: "catalogo", catalogoCampos: doCat, catalogoEm: it.conhecido?.atualizadoEm ?? "" });
       continue;
     }
-    const raw = porId.get(it.v.id);
-    const fichaIA = raw && raw.encontrado !== false ? normalizar(raw, it.v.ano, it.emFalta) : null;
+    const fichaIA = it.ficha && Object.keys(it.ficha).length ? it.ficha : null;
     if (fichaIA) {
-      const { aviso: _aviso, ...factos } = fichaIA as Record<string, unknown>;
       await catalogoJuntar(
-        it.v.nome, it.v.produtor, it.v.ano, factos, `vinho-info-${modoIA}-lote`,
-        (modoIA === "premium" ? fontesGround : (pesquisasPorVinho.get(it.v.id)?.fontes ?? [])), signal,
+        it.v.nome, it.v.produtor, it.v.ano, fichaIA, `vinho-info-${modoIA}-lote`,
+        [...(it.ev?.fontes ?? []), ...fontesGround].slice(0, 8), signal,
       );
     }
-    const fichaFinal = { ...it.doCatalogo, ...(fichaIA ?? {}) };
+    const origemCampos = Object.fromEntries(Object.entries(it.origem).filter(([k]) => !!fichaIA && k in fichaIA));
+    comFonte += Object.values(origemCampos).filter((o) => o.url).length;
     resultados.push({
       id: it.v.id,
-      encontrado: !!(fichaIA || Object.keys(it.doCatalogo).length),
-      ...fichaFinal,
-      ...(Object.keys(it.doCatalogo).length ? { origem: fichaIA ? "misto" : "catalogo" } : {}),
-      ...(raw && raw.aviso ? { aviso: texto(raw.aviso, 300) } : {}),
+      encontrado: !!(fichaIA || doCat.length),
+      ...it.doCatalogo, ...(fichaIA ?? {}),
+      ...(doCat.length ? { origem: fichaIA ? "misto" : "catalogo", catalogoCampos: doCat } : {}),
+      // Vai SEMPRE (mesmo vazio) quando a IA respondeu: é o que diz à app que
+      // um campo sem origem é "sem dizer de onde", e não uma resposta antiga.
+      ...(fichaIA ? { origemCampos } : {}),
+      ...(it.ev?.fontes?.length ? { fontes: it.ev.fontes } : {}),
+      ...(it.pesquisou !== null ? { pesquisaWeb: it.pesquisou } : {}),
+      ...(it.aviso ? { aviso: it.aviso } : {}),
     });
   }
 
   const dur = Date.now() - inicio;
-  const custoEstimado = usadoModo === "barato" ? 0.001 : 0.0035;
+  // ~1 $ por 1000 consultas ao Serper, como no vinho só.
+  const custoEstimado = modelosUsados.reduce((s, m) => s + (m === MODELO_BARATO ? 0.001 : 0.0035), 0) + serperConsultas * 0.001;
+  const pesquisouLote: boolean | null = precisamIA.some((it) => it.pesquisou === true) ? true
+    : precisamIA.some((it) => it.pesquisou === false) ? false : null;
   await registar("ok", {
-    nome: `lote de ${vinhos.length}`, modo: usadoModo, modelo: usadoModelo,
+    nome: `lote de ${vinhos.length}`, modo: escalou ? "escalado" : "barato", modelo: modelosUsados.join(" + "),
     vinhos: vinhos.length, catalogo_vinhos: catalogoVinhos, ia_vinhos: precisamIA.length,
-    ia_campos: camposIA.length, ms: dur, tentativas, custo_estimado_eur: custoEstimado,
+    ms: dur, tentativas, custo_estimado_eur: custoEstimado, campos_com_fonte: comFonte,
+    ...(serperConsultas ? { serper_consultas: serperConsultas, consultas: consultasFeitas, pesquisa: "serper" } : {}),
     ...(pesquisouLote !== null ? { pesquisaWeb: pesquisouLote } : {}),
     ...(usageTotal ? { usageMetadata: usageTotal } : {}),
   }, quem);
@@ -2382,9 +2434,10 @@ async function produzirFichaLote(
     ok: true,
     corpo: {
       resultados,
-      fontes: (modoIA === "premium" ? fontesGround : []).slice(0, 8),
-      pesquisa: true, plano: modoIA, modelo: usadoModelo, modo: usadoModo,
+      fontes: fontesGround.slice(0, 8),
+      pesquisa: true, plano: modoIA, modelo: modelosUsados.join(" + "), modo: escalou ? "escalado" : "barato",
       ...(pesquisouLote !== null ? { pesquisaWeb: pesquisouLote } : {}),
+      ...(serperConsultas ? { serperConsultas } : {}),
       custoEstimadoEur: custoEstimado,
       ...(usageTotal ? { usageMetadata: usageTotal } : {}),
       ...(tentativas.length ? { tentativas } : {}),
