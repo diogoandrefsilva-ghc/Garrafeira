@@ -2078,9 +2078,18 @@ async function produzirFicha(
      (`vinhoId` nulo) e um nome que o catálogo ainda não conhece, NÃO se
      escreve: a linha nasce quando o vinho for gravado, pelo trigger
      `vinhos_catalogo`, com o nome final (e a ficha da IA que ficou no
-     formulário). Um nome que o catálogo já conhece, ou um vinho já gravado,
-     escreve-se como sempre. O que se perde: a ficha da IA de um desejo com
-     um nome novo (a wishlist não vai ao catálogo — é a regra dela). */
+     formulário). Um vinho já gravado escreve-se como sempre.
+
+     E "o catálogo já conhece" quer dizer a LINHA onde a `juntar` vai
+     escrever — a mesma colheita e cor (`exato`) —, não um vinho parecido
+     noutra colheita (02/10/2026). A `procurar` responde sem colheita com a
+     linha de uma colheita qualquer, e a `juntar` só escreve na da colheita
+     pedida: com um "conhece" largo, a procura do vinho NOVO fazia nascer a
+     linha ela própria, com o nome escrito e o produtor vazio. Foi o "Piano
+     Grande Reserva" a criar no Catálogo: o "Grande Piano Grande Reserva"
+     2017 respondeu pelo nome, a `juntar` criou a #383 (sem ano nem
+     produtor) e, um minuto depois, a `criar` recusou o vinho que se estava
+     a criar — "já existe… é a #383". */
   /* DE ONDE VEIO CADA CAMPO (27/09/2026): o número que o modelo deu em
      `deOnde` → a página ou o resultado; o que só o grounding trouxe diz-se
      como tal. Com o "só estes sites", um campo sem origem sai da FICHA — não
@@ -2103,8 +2112,8 @@ async function produzirFicha(
 
   let catalogoAdiado = false;
   if (ficha) {
-    const nomeConfirmado = vinhoGravado || !!conhecido ||
-      (semAtalhos && !!(await catalogoProcurar(nome, produtor, ano, signal, tipo)));
+    const nomeConfirmado = vinhoGravado || !!conhecido?.exato ||
+      (semAtalhos && !!(await catalogoProcurar(nome, produtor, ano, signal, tipo))?.exato);
     const { aviso: _aviso, ...factos } = ficha as Record<string, unknown>;
     if (!Object.keys(factos).some((k) => k !== "ano")) {
       // Nada a levar (o "só estes sites" deixou tudo de fora).
