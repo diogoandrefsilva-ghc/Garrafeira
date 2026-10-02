@@ -1510,12 +1510,14 @@ async function modoAlternar(){
       catch(e){toast('Não foi possível abrir o catálogo: '+(e.message||e),1);return;}
       finally{document.body.classList.remove('cat-a-abrir');}
     }
-    if(LOTE_SEL_MODO)loteSelCancelar();
     TAB_GARRAFEIRA=tabAtiva;
     MODO='catalogo';
   }else{
     MODO='garrafeira';
   }
+  // Uma seleção da atualização massiva é de um dos lados: os ids do outro
+  // não se misturam com ela.
+  if(LOTE_SEL_MODO)loteSelCancelar();
   RESUMO_ABERTO=null;RESUMO_DRILL=null;
   // O Local é um filtro da garrafeira (no catálogo cortava tudo), e as
   // notas da casa são do catálogo (na garrafeira cortavam tudo).
@@ -3734,7 +3736,7 @@ function renderDetalhe(){
   const grupos=agruparVinhos(res,DET_AGRUPAR);
   const grelha=DET_VISTA==='grelha';
   box.innerHTML=grupos.map(g=>{
-    const itens=g.vinhos.map(v=>(grelha?vinhoGrelhaHTML:vinhoCardHTML)(v,termos,LOTE_SEL_MODO&&!modoCat())).join('');
+    const itens=g.vinhos.map(v=>(grelha?vinhoGrelhaHTML:vinhoCardHTML)(v,termos,LOTE_SEL_MODO)).join('');
     return `<div class="dgrupo">
       <div class="dgrupo-tit">${esc(g.titulo)} <span class="dgrupo-n">${g.vinhos.length}</span></div>
       ${grelha?`<div class="vgrelha">${itens}</div>`:itens}
@@ -5874,10 +5876,12 @@ function limparPosicaoLayout(prefix){
    SAEM. Quem acabou de fotografar a prateleira procura o "+", não as
    definições. O guarda continua a ser o da própria `importarAbrir()`
    (`podeUsarIA()`), como no `loteAbrir()`: em `sem_ia` a opção aparece e
-   diz porque é que não dá, em vez de desaparecer sem explicação. */
+   diz porque é que não dá, em vez de desaparecer sem explicação.
+   No Catálogo (aos curadores) é o MESMO menu, menos a wishlist: o vinho
+   novo vai à `winecatalog.criar`, e a atualização massiva e a importação
+   gravam no catálogo (`iaAplicarCat`, `importarGuardarCat`). */
 function fabToggle(){
-  if(modoCat()){catNovoVinho();return;}
-  if(tabAtiva==='desejos'){novoDesejo();return;}
+  if(tabAtiva==='desejos'&&!modoCat()){novoDesejo();return;}
   const w=document.getElementById('fab-wrap');
   if(w)w.classList.toggle('open');
 }
@@ -5887,7 +5891,7 @@ function fabFechar(){
 }
 function fabAcao(tipo){
   fabFechar();
-  if(tipo==='novo')abrirNovoVinho();
+  if(tipo==='novo')modoCat()?catNovoVinho():abrirNovoVinho();
   if(tipo==='lote')loteAbrir();
   if(tipo==='importar')importarAbrir();
   if(tipo==='desejo')novoDesejo();
@@ -6723,7 +6727,7 @@ async function iaPedirLote(vinhos,campos,motor){
       headers:{'Content-Type':'application/json','apikey':SB_KEY},
       body:JSON.stringify({
         assincrono:true,plano:motor,campos,
-        vinhos:vinhos.map(v=>({id:v.id,nome:v.nome,ano:v.ano||null,produtor:v.produtor||'',regiao:v.regiao||'',tipo:v.tipo||''})),
+        vinhos:vinhos.map(v=>({id:loteIdPedido(v.id),nome:v.nome,ano:v.ano||null,produtor:v.produtor||'',regiao:v.regiao||'',tipo:v.tipo||''})),
       })
     });
   }catch(e){
@@ -7043,7 +7047,7 @@ function iaMostrarResultado(res,vinhoId){
 
   const comAno=v.ano||IA_RES.ano||(IA_RES2&&IA_RES2.ano);
   const linhas=IA_CAMPOS.map(c=>{
-    if(c.k==='produtor')return '';                            // vem do Catálogo (migração 39)
+    if(iaCampoFora(c.k,v))return '';                          // identidade: não se propõe aqui
     if(!comAno&&IA_JANELA.includes(c.k))return '';          // sem colheita não há janela
     const ant=atual(c.k), g=iaTxt(c,IA_RES), p=cmp?iaTxt(c,IA_RES2):'';
     const novoG=g&&chave(g)!==chave(ant), novoP=p&&chave(p)!==chave(ant);
@@ -7150,14 +7154,18 @@ function iaTudoDe(qual){
   });
 }
 
-async function iaAplicar(){
-  if(roGuard())return;
-  const patch={},v=IDXV[IA_VINHO];
-  if(!v)return;
-  let castasNovas=null;
+/* O que não se propõe no ecrã da comparação: o produtor vem do Catálogo
+   (migração 39); num vinho DO catálogo também o ano — é a identidade da
+   linha, e muda-se no Editar, com o interruptor da identidade. */
+function iaCampoFora(k,v){return k==='produtor'||(k==='ano'&&v&&v.id<0);}
+/* O que ficou escolhido no ecrã da comparação — as caixas e os rádios — e
+   de que leituras veio. Uma regra só para os dois destinos (a garrafeira e
+   o catálogo). */
+function iaEscolhidos(v){
+  const valores={};let castas=null;
   const usados=[];                 // que leituras é que acabaram por entrar
   IA_CAMPOS.forEach(c=>{
-    if(c.k==='produtor')return;    // vem do Catálogo (migração 39)
+    if(iaCampoFora(c.k,v))return;
     let res;
     const r=document.querySelector(`input[name="iap-${c.k}"]:checked`);
     if(r){                         // linha de escolha entre as duas leituras
@@ -7171,9 +7179,17 @@ async function iaAplicar(){
     if(!res)return;
     if(!usados.includes(res))usados.push(res);
     const val=res[c.k];
-    if(c.k==='castas'){castasNovas=Array.isArray(val)?val:String(val).split(',').map(s=>s.trim()).filter(Boolean);return;}
-    patch[c.k]=val;
+    if(c.k==='castas'){castas=Array.isArray(val)?val:String(val).split(',').map(s=>s.trim()).filter(Boolean);return;}
+    valores[c.k]=val;
   });
+  return {valores,castas,usados};
+}
+async function iaAplicar(){
+  const v=IDXV[IA_VINHO];
+  if(!v)return;
+  if(v.id<0)return iaAplicarCat(v);
+  if(roGuard())return;
+  const {valores:patch,castas:castasNovas,usados}=iaEscolhidos(v);
   if(('ano' in patch?patch.ano:v.ano)==null)IA_JANELA.forEach(k=>delete patch[k]);
   if(!Object.keys(patch).length&&!castasNovas){toast('Não escolheste nada');return;}
 
@@ -7207,6 +7223,47 @@ async function iaAplicar(){
       fecharModal('modal-ia');renderLista();refrescarVinhoAberto();
       toast('Ficha atualizada ✓');
       curadorAviso(v.id);
+    }
+  }catch(e){
+    toast('Não foi possível guardar: '+e.message,1);
+    if(btn){btn.disabled=false;btn.textContent='Guardar o que '+(IA_RES2?'escolhi':'está marcado');}
+  }
+}
+/* Num vinho do CATÁLOGO (a atualização massiva no Catálogo, 02/10/2026): o
+   que ficou marcado corrige a linha pela `winecatalog.editar`, com a origem
+   do curador ou do admin — o mesmo caminho do `pqGuardarCat`. Sem o carimbo
+   `ai_*` (é da garrafeira); o catálogo guarda a origem de cada campo. A meio
+   de um lote não se relê o catálogo vinho a vinho (são ~380 KB): o vinho
+   fica com o que se gravou e o catálogo relê-se uma vez, no fim
+   (`loteAoFecharModalIA`). */
+async function iaAplicarCat(v){
+  if(!catPodeCriar()){toast('Só os curadores do catálogo podem corrigir um vinho do catálogo',1);return;}
+  const {valores:campos,castas}=iaEscolhidos(v);
+  if(!v.ano)IA_JANELA.forEach(k=>delete campos[k]);
+  if(castas)campos.castas=castas.map(x=>String(x).trim()).filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt'));
+  if(!Object.keys(campos).length){toast('Não escolheste nada');return;}
+  if(campos.vivino_url){
+    const l=vivinoLink(campos.vivino_url);
+    if(!l){toast('O link do Vivino tem de ser o do vinho (…/w/<número>) — desmarca-o para gravar o resto',1);return;}
+    campos.vivino_url=l;
+  }
+  const btn=document.getElementById('ia-btn');
+  if(btn){btn.disabled=true;btn.textContent='A guardar…';}
+  try{
+    const r=await sbReq('POST','rpc/editar',{p_id:v.cat_id,p_campos:campos},
+      {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
+    Object.assign(v,campos);
+    if(IA_LOTE_ATIVO){
+      LOTE_CAT_MUDOU=true;
+      renderLista();
+      loteAvancar();
+    }else{
+      const n=(r&&Number(r.campos))||0;
+      fecharModal('modal-ia');
+      CAT_VINHOS=null;
+      try{await catCarregar();}catch(_){}
+      renderLista();refrescarVinhoAberto();
+      toast(n?`Corrigido no catálogo: ${n} ${n===1?'campo':'campos'} ✓`:'Nada mudou no catálogo');
     }
   }catch(e){
     toast('Não foi possível guardar: '+e.message,1);
@@ -8825,15 +8882,27 @@ let LOTE_SEL=new Map();         // id -> {id,nome,ano,produtor,tipo,regiao}
 let LOTE_CAMPOS=[];             // até LOTE_MAX_CAMPOS chaves de IA_CAMPOS
 let LOTE_FILA=[], LOTE_IDX=0, LOTE_RESULTADOS=null;
 let IA_LOTE_ATIVO=false;        // `iaMostrarResultado`/`iaAplicar` leem isto para saber que estão a meio de um lote
+let LOTE_CAT_MUDOU=false;       // gravou-se alguma linha do catálogo neste lote: relê-se no fim
+/* O id com que cada vinho vai no pedido (à `vinho-info` ou no prompt manual)
+   e com que se reconhece na resposta. Os do Catálogo são NEGATIVOS na app
+   (`catNormalizar`), e um "-123" é o que um modelo copia mal — perde o sinal
+   e a resposta deixava de casar. Um lote é todo de um lado só (mudar de modo
+   cancela a seleção), por isso o valor absoluto não colide. */
+function loteIdPedido(id){return Math.abs(Number(id));}
+function lotePorId(lista){return new Map(lista.map(r=>[loteIdPedido(r&&r.id),r]));}
 
 function fabSincronizar(){
   const w=document.getElementById('fab-wrap');
   /* O "+" só onde se acrescenta alguma coisa (o dono das apps, 30/09/2026):
      no Detalhe da garrafeira (novo vinho, atualização massiva, importar) e
      na Wishlist (e aí vai direto a "Adicionar à wishlist"). Nem no Resumo,
-     nem em Locais, Consumidos ou Definições, nem no catálogo (fase 1). */
+     nem em Locais, Consumidos ou Definições. No Catálogo, no Detalhe e só
+     aos curadores (vinho novo, atualização massiva, importar). */
   const ha=modoCat()?(tabAtiva==='detalhe'&&catPodeCriar())
     :(tabAtiva==='detalhe'||(tabAtiva==='desejos'&&TEM_DESEJO));
+  // No Catálogo quem decide é o `catPodeCriar`, não a garrafeira aberta: um
+  // curador com uma garrafeira emprestada à vista continua a ter o "+".
+  if(w)w.classList.toggle('ro-hide',!modoCat());
   if(w)w.style.display=(LOTE_SEL_MODO||!ha)?'none':'';
   if(!ha)fabFechar();
   // No mapa dos locais o `ajustarEstantes` reserva espaço para o FAB — se
@@ -8844,7 +8913,8 @@ function fabSincronizar(){
 
 // ── Passo 1: escolher até LOTE_MAX_VINHOS na lista de Detalhe ──
 function loteAbrir(){
-  if(roGuard())return;
+  // No Catálogo corrige-se a linha para toda a gente: só os curadores.
+  if(modoCat()?!catPodeCriar():roGuard())return;
   if(!podeUsarIA()){toast('A pesquisa por IA não está incluída no teu acesso',1);return;}
   const btn=document.querySelector('.itabs .it[onclick^="tab(\'detalhe\'"]');
   tab('detalhe',btn);
@@ -8905,11 +8975,17 @@ function loteChipsHTML(){
 }
 
 // ── Passo 2: escolher até LOTE_MAX_CAMPOS campos, para todos os vinhos escolhidos ──
+// O produtor não se propõe (vem do Catálogo, migração 39 — a comparação já o
+// saltava, e escolhê-lo aqui era pedir um campo que nunca aparecia); no
+// Catálogo também o ano, que é identidade da linha (vai pelo Editar).
+function loteCamposPossiveis(){
+  return IA_CAMPOS.filter(c=>c.k!=='produtor'&&!(modoCat()&&c.k==='ano'));
+}
 function loteCampos(){
   LOTE_CAMPOS=[];
   const vinhos=[...LOTE_SEL.values()];
   const n=vinhos.length;
-  const linhas=IA_CAMPOS.map(c=>{
+  const linhas=loteCamposPossiveis().map(c=>{
     const vazios=vinhos.filter(vs=>!iaValorAtual(IDXV[vs.id]||{},c.k)).length;
     return `<label class="ia-esc">
       <input type="checkbox" class="lote-esc-c" value="${esc(c.k)}" onchange="loteToggleCampo('${escJs(c.k)}')">
@@ -8970,8 +9046,10 @@ async function loteAutoManual(){
   // Informativo, não bloqueia: diz quais destes vinhos já foram pesquisados
   // há menos de 30 dias, para quem preferir saltá-los ou ir pela manual em
   // vez de pagar outra pesquisa a um campo que provavelmente continua vazio.
+  // (Só na garrafeira: `analises.vinho_id` e o carimbo `ai_*` são de lá.)
   const recentes=[];
   for(const v of vinhos){
+    if(v.id<0)continue;
     try{if(await iaUltimaProcura(v.id))recentes.push(v.nome);}catch(e){}
   }
   const el=document.getElementById('lote-aviso-rep');
@@ -9008,11 +9086,11 @@ async function loteAutomaticaExecutar(){
 // depois de colada) — só falta separar por vinho e entrar no mesmo ecrã.
 function loteAplicarResultadoAutomatico(res){
   const lista=res&&Array.isArray(res.resultados)?res.resultados:[];
-  const porId=new Map(lista.map(r=>[Number(r&&r.id),r]));
+  const porId=lotePorId(lista);
   LOTE_RESULTADOS=new Map();
   LOTE_FILA=[];
   LOTE_AUTO_VINHOS.forEach(v=>{
-    const r=porId.get(v.id);
+    const r=porId.get(loteIdPedido(v.id));
     if(!r||r.encontrado===false)return;
     const ficha={...r};
     delete ficha.id;delete ficha.encontrado;
@@ -9084,7 +9162,7 @@ function loteManualPrompt(vinhos,campos){
   const hoje=new Date().toISOString().slice(0,10);
   const nomesCampos=campos.map(k=>IA_CAMPOS_JSON[k]||k);
   const linhas=vinhos.map(v=>
-    `- id: ${v.id} | nome: ${v.nome} | produtor: ${v.produtor||'(desconhecido)'}`+
+    `- id: ${loteIdPedido(v.id)} | nome: ${v.nome} | produtor: ${v.produtor||'(desconhecido)'}`+
     (v.ano?` | ano: ${v.ano}`:'')+(v.tipo?` | cor: ${v.tipo}`:'')).join('\n');
   const camposObj=campos.map(k=>`      "${IA_CAMPOS_JSON[k]||k}": ${loteManualCampoExemplo(k)}`).join(',\n');
   const regras=loteManualRegras(campos).map((r,i)=>`${i+1}. ${r}`).join('\n');
@@ -9107,7 +9185,7 @@ Responde SÓ com este JSON, sem texto à volta e sem blocos de código \`\`\`, c
 {
   "resultados": [
     {
-      "id": ${vinhos[0].id},
+      "id": ${loteIdPedido(vinhos[0].id)},
       "encontrado": true,
 ${camposObj},
       "aviso": "vazio, ou o que ficou por confirmar"
@@ -9158,11 +9236,11 @@ function loteManualColar(){
   }
   if(erroEl)erroEl.textContent='';
   const vinhos=[...LOTE_SEL.values()];
-  const porId=new Map(lista.map(r=>[Number(r&&r.id),r]));
+  const porId=lotePorId(lista);
   LOTE_RESULTADOS=new Map();
   LOTE_FILA=[];
   vinhos.forEach(v=>{
-    const r=porId.get(v.id);
+    const r=porId.get(loteIdPedido(v.id));
     if(!r||r.encontrado===false)return;
     const ficha=iaManualNormalizar(r,v.ano||null,LOTE_CAMPOS);
     if(!ficha)return;
@@ -9204,9 +9282,16 @@ function loteSaltar(){loteAvancar();}
 function loteAoFecharModalIA(){
   if(!IA_LOTE_ATIVO)return;
   const total=LOTE_FILA.length, feitos=LOTE_IDX;
-  IA_LOTE_ATIVO=false;
+  const catMudou=LOTE_CAT_MUDOU;
+  IA_LOTE_ATIVO=false;LOTE_CAT_MUDOU=false;
   LOTE_FILA=[];LOTE_RESULTADOS=null;LOTE_SEL=new Map();LOTE_AUTO_VINHOS=[];
   renderLista();
+  // No Catálogo: o que a `editar` arrumou (as castas, a origem de cada campo)
+  // lê-se agora, uma vez por lote.
+  if(catMudou){
+    CAT_VINHOS=null;
+    catCarregar().catch(()=>{}).then(()=>{renderLista();refrescarVinhoAberto();});
+  }
   toast(feitos>=total?'Atualização massiva concluída ✓':`Atualização massiva parada — ${feitos} de ${total} vistos`);
 }
 
@@ -10594,6 +10679,14 @@ function pdfPreImprimir(){
 }
 
 // ── IMPORTAR VINHOS POR IMAGENS ─────────────────────────────────────
+/* No Catálogo (aos curadores, 02/10/2026) é a MESMA leitura — a mesma Edge
+   Function, o mesmo ecrã de revisão — e o que se escolhe nasce no catálogo
+   pela `winecatalog.criar` (`importarGuardarCat`), sem garrafas: a cor é
+   obrigatória (é chave do catálogo, e a leitura põe "Tinto" quando não a
+   vê), as garrafas e o formato não aparecem. `IMPORT_CAT` é o destino
+   escolhido ao abrir, não o modo de agora — mudar de modo a meio não
+   muda para onde vai o que já se leu. */
+let IMPORT_CAT=false;
 let IMPORT_RESULTADO=[];
 // Guarda as imagens já preparadas (encolhidas, em base64) para o "tenta com
 // um modelo de IA diferente": só em memória do browser, nunca gravadas —
@@ -10601,12 +10694,16 @@ let IMPORT_RESULTADO=[];
 let IMPORT_IMAGENS=[];
 
 function importarAbrir(){
-  if(roGuard())return;
+  if(modoCat()?!catPodeCriar():roGuard())return;
   if(!podeUsarIA()){toast('A importação por IA não está incluída no teu acesso',1);return;}
+  // A Edge Function grava o pedido numa garrafeira em que se pode mexer: no
+  // Catálogo é a aberta se for minha, senão a minha.
+  IMPORT_CAT=modoCat();
+  if(IMPORT_CAT&&importarGid()==null){toast('Para ler imagens precisas de uma garrafeira tua — vê em Definições › Garrafeiras',1);return;}
   IMPORT_IMAGENS=[];
   document.getElementById('modal-ia-in').innerHTML=
     "<div class='mtop'><div><h3>📷 Importar vinhos por imagens</h3><div class='note' style='margin-top:3px'>Até 3 fotos de rótulos, uma lista ou uma prateleira.</div></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
-    "<div class='aviso'>As imagens são encolhidas no teu telemóvel, lidas pela IA e descartadas no fim. <b>Nada entra na garrafeira sem revisão tua.</b> A leitura não pesquisa na internet.</div>"+
+    "<div class='aviso'>As imagens são encolhidas no teu telemóvel, lidas pela IA e descartadas no fim. <b>Nada entra "+(IMPORT_CAT?"no catálogo":"na garrafeira")+" sem revisão tua.</b> A leitura não pesquisa na internet.</div>"+
     "<label>Imagens (máximo 3)</label><input id='imp-ficheiros' type='file' accept='image/jpeg,image/png,image/webp' multiple onchange='importarEscolha(this)'>"+
     "<div class='note' id='imp-estado' style='margin-top:8px'>Escolhe fotografias nítidas; podes juntar frente e verso do mesmo rótulo.</div>"+
     "<div class='macoes'><button class='btn prim' id='imp-btn' onclick='importarEnviar()'>Ler imagens</button><button class='btn ghost' onclick=\"fecharModal('modal-ia')\">Cancelar</button></div>";
@@ -10628,10 +10725,16 @@ async function importarBase64(file){
 }
 // Pedido à função, partilhado entre o envio normal e o "tenta com outro
 // modelo" — só muda o corpo (`extra`), tudo o resto (erros, 404) é igual.
+function importarGid(){
+  if(!IMPORT_CAT)return GA_ID;
+  if(GA_ID!=null&&podeEditar())return GA_ID;
+  const m=minhasGarrafeiras()[0];
+  return m?m.id:null;
+}
 async function importarPedir(imagens,extra){
   const r=await sbFetch(SB_URL+'/functions/v1/importar-vinhos',{
     method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY},
-    body:JSON.stringify(Object.assign({garrafeiraId:GA_ID,imagens},extra||{}))
+    body:JSON.stringify(Object.assign({garrafeiraId:importarGid(),imagens},extra||{}))
   });
   let d={};try{d=await r.json();}catch(_){}
   if(!r.ok){
@@ -10707,20 +10810,28 @@ function importarMostrarResultado(resultado){
       "<div style='display:flex;gap:8px;align-items:center'><input type='checkbox' class='imp-sel' data-i='"+i+"' checked>"+
       "<div style='flex:1;min-width:0'><label style='margin-top:0'>Nome</label><input class='imp-nome' data-i='"+i+"' value='"+esc(capitalizarLivre(v.nome||""))+"'></div></div>"+
       "<div><label>Produtor</label><input class='imp-produtor' data-i='"+i+"' value='"+esc(capitalizarLivre(v.produtor||""))+"'></div>"+
-      "<div class='mrow'><div><label>Ano</label><input class='imp-ano' data-i='"+i+"' inputmode='numeric' value='"+esc(v.ano||"")+"'></div><div><label>Garrafas</label><input class='imp-qtd' data-i='"+i+"' type='number' min='1' max='60' value='"+esc(v.quantidade||1)+"'></div><div><label>Formato</label><select class='imp-formato' data-i='"+i+"'>"+FORMATOS.map(function(x){return "<option value='"+esc(x)+"'>"+esc(x)+"</option>";}).join('')+"</select></div></div>"+
+      (IMPORT_CAT
+        // No Catálogo: a cor (chave da linha) no lugar das garrafas e do formato.
+        ?"<div class='mrow'><div><label>Ano</label><input class='imp-ano' data-i='"+i+"' inputmode='numeric' value='"+esc(v.ano||"")+"'></div><div><label>Cor</label><select class='imp-tipo' data-i='"+i+"'><option value=''>— escolhe a cor —</option>"+TIPOS.map(function(x){return "<option value='"+esc(x)+"'"+(x===v.tipo?" selected":"")+">"+esc(x)+"</option>";}).join('')+"</select></div></div>"
+        :"<div class='mrow'><div><label>Ano</label><input class='imp-ano' data-i='"+i+"' inputmode='numeric' value='"+esc(v.ano||"")+"'></div><div><label>Garrafas</label><input class='imp-qtd' data-i='"+i+"' type='number' min='1' max='60' value='"+esc(v.quantidade||1)+"'></div><div><label>Formato</label><select class='imp-formato' data-i='"+i+"'>"+FORMATOS.map(function(x){return "<option value='"+esc(x)+"'>"+esc(x)+"</option>";}).join('')+"</select></div></div>")+
       (detalhes?"<div class='note' style='margin-top:6px'>"+esc(detalhes)+"</div>":"")+
       (v.aviso?"<div class='note' style='margin-top:4px'>⚠️ "+esc(v.aviso)+"</div>":"")+"</div>";
   }).join('');
+  const sub=IMPORT_CAT
+    ?" vinho(s) proposto(s). Confere o nome, o produtor, o ano e a cor antes de criar — nascem no catálogo, para toda a gente."
+    :" vinho(s) proposto(s). Edita nome, produtor, ano ou quantidade antes de adicionar.";
   document.getElementById('modal-ia-in').innerHTML=
-    "<div class='mtop'><div><h3>Rever antes de importar</h3><div class='note' style='margin-top:3px'>"+IMPORT_RESULTADO.length+" vinho(s) proposto(s). Edita nome, produtor, ano ou quantidade antes de adicionar.</div></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
+    "<div class='mtop'><div><h3>Rever antes de "+(IMPORT_CAT?"criar no catálogo":"importar")+"</h3><div class='note' style='margin-top:3px'>"+IMPORT_RESULTADO.length+sub+"</div></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
     aviso+outroModelo+(linhas||"<div class='note' style='margin-top:14px'>Não foi possível identificar nenhum vinho com segurança. Tenta fotos mais nítidas ou uma imagem de cada vez.</div>")+
-    "<div class='macoes'><button class='btn prim' id='imp-guardar' "+(linhas?"onclick='importarGuardar()'":"disabled")+">Adicionar selecionados</button><button class='btn ghost' onclick=\"fecharModal('modal-ia')\">Cancelar</button></div>";
+    "<div id='imp-falhas'></div>"+
+    "<div class='macoes'><button class='btn prim' id='imp-guardar' "+(linhas?"onclick='importarGuardar()'":"disabled")+">"+(IMPORT_CAT?"Criar no catálogo":"Adicionar selecionados")+"</button><button class='btn ghost' onclick=\"fecharModal('modal-ia')\">Cancelar</button></div>";
 }
 function importarValor(classe,i){
   const e=document.querySelector('.'+classe+'[data-i=\"'+i+'\"]');
   return e?e.value.trim():'';
 }
 async function importarGuardar(){
+  if(IMPORT_CAT)return importarGuardarCat();
   const selecionados=Array.from(document.querySelectorAll('.imp-sel:checked')).map(e=>parseInt(e.dataset.i,10)).filter(Number.isInteger);
   if(!selecionados.length){toast('Seleciona pelo menos um vinho',1);return;}
   const btn=document.getElementById('imp-guardar');btn.disabled=true;btn.textContent='A adicionar…';
@@ -10748,6 +10859,59 @@ async function importarGuardar(){
     toast('A importação parou: '+e.message+'. O que já entrou ficou guardado.',1);
     btn.disabled=false;btn.textContent='Tentar guardar restantes';
   }
+}
+/* Os escolhidos nascem no CATÁLOGO, um a um, pela `winecatalog.criar` — a
+   mesma do Vinho novo (`catGuardarNovo`), que recusa um vinho e colheita
+   que já lá estejam. Uma recusa não pára os outros: o que entrou desmarca-se
+   e fica dito, o que não entrou fica marcado com o porquê, para se corrigir
+   (o nome, a cor) e tentar outra vez. */
+async function importarGuardarCat(){
+  if(!catPodeCriar())return;
+  const selecionados=Array.from(document.querySelectorAll('.imp-sel:checked')).map(e=>parseInt(e.dataset.i,10)).filter(Number.isInteger);
+  if(!selecionados.length){toast('Seleciona pelo menos um vinho',1);return;}
+  for(const i of selecionados){
+    if(!importarValor('imp-nome',i)){toast('Há um vinho escolhido sem nome',1);return;}
+    if(!importarValor('imp-tipo',i)){
+      toast('Escolhe a cor de '+importarValor('imp-nome',i),1);
+      const el=document.querySelector('.imp-tipo[data-i="'+i+'"]');if(el)el.focus();
+      return;
+    }
+  }
+  const btn=document.getElementById('imp-guardar');btn.disabled=true;btn.textContent='A criar…';
+  const WC={'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'};
+  const criados=[],falhas=[];
+  for(const i of selecionados){
+    const origem=IMPORT_RESULTADO[i]||{},nome=importarValor('imp-nome',i);
+    const anoLido=inteiro(importarValor('imp-ano',i));
+    const ano=(anoLido&&anoLido>=1900&&anoLido<=2100)?anoLido:null;
+    const campos={};
+    CAT_FICHA_FORM.forEach(k=>{if(origem[k]!=null&&origem[k]!=='')campos[k]=origem[k];});
+    campos.tipo=importarValor('imp-tipo',i);
+    if(ano==null)IA_JANELA.forEach(k=>delete campos[k]);
+    const cs=Array.isArray(origem.castas)?origem.castas.filter(Boolean):[];
+    if(cs.length)campos.castas=cs.slice().sort((a,b)=>String(a).localeCompare(String(b),'pt'));
+    try{
+      const r=await sbReq('POST','rpc/criar',{p_nome:nome,p_produtor:importarValor('imp-produtor',i),p_ano:ano,p_campos:campos},WC);
+      criados.push({i,id:r&&r.id});
+      const cx=document.querySelector('.imp-sel[data-i="'+i+'"]');if(cx)cx.checked=false;
+    }catch(e){falhas.push({i,nome,erro:e.message});}
+  }
+  if(criados.length){
+    CAT_VINHOS=null;
+    try{await catCarregar();}catch(_){}
+    renderLista();
+  }
+  if(!falhas.length){
+    fecharModal('modal-ia');
+    toast(criados.length+' vinho(s) criado(s) no catálogo ✓');
+    if(criados.length===1&&criados[0].id&&IDXV[-criados[0].id])verVinho(-criados[0].id);
+    return;
+  }
+  const box=document.getElementById('imp-falhas');
+  if(box)box.innerHTML="<div class='erro'>"+(criados.length?criados.length+" criado(s) no catálogo. ":"")+
+    "Não entraram:<br>"+falhas.map(f=>"<b>"+esc(f.nome)+"</b> — "+esc(f.erro)).join('<br>')+"</div>";
+  toast(falhas.length+' vinho(s) não entraram no catálogo — vê porquê',1);
+  btn.disabled=false;btn.textContent='Tentar outra vez';
 }
 
 function exportarJSON(){
@@ -10864,7 +11028,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='164';
+const APP_BUILD='165';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

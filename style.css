@@ -2060,9 +2060,14 @@ body.cat .it.on{background:#1d4a3b;box-shadow:0 4px 12px -4px rgba(29,74,59,.8)}
 /* Um vinho do catálogo abre na mesma página, com a capa verde do catálogo
    — venha de onde vier, diz-se logo que não é uma garrafa minha. */
 .mhero.mhero-cat{background:linear-gradient(155deg,#0f2a22,#1d4a3b 55%,#2f6e57)}
-/* O "+" do Catálogo (só aos curadores): cria um vinho no catálogo, e é
-   verde como tudo o que é do catálogo. */
+/* O "+" do Catálogo (só aos curadores): o mesmo menu da garrafeira — vinho
+   novo, atualização massiva, importar por imagens — a gravar no catálogo, e
+   verde como tudo o que é do catálogo. A wishlist é da garrafeira (`.so-gar`). */
 body.cat .fab{background:linear-gradient(160deg,#2f6e57,#0f2a22);box-shadow:0 8px 26px -6px rgba(15,42,34,.7)}
+body.cat .fab-op.so-gar{display:none!important}
+/* A escolher vinhos para a atualização massiva, o visto da seleção ocupa o
+   canto do selo — e é ele que interessa enquanto se escolhe. */
+.lote-modo .cat-selo{display:none}
 
 /* ── SUGESTÕES (a WineSelection dentro do catálogo, 30/09/2026) ─────
    A página "Sugerir" da WineSelection, com o CSS de lá e as cores daqui:
