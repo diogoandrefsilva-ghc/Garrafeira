@@ -582,7 +582,7 @@ está vazia. A migração corrige o que já estava escrito (com a marca
 `atualizado_em`), e os dois "Beiras" com a sub-região escrita (Silgueiros →
 Dão; Bairrada). Aplicada a 30/09/2026: 14 vinhos.
 
-### Migração 38 — uma grafia por casta (POR APLICAR)
+### Migração 38 — uma grafia por casta (já aplicada)
 
 `db/migracao-castas.sql`, depois do `db/castas.sql` do WineCatalog (a
 regra, já aplicada a 01/10/2026: 19 fichas do catálogo arrumadas). A
@@ -591,7 +591,7 @@ regra, já aplicada a 01/10/2026: 19 fichas do catálogo arrumadas). A
 castas que já lá estavam juntam-se na de referência. Cola-se inteira no SQL
 Editor (o MCP do Supabase não a corre: tem `DELETE`).
 
-### Migração 39 — o Catálogo fidedigno (POR APLICAR)
+### Migração 39 — o Catálogo fidedigno (já aplicada)
 
 `db/migracao-catalogo-fiel.sql`, depois da 32 e da 38. O nome e o produtor
 de um vinho gravado deixam de se mudar pela app (`vinhos_identidade_fixa`:
@@ -608,6 +608,8 @@ Ensaiada a 01/10/2026 numa transação desfeita no fim, contra a base real
 dados das lojas, deixou o catálogo como estava e abriu o comentário (e o
 push) ao admin; o nome e o produtor ficaram como estavam. Cola-se inteira no
 SQL Editor (o MCP do Supabase não a corre: tem `DELETE`, na `definir_castas`).
+Aplicada a 01/10/2026 pelo SQL Editor; confirmada a 02/10/2026 (as funções,
+o trigger e as permissões como no ficheiro, os 244 vinhos ligados).
 
 ## Regra de ouro
 
