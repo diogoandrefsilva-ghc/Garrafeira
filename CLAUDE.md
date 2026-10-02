@@ -170,7 +170,9 @@ o **valor médio por garrafa** (só ali, não no card fechado — o card fechado
 já tem o total).
 
 **A completar** são os vinhos a quem falta alguma coisa que a app usa —
-imagem, castas, preço médio ou classificação (`FALTAS`/`faltasDe`).
+imagem, castas, preço médio ou classificação (`FALTAS`/`faltasDe`). A
+MESMA lista é o filtro **Em falta** da fita (ver a seguir), com mais umas
+faltas que só lá aparecem (`resumo:false`).
 
 Os dois cards **dourados** (`scCardFav`) vêm logo a seguir aos de Regiões e
 Castas: **Região preferida** e **Casta preferida**, cada um com a região/
@@ -258,13 +260,30 @@ mostram-se todos os filtros ligados EXCETO os do campo que está aberto —
 esses já se leem nos cartões acesos por cima, e repeti-los por baixo era
 dizer a mesma coisa duas vezes.
 
-### Três filtros são LISTAS, nove são um valor só
+### Quatro filtros são LISTAS, os outros são um valor só
 Cor, região e castas aceitam mais do que um valor; os outros nove não. Não é
 simetria por simetria: são as três perguntas que se fazem sempre ("um tinto
 do Douro de Touriga?") e são as únicas onde escolher DUAS opções quer dizer
 alguma coisa. "Tinto ou Branco" e "Douro ou Alentejo" são perguntas
 legítimas; "2019 ou 2021" responde-se melhor pela organização por ano, e
 "Reserva ou Grande Reserva" quase nunca se pergunta.
+
+**O quarto é o "Em falta"** (🧩, `falta`, 02/10/2026, o dono: "as
+atualizações massivas são interessantes principalmente para filtros sobre
+dados em falta"): sem imagem, castas, preço, classificação, nota Vivino,
+link do Vivino (um link fora do formato `/w/<nº>` conta como sem link),
+harmonização, notas de prova, resumo, grau, estágio (o "Sem informação"
+do filtro do Estágio) e janela de consumo (só com colheita). Não é uma
+pergunta sobre o vinho mas sobre a ficha, e por isso é lista: "sem preço
+OU sem nota" é o lote que se quer encher de uma vez. Sai da `FALTAS`, a
+lista do card **A completar** do Resumo — UMA lista para as duas
+perguntas, senão o card e o filtro diziam números diferentes para "sem
+preço" (`f` é o valor no filtro, `fr` o rótulo curto, `resumo:false` só no
+filtro). E liga-se à **atualização massiva** pelos dois lados: na barra da
+seleção, **Marcar 10** (`loteSelVisiveis`) marca os seguintes da lista,
+pela ordem em que se vêem; e os campos que enchem as faltas escolhidas
+(`ia` de cada falta) vêm já marcados no passo dos campos. O "selecionados"
+da barra cala-se no telemóvel, que com o botão a mais já não cabia.
 
 Quem sabe a diferença é o próprio `F`: `ehLista(k)` pergunta se o valor
 guardado é um array, e `campoToggle` acrescenta/tira num caso e troca no
