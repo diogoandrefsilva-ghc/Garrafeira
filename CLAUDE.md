@@ -2243,7 +2243,20 @@ de botões que apareciam e desapareciam. Agora:
   acabou de deitar fora.
 A **atualização massiva** continua com o ecrã dela (`iaMostrarResultado`/
 `iaAplicar`, onde vivem ainda a segunda opinião e os rádios descritos mais
-abaixo) — é outra pergunta, vinho a vinho em fila.
+abaixo) — é outra pergunta, vinho a vinho em fila. **E não procura como a
+procura de um vinho** (visto a 02/10/2026, num lote de 7 harmonizações que
+voltou todo de memória): é UMA chamada ao Gemini para o lote inteiro, com
+os motores de ANTES de 27/09 — o `premium` só com o grounding (que muitas
+vezes não pesquisa), o `gratis` com o Serper vinho a vinho e o Gemini a
+ler — sem a consulta do Vivino, sem páginas, sem cache e sem `deOnde`. O
+que se diz no ecrã é o que se sabe (`iaFonteHTML`, as mesmas frases do
+`pqFonteHTML`, ao de leve): "↳ do Catálogo", "↳ da pesquisa Google (a IA
+não diz a página)" ou "↳ da IA (sem dizer de onde)", e a caixa "🧠 A IA
+respondeu de memória" quando o lote não pesquisou. O que a `vinho-info` diz
+do lote inteiro (`pesquisaWeb`, `modelo`, `fontes`) vai com cada vinho
+(`loteAplicarResultadoAutomatico`); as fontes dizem-se "do lote todo",
+porque não são deste vinho em particular. O rodapé "Leitura automática de
+páginas da net" saiu do lote: dizia-o a respostas de memória.
 
 Quem procura é a Edge
 Function `vinho-info.ts`, com DOIS MOTORES desacoplados — não dois níveis do

@@ -7060,6 +7060,23 @@ async function iaProfunda(){
   }catch(e){iaMostrarErro(e.message);}
 }
 
+/* De onde veio um valor da atualização massiva — as MESMAS frases da procura
+   de um vinho (`pqFonteHTML`), ao de leve, por baixo do valor. O lote é UMA
+   chamada ao Gemini para todos, sem `deOnde`: nunca diz a página, e quando
+   não pesquisou diz-se isso; não se inventa uma origem. */
+function iaFonteHTML(k,res){
+  if(!res)return '';
+  if(res.modelo===IA_MANUAL_MARCA)return '<span class="rv-de">↳ da resposta que colaste</span>';
+  if(Array.isArray(res.catalogoCampos)?res.catalogoCampos.includes(k):res.origem==='catalogo')
+    return '<span class="rv-de">↳ do Catálogo</span>';
+  if(res.origem==='misto'&&!Array.isArray(res.catalogoCampos))
+    return '<span class="rv-de">↳ do Catálogo ou da IA</span>';
+  // O motor "sem pesquisa web" do lote lê os resultados do Google que a
+  // função lhe dá (vinho a vinho): também é da pesquisa, sem dizer a página.
+  if(res.pesquisaWeb===true||(res.plano==='gratis'&&res.pesquisa))
+    return '<span class="rv-de">↳ da pesquisa Google <i>(a IA não diz a página)</i></span>';
+  return '<span class="rv-de">↳ da IA <i>(sem dizer de onde)</i></span>';
+}
 function iaMostrarResultado(res,vinhoId){
   IA_RES=res||{};IA_VINHO=vinhoId;
   const v=IDXV[vinhoId]||{};
@@ -7089,6 +7106,7 @@ function iaMostrarResultado(res,vinhoId){
       <label for="ia-${c.k}" class="ia-campo" style="margin:0;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)">
         <b>${esc(c.rot)}${nota||''}</b>
         ${ant?`<span class="ia-antes">${escLink(ant)}</span> → `:''}${escLink(txt)}
+        ${cmp?'':iaFonteHTML(c.k,IA_RES)}
       </label></div>`;
 
     if(!cmp)return caixa(g);
@@ -7114,9 +7132,13 @@ function iaMostrarResultado(res,vinhoId){
   }).filter(Boolean).join('');
 
   const fontesDe=(r,rot)=>r&&r.fontes&&r.fontes.length
-    ? `<div class="ia-fontes">Fontes${cmp?' ('+rot+')':''}: ${r.fontes.map(f=>
+    ? `<div class="ia-fontes">${r.fontesLote?'Fontes da pesquisa (do lote todo)':'Fontes'}${cmp?' ('+rot+')':''}: ${r.fontes.map(f=>
         `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo||f.url)}</a>`).join(' · ')}</div>`:'';
-  const semNet=IA_RES.pesquisa===false||(IA_RES2&&IA_RES2.pesquisa===false);
+  const semNet=IA_RES.pesquisa===false||IA_RES.pesquisaWeb===false||
+    (IA_RES2&&(IA_RES2.pesquisa===false||IA_RES2.pesquisaWeb===false));
+  // No lote, de memória diz-se como na procura de um vinho: uma caixa ao de
+  // leve, e o botão da pesquisa profunda (que é de UM vinho) não aparece.
+  const memoriaLote=IA_LOTE_ATIVO&&!cmp&&IA_RES.pesquisaWeb===false&&IA_RES.origem!=='catalogo';
   // Só vale sugerir o OUTRO motor a quem ainda não usou o premium (grounding
   // search): esse já pesquisa o Google por dentro, e o motor "sem pesquisa
   // web" é outra API por cima do MESMO Google — raramente vai encontrar algo
@@ -7134,7 +7156,9 @@ function iaMostrarResultado(res,vinhoId){
       <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
 
     ${iaOrigemHTML(IA_RES)}
-    ${!cmp?iaMemoriaHTML(IA_RES,'iaProfunda()'):''}
+    ${!cmp&&!IA_LOTE_ATIVO?iaMemoriaHTML(IA_RES,'iaProfunda()'):''}
+    ${memoriaLote&&linhas?'<div class="rv-aviso">🧠 A IA respondeu <b>de memória</b>, sem pesquisar na net — confere antes de guardar.</div>':''}
+    ${IA_LOTE_ATIVO&&IA_RES.aviso&&linhas?`<div class="rv-aviso">⚠️ ${esc(IA_RES.aviso)}</div>`:''}
     ${IA_ERRO2?`<div class="erro">A segunda opinião não deu: ${esc(IA_ERRO2)}. Fica o que a ${esc(rot1)} trouxe.</div>`:''}
     ${!cmp&&temPremium()&&valeAOutro&&linhas?`<div class="ia-prbar">
       <span>Isto foi a <b>${esc(rot1)}</b>. Queres ver o que a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))} diz ao lado?</span>
@@ -7160,9 +7184,9 @@ function iaMostrarResultado(res,vinhoId){
         <button class="btn ghost" onclick="fecharModal('modal-ia')">${IA_LOTE_ATIVO?'Parar aqui':'Fechar'}</button></div>`}
 
     ${fontesDe(IA_RES,rot1)}${cmp?fontesDe(IA_RES2,rot2):''}
-    <div class="ia-fontes"><i>${semNet
+    ${IA_LOTE_ATIVO?'':`<div class="ia-fontes"><i>${semNet
       ? '⚠️ Isto saiu da memória do modelo, sem pesquisa na net — confere tudo antes de aceitar.'
-      : 'Leitura automática de páginas da net. Vale como ponto de partida, não como certeza.'}</i></div>`;
+      : 'Leitura automática de páginas da net. Vale como ponto de partida, não como certeza.'}</i></div>`}`;
   abrirModal('modal-ia');
 }
 function iaTodos(marcar){
@@ -9150,7 +9174,15 @@ function loteAplicarResultadoAutomatico(res){
   LOTE_AUTO_VINHOS.forEach(v=>{
     const r=porId.get(loteIdPedido(v.id));
     if(!r||r.encontrado===false)return;
-    const ficha={...r};
+    /* O que a `vinho-info` diz do lote INTEIRO (uma chamada só ao Gemini)
+       vale para cada vinho: se pesquisou ou respondeu de memória, o modelo
+       e as fontes. Sem isto, cada vinho chegava ao ecrã sem nada disso — e
+       o ecrã dizia "leitura de páginas da net" a uma resposta de memória.
+       Um vinho que veio todo do catálogo não leva as fontes da pesquisa. */
+    const ficha={modelo:res.modelo||'',plano:res.plano||'',pesquisa:res.pesquisa,
+      ...(res.pesquisaWeb!=null?{pesquisaWeb:res.pesquisaWeb}:{}),
+      ...(r.origem!=='catalogo'&&Array.isArray(res.fontes)&&res.fontes.length?{fontes:res.fontes,fontesLote:true}:{}),
+      ...r};
     delete ficha.id;delete ficha.encontrado;
     LOTE_RESULTADOS.set(v.id,ficha);
     LOTE_FILA.push(v.id);
@@ -11086,7 +11118,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='166';
+const APP_BUILD='167';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
