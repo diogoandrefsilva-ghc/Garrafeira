@@ -2251,8 +2251,9 @@ vezes não pesquisa), o `gratis` com o Serper vinho a vinho e o Gemini a
 ler — sem a consulta do Vivino, sem páginas, sem cache e sem `deOnde`. O
 que se diz no ecrã é o que se sabe (`iaFonteHTML`, as mesmas frases do
 `pqFonteHTML`, ao de leve): "↳ do Catálogo", "↳ da pesquisa Google (a IA
-não diz a página)" ou "↳ da IA (sem dizer de onde)", e a caixa "🧠 A IA
-respondeu de memória" quando o lote não pesquisou. O que a `vinho-info` diz
+não diz a página)" ou "↳ da IA (sem dizer de onde)" — e mais nada: sem
+caixas de aviso no topo (o dono: "chega perfeitamente aquele parêntesis").
+O que a `vinho-info` diz
 do lote inteiro (`pesquisaWeb`, `modelo`, `fontes`) vai com cada vinho
 (`loteAplicarResultadoAutomatico`); as fontes dizem-se "do lote todo",
 porque não são deste vinho em particular. O rodapé "Leitura automática de

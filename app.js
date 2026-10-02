@@ -7061,9 +7061,10 @@ async function iaProfunda(){
 }
 
 /* De onde veio um valor da atualização massiva — as MESMAS frases da procura
-   de um vinho (`pqFonteHTML`), ao de leve, por baixo do valor. O lote é UMA
-   chamada ao Gemini para todos, sem `deOnde`: nunca diz a página, e quando
-   não pesquisou diz-se isso; não se inventa uma origem. */
+   de um vinho (`pqFonteHTML`), ao de leve, por baixo do valor, e mais nada
+   (o dono, 02/10/2026: sem caixas de aviso no topo). O lote é UMA chamada
+   ao Gemini para todos, sem `deOnde`: nunca diz a página, e quando não
+   pesquisou é "da IA (sem dizer de onde)"; não se inventa uma origem. */
 function iaFonteHTML(k,res){
   if(!res)return '';
   if(res.modelo===IA_MANUAL_MARCA)return '<span class="rv-de">↳ da resposta que colaste</span>';
@@ -7136,9 +7137,6 @@ function iaMostrarResultado(res,vinhoId){
         `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo||f.url)}</a>`).join(' · ')}</div>`:'';
   const semNet=IA_RES.pesquisa===false||IA_RES.pesquisaWeb===false||
     (IA_RES2&&(IA_RES2.pesquisa===false||IA_RES2.pesquisaWeb===false));
-  // No lote, de memória diz-se como na procura de um vinho: uma caixa ao de
-  // leve, e o botão da pesquisa profunda (que é de UM vinho) não aparece.
-  const memoriaLote=IA_LOTE_ATIVO&&!cmp&&IA_RES.pesquisaWeb===false&&IA_RES.origem!=='catalogo';
   // Só vale sugerir o OUTRO motor a quem ainda não usou o premium (grounding
   // search): esse já pesquisa o Google por dentro, e o motor "sem pesquisa
   // web" é outra API por cima do MESMO Google — raramente vai encontrar algo
@@ -7157,8 +7155,6 @@ function iaMostrarResultado(res,vinhoId){
 
     ${iaOrigemHTML(IA_RES)}
     ${!cmp&&!IA_LOTE_ATIVO?iaMemoriaHTML(IA_RES,'iaProfunda()'):''}
-    ${memoriaLote&&linhas?'<div class="rv-aviso">🧠 A IA respondeu <b>de memória</b>, sem pesquisar na net — confere antes de guardar.</div>':''}
-    ${IA_LOTE_ATIVO&&IA_RES.aviso&&linhas?`<div class="rv-aviso">⚠️ ${esc(IA_RES.aviso)}</div>`:''}
     ${IA_ERRO2?`<div class="erro">A segunda opinião não deu: ${esc(IA_ERRO2)}. Fica o que a ${esc(rot1)} trouxe.</div>`:''}
     ${!cmp&&temPremium()&&valeAOutro&&linhas?`<div class="ia-prbar">
       <span>Isto foi a <b>${esc(rot1)}</b>. Queres ver o que a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))} diz ao lado?</span>
@@ -11118,7 +11114,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='167';
+const APP_BUILD='168';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
