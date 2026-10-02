@@ -7070,6 +7070,16 @@ function iaFonteHTML(k,res){
   if(res.modelo===IA_MANUAL_MARCA)return '<span class="rv-de">↳ da resposta que colaste</span>';
   if(Array.isArray(res.catalogoCampos)?res.catalogoCampos.includes(k):res.origem==='catalogo')
     return '<span class="rv-de">↳ do Catálogo</span>';
+  /* A `vinho-info` de 02/10/2026 diz de onde veio cada campo (`origemCampos`,
+     como na procura de um vinho): o resultado da pesquisa, com o link, ou a
+     pesquisa Google do grounding. Com ela, um campo sem origem é da IA sem
+     dizer de onde — nunca se adivinha pelo resto. */
+  if(res.origemCampos&&typeof res.origemCampos==='object'){
+    const o=res.origemCampos[k];
+    if(o&&o.url)return `<span class="rv-de">↳ de <a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.site||o.url)}</a> <i>${o.pagina?'· página lida':'· resumo no Google'}</i></span>`;
+    if(o&&o.google)return '<span class="rv-de">↳ da pesquisa Google <i>(a IA não diz a página)</i></span>';
+    return '<span class="rv-de">↳ da IA <i>(sem dizer de onde)</i></span>';
+  }
   if(res.origem==='misto'&&!Array.isArray(res.catalogoCampos))
     return '<span class="rv-de">↳ do Catálogo ou da IA</span>';
   // O motor "sem pesquisa web" do lote lê os resultados do Google que a
@@ -9175,9 +9185,12 @@ function loteAplicarResultadoAutomatico(res){
        e as fontes. Sem isto, cada vinho chegava ao ecrã sem nada disso — e
        o ecrã dizia "leitura de páginas da net" a uma resposta de memória.
        Um vinho que veio todo do catálogo não leva as fontes da pesquisa. */
+    // Desde 02/10/2026 cada vinho traz as SUAS fontes (a pesquisa dele) e de
+    // onde veio cada campo (`origemCampos`); as do lote todo (o grounding)
+    // só ficam com um vinho que não trouxe as suas.
     const ficha={modelo:res.modelo||'',plano:res.plano||'',pesquisa:res.pesquisa,
       ...(res.pesquisaWeb!=null?{pesquisaWeb:res.pesquisaWeb}:{}),
-      ...(r.origem!=='catalogo'&&Array.isArray(res.fontes)&&res.fontes.length?{fontes:res.fontes,fontesLote:true}:{}),
+      ...(r.origem!=='catalogo'&&!(r.fontes&&r.fontes.length)&&Array.isArray(res.fontes)&&res.fontes.length?{fontes:res.fontes,fontesLote:true}:{}),
       ...r};
     delete ficha.id;delete ficha.encontrado;
     LOTE_RESULTADOS.set(v.id,ficha);
@@ -11114,7 +11127,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='168';
+const APP_BUILD='169';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

@@ -2243,21 +2243,36 @@ de botões que apareciam e desapareciam. Agora:
   acabou de deitar fora.
 A **atualização massiva** continua com o ecrã dela (`iaMostrarResultado`/
 `iaAplicar`, onde vivem ainda a segunda opinião e os rádios descritos mais
-abaixo) — é outra pergunta, vinho a vinho em fila. **E não procura como a
-procura de um vinho** (visto a 02/10/2026, num lote de 7 harmonizações que
-voltou todo de memória): é UMA chamada ao Gemini para o lote inteiro, com
-os motores de ANTES de 27/09 — o `premium` só com o grounding (que muitas
-vezes não pesquisa), o `gratis` com o Serper vinho a vinho e o Gemini a
-ler — sem a consulta do Vivino, sem páginas, sem cache e sem `deOnde`. O
-que se diz no ecrã é o que se sabe (`iaFonteHTML`, as mesmas frases do
-`pqFonteHTML`, ao de leve): "↳ do Catálogo", "↳ da pesquisa Google (a IA
-não diz a página)" ou "↳ da IA (sem dizer de onde)" — e mais nada: sem
-caixas de aviso no topo (o dono: "chega perfeitamente aquele parêntesis").
-O que a `vinho-info` diz
-do lote inteiro (`pesquisaWeb`, `modelo`, `fontes`) vai com cada vinho
-(`loteAplicarResultadoAutomatico`); as fontes dizem-se "do lote todo",
-porque não são deste vinho em particular. O rodapé "Leitura automática de
-páginas da net" saiu do lote: dizia-o a respostas de memória.
+abaixo) — é outra pergunta, vinho a vinho em fila. **E procura como a
+procura de um vinho** (02/10/2026, o dono: "só iria à memória da IA se as
+duas linhas do site do Serper não trouxessem nada"). Até aí era UMA
+chamada ao Gemini com os motores de ANTES de 27/09 — o `premium` só com o
+grounding, que muitas vezes não pesquisa (um lote de 7 harmonizações
+voltou todo de memória, sem fonte nenhuma). Agora (`produzirFichaLote`):
+- **completo** (`premium`): primeiro o Serper, vinho a vinho — a pesquisa
+  GERAL só quando se pediu algum campo que não é do Vivino, a do VIVINO só
+  quando se pediu um campo do Vivino (`CAMPOS_VIVINO`); pedidos só campos
+  do Vivino, só essa. Depois UMA chamada ao Gemini a ler a evidência de
+  todos (`promptLote`, numerada DENTRO de cada vinho) e a dizer de onde
+  tirou cada campo (`deOnde` → `origemCampos`, a mesma `origemDosCampos`
+  do vinho só). Só pelo que a pesquisa não trouxe, UMA chamada com
+  grounding para os vinhos todos. Num lote de 10: 10 a 20 consultas Serper
+  e 1 a 2 chamadas ao Gemini;
+- **intermédio** (`gratis`): só o grounding, numa chamada — o Serper paga-se
+  (a decisão de 27/09 para o vinho só, que o lote fazia ao contrário).
+A "pesquisa Google" só se diz quando o grounding pesquisou MESMO
+(`pesquisou`); de memória, o campo fica sem origem. Cada vinho traz as suas
+`fontes`, `origemCampos` (sempre, mesmo vazio, quando a IA respondeu),
+`catalogoCampos` e `pesquisaWeb`. No ecrã (`iaFonteHTML`, as frases do
+`pqFonteHTML`, ao de leve e sem caixas de aviso no topo — o dono: "chega
+perfeitamente aquele parêntesis"): "↳ de garrafeiranacional.com · resumo
+no Google" com o link, "↳ da pesquisa Google (a IA não diz a página)",
+"↳ do Catálogo" ou "↳ da IA (sem dizer de onde)". Com uma `vinho-info`
+antiga (sem `origemCampos`) a app adivinha pelo `pesquisaWeb` do lote.
+Os dados mostraram (02/10/2026) de onde vem a harmonização com fonte nas
+procuras de um vinho: de páginas ABERTAS (links colados) quase sempre, e
+do resumo do Google raramente (2 em 29) — por isso o grounding fica atrás
+da pesquisa, e não se abrem páginas no lote.
 
 Quem procura é a Edge
 Function `vinho-info.ts`, com DOIS MOTORES desacoplados — não dois níveis do
