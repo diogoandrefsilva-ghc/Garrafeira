@@ -1202,8 +1202,18 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
    segundo plano (a app sonda a linha, e retoma-a se se sair da app). A cor
    pede-se com as palavras da Garrafeira (Tinto · Branco · Rosé · Espumante ·
    Licoroso · Frisante; um Vinho Verde diz-se pela cor): é a chave do
-   catálogo.
-2. **A carta no ecrã** (`wsCartaHTML`): **só os vinhos até ao orçamento, com
+   catálogo. **E no fim da leitura, a ORDEM** (`ordenarCarta`, 03/10/2026, o
+   dono: "a ordem dos vinhos que aparece podia aparecer pela sugestão do
+   Gemini"): uma chamada só de texto que ordena os vinhos que cabem no
+   orçamento pelo interesse para o prato — a harmonização provável, a
+   reputação do vinho e do produtor, a nota do Vivino quando o Catálogo a
+   tem, a relação preço/qualidade —, para se saber por onde começar a
+   procurar. Era o que o `pesquisar` da `sugerir-vinho` fazia, para a lista
+   toda. Aqui a memória do modelo pode entrar, porque é só a ORDEM: nada do
+   que ele pensa aparece como facto. Fica em `cartas.ordem`; se falhar, fica
+   nula e a lista sai pela ordem da carta, sem a leitura falhar.
+2. **A carta no ecrã** (`wsCartaHTML`), **pela ordem da IA** (`wsOrdenar`,
+   com uma linha a dizê-lo): **só os vinhos até ao orçamento, com
    5 € de margem** (`wsCabe`, e o `cabe` da função — a carta diz 31 € e o
    orçamento é 30: entra); sem preço da garrafa não entra (um vinho a copo
    não é uma garrafa). O que ficou de fora diz-se numa linha. De cada vinho,

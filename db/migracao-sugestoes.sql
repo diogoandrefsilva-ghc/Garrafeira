@@ -9,8 +9,9 @@
 -- passos, e todos daqui (a WineSelection é para desligar):
 --   1. LER a carta (a Edge Function `garrafeira-carta`, `acao:'ler'`) —
 --      só a transcrição, guardada em `garrafeira.cartas`;
---   2. a app mostra só o que cabe no orçamento (+5 €) e, de cada vinho que
---      o Catálogo conhece, a nota do Vivino e a ficha (`carta_ligar`);
+--   2. a app mostra só o que cabe no orçamento (+5 €), pela ordem que o
+--      Gemini sugere para o prato (`cartas.ordem`), e de cada vinho que o
+--      Catálogo conhece a nota do Vivino e a ficha (`carta_ligar`);
 --   3. escolhem-se até 5 para o "Procurar informação" com IA de sempre
 --      (`vinho-info`, que guarda no catálogo — `daCarta`);
 --   4. a recomendação (`garrafeira-carta`, `acao:'recomendar'`), só com o
@@ -57,6 +58,11 @@ CREATE TABLE IF NOT EXISTS garrafeira.cartas (
   atualizado_em timestamptz  NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS cartas_quem ON garrafeira.cartas (quem, criado_em DESC);
+-- A ordem da lista que o Gemini sugere no fim da leitura (os índices de
+-- `vinhos`, os mais prometedores para o prato primeiro). 03/10/2026, depois
+-- da primeira aplicação: o dono quis a lista pela ordem da IA. Nula = pela
+-- ordem da carta.
+ALTER TABLE garrafeira.cartas ADD COLUMN IF NOT EXISTS ordem jsonb;
 
 ALTER TABLE garrafeira.cartas ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON garrafeira.cartas FROM PUBLIC, anon, authenticated;

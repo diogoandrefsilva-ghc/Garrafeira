@@ -634,6 +634,9 @@ para `authenticated`, nada para `anon`, RLS ligada, a policy, e as duas
 funções a responder como no ensaio. Publicadas no mesmo dia a
 `garrafeira-carta` (nova) e a `vinho-info` (o `daCarta`), as duas como um
 `index.ts` que importa o ficheiro do repositório no commit 1335bdca.
+No mesmo dia, mais uma coluna: `cartas.ordem` (a ordem da lista que o
+Gemini sugere no fim da leitura) — `ADD COLUMN IF NOT EXISTS`, no mesmo
+ficheiro.
 
 ## Regra de ouro
 
