@@ -237,7 +237,8 @@ conhecia o "Qta.", ficava com um "qt" a mais, a `carta_ligar` não achou a
 linha do Catálogo, e o "Procurar informação" fez nascer outra ao lado. No
 PRODUTOR, a BD escreve "Quinta" por extenso (`winecatalog.produtor_oficial`,
 pela qual o trigger `vinhos_nomes` daqui passa): "Qta. do Vallado" grava-se
-"Quinta do Vallado". O nome do vinho fica como foi escrito.
+"Quinta do Vallado". E o nome do vinho também (`winecatalog.identidade`,
+a mesma conta): "Qt.ª de Cidrô Arinto" grava-se "Quinta de Cidrô Arinto".
 
 ### O painel abre numa FITA de campos, não numa pilha de grupos
 Já foi tudo ou nada (um botão "Filtros" e onze filtros abertos por trás
