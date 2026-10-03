@@ -239,6 +239,13 @@ PRODUTOR, a BD escreve "Quinta" por extenso (`winecatalog.produtor_oficial`,
 pela qual o trigger `vinhos_nomes` daqui passa): "Qta. do Vallado" grava-se
 "Quinta do Vallado". E o nome do vinho também (`winecatalog.identidade`,
 a mesma conta): "Qt.ª de Cidrô Arinto" grava-se "Quinta de Cidrô Arinto".
+E as castas abreviadas também, no nome, na chave e na lista das castas
+(`db/castas-abreviadas.sql` da WineCatalog): "T. Nacional" é Touriga
+Nacional, "Tª Roriz" é Tinta Roriz, "Cab. Sauvignon" é Cabernet Sauvignon.
+E "Quinta de Cidrô", "Quinta das Carvalhas" e "Quinta dos Aciprestes" no
+produtor gravam "Real Companhia Velha" (grafias da oficial), sem sair da
+frente do nome do vinho (`db/marcas-do-produtor.sql` de lá). A procura no
+browser não faz as castas: os nomes já chegam arrumados da BD.
 
 ### O painel abre numa FITA de campos, não numa pilha de grupos
 Já foi tudo ou nada (um botão "Filtros" e onze filtros abertos por trás
@@ -2130,8 +2137,10 @@ por " e ", "&", "/", "+", ";" e vírgulas, compara sem acentos (a
 `casta_chave`), troca a grafia pela de referência e tira o que não é casta
 ("Vinhas Velhas"). No catálogo é um trigger na ficha. **Não junta
 sinónimos regionais** (Tinta Roriz/Aragonez/Tempranillo — o nome diz de
-onde é o vinho). Uma grafia nova entra na `winecatalog.casta_referencia`,
-não se corrige à mão. A app **relê** as castas depois de gravar
+onde é o vinho). Uma grafia nova entra na `winecatalog.casta_referencias()`,
+não se corrige à mão; e "T. Nacional"/"Tª Roriz"/"Cab. Sauvignon" passam a
+Touriga Nacional/Tinta Roriz/Cabernet Sauvignon (`castas_por_extenso`,
+03/10/2026). A app **relê** as castas depois de gravar
 (`gravarCastas`), porque não tem cópia da regra.
 
 ## O vocabulário do "tipo"
