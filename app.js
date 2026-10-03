@@ -1745,7 +1745,7 @@ const WS_PENDENTE_KEY='gf_ws_carta';
 let _wsPollTimer=null, _wsPollInicio=0;
 const WS_POLL_INTERVALO_MS=3000;
 const WS_POLL_MAX_MS=3*60*1000;
-const WS_COLS='id,prato,orcamento,estado,vinhos,aviso,erro,pesquisados,rec_estado,recomendacao,rec_erro,criado_em';
+const WS_COLS='id,prato,orcamento,estado,vinhos,aviso,erro,ordem,pesquisados,rec_estado,recomendacao,rec_erro,criado_em';
 let WS=null;   // a carta que está no ecrã
 
 function wsStatus(txt,erro){
@@ -1799,7 +1799,7 @@ function wsIniciarPolling(id){
   _wsPollInicio=Date.now();
   _wsPollTimer=-1;   // "a sondar", já antes do primeiro tick
   document.getElementById('ws-btn-ler').disabled=true;
-  wsStatus('A ler a carta — podes sair da app, a leitura continua…');
+  wsStatus('A ler a carta e a ordenar os vinhos — podes sair da app, a leitura continua…');
   wsPollTick(id);
 }
 async function wsPollTick(id){
@@ -1869,6 +1869,9 @@ async function wsAbrirCarta(row){
   WS={
     id:row.id, prato:row.prato||'', orcamento:row.orcamento!=null?Number(row.orcamento):null,
     vinhos:Array.isArray(row.vinhos)?row.vinhos:[], aviso:row.aviso||'',
+    // a ordem que o Gemini sugeriu no fim da leitura (índices de `vinhos`);
+    // sem ela, a da carta
+    ordem:Array.isArray(row.ordem)?row.ordem.map(Number):null,
     ligados:[], ligado:false, marcas:null, sel:new Set(),
     // {índice: 'a' (a procurar) | 'ok' | 'falhou'}
     pesq:Object.assign({},row.pesquisados&&typeof row.pesquisados==='object'?row.pesquisados:{}),
@@ -2000,9 +2003,21 @@ const WS_DET_MAX=5;     // de cada vez (o dono)
 const WS_DET_TOTAL=15;  // por carta: 5, 10 ou 15
 function wsPesqN(c){return Object.keys(c.pesq).length;}
 function wsAProcurar(c){return Object.values(c.pesq).includes('a');}
+/* A ORDEM DA LISTA é a que o Gemini sugeriu no fim da leitura (03/10/2026,
+   o dono: "a ordem dos vinhos que aparece podia aparecer pela sugestão do
+   Gemini"): os mais prometedores para o prato e o orçamento primeiro — é
+   por onde começar a procurar informação. É só a ordem: nada do que o
+   modelo pensa aparece como facto, e a sugestão final continua a ser só com
+   o que o Catálogo sabe. Os que a ordem não tem (uma carta antiga, ou a
+   ordem que falhou) ficam no fim, pela ordem da carta. */
+function wsOrdenar(c,idx){
+  if(!c.ordem||!c.ordem.length)return idx;
+  const pos=new Map(c.ordem.map((i,k)=>[i,k]));
+  return idx.slice().sort((a,b)=>(pos.has(a)?pos.get(a):1e4+a)-(pos.has(b)?pos.get(b):1e4+b));
+}
 function wsCartaHTML(c){
   const orc=c.orcamento;
-  const idx=c.vinhos.map((v,i)=>i).filter(i=>wsCabe(c.vinhos[i],orc));
+  const idx=wsOrdenar(c,c.vinhos.map((v,i)=>i).filter(i=>wsCabe(c.vinhos[i],orc)));
   const caros=c.vinhos.filter(v=>v.preco!=null&&!wsCabe(v,orc)).length;
   const semPreco=orc!=null?c.vinhos.filter(v=>v.preco==null).length:0;
   const conh=idx.filter(i=>wsCatDe(c,i)).length;
@@ -2018,6 +2033,7 @@ function wsCartaHTML(c){
   return `<div class="ws-card">
     <div class="ws-card-label">A carta${prato} · ${idx.length} vinho${idx.length===1?'':'s'}${orc!=null?` até ${wsEur(orc)}`:''}${c.ligado?` · ${conh} no Catálogo`:''}</div>
     ${fora?`<p class="ws-note" style="margin-top:-4px">Ficaram de fora ${fora}.</p>`:''}
+    ${c.ordem&&idx.length>1?`<p class="ws-note">✨ Pela ordem que a IA sugere${c.prato?` para ${esc(c.prato)}`:''}: os primeiros são por onde começar a procurar.</p>`:''}
     ${c.aviso?`<p class="ws-note">⚠️ ${esc(c.aviso)}</p>`:''}
     ${wsLegendaTipos(idx.map(i=>c.vinhos[i].tipo||(wsCatDe(c,i)||{}).tipo))}
     ${c.marcas?'<p class="ws-note am-legenda">Dos amigos das Prendas de Anos: 🍾 tem na garrafeira · ⭐ bebeu e deu nota · 💭 está na wishlist · 🎁 já foi prenda. Toca numa marca para ver o pormenor.</p>':''}
@@ -11062,7 +11078,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='172';
+const APP_BUILD='173';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

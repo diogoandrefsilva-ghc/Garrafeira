@@ -6,9 +6,13 @@
 // de uma vez — ler a carta, perguntar ao catálogo e recomendar —, com uma
 // segunda função (`verificar-vinhos`) para a "pesquisa a sério" e outra
 // ainda, a profunda, ao admin. Agora são passos, e a pessoa vê cada um:
-//   1. LER (`acao: "ler"`): as fotos da carta → a lista dos vinhos, e mais
-//      nada. É uma transcrição — sem catálogo, sem recomendação, sem
-//      pesquisa. Fica em `garrafeira.cartas`.
+//   1. LER (`acao: "ler"`): as fotos da carta → a lista dos vinhos. É uma
+//      transcrição — sem pesquisa —, e a seguir uma chamada só de texto
+//      ORDENA os que cabem no orçamento pelo interesse para o prato
+//      (`ordenarCarta`, 03/10/2026, o dono: "a ordem dos vinhos que aparece
+//      podia aparecer pela sugestão do Gemini"). É a ordem da lista, para se
+//      saber por onde começar a procurar — nunca um facto, nunca a sugestão.
+//      Fica em `garrafeira.cartas` (`vinhos`, `ordem`).
 //   2. a APP mostra só os que cabem no orçamento (+5 €) e, de cada um que o
 //      Catálogo conhece, a nota do Vivino e a ficha (`carta_ligar`).
 //   3. a APP manda até 5 ao "Procurar informação" com IA de sempre
@@ -108,6 +112,7 @@ function somar(a: Usage | null, b: Usage | null): Usage | null {
 // Uma estimativa GROSSEIRA, para dar ordem de grandeza (como na `sugerir-vinho`).
 const CUSTO_LEITURA_EUR = 0.003;
 const CUSTO_RECOMENDACAO_EUR = 0.002;
+const CUSTO_ORDEM_EUR = 0.001;
 
 /* ── Uma chamada ao Gemini, de modelo em modelo ──
    JSON direto (não há pesquisa, por isso não há o conflito com o
@@ -277,6 +282,106 @@ Regras:
 Responde só com o JSON.`;
 }
 
+/* ── A ORDEM DA LISTA (no fim da leitura) ──
+   O dono: "a ordem dos vinhos que aparece podia aparecer pela sugestão do
+   Gemini". Era o que a `sugerir-vinho` fazia com o `pesquisar` (até 4
+   desconhecidos que valia a pena pesquisar); aqui ordena-se a lista TODA
+   dos que cabem no orçamento, para quem vai escolher até 5 para procurar
+   saber por onde começar. Aqui a memória do modelo pode entrar — a
+   reputação de um produtor, uma região que casa com o prato — porque é só a
+   ORDEM: nada do que o modelo sabe aparece como facto, e a sugestão final
+   continua a ser só com o que o Catálogo sabe. Se falhar, a lista fica pela
+   ordem da carta, que é como sempre foi. */
+const LINHA_FACTOS = 140;
+function linhaDaCarta(v: any, i: number, l: any): string {
+  const f = l?.ficha ?? null;
+  const nv = f ? notaVivino(f) : null;
+  const factos = f && sabeAlgo(f) ? [
+    nv ? `Vivino ${nv.nota}/5` : "",
+    numOuNull(f.preco_medio) != null ? `preço de referência ~${numOuNull(f.preco_medio)}€` : "",
+    Array.isArray(f.castas) && f.castas.length ? `castas: ${f.castas.slice(0, 4).join(", ")}` : "",
+    f.harmonizacao ? `harmoniza com: ${s(f.harmonizacao, LINHA_FACTOS)}` : "",
+  ].filter(Boolean).join(" | ") : "";
+  return [
+    `[${i}] ${v.nome}`,
+    (v.produtor || l?.produtor) ? `produtor: ${v.produtor || l.produtor}` : "",
+    v.ano ? `colheita: ${v.ano}` : "",
+    (v.tipo || f?.tipo) ? `cor: ${v.tipo || f.tipo}` : "",
+    (v.regiao || f?.regiao) ? `região: ${v.regiao || f.regiao}` : "",
+    v.preco != null ? `preço na carta: ${v.preco}€` : "",
+    factos ? `catálogo: ${factos}` : "sem dados no catálogo",
+  ].filter(Boolean).join(" | ");
+}
+function promptOrdem(linhas: string[], prato: string, orcamento: number | null) {
+  return `És um escanção num restaurante em Portugal. Estes são os vinhos desta
+carta${orcamento ? ` que cabem no orçamento (${orcamento} € por garrafa, com uma folga de ${MARGEM_ORCAMENTO} €)` : ""}:
+
+${linhas.join("\n")}
+
+${prato ? `O prato a acompanhar é: "${prato}".` : "Não foi indicado nenhum prato — pensa em vinhos versáteis e bem feitos."}
+
+Quem está à mesa vai escolher alguns destes para pesquisar a fundo antes de
+decidir. Ordena-os TODOS, do que mais vale a pena pesquisar para o que menos:
+os primeiros são os candidatos mais prometedores para este prato, a este preço.
+
+Devolve APENAS um objeto JSON com esta forma exata:
+{"ordem": [number]}
+com os números entre [ ], todos, sem repetir.
+
+Critérios, por esta ordem:
+1. a harmonização provável com o prato (cor, corpo, castas, região, estilo);
+2. a reputação do vinho e do produtor, e a nota do Vivino quando é dada;
+3. a relação preço/qualidade (o preço na carta face ao de referência,
+   quando é dado — 2 a 3 vezes é o normal num restaurante);
+4. em igualdade, os PORTUGUESES primeiro.
+Podes usar o que sabes destes vinhos, produtores e regiões: é só para
+ordenar a lista, não aparece a ninguém como facto.
+Responde só com o JSON.`;
+}
+// A linha do catálogo de cada vinho da carta, com a ficha (a mesma pergunta
+// que a app faz, `carta_ligar`). Lança se o catálogo não responder.
+async function ligarComFicha(vinhos: any[], signal: AbortSignal): Promise<any[]> {
+  const r = await sb("rpc/carta_ligar", { method: "POST", signal,
+    body: JSON.stringify({ p_pedidos: vinhos.map((v) => ({ nome: v.nome, produtor: v.produtor || "", ano: v.ano ?? null, tipo: v.tipo || null })), p_ficha: true }) });
+  if (!r.ok) throw new Error("não consegui perguntar ao catálogo (" + r.status + ")");
+  const d = await r.json();
+  return Array.isArray(d) ? d : [];
+}
+async function ordenarCarta(vinhos: any[], prato: string, orcamento: number | null, modelos: string[], parent: AbortSignal) {
+  const cand = vinhos.map((v, i) => i).filter((i) => cabe(vinhos[i].preco ?? null, orcamento));
+  const out = { ordem: null as number[] | null, usage: null as Usage | null, modelo: "", chamadas: 0, erro: "" };
+  if (cand.length < 2) { out.ordem = cand; return out; }
+  // Um tecto próprio: uma ordem lenta não pode levar a leitura atrás.
+  const ctrl = new AbortController();
+  const onAbort = () => ctrl.abort();
+  parent.addEventListener("abort", onAbort);
+  const timer = setTimeout(() => ctrl.abort(), 30_000);
+  try {
+    let ligados: any[] = [];
+    try { ligados = await ligarComFicha(vinhos, ctrl.signal); } catch (_) { /* ordena-se só com a carta */ }
+    const linhas = cand.map((i) => linhaDaCarta(vinhos[i], i, ligados[i]));
+    const g = await gerar([[modelos[0], 512], [MODELO_LEVE, 0]], [{ text: promptOrdem(linhas, prato, orcamento) }], ctrl.signal);
+    out.usage = g.usage; out.modelo = g.modelo; out.chamadas = g.chamadas;
+    const j = g.texto ? extrairJson(g.texto) : null;
+    if (!j || !Array.isArray(j.ordem)) { out.erro = g.erro || "ilegível"; return out; }
+    const ok = new Set(cand), vistos = new Set<number>(), ordem: number[] = [];
+    for (const x of j.ordem) {
+      const i = Number(x);
+      if (ok.has(i) && !vistos.has(i)) { vistos.add(i); ordem.push(i); }
+    }
+    // os que o modelo deixou de fora vão no fim, pela ordem da carta
+    for (const i of cand) if (!vistos.has(i)) ordem.push(i);
+    out.ordem = ordem;
+    return out;
+  } catch (e) {
+    out.erro = String((e as Error).message || e).slice(0, 200);
+    return out;
+  } finally {
+    clearTimeout(timer);
+    parent.removeEventListener("abort", onAbort);
+  }
+}
+
 /* ── A base de dados ── */
 async function sb(path: string, init: RequestInit = {}, perfil = "garrafeira", auth = "Bearer " + SB_SRV) {
   return await fetch(`${SB_URL}/rest/v1/${path}`, {
@@ -339,7 +444,7 @@ async function registar(estado: string, detalhe: Record<string, unknown>, quem: 
 }
 
 /* ── Ler (em segundo plano) ── */
-async function lerCarta(id: number, quem: string, partsImg: unknown[], nFotos: number) {
+async function lerCarta(id: number, quem: string, partsImg: unknown[], nFotos: number, prato: string, orcamento: number | null) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), PROC_TIMEOUT_MS);
   const t0 = Date.now();
@@ -362,13 +467,21 @@ async function lerCarta(id: number, quem: string, partsImg: unknown[], nFotos: n
     }
     const vinhos = (Array.isArray(j.vinhosCarta) ? j.vinhosCarta : []).map(normVinhoCarta).filter(Boolean).slice(0, 80);
     const aviso = j.aviso ? s(j.aviso, 200) : null;
+    // A ordem da lista (ver "A ORDEM DA LISTA"): nunca deita a leitura abaixo.
+    const o = vinhos.length && !ctrl.signal.aborted
+      ? await ordenarCarta(vinhos, prato, orcamento, modelos, ctrl.signal)
+      : { ordem: null, usage: null, modelo: "", chamadas: 0, erro: "" };
+    const pediuOrdem = o.chamadas > 0 || !!o.erro;
     await registar("ok", {
       passo: "ler", modelo: g.modelo, fotos: nFotos, vinhos_carta: vinhos.length,
-      chamadas_gemini: g.chamadas, ...(g.usage ? { usageMetadata: g.usage } : {}),
-      custo_estimado_eur: CUSTO_LEITURA_EUR, ms: Date.now() - t0,
+      ordem: o.ordem && pediuOrdem ? "ia" : o.erro ? "falhou" : "carta",
+      ...(o.erro ? { ordem_erro: o.erro } : {}), ...(o.modelo ? { modelo_ordem: o.modelo } : {}),
+      chamadas_gemini: g.chamadas + o.chamadas,
+      ...(somar(g.usage, o.usage) ? { usageMetadata: somar(g.usage, o.usage) } : {}),
+      custo_estimado_eur: CUSTO_LEITURA_EUR + (o.chamadas ? CUSTO_ORDEM_EUR : 0), ms: Date.now() - t0,
     }, quem);
     await atualizarCarta(id, quem, vinhos.length
-      ? { estado: "lida", vinhos, aviso }
+      ? { estado: "lida", vinhos, aviso, ordem: o.ordem && pediuOrdem ? o.ordem : null }
       : { estado: "erro", erro: aviso || "não consegui ler vinhos nesta carta — tenta uma foto mais nítida" });
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";
@@ -389,10 +502,7 @@ async function recomendarCarta(row: any, quem: string) {
     const orc = row.orcamento != null ? Number(row.orcamento) : null;
     // A linha do catálogo de cada um — a mesma pergunta que a app faz, mas
     // com a ficha (o que o modelo vai ler).
-    const r = await sb("rpc/carta_ligar", { method: "POST", signal: ctrl.signal,
-      body: JSON.stringify({ p_pedidos: vinhos.map((v) => ({ nome: v.nome, produtor: v.produtor || "", ano: v.ano ?? null, tipo: v.tipo || null })), p_ficha: true }) });
-    if (!r.ok) throw new Error("não consegui perguntar ao catálogo (" + r.status + ")");
-    const ligados: any[] = await r.json();
+    const ligados = await ligarComFicha(vinhos, ctrl.signal);
 
     const linhas: string[] = [];
     const conhecidos = new Set<number>();
@@ -504,14 +614,15 @@ Deno.serve(async (req) => {
         if (total > 20_000_000) return json({ error: "fotos demasiado grandes no total — tenta menos fotos" }, 400);
         partsImg.push({ inline_data: { mime_type: /^image\/[a-z+.-]+$/i.test(String(img.mime)) ? img.mime : "image/jpeg", data } });
       }
+      const prato = s(body.prato, 200), orcamento = numOuNull(body.orcamento, 1, 10000);
       const r = await sb("cartas", { method: "POST", headers: { Prefer: "return=representation" }, signal: ctrl.signal,
-        body: JSON.stringify({ quem, prato: s(body.prato, 200), orcamento: numOuNull(body.orcamento, 1, 10000), fotos: imagens.length }) });
+        body: JSON.stringify({ quem, prato, orcamento, fotos: imagens.length }) });
       const id = r.ok ? (await r.json())?.[0]?.id : null;
       if (typeof id !== "number") {
         await registar("erro", { passo: "criar_carta", status: r.status }, quem);
         return json({ error: "não consegui começar a leitura — tenta outra vez" }, 502);
       }
-      EdgeRuntime.waitUntil(lerCarta(id, quem!, partsImg, imagens.length));
+      EdgeRuntime.waitUntil(lerCarta(id, quem!, partsImg, imagens.length, prato, orcamento));
       return json({ id, estado: "pendente" }, 202);
     }
 
