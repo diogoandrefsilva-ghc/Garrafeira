@@ -611,6 +611,23 @@ SQL Editor (o MCP do Supabase não a corre: tem `DELETE`, na `definir_castas`).
 Aplicada a 01/10/2026 pelo SQL Editor; confirmada a 02/10/2026 (as funções,
 o trigger e as permissões como no ficheiro, os 244 vinhos ligados).
 
+### Migração 40 — as Sugestões passam a ser da Garrafeira (**por aplicar**)
+
+`db/migracao-sugestoes.sql`, depois da 28. As Sugestões deixam as Edge
+Functions da WineSelection e passam a ter passos (ver o `CLAUDE.md`, "As
+Sugestões"): `garrafeira.cartas` (as cartas lidas, de cada pessoa; escreve
+só a Edge Function `garrafeira-carta`, lê-se pela policy `cartas_minhas`),
+`garrafeira.carta_ligar` (a linha do catálogo de cada vinho da carta, com a
+cor) e `garrafeira.marcas_amigos` — a da WineCatalog baralhava tintos com
+brancos, porque as chaves do nome deixam a cor de fora e ela nunca olhava
+para a cor. Só cria (sem `DELETE` nem `DROP`), por isso corre pelo MCP ou
+pelo SQL Editor. Ensaiada a 03/10/2026 em funções temporárias (`pg_temp`),
+contra a base real: um "Monte da Peceguina" branco deixou de mostrar o
+tinto do Barrona, e um "Carm Grande Reserva" branco mostra só a garrafa
+branca (a de antes mostrava as duas).
+A seguir: `supabase functions deploy garrafeira-carta` (nova) e
+`supabase functions deploy vinho-info` (o `daCarta`).
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -662,6 +679,9 @@ Numa base de dados limpa:
    gravados (migração 37). Só depois do `db/regioes.sql` do WineCatalog.
 11. **`migracao-castas.sql`** — uma grafia por casta (migração 38). Só
    depois do `db/castas.sql` do WineCatalog.
+12. **`migracao-sugestoes.sql`** — as cartas das Sugestões, a ligação de
+   cada vinho da carta ao catálogo e as marcas dos amigos com a cor
+   (migração 40). Só depois do `winecatalog` e do `anniversarygifts`.
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)
@@ -693,7 +713,8 @@ Estes não se fazem por SQL:
    manter `GEMINI_FREE_API_KEY`; `GEMINI_FREE_DAILY_LIMIT` é opcional e vale 5
    por defeito.
 4. **Deploy da função:** `supabase functions deploy vinho-info` (o ficheiro
-   está na raiz do repo, `vinho-info.ts`).
+   está na raiz do repo, `vinho-info.ts`). A das Sugestões é a
+   `garrafeira-carta` (`garrafeira-carta.ts`, migração 40).
 
 ## O que fica onde
 

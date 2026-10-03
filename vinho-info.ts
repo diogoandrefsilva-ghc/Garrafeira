@@ -1783,6 +1783,10 @@ async function produzirFicha(
   // O resultado do Vivino que o "Procurar links" já trouxe (ver "PROCURAR
   // LINKS"): entra como um resultado do Serper, sem gastar outra consulta.
   vivinoGoogle: Resultado | null = null,
+  // Um vinho lido numa carta de restaurante (as Sugestões, 03/10/2026): o
+  // nome impresso na carta é a confirmação, e o que se encontrar vai logo
+  // para o catálogo (ver "MAS SÓ COM UM NOME CONFIRMADO", mais abaixo).
+  daCarta: boolean = false,
 ): Promise<Res> {
   if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
   const inicio = Date.now();
@@ -1794,7 +1798,10 @@ async function produzirFicha(
   // COM SITES também não (27/09/2026): quem os escreve quer que se LEIAM
   // agora — e o catálogo já respondeu na etapa 1 do ecrã, à parte.
   const semAtalhos = profunda || sites.length > 0;
-  const cache = semAtalhos ? null : await cacheLer(chave, signal);
+  // Da carta também não se lê a cache: uma resposta de lá não volta a ir ao
+  // catálogo, e é para lá que esta procura tem de ir. O catálogo responde
+  // primeiro na mesma.
+  const cache = semAtalhos || daCarta ? null : await cacheLer(chave, signal);
   if (cache?.resultado) {
     await registar("ok", {
       nome, ano, modo: "cache", modelo: cache.modelo, ms: Date.now() - inicio,
@@ -2101,14 +2108,19 @@ async function produzirFicha(
     }
   }
 
+  /* E UM VINHO DE UMA CARTA (`daCarta`, 03/10/2026): o nome é o que o
+     restaurante imprimiu, não o que alguém escreveu à pressa e ainda pode
+     corrigir — escreve-se. A cor que a carta disse vai com ele (é a chave do
+     catálogo: sem ela, o branco ia parar à linha do tinto). */
   let catalogoAdiado = false;
   if (ficha) {
-    const nomeConfirmado = vinhoGravado || !!conhecido ||
+    const nomeConfirmado = vinhoGravado || daCarta || !!conhecido ||
       (semAtalhos && !!(await catalogoProcurar(nome, produtor, ano, signal, tipo)));
     const { aviso: _aviso, ...factos } = ficha as Record<string, unknown>;
     if (!Object.keys(factos).some((k) => k !== "ano")) {
       // Nada a levar (o "só estes sites" deixou tudo de fora).
     } else if (nomeConfirmado) {
+      if (daCarta && tipo && !factos.tipo) factos.tipo = tipo;
       await catalogoJuntar(
         nome, produtor, ano, factos, `vinho-info-${modoIA}`,
         fontesIA, signal,
@@ -2145,6 +2157,7 @@ async function produzirFicha(
     ia_campos: emFalta.length,
     // O vinho novo com um nome que o catálogo não conhece: vai quando for gravado.
     ...(catalogoAdiado ? { catalogo: "adiado" } : {}),
+    ...(daCarta ? { da_carta: true } : {}),
     ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}), ...(profunda ? { profunda: true } : {}),
     ...(serperConsultas ? { serper_consultas: serperConsultas, consultas: consultasFeitas } : {}),
     // O que se fez com os sites de confiança: sem isto não havia maneira de
@@ -2671,6 +2684,8 @@ Deno.serve(async (req) => {
     const soSites = body?.soSites === true && sites.length > 0;
     const notas = texto(body?.notas, 300);
     const vinhoId = typeof body?.vinhoId === "number" ? body.vinhoId : null;
+    // Um vinho lido numa carta (as Sugestões): o nome da carta é a confirmação.
+    const daCarta = body?.daCarta === true && vinhoId === null;
     /* `campos`: a app diz o que quer que se procure. Só se aceitam nomes
        conhecidos — um nome inventado aqui era um campo a menos no prompt e,
        pior, um filtro que deitava fora a resposta toda lá no fim. Pedir
@@ -2702,7 +2717,7 @@ Deno.serve(async (req) => {
        existir, `criarAnalise` devolve null e cai-se no modo síncrono em vez
        de rebentar. */
     if (body?.assincrono === true) {
-      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, tipo, notas, sites, ...(soSites ? { soSites } : {}), campos: camposPedidos }, vinhoId, quem!, ctrl.signal);
+      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, tipo, notas, sites, ...(soSites ? { soSites } : {}), ...(daCarta ? { daCarta } : {}), campos: camposPedidos }, vinhoId, quem!, ctrl.signal);
       if (analiseId != null) {
         const dono = quem!;
         // NÃO faz await: o trabalho pesado sobrevive ao pedido original.
@@ -2710,7 +2725,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle), vivinoDado, camposPedidos);
+          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle, daCarta), vivinoDado, camposPedidos);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -2728,7 +2743,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle), vivinoDado, camposPedidos);
+    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle, daCarta), vivinoDado, camposPedidos);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";
