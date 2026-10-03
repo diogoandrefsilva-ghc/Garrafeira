@@ -1111,6 +1111,15 @@ function estrelas(n){if(!n)return '';const k=Math.round(n);return '★'.repeat(k
 function chave(s){
   return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 }
+// As siglas escritas com pontos são a palavra sem eles: "M.O.B." é "MOB",
+// "D.O.C." é "DOC". Junta as letras SOLTAS seguidas de ponto ("m.o.b." e
+// "m. o. b." → "mob", "j.m. fonseca" → "jm fonseca"); uma letra só não é
+// sigla ("S. Miguel" fica). Recebe texto já passado pelo `chave()`. É a
+// regra da chave do catálogo (`winecatalog.tokens`, `db/siglas.sql` da
+// WineCatalog): sem ela, procurar "mob" não dava o "M.O.B. Lote 3".
+function siglas(s){
+  return s.replace(/\b[a-z](?:\.\s?[a-z]\b)+(?:\.(?![a-z0-9]))?/g,m=>m.replace(/[.\s]/g,''));
+}
 
 let _toastT=null;
 function toast(msg,erro){
@@ -3371,8 +3380,8 @@ function haFiltros(){
 // "touriga douro" devolver o que interessa em vez de tudo).
 function passaTexto(v,termos){
   if(!termos.length)return true;
-  const alvo=chave([v.nome,v.produtor,v.regiao,v.sub_regiao,v.tipo,v.estilo,v.mencao,
-    v.ano,(v.castas||[]).join(' '),v.notas,v.notas_prova,v.harmonizacao].join(' '));
+  const alvo=siglas(chave([v.nome,v.produtor,v.regiao,v.sub_regiao,v.tipo,v.estilo,v.mencao,
+    v.ano,(v.castas||[]).join(' '),v.notas,v.notas_prova,v.harmonizacao].join(' ')));
   return termos.every(t=>alvo.includes(t));
 }
 
@@ -3380,7 +3389,7 @@ function passaTexto(v,termos){
 // cartão precisa dos MESMOS para dizer onde encontrou a palavra.
 function termosProcura(){
   const c=document.getElementById('f-texto');
-  return c?chave(c.value).split(/\s+/).filter(Boolean):[];
+  return c?siglas(chave(c.value)).split(/\s+/).filter(Boolean):[];
 }
 
 /* ── ONDE É QUE A PALAVRA ESTAVA ────────────────────────────────────
@@ -3408,15 +3417,15 @@ const CAMPOS_MATCH=[
   ['Sub-região',    v=>v.sub_regiao],
   // As duas primeiras castas já estão no cartão; as que o "+2" esconde é
   // que precisam de ser ditas, e só as que deram match.
-  ['Casta',         (v,t)=>(v.castas||[]).slice(2).filter(c=>t.some(x=>chave(c).includes(x))).join(' · ')],
+  ['Casta',         (v,t)=>(v.castas||[]).slice(2).filter(c=>t.some(x=>siglas(chave(c)).includes(x))).join(' · ')],
   ['Notas de prova',v=>v.notas_prova],
   ['Harmoniza com', v=>v.harmonizacao],
   ['As minhas notas',v=>v.notas]
 ];
 function trechosMatch(v,termos){
   if(!termos||!termos.length)return '';
-  const visivel=chave([v.nome,v.produtor,v.tipo,v.estilo,v.regiao,v.mencao,v.ano,
-    (v.castas||[]).slice(0,2).join(' ')].join(' '));
+  const visivel=siglas(chave([v.nome,v.produtor,v.tipo,v.estilo,v.regiao,v.mencao,v.ano,
+    (v.castas||[]).slice(0,2).join(' ')].join(' ')));
   const porMostrar=termos.filter(t=>!visivel.includes(t));
   if(!porMostrar.length)return '';
   const linhas=[];
@@ -3424,7 +3433,7 @@ function trechosMatch(v,termos){
     if(linhas.length===MAX_MATCH)break;
     const txt=String(ler(v,porMostrar)||'').trim();
     if(!txt)continue;
-    const alvo=chave(txt);
+    const alvo=siglas(chave(txt));
     const presentes=porMostrar.filter(t=>alvo.includes(t));
     if(!presentes.length)continue;
     linhas.push(`<div class="vcm-l"><span class="vcm-k">${esc(rot)}</span>`+
@@ -5732,7 +5741,7 @@ async function quererDeNovo(id){
    O ANO não entra: quer-se "o Barca Velha" e compra-se o de 2011. */
 const DESEJO_VAZIAS=new Set(['de','do','da','dos','das','e','d','the','o','a']);
 function palavrasDesejo(s){
-  return chave(s).replace(/[^a-z0-9]+/g,' ').trim().split(/\s+/).filter(t=>t&&!DESEJO_VAZIAS.has(t));
+  return siglas(chave(s)).replace(/[^a-z0-9]+/g,' ').trim().split(/\s+/).filter(t=>t&&!DESEJO_VAZIAS.has(t));
 }
 function mesmoDesejo(a,b){
   const na=palavrasDesejo(a.nome), nb=palavrasDesejo(b.nome);
@@ -11127,7 +11136,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='169';
+const APP_BUILD='170';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

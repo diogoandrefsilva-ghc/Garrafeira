@@ -213,6 +213,15 @@ está trocada de propósito: escreve-se o que se procura e só DEPOIS se decide
 como arrumar o que sobrou. É também a ordem do Catálogo da WineCatalog. Por ser o mesmo `<input>`, o texto e os filtros
 ligados não se perdem ao trocar de separador.
 
+**"MOB" é "M.O.B."** (03/10/2026, o dono das apps): a procura livre junta as
+siglas escritas com pontos (`siglas`, por cima do `chave()`) — no texto do
+vinho e no que se escreve na caixa —, e os parecidos do vinho novo e o
+"é um da wishlist?" também (`palavrasDesejo`). Uma letra solta não é sigla
+("S. Miguel" fica). É a regra da chave do catálogo (`winecatalog.tokens`,
+`db/siglas.sql` da WineCatalog), que por isso também acha a linha do "M.O.B.
+Lote 3" a quem escreve "MOB" (a `colheitas` da 1.ª etapa, a ligação ao
+catálogo ao gravar). Mexer numa é mexer na outra.
+
 ### O painel abre numa FITA de campos, não numa pilha de grupos
 Já foi tudo ou nada (um botão "Filtros" e onze filtros abertos por trás
 dele) e já foi por **andares** (a procura, depois cor/região/castas,
