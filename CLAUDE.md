@@ -229,6 +229,13 @@ vinho e no que se escreve na caixa —, e os parecidos do vinho novo e o
 Lote 3" a quem escreve "MOB" (a `colheitas` da 1.ª etapa, a ligação ao
 catálogo ao gravar). Mexer numa é mexer na outra.
 
+**E "Qt.ª" é "Quinta"** (03/10/2026, o dono das apps): a mesma `siglas`
+troca "Qta.", "Qt.ª", "Qtª", "Qt." e "Q.ta" por "quinta" — e a chave do
+catálogo também (`db/abreviaturas.sql` da WineCatalog). Uma carta das
+Sugestões escrevia "Qt.ª das Carvalhas Touriga Nacional"; a chave só
+conhecia o "Qta.", ficava com um "qt" a mais, a `carta_ligar` não achou a
+linha do Catálogo, e o "Procurar informação" fez nascer outra ao lado.
+
 ### O painel abre numa FITA de campos, não numa pilha de grupos
 Já foi tudo ou nada (um botão "Filtros" e onze filtros abertos por trás
 dele) e já foi por **andares** (a procura, depois cor/região/castas,

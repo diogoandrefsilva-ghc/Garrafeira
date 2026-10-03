@@ -1117,8 +1117,12 @@ function chave(s){
 // sigla ("S. Miguel" fica). Recebe texto já passado pelo `chave()`. É a
 // regra da chave do catálogo (`winecatalog.tokens`, `db/siglas.sql` da
 // WineCatalog): sem ela, procurar "mob" não dava o "M.O.B. Lote 3".
+// E "Qta.", "Qt.ª", "Qtª", "Qt.", "Q.ta" são "quinta" (e com "s", "quintas"),
+// como na chave (`db/abreviaturas.sql`): uma carta escreve "Qt.ª das
+// Carvalhas" e a garrafeira "Quinta das Carvalhas".
 function siglas(s){
-  return s.replace(/\b[a-z](?:\.\s?[a-z]\b)+(?:\.(?![a-z0-9]))?/g,m=>m.replace(/[.\s]/g,''));
+  return s.replace(/\b(?:q\.\s?ta|qta|qt)(s?)\.?ª?(?![a-z0-9])/g,(m,p)=>'quinta'+p)
+    .replace(/\b[a-z](?:\.\s?[a-z]\b)+(?:\.(?![a-z0-9]))?/g,m=>m.replace(/[.\s]/g,''));
 }
 
 let _toastT=null;
@@ -11078,7 +11082,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='173';
+const APP_BUILD='174';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
