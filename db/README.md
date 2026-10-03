@@ -611,7 +611,7 @@ SQL Editor (o MCP do Supabase não a corre: tem `DELETE`, na `definir_castas`).
 Aplicada a 01/10/2026 pelo SQL Editor; confirmada a 02/10/2026 (as funções,
 o trigger e as permissões como no ficheiro, os 244 vinhos ligados).
 
-### Migração 40 — as Sugestões passam a ser da Garrafeira (**por aplicar**)
+### Migração 40 — as Sugestões passam a ser da Garrafeira (já aplicada)
 
 `db/migracao-sugestoes.sql`, depois da 28. As Sugestões deixam as Edge
 Functions da WineSelection e passam a ter passos (ver o `CLAUDE.md`, "As
@@ -626,8 +626,14 @@ SQL Editor. Ensaiada a 03/10/2026 em funções temporárias (`pg_temp`),
 contra a base real: um "Monte da Peceguina" branco deixou de mostrar o
 tinto do Barrona, e um "Carm Grande Reserva" branco mostra só a garrafa
 branca (a de antes mostrava as duas).
-A seguir: `supabase functions deploy garrafeira-carta` (nova) e
-`supabase functions deploy vinho-info` (o `daCarta`).
+Aplicada a 03/10/2026 pelo MCP, por partes: o `apply_migration` e um
+`execute_sql` com o ficheiro inteiro ficaram presos sem chegar à base (o
+MCP para à espera de uma confirmação por causa do `DROP POLICY`), e sem ele
+passou tudo (a policy ainda não existia). Confirmada a seguir: só `SELECT`
+para `authenticated`, nada para `anon`, RLS ligada, a policy, e as duas
+funções a responder como no ensaio. Publicadas no mesmo dia a
+`garrafeira-carta` (nova) e a `vinho-info` (o `daCarta`), as duas como um
+`index.ts` que importa o ficheiro do repositório no commit 1335bdca.
 
 ## Regra de ouro
 
