@@ -1402,9 +1402,26 @@ async function catGuardarNovo(){
     toast('No catálogo ✓');
     if(r&&r.id&&IDXV[-r.id])verVinho(-r.id);
   }catch(e){
-    // A `criar` diz qual é a linha quando o vinho já existe.
-    toast('Não foi possível criar: '+e.message,1);
     btn.disabled=false;btn.textContent='Criar no catálogo';
+    // A `criar` recusa um vinho e colheita que já lá estão e diz qual é a
+    // linha ("… é a #383 …"). Dito assim, lia-se "já tens este vinho"
+    // (02/10/2026, o dono: "não tenho este vinho"): quem o tem é o CATÁLOGO.
+    // Diz-se qual é, e abre-se se se quiser.
+    const m=/#(\d+)/.exec(e.message||'');
+    if(m){
+      const id=-Number(m[1]);
+      try{CAT_VINHOS=null;await catCarregar();renderLista();}catch(_){}
+      const c=IDXV[id];
+      if(c){
+        const qual=`«${c.nome}»${c.ano?' '+c.ano:' (sem colheita)'}${c.produtor?' · '+c.produtor:''}`;
+        if(confirm(`O Catálogo já tem este vinho: ${qual}.\n\nAbrir esse em vez de criar outro?`)){
+          _iaExtraNovo=null;FORM_CAT=false;
+          fecharModal('modal-edit');verVinho(id);
+        }
+        return;
+      }
+    }
+    toast('Não foi possível criar: '+e.message,1);
   }
 }
 /* Corrigir um vinho do catálogo (30/09/2026): o Editar de sempre sobre a
@@ -1529,24 +1546,28 @@ async function modoAlternar(){
   tab(alvo,document.querySelector(`.itabs .it[onclick^="tab('${alvo}'"]`));
 }
 
-/* ── SUGESTÕES: A WINESELECTION DENTRO DO CATÁLOGO (30/09/2026) ──────
-   O dono das apps: "dentro da componente de Catálogo da garrafeira, queria
-   igualmente transpor a WineSelection … teríamos um separador de
-   Sugestões, onde importaríamos aquela página da WineSelection (que depois
-   descontinuarei)". É a página "Sugerir" de lá, tal e qual: as fotos da
-   carta, o prato e o orçamento vão à MESMA Edge Function (`sugerir-vinho`,
-   do repo WineSelection), e volta a recomendação e a lista da carta, com as
-   marcas dos amigos e a pesquisa a sério de até 4 vinhos
-   (`verificar-vinhos`). As cartas anteriores são as MINHAS análises.
-   - Quem vê o separador: quem tem IA na Garrafeira (`podeUsarIA()`). Do
-     lado de lá, a `wineselection.is_allowed()` — que as duas Edge Functions
-     perguntam — deixa passar quem tem IA aqui (`garrafeira.plano_ia()`).
-   - Os dados continuam no schema `wineselection` (`WS_H`): a app
-     WineSelection pode ser desligada sem se perder nada disto.
+/* ── SUGESTÕES: QUE VINHO PEÇO? (30/09/2026, refeitas a 03/10/2026) ──────
+   Nasceram como a página "Sugerir" da WineSelection transposta, com as
+   Edge Functions de lá a fazer tudo de uma vez. O dono das apps, a
+   03/10/2026: "quero mudar aqui a mecânica da coisa … aquilo da pesquisa
+   simples e pesquisa avançada é confuso!". Agora são PASSOS, todos da
+   Garrafeira (migração 40, Edge Function `garrafeira-carta`):
+     1. as fotos da carta, o prato e o orçamento → LER (`wsLer`): só a lista
+        dos vinhos, guardada em `garrafeira.cartas`;
+     2. a carta no ecrã, só com o que cabe no orçamento (+5 €), e de cada
+        vinho que o Catálogo conhece a nota do Vivino e a ficha — tocar no
+        nome abre a página do vinho (`wsCartaHTML`);
+     3. escolhem-se até 5 para PROCURAR INFORMAÇÃO com IA — a mesma da
+        página do vinho (`vinho-info`), e o que se encontrar fica logo no
+        Catálogo (`wsDetalhe`). Mais 5, até 15 por carta;
+     4. SUGERIR (`wsRecomendar`): a recomendação, só entre os vinhos de que
+        o Catálogo sabe alguma coisa.
+   - Quem vê o separador: quem tem IA na Garrafeira (`podeUsarIA()`); a
+     `garrafeira-carta` pergunta o mesmo à BD (`plano_ia()`).
    - Só no catálogo: é "que vinho peço?", não "o que tenho em casa".
-   Os nomes levam `ws`/`WS_` à frente (como lá), e as classes do CSS vivem
-   debaixo de `#s-sugestoes`: nada disto pode pisar o resto da app. */
-const WS_H={'Accept-Profile':'wineselection','Content-Profile':'wineselection'};
+   Os nomes levam `ws`/`WS_` à frente (vieram da WineSelection), e as
+   classes do CSS vivem debaixo de `#s-sugestoes`: nada disto pode pisar o
+   resto da app. */
 let WS_INIT=false;
 function wsAbrir(){
   if(!WS_INIT){
@@ -1561,7 +1582,6 @@ function wsAbrir(){
   const h=document.getElementById('ws-hist');
   if(h&&h.open)wsCarregarHistorico();
 }
-function wsEu(){return String((_sbSession&&_sbSession.user&&_sbSession.user.email)||'').toLowerCase();}
 
 // ── As fotos da carta (mais do que uma, se o menu não couber numa só) ──
 let _wsImagens=[]; // [{base64, mime}]
@@ -1587,7 +1607,7 @@ function wsRenderImgGrid(){
   }else{
     meta.style.display='none';
   }
-  document.getElementById('ws-btn-sugerir').disabled=_wsImagens.length===0||!!_wsPollTimer;
+  document.getElementById('ws-btn-ler').disabled=_wsImagens.length===0||!!_wsPollTimer;
 }
 function wsRemoverImagem(i){_wsImagens.splice(i,1);wsRenderImgGrid();}
 function wsLimparImagens(){_wsImagens=[];wsRenderImgGrid();}
@@ -1705,18 +1725,19 @@ async function wsImagensEscolhidas(event){
   wsRenderImgGrid();
 }
 
-/* ── Sugerir: a Edge Function responde já, e sonda-se o resultado ──
-   A análise (as fotos + o catálogo + a recomendação) pode passar de um
-   minuto, e um pedido HTTP à espera disso morre quando o telemóvel bloqueia
-   o ecrã. Por isso a função só cria a linha em `wineselection.analises`
-   ('pendente') e continua no servidor; daqui sonda-se, e sobrevive a sair
-   da app ou a recarregar (`gf_ws_pendente`). */
-const WS_PENDENTE_KEY='gf_ws_pendente';
+/* ── 1. Ler a carta: a Edge Function responde já, e sonda-se a linha ──
+   Ler seis fotos pode passar de um minuto, e um pedido HTTP à espera disso
+   morre quando o telemóvel bloqueia o ecrã. Por isso a `garrafeira-carta`
+   só cria a linha em `garrafeira.cartas` ('pendente') e continua no
+   servidor; daqui sonda-se, e sobrevive a sair da app ou a recarregar
+   (`gf_ws_carta`). A leitura é SÓ a transcrição: o resto são os passos
+   seguintes, e cada um vê-se. */
+const WS_PENDENTE_KEY='gf_ws_carta';
 let _wsPollTimer=null, _wsPollInicio=0;
 const WS_POLL_INTERVALO_MS=3000;
 const WS_POLL_MAX_MS=3*60*1000;
-const _wsVerifSel={};          // {analiseId: Set(índice na carta)}
-const _wsVerifPolls={};        // {analiseId: {timer, inicio}}
+const WS_COLS='id,prato,orcamento,estado,vinhos,aviso,erro,pesquisados,rec_estado,recomendacao,rec_erro,criado_em';
+let WS=null;   // a carta que está no ecrã
 
 function wsStatus(txt,erro){
   const s=document.getElementById('ws-sugerir-status');
@@ -1725,32 +1746,42 @@ function wsStatus(txt,erro){
   s.style.color=erro?'var(--dg)':'var(--mu)';
   s.textContent=txt||'';
 }
-async function wsSugerir(){
-  if(!_wsImagens.length){toast('Tira primeiro uma foto da carta',1);return;}
-  if(!podeUsarIA()){toast('As sugestões usam IA, e a IA não está incluída no teu acesso',1);return;}
-  const prato=document.getElementById('ws-prato').value.trim();
-  const orcamento=wsOrcamentoValor();
-  const btn=document.getElementById('ws-btn-sugerir');
-  btn.disabled=true;
-  wsStatus('A pedir a análise…');
-  document.getElementById('ws-resultado').innerHTML='';
+// As duas acções da `garrafeira-carta` respondem com o `id` da carta.
+async function wsFuncao(corpo){
+  let r;
   try{
-    const r=await sbFetch(`${SB_URL}/functions/v1/sugerir-vinho`,{
+    r=await sbFetch(`${SB_URL}/functions/v1/garrafeira-carta`,{
       method:'POST',
       headers:{'Content-Type':'application/json','apikey':SB_KEY},
-      body:JSON.stringify({imagens:_wsImagens.map(im=>({data:im.base64,mime:im.mime})),prato,orcamento})
+      body:JSON.stringify(corpo)
     });
-    let d={};try{d=await r.json();}catch(_){}
-    if(!r.ok||!d.id){
-      wsStatus(r.status===403?'As sugestões ainda não estão abertas à tua conta — fala com o admin.'
-        :(d.error||('Erro HTTP '+r.status+' — tenta outra vez.')),1);
-      btn.disabled=false;
-      return;
-    }
-    try{localStorage.setItem(WS_PENDENTE_KEY,String(d.id));}catch(e){}
-    wsIniciarPolling(d.id);
+  }catch(e){throw new Error('Erro de ligação — tenta outra vez.');}
+  let d={};try{d=await r.json();}catch(_){}
+  if(!r.ok||!d.id){
+    if(r.status===404&&!d.error)throw new Error('A função `garrafeira-carta` ainda não está publicada no Supabase.');
+    throw new Error(d.error||('Erro HTTP '+r.status+' — tenta outra vez.'));
+  }
+  return d.id;
+}
+async function wsLer(){
+  if(!_wsImagens.length){toast('Tira primeiro uma foto da carta',1);return;}
+  if(!podeUsarIA()){toast('As sugestões usam IA, e a IA não está incluída no teu acesso',1);return;}
+  const btn=document.getElementById('ws-btn-ler');
+  btn.disabled=true;
+  wsStatus('A enviar as fotos…');
+  WS=null;
+  document.getElementById('ws-resultado').innerHTML='';
+  try{
+    const id=await wsFuncao({
+      acao:'ler',
+      imagens:_wsImagens.map(im=>({data:im.base64,mime:im.mime})),
+      prato:document.getElementById('ws-prato').value.trim(),
+      orcamento:wsOrcamentoValor()
+    });
+    try{localStorage.setItem(WS_PENDENTE_KEY,String(id));}catch(e){}
+    wsIniciarPolling(id);
   }catch(e){
-    wsStatus('Erro de ligação — tenta outra vez.',1);
+    wsStatus(e.message,1);
     btn.disabled=false;
   }
 }
@@ -1758,8 +1789,8 @@ function wsIniciarPolling(id){
   clearTimeout(_wsPollTimer);
   _wsPollInicio=Date.now();
   _wsPollTimer=-1;   // "a sondar", já antes do primeiro tick
-  document.getElementById('ws-btn-sugerir').disabled=true;
-  wsStatus('A ler a carta e a ver o que já se sabe de cada vinho — podes sair da app, a análise continua…');
+  document.getElementById('ws-btn-ler').disabled=true;
+  wsStatus('A ler a carta — podes sair da app, a leitura continua…');
   wsPollTick(id);
 }
 async function wsPollTick(id){
@@ -1769,19 +1800,19 @@ async function wsPollTick(id){
     return;
   }
   try{
-    const rows=await sbReq('GET',`analises?id=eq.${encodeURIComponent(id)}&select=id,estado,resultado,erro,prato,verificacao`,undefined,WS_H);
+    const rows=await sbReq('GET',`cartas?id=eq.${encodeURIComponent(id)}&select=${WS_COLS}`);
     const row=rows&&rows[0];
     if(!row){wsPollTerminar();wsStatus('');return;}
-    if(row.estado==='concluido'){
+    if(row.estado==='lida'){
       wsPollTerminar();
       wsStatus('');
-      document.getElementById('ws-resultado').innerHTML=wsResultadoHTML(row.resultado||{},{analiseId:row.id,verificacao:row.verificacao});
+      wsAbrirCarta(row);
       const h=document.getElementById('ws-hist');if(h&&h.open)wsCarregarHistorico();
       return;
     }
     if(row.estado==='erro'){
       wsPollTerminar();
-      wsStatus(row.erro||'Não consegui analisar esta carta — tenta outra vez.',1);
+      wsStatus(row.erro||'Não consegui ler esta carta — tenta outra vez.',1);
       return;
     }
   }catch(e){ /* um soluço de rede: tenta no próximo */ }
@@ -1791,11 +1822,11 @@ function wsPollTerminar(){
   clearTimeout(_wsPollTimer);
   _wsPollTimer=null;
   try{localStorage.removeItem(WS_PENDENTE_KEY);}catch(e){}
-  const btn=document.getElementById('ws-btn-sugerir');
+  const btn=document.getElementById('ws-btn-ler');
   if(btn)btn.disabled=_wsImagens.length===0;
 }
 // Ao voltar à app (ecrã desbloqueado), sonda já em vez de esperar pelo
-// próximo tick — a análise principal e as pesquisas a decorrer.
+// próximo tick — a leitura e a recomendação a decorrer.
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible')return;
   if(_wsPollTimer){
@@ -1803,167 +1834,75 @@ document.addEventListener('visibilitychange',()=>{
     try{id=localStorage.getItem(WS_PENDENTE_KEY);}catch(e){}
     if(id){clearTimeout(_wsPollTimer);wsPollTick(id);}
   }
-  Object.keys(_wsVerifPolls).forEach(aid=>{
-    const p=_wsVerifPolls[aid];
-    if(p){clearTimeout(p.timer);wsVerifPollTick(aid,p.inicio);}
-  });
+  if(_wsRecTick){clearTimeout(_wsRecTimer);_wsRecTick();}
 });
-// Uma análise que ficou a meio (recarregou-se a página): retoma-se ao abrir.
+// Uma leitura que ficou a meio (recarregou-se a página): retoma-se ao abrir.
 function wsRetomarPendente(){
   let id=null;
   try{id=localStorage.getItem(WS_PENDENTE_KEY);}catch(e){}
   if(id)wsIniciarPolling(id);
 }
 
-function wsEur(v){return typeof v==='number'&&isFinite(v)?v.toFixed(2).replace('.',',')+' €':'—';}
-const WS_PRECO_INFO={
-  barato:{cls:'bg-ok',txt:'Preço abaixo do mercado'},
-  justo:{cls:'bg-ok',txt:'Preço justo'},
-  caro:{cls:'bg-warn',txt:'Um pouco caro'},
-  muito_caro:{cls:'bg-bad',txt:'Preço exagerado'},
-  desconhecido:{cls:'bg-mu',txt:'Sem dados de preço'}
-};
-const WS_TIPO_COR={
-  Tinto:'#6b1230',Branco:'#e2d08a','Rosé':'#e2879c',Verde:'#9bc26b',
-  Espumante:'#c9d9e0',Doce:'#c9932e',Outro:'#c9bfbc'
-};
-function wsTipoCor(tipo){return WS_TIPO_COR[tipo]||WS_TIPO_COR.Outro;}
-function wsLegendaTipos(vinhos){
-  const tipos=[...new Set(vinhos.map(v=>v.tipo).filter(Boolean))];
-  if(!tipos.length)return '';
-  return `<div class="tipo-legenda">${tipos.map(t=>`<span class="tipo-legenda-item"><span class="tipo-dot" style="background:${wsTipoCor(t)}"></span>${esc(t)}</span>`).join('')}</div>`;
+/* ── 2. A carta, com o que o Catálogo sabe ──
+   Só os vinhos que cabem no orçamento, com a margem de 5 € (o dono: a carta
+   diz 31 € e o orçamento é 30 — entra). Sem preço lido não entra: um vinho
+   a copo não é uma garrafa. A MESMA regra do `cabe` da `garrafeira-carta`.
+   De cada um, a linha do Catálogo (`carta_ligar`, COM A COR — o branco nunca
+   responde pelo tinto): a nota do Vivino e a ficha vêm de lá, e tocar no
+   nome abre a página do vinho, a mesma do separador Detalhe. */
+const WS_MARGEM=5;
+function wsCabe(v,orc){return orc==null||(v.preco!=null&&Number(v.preco)<=orc+WS_MARGEM);}
+function wsPedido(v){
+  return {nome:String(v.nome||''),produtor:v.produtor||'',ano:Number.isInteger(v.ano)?v.ano:null,tipo:v.tipo||null};
 }
-function wsPontuacaoHTML(pontuacao){
-  if(!Array.isArray(pontuacao)||!pontuacao.length)return '';
-  return `<div class="pont-row">${pontuacao.map(p=>{
-    const valor=typeof p.valor==='number'?p.valor.toFixed(1):'?';
-    const corpo=`★ ${valor}/${p.escala||5} <span class="pont-fonte">${esc(p.fonte||'')}</span>`;
-    return p.url
-      ?`<a class="pont-badge" href="${esc(p.url)}" target="_blank" rel="noopener">${corpo}</a>`
-      :`<span class="pont-badge">${corpo}</span>`;
-  }).join('')}</div>`;
+async function wsAbrirCarta(row){
+  clearTimeout(_wsRecTimer);_wsRecTick=null;
+  WS={
+    id:row.id, prato:row.prato||'', orcamento:row.orcamento!=null?Number(row.orcamento):null,
+    vinhos:Array.isArray(row.vinhos)?row.vinhos:[], aviso:row.aviso||'',
+    ligados:[], ligado:false, marcas:null, sel:new Set(),
+    // {índice: 'a' (a procurar) | 'ok' | 'falhou'}
+    pesq:Object.assign({},row.pesquisados&&typeof row.pesquisados==='object'?row.pesquisados:{}),
+    rec:row.rec_estado==='concluido'?row.recomendacao:null,
+    recEstado:row.rec_estado||'', recErro:row.rec_erro||''
+  };
+  wsDesenhar();
+  await wsLigar(WS);
+  if(WS&&WS.id===row.id&&WS.recEstado==='pendente')wsRecIniciarPolling(WS);
 }
-/* Os avisos da conferência feita na Edge Function: o vinho recomendado não
-   está na carta que ela leu, ou o preço não bate. Não se esconde a
-   sugestão (o emparelhamento é por nome e pode falhar) — quem está à mesa
-   tem a carta na mão e confirma num segundo. */
-function wsCoerenciaHTML(v){
-  const co=v&&v.coerencia;
-  if(!co)return '';
-  const avisos=[];
-  if(co.naCarta===false)avisos.push('Não encontrei este vinho na lista que li da carta — confirma no menu antes de pedires.');
-  if(co.precoCartaLido!=null)avisos.push('Na carta li '+wsEur(co.precoCartaLido)+' para este vinho — confirma o preço.');
-  if(!avisos.length)return '';
-  return `<div class="vinho-alerta">${avisos.map(a=>`<p>⚠️ ${esc(a)}</p>`).join('')}</div>`;
+async function wsLigar(c){
+  try{await catCarregar();}catch(e){}
+  try{
+    const r=await sbRpc('carta_ligar',{p_pedidos:c.vinhos.map(wsPedido)});
+    c.ligados=Array.isArray(r)?r:[];
+  }catch(e){c.ligados=[];}
+  c.ligado=true;
+  if(WS!==c)return;
+  wsDesenhar();
+  wsCarregarMarcas(c);
 }
-function wsPrecoBadgeHTML(v){
-  const pi=WS_PRECO_INFO[(v.precoAvaliacao&&v.precoAvaliacao.classificacao)||'desconhecido']||WS_PRECO_INFO.desconhecido;
-  return `<div class="preco-badge ${pi.cls}">${pi.txt}${v.precoAvaliacao&&v.precoAvaliacao.faixaMercado?` · ref. ${esc(v.precoAvaliacao.faixaMercado)}`:''}</div>
-    ${v.precoAvaliacao&&v.precoAvaliacao.comentario?`<p class="vinho-txt">${esc(v.precoAvaliacao.comentario)}</p>`:''}`;
-}
-function wsVinhoCardHTML(v,destaque){
-  const sub=[v.produtor,v.tipo,v.regiao,v.casta].filter(Boolean).map(esc).join(' · ');
-  return `<div class="vinho-card${destaque?' destaque':''}">
-    ${destaque?'<div class="vinho-ribbon">🏆 Melhor escolha</div>':''}
-    <div class="vinho-head">
-      <div>
-        <div class="vinho-nome">${esc(v.nome||'Vinho')}</div>
-        ${sub?`<div class="vinho-sub">${sub}</div>`:''}
-      </div>
-      <div class="vinho-preco">${wsEur(v.precoCarta)}</div>
-    </div>
-    ${wsCoerenciaHTML(v)}
-    ${wsPontuacaoHTML(v.pontuacao)}
-    ${wsPrecoBadgeHTML(v)}
-    ${v.combinacao?`<p class="vinho-txt"><strong>Porque combina:</strong> ${esc(v.combinacao)}</p>`:''}
-  </div>`;
-}
-/* OU SABEMOS OU NÃO SABEMOS: um vinho tem factos (do catálogo, ou de uma
-   pesquisa a sério pedida aqui) ou diz "sem dados" — nunca uma estimativa
-   de memória com ar de número (a invariante 3 da WineCatalog). As análises
-   antigas (sem `versao`) desenham-se pelo caminho antigo, com "—". */
-function wsScoreTxt(v){
-  if(v.pontuacaoAprox==null||v.pontuacaoOrigem!=='catalogo')return '—';
-  return '★ '+Number(v.pontuacaoAprox).toFixed(1)+'<span class="carta-ano">'+esc(v.pontuacaoAno?' '+v.pontuacaoAno:'')+'</span>';
-}
-function wsNotaDaLista(vinhos){
-  const n=(vinhos||[]).filter(v=>v.pontuacaoOrigem==='catalogo').length;
-  if(!n)return 'Análise antiga: nenhum destes vinhos tinha sido pesquisado a sério.';
-  return '<b>★ '+n+'</b> '+(n===1?'tinha':'tinham')+' nota pesquisada a sério. Os outros (—) não tinham dados.';
-}
-/* O que cada análise no ecrã tem: a leitura da carta e a última pesquisa
-   pedida (`verificacao`). O que se vê é a JUNÇÃO das duas (`wsMesclar`). */
-const _wsAnalises={};          // {analiseId: {resultado, verificacao}}
-function wsMesclar(res,verif){
-  const d=Object.assign({},res||{});
-  d.vinhosCarta=(Array.isArray(d.vinhosCarta)?d.vinhosCarta:[]).map(v=>Object.assign({},v));
-  if(verif&&!Array.isArray(verif)&&Array.isArray(verif.vinhos)){
-    verif.vinhos.forEach(x=>{
-      const v=d.vinhosCarta[x.i];
-      if(!v)return;
-      if(x.conhecido){v.conhecido=x.conhecido;v.precoAvaliacao=x.precoAvaliacao||null;v.naoEncontrado=false;}
-      else if(x.naoEncontrado&&!v.conhecido)v.naoEncontrado=true;
-      if(typeof x.pesquisaWeb==='boolean')v.pesquisaWeb=x.pesquisaWeb;
-    });
-    if(verif.recomendacao!=='falhou'){
-      d.sugestoes=Array.isArray(verif.sugestoes)?verif.sugestoes:[];
-      d.recomendacao=verif.recomendacao;
-    }
-    d.pesquisar=Array.isArray(verif.pesquisar)?verif.pesquisar:[];
-    d.pesquisado=true;
-  }
-  return d;
-}
-// Só se oferece para pesquisar o que NÃO se sabe: um vinho já pesquisado
-// que ficou sem nota não volta a ter visto (era pagar outra vez pelo mesmo).
-function wsPesquisavel(v){return !!v&&!v.conhecido&&!v.naoEncontrado;}
-// Ao admin, os que voltaram SEM pesquisa Google levam 🧠, e há a pesquisa
-// profunda (o Serper, garantido). A Edge Function volta a confirmar.
-function wsDeMemoria(v){return !!v&&v.pesquisaWeb===false;}
-function wsResultadoHTML(d,opts){
-  opts=opts||{};
-  const analiseId=opts.analiseId;
-  if(d&&d.versao>=2&&analiseId!=null){
-    _wsAnalises[analiseId]={resultado:d,verificacao:opts.verificacao||null};
-    setTimeout(()=>wsCarregarMarcas(analiseId),0);
-    return `<div class="res-wrap" data-res="${analiseId}">${wsResultadoV2HTML(analiseId)}</div>`;
-  }
-  return wsResultadoLegadoHTML(d,opts);
-}
-function wsRedesenhar(analiseId){
-  document.querySelectorAll(`#s-sugestoes .res-wrap[data-res="${analiseId}"]`).forEach(el=>{el.innerHTML=wsResultadoV2HTML(analiseId);});
+// O vinho do Catálogo ligado a este da carta (null se o Catálogo não o tem).
+function wsCatDe(c,i){
+  const l=c.ligados[i];
+  return l&&l.id!=null?(IDXV[-Number(l.id)]||null):null;
 }
 
 /* ── As marcas dos amigos ──
    🍾 na garrafeira de um amigo · ⭐ bebeu-o e deu nota · 💭 na wishlist ·
    🎁 já foi prenda de anos. Os amigos são o grupo FECHADO das Prendas de
-   Anos: quem não está lá recebe `null` da `winecatalog.marcas_amigos` e não
-   vê marca nenhuma — o portão é do servidor. Pergunta-se sempre que uma
-   análise se desenha (o histórico mostra o que os amigos têm HOJE), e se
-   falhar a carta aparece sem marcas. */
-const _wsMarcas={};            // {analiseId: [marcas|null, …] pela ordem da carta}
-async function wsCarregarMarcas(analiseId){
-  if(analiseId in _wsMarcas)return;
-  const st=_wsAnalises[analiseId];
-  const vinhos=st&&st.resultado&&Array.isArray(st.resultado.vinhosCarta)?st.resultado.vinhosCarta:[];
-  if(!vinhos.length||!_sbSession)return;
-  _wsMarcas[analiseId]=null;
+   Anos: quem não está lá recebe `null` da `garrafeira.marcas_amigos` e não
+   vê marca nenhuma — o portão é do servidor. Vai a linha do Catálogo de cada
+   vinho (`catalogo_id`) e a cor: a da WineCatalog comparava só as chaves do
+   nome, que deixam a cor de fora, e um branco da carta acendia o tinto da
+   garrafeira de um amigo (migração 40). Se falhar, a carta fica sem marcas. */
+async function wsCarregarMarcas(c){
+  if(!_sbSession||!c.vinhos.length)return;
   try{
-    const r=await sbFetch(`${SB_URL}/rest/v1/rpc/marcas_amigos`,{
-      method:'POST',
-      headers:sbHeaders({'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'}),
-      body:JSON.stringify({p_pedidos:vinhos.map(v=>({nome:String(v.nome||''),produtor:v.produtor||'',ano:Number.isInteger(v.ano)?v.ano:null}))})
-    });
-    if(!r.ok){delete _wsMarcas[analiseId];return;}
-    const d=await r.json();
-    if(!Array.isArray(d)||!d.some(Boolean))return;
-    _wsMarcas[analiseId]=d;
-    wsRedesenhar(analiseId);
-  }catch(e){delete _wsMarcas[analiseId];}
-}
-function wsMarcaDe(analiseId,i){
-  const m=_wsMarcas[analiseId];
-  return Array.isArray(m)&&Number.isInteger(i)?(m[i]||null):null;
+    const d=await sbRpc('marcas_amigos',{p_pedidos:c.vinhos.map((v,i)=>
+      Object.assign(wsPedido(v),{catalogo_id:c.ligados[i]&&c.ligados[i].id!=null?Number(c.ligados[i].id):null}))});
+    c.marcas=Array.isArray(d)&&d.some(Boolean)?d:null;
+    if(WS===c)wsDesenhar();
+  }catch(e){}
 }
 function wsMarcasHTML(m){
   if(!m)return '';
@@ -1997,329 +1936,316 @@ function wsAmigoToque(ev,el){
   toast(el.getAttribute('data-t')||'');
 }
 
-const WS_REC_TXT={
-  'catalogo-falhou':'Não consegui consultar o que já sabemos destes vinhos — tenta outra vez daqui a um minuto antes de pesquisar, para não pagares por uma pesquisa que já foi feita.',
-  'sem-conhecidos':'Ainda não conheço nenhum vinho desta carta — e prefiro não adivinhar. Escolhe até 4 na lista para pesquisar a sério (já deixei marcados os que parecem fazer mais sentido para o prato).',
-  'falhou':'Não consegui fazer a recomendação agora — mas a lista abaixo tem tudo o que se sabe de cada vinho.',
-  'ok':'Dos vinhos que conheço, nenhum combina bem com este pedido. Pesquisa alguns dos outros na lista.',
-  'sem-carta':'Não consegui ler vinhos nesta carta — tenta uma foto mais nítida.'
+function wsEur(v){return typeof v==='number'&&isFinite(v)?v.toFixed(2).replace('.',',')+' €':'—';}
+const WS_TIPO_COR={
+  Tinto:'#6b1230',Branco:'#e2d08a','Rosé':'#e2879c',Espumante:'#c9d9e0',
+  Licoroso:'#c9932e',Frisante:'#b9d8a8',Outro:'#c9bfbc'
 };
-function wsResultadoV2HTML(analiseId){
-  const st=_wsAnalises[analiseId];
-  if(!st)return '';
-  const d=wsMesclar(st.resultado,st.verificacao);
-  const vinhos=d.vinhosCarta;
-  const sug=Array.isArray(d.sugestoes)?d.sugestoes:[];
-  let html='';
-  if(sug.length){
-    html+=`<div class="ws-card-label sug-titulo">A recomendação${sug.length>1?' <em>— toca num vinho para ver o resumo</em>':''}</div>`;
-    html+=sug.map((v,k)=>wsSugDetHTML(v,k,sug,analiseId)).join('');
-  }else{
-    const txt=(d.recomendacao==='sem-carta'&&d.aviso)?d.aviso:(WS_REC_TXT[d.recomendacao]||WS_REC_TXT['sem-conhecidos']);
-    html+=`<div class="ws-card"><p class="ws-note">${esc(txt)}</p></div>`;
-  }
-  if(vinhos.length){
-    // Os que a recomendação apontou para pesquisar vêm marcados — só da
-    // primeira vez: depois manda quem está à mesa.
-    if(!_wsVerifSel[analiseId]){
-      _wsVerifSel[analiseId]=new Set((d.pesquisar||[]).filter(i=>wsPesquisavel(vinhos[i])).slice(0,WS_VERIF_MAX));
-    }
-    const sel=_wsVerifSel[analiseId];
-    const nConh=vinhos.filter(v=>v.conhecido).length;
-    const pendente=!!_wsVerifPolls[analiseId];
-    const memoria=isAdmin()?vinhos.map((v,i)=>wsDeMemoria(v)?i:-1).filter(i=>i>=0):[];
-    html+=`<div class="ws-card">
-      <div class="ws-card-label">Vinhos da carta (${vinhos.length}) · ${nConh} conhecido${nConh===1?'':'s'}</div>
-      <p class="ws-note" style="margin-top:-4px">★ é a nota do Vivino. <b>sem dados</b> quer dizer que ainda não pesquisámos esse vinho — escolhe até ${WS_VERIF_MAX} e eu pesquiso.</p>
-      ${wsLegendaTipos(vinhos)}
-      ${Array.isArray(_wsMarcas[analiseId])?'<p class="ws-note am-legenda">Dos amigos das Prendas de Anos: 🍾 tem na garrafeira · ⭐ bebeu e deu nota · 💭 está na wishlist · 🎁 já foi prenda. Toca numa marca para ver o pormenor.</p>':''}
-      <div class="carta-list">${vinhos.map((v,i)=>wsCartaItemV2HTML(v,i,analiseId,sel)).join('')}</div>
-      <div class="verif-bar">
-        <button type="button" class="btn ghost" id="ws-btn-verificar-${analiseId}" onclick="wsVerificar(${analiseId})" ${(!sel.size||pendente)?'disabled':''}>🔎 Pesquisar os escolhidos (<span id="ws-verif-count-${analiseId}">${sel.size}</span>)</button>
-        ${memoria.length?`<p class="ws-note" style="margin:10px 0 6px">🧠 ${memoria.length===1?'Um vinho voltou':memoria.length+' vinhos voltaram'} sem pesquisa Google — o Gemini respondeu de memória.</p>
-        <button type="button" class="btn ghost ws-profunda" id="ws-btn-profunda-${analiseId}" onclick="wsVerificar(${analiseId},true)" ${pendente?'disabled':''}>🔬 Pesquisa profunda (${Math.min(memoria.length,WS_VERIF_MAX)})</button>`:''}
-        <div id="ws-verif-status-${analiseId}" class="ws-note" style="${pendente?'':'display:none'}">${pendente?'A pesquisar a sério — pode demorar um pouco…':''}</div>
-      </div>
+function wsTipoCor(tipo){return WS_TIPO_COR[tipo]||WS_TIPO_COR.Outro;}
+function wsLegendaTipos(tipos){
+  tipos=[...new Set(tipos.filter(Boolean))];
+  if(!tipos.length)return '';
+  return `<div class="tipo-legenda">${tipos.map(t=>`<span class="tipo-legenda-item"><span class="tipo-dot" style="background:${wsTipoCor(t)}"></span>${esc(t)}</span>`).join('')}</div>`;
+}
+/* O preço na carta face ao preço de referência do vinho (`precoPrincipal`,
+   o mesmo da página do vinho). Os cortes são o que se diz em qualquer
+   restaurante sobre a margem da garrafa — 2 a 3 vezes o preço de loja é o
+   normal — e vão escritos no comentário: quem está à mesa vê a conta. */
+const WS_PRECO_INFO={
+  barato:{cls:'bg-ok',txt:'Preço abaixo do habitual'},
+  justo:{cls:'bg-ok',txt:'Preço justo'},
+  caro:{cls:'bg-warn',txt:'Um pouco caro'},
+  muito_caro:{cls:'bg-bad',txt:'Preço exagerado'}
+};
+function wsAvaliarPreco(carta,ref){
+  if(carta==null||!(carta>0)||ref==null||!(ref>0))return null;
+  const fmt=x=>x.toFixed(x<20?2:0).replace('.',',')+' €';
+  const r=carta/ref;
+  const cls=r<=2?'barato':r<=3?'justo':r<=4.5?'caro':'muito_caro';
+  const onde={barato:'abaixo do',justo:'dentro do',caro:'acima do',muito_caro:'muito acima do'}[cls];
+  return {cls,ref:fmt(ref),
+    txt:`Custa cerca de ${fmt(ref)} numa loja e ${wsEur(carta)} nesta carta — ${r.toFixed(1).replace('.',',')}×, ${onde} habitual num restaurante (2 a 3 vezes o preço de loja).`};
+}
+// A nota do Vivino que conta (`notaVivino`), com a colheita quando não é a
+// da carta — quem está à mesa merece saber a que garrafa ela pertence.
+function wsNotaHTML(cat,v,cls){
+  const x=notaVivino(cat);
+  if(!x)return '';
+  const outra=x.de==='colheita'&&cat.ano&&String(cat.ano)!==String(v.ano||'')?String(cat.ano):'';
+  const t=x.de==='global'?'Vivino, todas as colheitas':`Vivino, colheita ${cat.ano||''}`;
+  return `<span class="${cls}" title="${esc(t)}">★ ${x.nota.toFixed(1)}${outra?`<span class="carta-ano">${esc(outra)}</span>`:''}</span>`;
+}
+
+/* ── O desenho ──
+   A recomendação (quando há) por cima — é a resposta —, e a carta por baixo,
+   com os vistos para procurar informação. Uma carta só no ecrã de cada vez:
+   abrir uma das anteriores troca-a por esta. */
+function wsDesenhar(){
+  const box=document.getElementById('ws-resultado');
+  if(!box)return;
+  const c=WS;
+  if(!c){box.innerHTML='';return;}
+  box.innerHTML=wsRecHTML(c)+wsCartaHTML(c);
+}
+const WS_DET_MAX=5;     // de cada vez (o dono)
+const WS_DET_TOTAL=15;  // por carta: 5, 10 ou 15
+function wsPesqN(c){return Object.keys(c.pesq).length;}
+function wsAProcurar(c){return Object.values(c.pesq).includes('a');}
+function wsCartaHTML(c){
+  const orc=c.orcamento;
+  const idx=c.vinhos.map((v,i)=>i).filter(i=>wsCabe(c.vinhos[i],orc));
+  const caros=c.vinhos.filter(v=>v.preco!=null&&!wsCabe(v,orc)).length;
+  const semPreco=orc!=null?c.vinhos.filter(v=>v.preco==null).length:0;
+  const conh=idx.filter(i=>wsCatDe(c,i)).length;
+  const fora=[caros?`${caros} acima de ${wsEur(orc+WS_MARGEM)}`:'',semPreco?`${semPreco} sem preço da garrafa`:''].filter(Boolean).join(' e ');
+  const prato=c.prato?` · ${esc(c.prato)}`:'';
+  if(!idx.length){
+    return `<div class="ws-card">
+      <div class="ws-card-label">A carta${prato}</div>
+      <p class="ws-note">${orc!=null?`Nenhum dos ${c.vinhos.length} vinhos lidos cabe em ${wsEur(orc)} (com ${WS_MARGEM} € de margem).`:'Não consegui ler vinhos nesta carta.'}</p>
     </div>`;
   }
-  return html;
+  const restam=WS_DET_TOTAL-wsPesqN(c), aProcurar=wsAProcurar(c), recPend=c.recEstado==='pendente';
+  return `<div class="ws-card">
+    <div class="ws-card-label">A carta${prato} · ${idx.length} vinho${idx.length===1?'':'s'}${orc!=null?` até ${wsEur(orc)}`:''}${c.ligado?` · ${conh} no Catálogo`:''}</div>
+    ${fora?`<p class="ws-note" style="margin-top:-4px">Ficaram de fora ${fora}.</p>`:''}
+    ${c.aviso?`<p class="ws-note">⚠️ ${esc(c.aviso)}</p>`:''}
+    ${wsLegendaTipos(idx.map(i=>c.vinhos[i].tipo||(wsCatDe(c,i)||{}).tipo))}
+    ${c.marcas?'<p class="ws-note am-legenda">Dos amigos das Prendas de Anos: 🍾 tem na garrafeira · ⭐ bebeu e deu nota · 💭 está na wishlist · 🎁 já foi prenda. Toca numa marca para ver o pormenor.</p>':''}
+    <div class="carta-list">${c.ligado?idx.map(i=>wsLinhaHTML(c,i,restam)).join(''):'<p class="ws-note">A ver o que o Catálogo sabe…</p>'}</div>
+    <div class="ws-acoes">
+      <p class="ws-note">${restam>0
+        ?`Escolhe até ${Math.min(WS_DET_MAX,restam)} para procurar informação com IA — o que se encontrar fica no Catálogo. Depois, pede a sugestão.`
+        :`Já procuraste ${WS_DET_TOTAL} vinhos desta carta. Pede a sugestão.`}</p>
+      ${restam>0?`<button type="button" class="btn ghost" id="ws-btn-det" onclick="wsDetalhe()" ${(!c.sel.size||aProcurar)?'disabled':''}>🔎 Procurar informação (<span id="ws-det-n">${c.sel.size}</span>/${Math.min(WS_DET_MAX,restam)})</button>`:''}
+      <button type="button" class="btn prim" onclick="wsRecomendar()" ${(aProcurar||recPend||!c.ligado)?'disabled':''}>🍷 ${c.rec?'Sugerir outra vez':'Sugerir'}</button>
+      ${aProcurar?'<p class="ws-note">A procurar informação — pode demorar um minuto…</p>':''}
+    </div>
+  </div>`;
 }
-/* A caixa resumo: os vinhos conhecidos pela ordem da recomendação, os 2 ou
-   3 recomendados com a marca. Só o primeiro vem aberto — à mesa a pergunta
-   é "qual?" (`<details>`, sem JavaScript). Um resultado de antes da
-   ordenação não tem `recomendado`: aí todas eram recomendações. */
-function wsSugDetHTML(v,k,todas,analiseId){
-  const antigas=!todas.some(x=>x.recomendado!=null);
-  const rec=antigas||!!v.recomendado;
-  const sub=[v.produtor,v.tipo,v.regiao,v.casta].filter(Boolean).map(esc).join(' · ');
-  const amigos=wsMarcasHTML(wsMarcaDe(analiseId,v.i));
-  const p0=Array.isArray(v.pontuacao)&&v.pontuacao[0];
-  const nota=p0&&typeof p0.valor==='number'?`★ ${p0.valor.toFixed(1)}`:'<span class="sem-dados">sem nota</span>';
-  const marca=k===0&&rec?'<span class="sug-marca topo">🏆 Melhor escolha</span>':rec?'<span class="sug-marca">Recomendado</span>':'';
-  return `<details class="vinho-card sug-det${rec?' destaque':''}"${k===0?' open':''}>
+function wsLinhaHTML(c,i,restam){
+  const v=c.vinhos[i], cat=wsCatDe(c,i), est=c.pesq[i];
+  const tipo=v.tipo||(cat&&cat.tipo)||null;
+  const castas=cat&&cat.castas&&cat.castas.length?cat.castas.slice(0,3).join(', '):'';
+  const sub=[v.produtor||(cat&&cat.produtor),v.ano,v.regiao||(cat&&cat.regiao),castas].filter(Boolean).map(x=>esc(String(x))).join(' · ');
+  let estado;
+  if(est==='a')estado='<span class="carta-score a-procurar">a procurar…</span>';
+  else if(cat)estado=wsNotaHTML(cat,v,'carta-score conhecida')||'<span class="carta-score">sem nota</span>';
+  else if(est==='falhou')estado='<span class="carta-score" title="Procurado com IA, sem resultados fiáveis">não encontrado</span>';
+  else estado='<span class="carta-score sem-dados">sem dados</span>';
+  const pr=wsAvaliarPreco(v.preco!=null?Number(v.preco):null,cat?precoVinho(cat):null);
+  // Procura-se uma vez por carta; o que falhou pode tentar-se outra vez.
+  const podeVisto=est!=='a'&&est!=='ok'&&(c.sel.has(i)||restam-c.sel.size>0);
+  const visto=est==='ok'?'<span class="carta-check-feito" title="Já procurado com IA">✓</span>'
+    :podeVisto?`<input type="checkbox" class="carta-check" data-i="${i}" ${c.sel.has(i)?'checked':''} onchange="wsDetToggle(this)" aria-label="Procurar informação">`
+    :'<span class="carta-check-vazio"></span>';
+  // Ligado ao Catálogo, o nome é o de lá (sem as MAIÚSCULAS da carta): se a
+  // ligação estiver errada, é aqui que se vê.
+  const nome=cat
+    ?`<span class="carta-nome ligado" onclick="verVinho(${cat.id})">${esc(cat.nome||v.nome||'')}<span class="carta-ver">›</span>`
+    :`<span class="carta-nome">${esc(v.nome||'')}`;
+  return `<div class="carta-item">
+    ${visto}
+    <span class="tipo-dot" style="background:${wsTipoCor(tipo)}" title="${esc(tipo||'Cor desconhecida')}"></span>
+    ${nome}${sub?`<span class="carta-sub">${sub}</span>`:''}${wsMarcasHTML(c.marcas&&c.marcas[i])}</span>
+    ${estado}
+    <span class="carta-preco${pr?' preco-'+pr.cls:''}"${pr?` title="${esc(WS_PRECO_INFO[pr.cls].txt+' · ref. '+pr.ref)}"`:''}>${wsEur(v.preco!=null?Number(v.preco):null)}</span>
+  </div>`;
+}
+
+/* ── 3. Procurar informação (até 5 de cada vez) ──
+   É o "Procurar informação" com IA de sempre (`vinho-info`, o motor do
+   plano de cada um) e grava logo no Catálogo (`daCarta`: o nome da carta é
+   a confirmação). Um vinho que o Catálogo já tem vai com o nome, o produtor
+   e a colheita DA LINHA — é assim que a `vinho-info` a acha, e é nela que
+   escreve; um que não tem vai como a carta o escreve, e nasce lá. Nunca se
+   pede o produtor, o ano nem a cor: são a identidade, e uma cor errada
+   vinda da IA fazia nascer outra linha. */
+function wsDetToggle(el){
+  const c=WS;if(!c)return;
+  const i=parseInt(el.dataset.i,10);
+  const max=Math.min(WS_DET_MAX,WS_DET_TOTAL-wsPesqN(c));
+  if(el.checked){
+    if(c.sel.size>=max){el.checked=false;toast(`Escolhe no máximo ${max} de cada vez`,1);return;}
+    c.sel.add(i);
+  }else c.sel.delete(i);
+  wsDesenhar();
+}
+function wsPedidoIA(c,i){
+  const v=c.vinhos[i], l=c.ligados[i], cat=wsCatDe(c,i);
+  const ano=l?(l.ano!=null?Number(l.ano):null):(Number.isInteger(v.ano)?v.ano:null);
+  const tipo=cat&&TIPOS.includes(cat.tipo)?cat.tipo:(TIPOS.includes(v.tipo)?v.tipo:'');
+  const campos=iaCamposPara({ano}).map(x=>x.k).filter(k=>!['produtor','ano','tipo'].includes(k));
+  return {
+    nome:cat?cat.nome:String(v.nome||''),
+    produtor:cat?(cat.produtor||v.produtor||''):(v.produtor||''),
+    ano, tipo, regiao:v.regiao||(cat&&cat.regiao)||'', campos, daCarta:true
+  };
+}
+async function wsDetalhe(){
+  const c=WS;
+  if(!c||!c.sel.size||wsAProcurar(c))return;
+  if(!podeUsarIA()){toast('A IA não está incluída no teu acesso',1);return;}
+  const idx=[...c.sel];
+  idx.forEach(i=>{c.pesq[i]='a';});
+  c.sel.clear();
+  wsDesenhar();
+  const motor=motorDoPlano();
+  const res=await Promise.allSettled(idx.map(i=>iaPedir(wsPedidoIA(c,i),null,motor)));
+  res.forEach((r,k)=>{c.pesq[idx[k]]=r.status==='fulfilled'?'ok':'falhou';});
+  // o que se encontrou está no Catálogo: relê-se, e a carta liga-se outra vez
+  // (um vinho que não estava lá passou a estar)
+  CAT_VINHOS=null;
+  await wsLigar(c);
+  const falhou=res.filter(r=>r.status!=='fulfilled');
+  if(WS===c){
+    toast(falhou.length===idx.length?'Não encontrei informação fiável — '+(falhou[0].reason&&falhou[0].reason.message||'tenta outra vez')
+      :falhou.length?`Informação encontrada para ${idx.length-falhou.length} de ${idx.length}`:'Informação encontrada e guardada no Catálogo ✓',falhou.length===idx.length?1:0);
+  }
+  if(tabAtiva==='detalhe')renderFiltrados();
+}
+
+/* ── 4. A sugestão ──
+   A `garrafeira-carta` ordena só os vinhos que cabem no orçamento e de que
+   o Catálogo sabe alguma coisa, e diz porquê. Devolve a ORDEM e a frase; a
+   nota, o preço de referência e o "preço justo" do cartão saem daqui, dos
+   dados do Catálogo — nunca do texto do modelo. */
+let _wsRecTimer=null, _wsRecTick=null;
+async function wsRecomendar(){
+  const c=WS;
+  if(!c||c.recEstado==='pendente'||wsAProcurar(c))return;
+  c.recEstado='pendente';c.recErro='';
+  wsDesenhar();
+  const pesq={};
+  Object.entries(c.pesq).forEach(([k,v])=>{if(v==='ok'||v==='falhou')pesq[k]=v;});
+  try{
+    await wsFuncao({acao:'recomendar',id:c.id,pesquisados:pesq});
+    wsRecIniciarPolling(c);
+  }catch(e){
+    c.recEstado='erro';c.recErro=e.message;
+    wsDesenhar();
+  }
+}
+function wsRecIniciarPolling(c){
+  clearTimeout(_wsRecTimer);
+  const inicio=Date.now();
+  _wsRecTick=async()=>{
+    if(WS!==c){_wsRecTick=null;return;}
+    if(Date.now()-inicio>2*60*1000){
+      _wsRecTick=null;c.recEstado='erro';c.recErro='A sugestão está a demorar demasiado — tenta outra vez.';
+      wsDesenhar();return;
+    }
+    try{
+      const rows=await sbReq('GET',`cartas?id=eq.${c.id}&select=rec_estado,recomendacao,rec_erro`);
+      const r=rows&&rows[0];
+      if(r&&r.rec_estado!=='pendente'&&WS===c){
+        _wsRecTick=null;
+        c.recEstado=r.rec_estado||'';
+        c.rec=r.rec_estado==='concluido'?r.recomendacao:c.rec;
+        c.recErro=r.rec_estado==='erro'?(r.rec_erro||'Não consegui fazer a sugestão — tenta outra vez.'):'';
+        wsDesenhar();
+        const el=document.getElementById('ws-resultado');
+        if(el&&c.rec)el.scrollIntoView({behavior:'smooth',block:'start'});
+        const h=document.getElementById('ws-hist');if(h&&h.open)wsCarregarHistorico();
+        return;
+      }
+    }catch(e){ /* um soluço de rede: tenta no próximo */ }
+    if(_wsRecTick)_wsRecTimer=setTimeout(_wsRecTick,WS_POLL_INTERVALO_MS);
+  };
+  _wsRecTick();
+}
+function wsRecHTML(c){
+  if(c.recEstado==='pendente')return '<div class="ws-card"><p class="ws-note">🍷 A escolher, só entre os vinhos de que o Catálogo sabe alguma coisa…</p></div>';
+  let html='';
+  if(c.recEstado==='erro'&&c.recErro)html+=`<div class="ws-card"><p class="ws-note" style="color:var(--dg)">${esc(c.recErro)}</p></div>`;
+  const rec=c.rec;
+  if(!rec)return html;
+  const sug=(Array.isArray(rec.sugestoes)?rec.sugestoes:[]).filter(s=>c.vinhos[s.i]);
+  if(!sug.length){
+    const txt=rec.estado==='sem-conhecidos'
+      ?'Ainda não sei nada de nenhum destes vinhos — e prefiro não adivinhar. Escolhe até 5 na lista e procura informação.'
+      :'Dos vinhos que conheço, nenhum combina bem com este pedido. Procura informação sobre outros da lista.';
+    return html+`<div class="ws-card"><p class="ws-note">${txt}</p></div>`;
+  }
+  return html+`<div class="ws-card-label sug-titulo">A sugestão${sug.length>1?' <em>— toca num vinho para ver porquê</em>':''}</div>`
+    +sug.map((s,k)=>wsSugHTML(c,s,k)).join('');
+}
+// Um <details> por vinho, só o primeiro aberto — à mesa a pergunta é "qual?".
+function wsSugHTML(c,s,k){
+  const v=c.vinhos[s.i], cat=wsCatDe(c,s.i);
+  const tipo=v.tipo||(cat&&cat.tipo)||'';
+  const castas=cat&&cat.castas&&cat.castas.length?cat.castas.join(', '):'';
+  const sub=[tipo,v.regiao||(cat&&cat.regiao),castas].filter(Boolean).map(x=>esc(String(x))).join(' · ');
+  const marca=k===0&&s.recomendado?'<span class="sug-marca topo">🏆 Melhor escolha</span>':s.recomendado?'<span class="sug-marca">Recomendado</span>':'';
+  const nota=cat?wsNotaHTML(cat,v,'sug-nota'):'';
+  const pr=wsAvaliarPreco(v.preco!=null?Number(v.preco):null,cat?precoVinho(cat):null);
+  const viv=cat?vivinoLink(cat.vivino_url||''):'';
+  return `<details class="vinho-card sug-det${s.recomendado?' destaque':''}"${k===0?' open':''}>
     <summary class="sug-sum">
       <span class="sug-pos">${k+1}</span>
       <span class="sug-cab">
         ${marca}
-        <span class="vinho-nome">${esc(v.nome||'Vinho')}</span>
+        <span class="vinho-nome">${esc((cat&&cat.nome)||v.nome||'Vinho')}</span>
         ${sub?`<span class="vinho-sub">${sub}</span>`:''}
-        ${amigos}
+        ${wsMarcasHTML(c.marcas&&c.marcas[s.i])}
       </span>
       <span class="sug-dir">
-        <span class="vinho-preco">${wsEur(v.precoCarta)}</span>
-        <span class="sug-nota">${nota}${v.notaAno?`<span class="carta-ano">${esc(' '+v.notaAno)}</span>`:''}</span>
+        <span class="vinho-preco">${wsEur(v.preco!=null?Number(v.preco):null)}</span>
+        ${nota||'<span class="sug-nota"><span class="sem-dados">sem nota</span></span>'}
       </span>
     </summary>
     <div class="sug-corpo">
-      ${wsCoerenciaHTML(v)}
-      ${wsPontuacaoHTML(v.pontuacao)}
-      ${wsPrecoBadgeHTML(v)}
-      ${v.combinacao?`<p class="vinho-txt"><strong>Porquê:</strong> ${esc(v.combinacao)}</p>`:''}
+      ${pr?`<div class="preco-badge ${WS_PRECO_INFO[pr.cls].cls}">${WS_PRECO_INFO[pr.cls].txt} · ref. ${esc(pr.ref)}</div>
+        <p class="vinho-txt">${esc(pr.txt)}</p>`:''}
+      ${s.razao?`<p class="vinho-txt"><strong>Porquê:</strong> ${esc(s.razao)}</p>`:''}
+      ${cat?`<div class="sug-links"><button type="button" class="mini" onclick="verVinho(${cat.id})">Ver a ficha</button>${viv?`<a class="mini" href="${esc(viv)}" target="_blank" rel="noopener">Vivino ↗</a>`:''}</div>`:''}
     </div>
   </details>`;
 }
-function wsCartaItemV2HTML(v,i,analiseId,sel){
-  const k=v.conhecido;
-  const tipo=v.tipo||(k&&k.tipo)||null;
-  const podePesquisar=wsPesquisavel(v);
-  const sub=[v.produtor||(k&&k.produtor),v.ano,k&&Array.isArray(k.castas)&&k.castas.length?k.castas.slice(0,3).join(', '):null].filter(Boolean).map(esc).join(' · ');
-  let score;
-  if(k&&k.nota!=null){
-    const corpo='★ '+Number(k.nota).toFixed(1)+'<span class="carta-ano">'+esc(k.notaAno?' '+k.notaAno:'')+'</span>';
-    score=k.notaUrl?`<a class="carta-score conhecida" href="${esc(k.notaUrl)}" target="_blank" rel="noopener">${corpo}</a>`:`<span class="carta-score conhecida">${corpo}</span>`;
-  }else if(k){
-    score='<span class="carta-score">sem nota</span>';
-  }else if(v.naoEncontrado){
-    score='<span class="carta-score" title="Pesquisado a sério, sem resultados fiáveis">não encontrado</span>';
-  }else{
-    score='<span class="carta-score sem-dados">sem dados</span>';
-  }
-  const cls=(v.precoAvaliacao&&v.precoAvaliacao.classificacao)||'';
-  const pi=WS_PRECO_INFO[cls];
-  const precoTit=pi&&cls!=='desconhecido'?`${pi.txt}${v.precoAvaliacao.faixaMercado?' · '+v.precoAvaliacao.faixaMercado:''}`:'';
-  return `<div class="carta-item">
-    ${podePesquisar?`<input type="checkbox" class="carta-check" data-analise="${analiseId}" data-i="${i}" ${sel.has(i)?'checked':''} onchange="wsVerifToggle(this)">`:'<span class="carta-check-vazio"></span>'}
-    <span class="tipo-dot" style="background:${wsTipoCor(tipo)}" title="${esc(tipo||'Cor desconhecida')}"></span>
-    <span class="carta-nome">${esc(v.nome||'')}${isAdmin()&&wsDeMemoria(v)?' <span class="carta-memoria" title="Respondido de memória — sem pesquisa Google">🧠</span>':''}${sub?`<span class="carta-sub">${sub}</span>`:''}${wsMarcasHTML(wsMarcaDe(analiseId,i))}</span>
-    ${score}
-    <span class="carta-preco${cls&&cls!=='desconhecido'?' preco-'+cls:''}"${precoTit?` title="${esc(precoTit)}"`:''}>${wsEur(v.preco)}</span>
-  </div>`;
-}
-// O resultado de antes da versão 2, como era (só no histórico).
-function wsResultadoLegadoHTML(d,opts){
-  const sug=Array.isArray(d.sugestoes)?d.sugestoes:[];
-  if(!sug.length){
-    return `<div class="ws-card"><p class="ws-note">${esc(d.aviso||'Não encontrei sugestões claras nesta carta — tenta uma foto mais nítida.')}</p></div>`;
-  }
-  let html=sug.map((v,i)=>wsVinhoCardHTML(v,i===0)).join('');
-  if(Array.isArray(d.vinhosCarta)&&d.vinhosCarta.length){
-    html+=`<div class="ws-card">
-      <div class="ws-card-label">Vinhos lidos na carta (${d.vinhosCarta.length})</div>
-      <p class="ws-note" style="margin-top:-4px">${wsNotaDaLista(d.vinhosCarta)}</p>
-      ${wsLegendaTipos(d.vinhosCarta)}
-      <div class="carta-list">${d.vinhosCarta.map(v=>`<div class="carta-item">
-        <span class="carta-check-vazio"></span>
-        <span class="tipo-dot" style="background:${wsTipoCor(v.tipo)}" title="${esc(v.tipo||'Cor desconhecida')}"></span>
-        <span class="carta-nome">${esc(v.nome||'')}</span>
-        <span class="carta-score${v.pontuacaoOrigem==='catalogo'?' conhecida':''}">${wsScoreTxt(v)}</span>
-        <span class="carta-preco">${wsEur(v.preco)}</span>
-      </div>`).join('')}</div>
-    </div>`;
-  }
-  if(Array.isArray(opts.verificacao)&&opts.verificacao.length){
-    html+=`<div class="ws-card-label" style="margin-top:14px">Verificação pedida</div>${opts.verificacao.map(wsVerifCardHTML).join('')}`;
-  }
-  if(Array.isArray(d.fontes)&&d.fontes.length){
-    html+=`<div class="ws-fontes">Fontes: ${d.fontes.map(f=>`<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo||f.url)}</a>`).join(' · ')}</div>`;
-  }
-  return html;
-}
 
-/* ── A pesquisa a sério (até 4 vinhos escolhidos na lista) ──
-   A Edge Function `verificar-vinhos` recebe os ÍNDICES dos vinhos na carta
-   lida, pesquisa-os, volta a recomendar sobre a carta inteira e guarda no
-   catálogo o que encontrou. Mexe na mesma linha de `analises`, com o mesmo
-   pedido-e-sondagem. */
-const WS_VERIF_MAX=4;
-function wsVerifToggle(el){
-  const aid=el.dataset.analise,i=parseInt(el.dataset.i,10);
-  if(!_wsVerifSel[aid])_wsVerifSel[aid]=new Set();
-  const sel=_wsVerifSel[aid];
-  if(el.checked){
-    if(sel.size>=WS_VERIF_MAX){el.checked=false;toast('Escolhe no máximo '+WS_VERIF_MAX+' vinhos',1);return;}
-    sel.add(i);
-  }else{
-    sel.delete(i);
-  }
-  // A mesma análise pode estar desenhada em dois sítios (a de agora e o
-  // histórico): os vistos e o contador mudam nos dois.
-  document.querySelectorAll(`.carta-check[data-analise="${aid}"][data-i="${i}"]`).forEach(c=>{c.checked=sel.has(i);});
-  document.querySelectorAll('#ws-verif-count-'+aid).forEach(c=>{c.textContent=sel.size;});
-  document.querySelectorAll('#ws-btn-verificar-'+aid).forEach(b=>{b.disabled=sel.size===0||!!_wsVerifPolls[aid];});
-}
-function wsVerifStatus(analiseId,txt,erro){
-  document.querySelectorAll('#ws-verif-status-'+analiseId).forEach(s=>{
-    s.style.display=txt?'block':'none';
-    s.style.color=erro?'var(--dg)':'var(--mu)';
-    s.textContent=txt||'';
-  });
-}
-function wsVerifBotoes(analiseId,desligar){
-  const sel=_wsVerifSel[analiseId];
-  document.querySelectorAll('#ws-btn-verificar-'+analiseId).forEach(b=>{b.disabled=desligar||!sel||!sel.size;});
-  document.querySelectorAll('#ws-btn-profunda-'+analiseId).forEach(b=>{b.disabled=!!desligar;});
-}
-async function wsVerificar(analiseId,profunda){
-  let indices;
-  if(profunda){
-    const st=_wsAnalises[analiseId];
-    const vinhos=st?wsMesclar(st.resultado,st.verificacao).vinhosCarta:[];
-    indices=vinhos.map((v,i)=>wsDeMemoria(v)?i:-1).filter(i=>i>=0).slice(0,WS_VERIF_MAX);
-  }else{
-    const sel=_wsVerifSel[analiseId];
-    indices=sel?[...sel]:[];
-  }
-  if(!indices.length)return;
-  wsVerifBotoes(analiseId,true);
-  wsVerifStatus(analiseId,profunda?'Pesquisa profunda — a pesquisar no Google…':'A pesquisar a sério — pode demorar um pouco…');
-  try{
-    const r=await sbFetch(`${SB_URL}/functions/v1/verificar-vinhos`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','apikey':SB_KEY},
-      body:JSON.stringify(profunda?{analiseId,indices,profunda:true}:{analiseId,indices})
-    });
-    let d={};try{d=await r.json();}catch(_){}
-    if(!r.ok){
-      wsVerifStatus(analiseId,d.error||('Erro HTTP '+r.status+' — tenta outra vez.'),1);
-      wsVerifBotoes(analiseId,false);
-      return;
-    }
-    wsVerifIniciarPolling(analiseId);
-  }catch(e){
-    wsVerifStatus(analiseId,'Erro de ligação — tenta outra vez.',1);
-    wsVerifBotoes(analiseId,false);
-  }
-}
-function wsVerifIniciarPolling(analiseId){
-  const inicio=Date.now();
-  const p=_wsVerifPolls[analiseId]||{};
-  clearTimeout(p.timer);
-  _wsVerifPolls[analiseId]={timer:null,inicio};
-  wsVerifPollTick(analiseId,inicio);
-}
-async function wsVerifPollTick(analiseId,inicio){
-  if(Date.now()-inicio>WS_POLL_MAX_MS){
-    delete _wsVerifPolls[analiseId];
-    wsVerifStatus(analiseId,'Está a demorar demasiado — tenta outra vez.',1);
-    wsVerifBotoes(analiseId,false);
-    return;
-  }
-  try{
-    const rows=await sbReq('GET',`analises?id=eq.${encodeURIComponent(analiseId)}&select=id,verificacao_estado,verificacao,verificacao_erro`,undefined,WS_H);
-    const row=rows&&rows[0];
-    if(row&&row.verificacao_estado==='concluido'){
-      delete _wsVerifPolls[analiseId];
-      wsVerifConcluida(analiseId,row.verificacao);
-      return;
-    }
-    if(row&&row.verificacao_estado==='erro'){
-      delete _wsVerifPolls[analiseId];
-      wsVerifStatus(analiseId,row.verificacao_erro||'Não consegui pesquisar — tenta outra vez.',1);
-      wsVerifBotoes(analiseId,false);
-      return;
-    }
-  }catch(e){ /* um soluço de rede: tenta no próximo */ }
-  if(_wsVerifPolls[analiseId]){
-    _wsVerifPolls[analiseId].timer=setTimeout(()=>wsVerifPollTick(analiseId,inicio),WS_POLL_INTERVALO_MS);
-  }
-}
-// A pesquisa voltou: a lista e a recomendação redesenham-se com o que se
-// sabe agora, e os vistos limpam-se.
-function wsVerifConcluida(analiseId,verificacao){
-  const st=_wsAnalises[analiseId];
-  if(!st||!verificacao||Array.isArray(verificacao)){
-    wsVerifStatus(analiseId,'');
-    wsVerifBotoes(analiseId,false);
-    return;
-  }
-  st.verificacao=verificacao;
-  delete _wsVerifSel[analiseId];
-  wsRedesenhar(analiseId);
-  const n=(verificacao.vinhos||[]).filter(x=>x.naoEncontrado).length;
-  const mem=isAdmin()?(verificacao.vinhos||[]).filter(x=>x.pesquisaWeb===false).length:0;
-  toast(mem?`Pesquisa feita — ${mem} de memória, sem Google`:n?`Pesquisa feita — ${n} sem dados fiáveis`:'Pesquisa feita ✓');
-  // o que se pesquisou ficou no catálogo: da próxima vez que se abrir,
-  // relê-se
-  CAT_VINHOS=null;
-  if(modoCat())catCarregar().then(()=>{if(tabAtiva==='detalhe')renderFiltrados();}).catch(()=>{});
-}
-// Uma verificação antiga que volta num instante parece uma resposta a
-// fingir — não é: já tinha sido pesquisada, e o catálogo guardou-a.
-function wsVerifOrigemHTML(v){
-  if(v.origem!=='catalogo')return '';
-  const d=v.origemEm?new Date(v.origemEm):null;
-  const quando=(d&&!isNaN(d))?d.toLocaleDateString('pt-PT',{day:'2-digit',month:'short',year:'numeric'}):'';
-  const ano=v.origemAno?(' · colheita de '+v.origemAno):'';
-  return `<div class="verif-origem">✓ Já pesquisado${quando?' em '+esc(quando):''}${esc(ano)} — não foi preciso pesquisar outra vez.</div>`;
-}
-function wsVerifCardHTML(v){
-  return `<div class="vinho-card verif-card">
-    <div class="vinho-nome">${esc(v.nome||'')}</div>
-    ${wsVerifOrigemHTML(v)}
-    ${wsPontuacaoHTML(v.pontuacao)}
-    ${wsPrecoBadgeHTML(v)}
-  </div>`;
-}
-
-/* ── As cartas anteriores (as MINHAS análises) ──
-   A linha nasce em `analises` quando se pede, e fecha-se no sítio quando a
-   análise acaba — o histórico é essa tabela, com as que falharam ou ainda
-   estão a correr. Só as minhas, mesmo ao admin (que lá as vê todas). Cada
-   carta só se desenha quando se abre: desenhada, pergunta pelas marcas dos
-   amigos, e eram trinta perguntas de uma vez para ninguém as ver. */
-const _wsHist={};              // {id: linha de `analises`}
+/* ── As cartas anteriores (as MINHAS, `garrafeira.cartas`) ──
+   A linha nasce quando se pede a leitura e guarda-se com a sugestão — o
+   histórico é essa tabela, com as que falharam ou ainda estão a correr. Só
+   as minhas, mesmo ao admin (a policy é por `quem`). Abrir uma põe-na no
+   ecrã no lugar da de agora, com o que o Catálogo sabe HOJE. As cartas de
+   antes de outubro de 2026 ficaram no schema da WineSelection. */
 async function wsCarregarHistorico(){
   const box=document.getElementById('ws-historico');
   if(!box)return;
   box.innerHTML='<p class="ws-note">A carregar…</p>';
   try{
-    const rows=await sbReq('GET',`analises?user_email=eq.${encodeURIComponent(wsEu())}&select=id,prato,estado,resultado,erro,criado_em,verificacao&order=criado_em.desc&limit=30`,undefined,WS_H);
-    if(!rows||!rows.length){box.innerHTML='<p class="ws-note">Ainda não pediste nenhuma sugestão.</p>';return;}
-    rows.forEach(r=>{_wsHist[r.id]=r;});
+    const rows=await sbReq('GET',`cartas?select=id,prato,orcamento,estado,vinhos,recomendacao,rec_estado,erro,criado_em&order=criado_em.desc&limit=30`);
+    if(!rows||!rows.length){box.innerHTML='<p class="ws-note">Ainda não leste nenhuma carta.</p>';return;}
     box.innerHTML=rows.map(wsHistItemHTML).join('');
   }catch(e){box.innerHTML='<p class="ws-note">Não foi possível carregar as cartas anteriores.</p>';}
 }
 function wsHistItemHTML(r){
-  // A recomendação que conta é a mais recente: a de depois da pesquisa.
-  const sug=(r.resultado&&r.resultado.versao>=2)
-    ?(wsMesclar(r.resultado,r.verificacao).sugestoes||[])
-    :((r.resultado&&Array.isArray(r.resultado.sugestoes))?r.resultado.sugestoes:[]);
-  const top=sug[0]||null;
+  const vinhos=Array.isArray(r.vinhos)?r.vinhos:[];
+  const sug=r.rec_estado==='concluido'&&r.recomendacao&&Array.isArray(r.recomendacao.sugestoes)?r.recomendacao.sugestoes:[];
+  const top=sug.length&&vinhos[sug[0].i]?vinhos[sug[0].i]:null;
   const data=new Date(r.criado_em);
   const dataFmt=isNaN(data)?'':data.toLocaleDateString('pt-PT',{day:'2-digit',month:'short',year:'numeric'});
-  const topTxt=r.estado==='pendente'?'⏳ a analisar…':r.estado==='erro'?'⚠️ falhou':(top?('🍷 '+esc(top.nome)):'sem sugestões');
+  const txt=r.estado==='pendente'?'⏳ a ler…':r.estado==='erro'?'⚠️ '+esc(r.erro||'falhou')
+    :top?'🍷 '+esc(top.nome):`${vinhos.length} vinho${vinhos.length===1?'':'s'} · sem sugestão`;
   return `<div class="hist-item">
-    <div class="hist-head" onclick="wsToggleHist(${r.id})">
+    <div class="hist-head"${r.estado==='lida'?` onclick="wsAbrirHist(${r.id})"`:''}>
       <div>
-        <div class="hist-prato">${esc(r.prato||'(sem prato)')}</div>
-        <div class="hist-top">${topTxt}</div>
+        <div class="hist-prato">${esc(r.prato||'(sem prato)')}${r.orcamento!=null?` <span class="hist-orc">· até ${wsEur(Number(r.orcamento))}</span>`:''}</div>
+        <div class="hist-top">${txt}</div>
       </div>
       <div class="hist-data">${dataFmt}</div>
     </div>
-    <div class="hist-body" id="ws-hist-body-${r.id}" style="display:none"></div>
   </div>`;
 }
-function wsHistCorpoHTML(r){
-  if(r.estado==='concluido')return wsResultadoHTML(r.resultado||{},{analiseId:r.id,verificacao:r.verificacao});
-  if(r.estado==='erro')return `<p class="ws-note" style="color:var(--dg)">${esc(r.erro||'Falhou — tenta outra vez.')}</p>`;
-  return '<p class="ws-note">Ainda a analisar — volta a abrir daqui a pouco.</p>';
-}
-function wsToggleHist(id){
-  const el=document.getElementById('ws-hist-body-'+id);
-  if(!el)return;
-  const abrir=el.style.display==='none';
-  if(abrir&&!el.dataset.pronto&&_wsHist[id]){el.innerHTML=wsHistCorpoHTML(_wsHist[id]);el.dataset.pronto='1';}
-  el.style.display=abrir?'block':'none';
+async function wsAbrirHist(id){
+  try{
+    const rows=await sbReq('GET',`cartas?id=eq.${id}&select=${WS_COLS}`);
+    if(!rows||!rows[0])return;
+    wsStatus('');
+    const el=document.getElementById('ws-resultado');
+    wsAbrirCarta(rows[0]);
+    if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){toast('Não foi possível abrir esta carta',1);}
 }
 
 /* ── NAVEGAÇÃO ─────────────────────────────────────────────────────── */
@@ -11127,7 +11053,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='169';
+const APP_BUILD='171';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
