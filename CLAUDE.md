@@ -35,6 +35,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
 - `garrafeira-imagens.ts` — a Edge Function que copia as imagens das lojas
   para o bucket `garrafeira-imagens` (migração 34). Deploy:
   `supabase functions deploy garrafeira-imagens`.
+- `garrafeira-carta.ts` — a Edge Function das Sugestões: lê a carta e faz
+  a sugestão (migração 40; ver "As Sugestões"). Deploy:
+  `supabase functions deploy garrafeira-carta`.
 - `garrafeira-push.ts` — a Edge Function das notificações push (a chave
   pública VAPID para a app, e o envio da caixa de saída `push_avisos`; ver
   "Comentários e sugestões"). Deploy: `supabase functions deploy garrafeira-push`.
@@ -121,6 +124,10 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   corrige o catálogo na linha que é só desse vinho; nas outras, enche o
   vazio e a divergência vai ao admin (ver "Os curadores do catálogo" ›
   "E quem não é curador").
+  `migracao-sugestoes.sql` é a 40: as Sugestões passam a ser da
+  Garrafeira — as cartas lidas (`garrafeira.cartas`), a ligação de cada
+  vinho da carta ao catálogo com a cor (`carta_ligar`) e as marcas dos
+  amigos que já não baralham tintos com brancos (`garrafeira.marcas_amigos`).
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1178,30 +1185,64 @@ notas são diz o `title` e a página do vinho.
   migração (`F_SO_CAT`, `campoVisivel`); fora disso o `passaFiltros` salta-os,
   e trocar de modo limpa-os — como o Local, ao contrário.
 
-### As Sugestões: a WineSelection dentro do Catálogo (30/09/2026)
-O dono das apps: "dentro da componente de Catálogo da garrafeira, queria
-igualmente transpôr a WineSelection 🙂 ou seja, teríamos um separador de
-Sugestões, onde importaríamos aquela página da WineSelection (que depois
-descontinuarei)". É a página "Sugerir" de lá, tal e qual (secção
-"SUGESTÕES" no app.js, `ws*`; o CSS debaixo de `#s-sugestoes`): as fotos da
-carta, o prato e o orçamento vão à MESMA Edge Function `sugerir-vinho` (repo
-WineSelection), e volta a recomendação e a lista da carta, com as marcas dos
-amigos e a pesquisa a sério de até 4 vinhos (`verificar-vinhos`). As
-"Cartas anteriores" são as minhas análises, cada uma desenhada só quando se
-abre.
+### As Sugestões: que vinho peço? (30/09/2026, por passos desde 03/10/2026)
+Nasceram como a página "Sugerir" da WineSelection transposta (30/09/2026, o
+dono das apps: "teríamos um separador de Sugestões, onde importaríamos
+aquela página da WineSelection (que depois descontinuarei)"), com as Edge
+Functions de lá — `sugerir-vinho` lia a carta, perguntava ao catálogo e
+recomendava, tudo de uma vez; `verificar-vinhos` fazia a "pesquisa a sério",
+e ao admin ainda havia a profunda e o 🧠. O dono, a 03/10/2026: "quero mudar
+aqui a mecânica da coisa … aquilo da pesquisa simples e pesquisa avançada, é
+confuso!". Agora são **passos**, cada um à vista, e todos da Garrafeira
+(secção "SUGESTÕES" no app.js, `ws*`; a Edge Function `garrafeira-carta.ts`;
+a migração 40; o CSS debaixo de `#s-sugestoes`):
+1. **Ler a carta** (`wsLer` → `garrafeira-carta`, `acao:'ler'`): as fotos, o
+   prato e o orçamento. É SÓ a transcrição — os vinhos, com produtor, ano,
+   cor, região e preço da garrafa — guardada em `garrafeira.cartas`, em
+   segundo plano (a app sonda a linha, e retoma-a se se sair da app). A cor
+   pede-se com as palavras da Garrafeira (Tinto · Branco · Rosé · Espumante ·
+   Licoroso · Frisante; um Vinho Verde diz-se pela cor): é a chave do
+   catálogo.
+2. **A carta no ecrã** (`wsCartaHTML`): **só os vinhos até ao orçamento, com
+   5 € de margem** (`wsCabe`, e o `cabe` da função — a carta diz 31 € e o
+   orçamento é 30: entra); sem preço da garrafa não entra (um vinho a copo
+   não é uma garrafa). O que ficou de fora diz-se numa linha. De cada vinho,
+   a linha do Catálogo (`carta_ligar`, COM A COR: o branco nunca responde
+   pelo tinto; a colheita da carta primeiro), e daí a nota do Vivino
+   (`notaVivino`), as castas, o preço de referência (`precoPrincipal`) e o
+   nome como o Catálogo o escreve; **tocar no nome abre a página do vinho**,
+   a mesma do Detalhe. O que o Catálogo não tem diz "sem dados".
+3. **Procurar informação, até 5 de cada vez** (`wsDetalhe`): os vistos da
+   lista (nenhum vem marcado) vão ao "Procurar informação" com IA de sempre —
+   a `vinho-info`, com o motor do plano de cada um — e **o que se encontrar
+   fica logo no Catálogo** (`daCarta`: o nome impresso na carta é a
+   confirmação, ver "A procura da IA"). Um vinho que o Catálogo tem vai com
+   o nome, o produtor e a colheita DA LINHA (é nela que a `vinho-info`
+   escreve); um que não tem vai como a carta o escreve, e nasce lá. Nunca se
+   pede o produtor, o ano nem a cor (`wsPedidoIA`): são a identidade, e uma
+   cor errada da IA fazia nascer outra linha. Depois, mais 5, até **15 por
+   carta** (`WS_DET_TOTAL`); o que falhou pode tentar-se outra vez.
+4. **Sugerir** (`wsRecomendar` → `garrafeira-carta`, `acao:'recomendar'`):
+   uma chamada só de texto que ordena os vinhos que cabem no orçamento e de
+   que o Catálogo sabe alguma coisa (lidos de novo pela `carta_ligar`, com a
+   ficha), com os 2 ou 3 recomendados e o porquê. Devolve só a ORDEM e a
+   frase; a nota, o preço e o "preço justo" (2 a 3 vezes o preço de
+   referência é o normal, `wsAvaliarPreco`) saem dos dados, nunca do texto
+   do modelo. Um vinho sem nota não passa à frente de um com nota nos
+   recomendados — no prompt e em código. Pode pedir-se outra vez depois de
+   procurar mais.
+- **Uma carta no ecrã de cada vez** (`WS`): as "Cartas anteriores" são as
+  linhas de `garrafeira.cartas` (as minhas — a policy é por `quem`, mesmo ao
+  admin), e abrir uma põe-na no lugar da de agora, com o que o Catálogo sabe
+  HOJE. As cartas de antes de 03/10/2026 ficaram no schema `wineselection`
+  e já não aparecem.
 - **Só no catálogo** (`.so-cat`): é "que vinho peço?", não "o que tenho".
 - **Só com IA** (`body.sem-sugestoes`, no `sincronizarTabs`): quem é `sem_ia`
-  não vê o separador. Do lado de lá, a `wineselection.is_allowed()` — que as
-  duas Edge Functions perguntam, e a policy das análises também — deixa
-  passar quem tem IA aqui (`garrafeira.plano_ia()`). A regra vive nessa
-  função (`db/functions.sql` do repo WineSelection).
-- **Os dados continuam no schema `wineselection`** (`WS_H` nos pedidos): a
-  app WineSelection pode ser desligada sem se perder nada disto. O contrato
-  do `resultado` é o do `CLAUDE.md` de lá ("Contrato do pedido e da
-  resposta") — mexer nele é mexer nas duas Edge Functions e aqui.
-- O que a pesquisa a sério encontra fica no catálogo; a lista do Catálogo
-  relê-se a seguir (`wsVerifConcluida`).
-- O `gf_tab` nunca reabre as Sugestões: a app abre sempre na garrafeira.
+  não vê o separador, e a `garrafeira-carta` pergunta o mesmo à BD
+  (`plano_ia()`). O "Procurar informação" é a `vinho-info`, que só atende
+  EDITORES.
+- **As marcas dos amigos** (🍾 🍷 💭 🎁) são da `garrafeira.marcas_amigos`
+  (ver "A exceção: as marcas dos amigos").
 
 ### Os curadores do catálogo (30/09/2026, migração 32)
 O dono das apps: "eu quero definir quem cria novos vinhos no catálogo… e se
@@ -1634,8 +1675,15 @@ no repo WineCatalog): só responde a quem é do grupo e só conta as
 garrafeiras cujo dono é do grupo. Nunca sai a linha — nem notas, preço,
 local ou fotografia: só o nome do amigo, quantas garrafas, as colheitas, a
 nota e a data. As partilhas e a RLS daqui ficam exatamente como estavam.
+**As Sugestões daqui usam a irmã `garrafeira.marcas_amigos`** (migração 40,
+03/10/2026, o dono: "estás a baralhar tintos com brancos"): as chaves do
+nome (`chave_base`, `base_nome`) deixam a cor de fora — "Papa Figos Branco"
+e "Papa Figos" dão a mesma —, e a de lá nunca olhava para a cor; um branco
+da carta acendia o tinto da garrafeira de um amigo. A daqui liga primeiro
+pela linha do catálogo (`vinhos.catalogo_id`) e, pela chave, só quando a cor
+não discorda. O resto é a regra de lá, tal e qual.
 **Se mexeres em `garrafas.estado`, `consumo_avaliacao` ou `desejado`**
-(nomes ou significado), vê essa função no mesmo dia.
+(nomes ou significado), vê as duas funções no mesmo dia.
 
 ## Cada um vê a sua garrafeira (a outra decisão que segura o resto)
 Um **vinho**, uma **garrafa** e um **local** pertencem sempre a uma
@@ -2504,16 +2552,23 @@ Como funciona, dos dois lados:
 - **a escrever**: o que a IA acabou de descobrir volta ao catálogo, e o
   trigger `vinhos_catalogo` leva para lá cada vinho que alguém guarda —
   **mas a IA só escreve com um nome confirmado** (27/09/2026): um vinho já
-  gravado (`vinhoId`), ou um nome que o catálogo já conhece. No vinho novo
-  com um nome que o catálogo não conhece, não escreve (`catalogo: "adiado"`
-  no `sync_log`): o nome é o que a pessoa escreveu e ainda o pode corrigir —
+  gravado (`vinhoId`), ou a LINHA desta colheita e cor que o catálogo já
+  tem (`exato` da `procurar` — 02/10/2026: um vinho parecido noutra
+  colheita não chega, porque a `juntar` escreve na colheita pedida e fazia
+  nascer a linha ela própria; foi a #383, "Piano Grande Reserva" sem ano
+  nem produtor, criada pela procura do vinho que se estava a criar no
+  Catálogo, e a `criar` recusou-o um minuto depois). No vinho novo sem essa
+  linha, não escreve (`catalogo: "adiado"` no `sync_log`): o nome é o que a pessoa escreveu e ainda o pode corrigir —
   o formulário é a confirmação. Foi o "Cristo vinhas velhas": a IA respondeu
   pelo Quinta do Crasto, a pessoa gravou "Crasto Vinhas Velhas" na wishlist,
   e o catálogo ficou com uma linha com o nome errado e sem produtor, de um
   vinho que ninguém tinha (resolvida nos Duplicados da WineCatalog). A linha
   nasce quando o vinho é gravado, pelo trigger, com o nome final — na
   wishlist também, desde a migração 29 (com força 1; ver "A wishlist é um
-  vinho sem garrafas"). As
+  vinho sem garrafas"). **A exceção é um vinho de uma CARTA** (`daCarta`, as
+  Sugestões, 03/10/2026): o nome é o que o restaurante imprimiu, e escreve-se
+  logo — com a cor que a carta disse, e sem ler a cache (uma resposta de lá
+  não voltava ao catálogo). As
   castas não vivem na linha do vinho, por isso o trigger não as vê mudar —
   o gancho que falta está no fim da `definir_castas`, em `functions.sql`;
 - **nada disto pode deitar uma procura abaixo.** É uma poupança, não uma

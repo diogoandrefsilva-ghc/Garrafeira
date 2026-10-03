@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="170">
+<body data-build="172">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone-claro.png" alt="">
@@ -234,9 +234,10 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
     <div id="desejos"></div>
   </section>
 
-  <!-- ═══ SUGESTÕES (a página "Sugerir" da WineSelection, no catálogo) ═══
+  <!-- ═══ SUGESTÕES (que vinho peço?, no catálogo) ═══
        As fotos da carta, o prato e o orçamento vão à Edge Function
-       `sugerir-vinho` (repo WineSelection); ver "SUGESTÕES" no app.js. -->
+       `garrafeira-carta`, que só LÊ a carta; a lista, o "Procurar
+       informação" e a sugestão vêm a seguir. Ver "SUGESTÕES" no app.js. -->
   <section class="sec" id="s-sugestoes">
     <div class="ws-card">
       <div class="ws-card-label">1. Fotos da carta de vinhos <em>(mais do que uma, se o menu não couber numa só)</em></div>
@@ -269,7 +270,7 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       </div>
       <div class="orc-dots" id="ws-orc-dots"></div>
 
-      <button class="btn prim full" id="ws-btn-sugerir" onclick="wsSugerir()" style="margin-top:18px" disabled>🍷 Sugerir vinho</button>
+      <button class="btn prim full" id="ws-btn-ler" onclick="wsLer()" style="margin-top:18px" disabled>📖 Ler a carta</button>
       <div id="ws-sugerir-status" class="ws-note" style="display:none"></div>
     </div>
 
