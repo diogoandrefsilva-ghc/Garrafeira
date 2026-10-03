@@ -2543,9 +2543,13 @@ Como funciona, dos dois lados:
 - **a escrever**: o que a IA acabou de descobrir volta ao catálogo, e o
   trigger `vinhos_catalogo` leva para lá cada vinho que alguém guarda —
   **mas a IA só escreve com um nome confirmado** (27/09/2026): um vinho já
-  gravado (`vinhoId`), ou um nome que o catálogo já conhece. No vinho novo
-  com um nome que o catálogo não conhece, não escreve (`catalogo: "adiado"`
-  no `sync_log`): o nome é o que a pessoa escreveu e ainda o pode corrigir —
+  gravado (`vinhoId`), ou a LINHA desta colheita e cor que o catálogo já
+  tem (`exato` da `procurar` — 02/10/2026: um vinho parecido noutra
+  colheita não chega, porque a `juntar` escreve na colheita pedida e fazia
+  nascer a linha ela própria; foi a #383, "Piano Grande Reserva" sem ano
+  nem produtor, criada pela procura do vinho que se estava a criar no
+  Catálogo, e a `criar` recusou-o um minuto depois). No vinho novo sem essa
+  linha, não escreve (`catalogo: "adiado"` no `sync_log`): o nome é o que a pessoa escreveu e ainda o pode corrigir —
   o formulário é a confirmação. Foi o "Cristo vinhas velhas": a IA respondeu
   pelo Quinta do Crasto, a pessoa gravou "Crasto Vinhas Velhas" na wishlist,
   e o catálogo ficou com uma linha com o nome errado e sem produtor, de um

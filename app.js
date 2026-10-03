@@ -1402,9 +1402,26 @@ async function catGuardarNovo(){
     toast('No catálogo ✓');
     if(r&&r.id&&IDXV[-r.id])verVinho(-r.id);
   }catch(e){
-    // A `criar` diz qual é a linha quando o vinho já existe.
-    toast('Não foi possível criar: '+e.message,1);
     btn.disabled=false;btn.textContent='Criar no catálogo';
+    // A `criar` recusa um vinho e colheita que já lá estão e diz qual é a
+    // linha ("… é a #383 …"). Dito assim, lia-se "já tens este vinho"
+    // (02/10/2026, o dono: "não tenho este vinho"): quem o tem é o CATÁLOGO.
+    // Diz-se qual é, e abre-se se se quiser.
+    const m=/#(\d+)/.exec(e.message||'');
+    if(m){
+      const id=-Number(m[1]);
+      try{CAT_VINHOS=null;await catCarregar();renderLista();}catch(_){}
+      const c=IDXV[id];
+      if(c){
+        const qual=`«${c.nome}»${c.ano?' '+c.ano:' (sem colheita)'}${c.produtor?' · '+c.produtor:''}`;
+        if(confirm(`O Catálogo já tem este vinho: ${qual}.\n\nAbrir esse em vez de criar outro?`)){
+          _iaExtraNovo=null;FORM_CAT=false;
+          fecharModal('modal-edit');verVinho(id);
+        }
+        return;
+      }
+    }
+    toast('Não foi possível criar: '+e.message,1);
   }
 }
 /* Corrigir um vinho do catálogo (30/09/2026): o Editar de sempre sobre a
@@ -11036,7 +11053,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='170';
+const APP_BUILD='171';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

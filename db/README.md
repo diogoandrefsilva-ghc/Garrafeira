@@ -620,8 +620,9 @@ só a Edge Function `garrafeira-carta`, lê-se pela policy `cartas_minhas`),
 `garrafeira.carta_ligar` (a linha do catálogo de cada vinho da carta, com a
 cor) e `garrafeira.marcas_amigos` — a da WineCatalog baralhava tintos com
 brancos, porque as chaves do nome deixam a cor de fora e ela nunca olhava
-para a cor. Só cria (sem `DELETE` nem `DROP`), por isso corre pelo MCP ou
-pelo SQL Editor. Ensaiada a 03/10/2026 em funções temporárias (`pg_temp`),
+para a cor. Só cria (o único `DROP` é o `DROP POLICY IF EXISTS` da própria
+policy nova, para poder correr outra vez), por isso corre pelo MCP ou pelo
+SQL Editor. Ensaiada a 03/10/2026 em funções temporárias (`pg_temp`),
 contra a base real: um "Monte da Peceguina" branco deixou de mostrar o
 tinto do Barrona, e um "Carm Grande Reserva" branco mostra só a garrafa
 branca (a de antes mostrava as duas).
