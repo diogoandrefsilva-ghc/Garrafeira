@@ -234,7 +234,10 @@ troca "Qta.", "Qt.ª", "Qtª", "Qt." e "Q.ta" por "quinta" — e a chave do
 catálogo também (`db/abreviaturas.sql` da WineCatalog). Uma carta das
 Sugestões escrevia "Qt.ª das Carvalhas Touriga Nacional"; a chave só
 conhecia o "Qta.", ficava com um "qt" a mais, a `carta_ligar` não achou a
-linha do Catálogo, e o "Procurar informação" fez nascer outra ao lado.
+linha do Catálogo, e o "Procurar informação" fez nascer outra ao lado. No
+PRODUTOR, a BD escreve "Quinta" por extenso (`winecatalog.produtor_oficial`,
+pela qual o trigger `vinhos_nomes` daqui passa): "Qta. do Vallado" grava-se
+"Quinta do Vallado". O nome do vinho fica como foi escrito.
 
 ### O painel abre numa FITA de campos, não numa pilha de grupos
 Já foi tudo ou nada (um botão "Filtros" e onze filtros abertos por trás
