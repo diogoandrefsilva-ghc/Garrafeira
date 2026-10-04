@@ -1,7 +1,16 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-// Importação efémera: as imagens não são persistidas; só o resultado revisto
+// Importação efémera: os ficheiros não são persistidos; só o resultado revisto
 // chega à tabela importacoes. Deploy: supabase functions deploy importar-vinhos
+//
+// Desde 04/10/2026 lê IMAGENS E DOCUMENTOS (o dono das apps: "o importar por
+// imagens passa a ser importar por imagens/docs, e deixa de ser apenas para
+// adicionar novos vinhos"): fotografias e prints (JPEG/PNG/WebP), PDFs (a
+// ficha técnica do produtor) e ficheiros de texto. Um PDF ou uma imagem vai
+// INTEIRO ao Gemini em anexo (`inline_data`, como os `documentos` da
+// vinho-info); um texto vai como texto. O tipo de um PDF confere-se pelos
+// BYTES, nunca pelo nome. A app é que decide, vinho a vinho, se o que se leu
+// é um vinho novo ou a ficha de um que já existe — aqui só se lê.
 const SB_URL=Deno.env.get("SUPABASE_URL")!;
 const SB_SRV=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_KEY=Deno.env.get("GEMINI_FREE_API_KEY")??"";
@@ -59,6 +68,10 @@ async function candidatos(signal:AbortSignal):Promise<string[]>{
  return _modelos;
 }
 const MAX_IMAGENS=3, MAX_BASE64=2_400_000;
+// Um PDF até 6 MB (8,2 MB em base64), um texto até 200 KB; juntos até ~13 MB.
+const MAX_PDF64=8_200_000, MAX_TXT64=280_000, MAX_TOTAL64=13_000_000, MAX_TEXTO=200_000;
+type Ficheiro={mime:string,data:string,nome:string,texto?:string};
+const tipoRot=(mime:string)=>mime==="application/pdf"?"PDF":mime==="text/plain"?"texto":"imagem";
 const LIMITE_GRATIS=Math.max(1,Math.min(20,Number(Deno.env.get("GEMINI_IMPORT_FREE_DAILY_LIMIT")??3)||3));
 const CORS={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, apikey, content-type","Access-Control-Allow-Methods":"POST, OPTIONS"};
 const texto=(v:unknown,n:number)=>String(v??"").replace(/\s+/g," ").trim().slice(0,n);
@@ -98,24 +111,35 @@ function normalizar(raw:any):Record<string,unknown>|null{
  // Sem colheita não há janela de consumo (seria a de uma colheita qualquer).
  const colheita=ano(raw?.ano);
  const de=colheita===null?null:ano(raw?.beberDe);let ate=colheita===null?null:ano(raw?.beberAte);if(de!==null&&ate!==null&&ate<de)ate=null;
- const o:Record<string,unknown>={nome,produtor:texto(raw?.produtor,90),ano:ano(raw?.ano),tipo:escolha(raw?.tipo,TIPOS)||"Tinto",estilo:escolha(raw?.estilo,ESTILOS),regiao:texto(raw?.regiao,60),sub_regiao:texto(raw?.subRegiao,60),mencao:escolha(raw?.mencao,MENCOES),classificacao:escolha(raw?.classificacao,CLASSIF),castas,teor:numero(raw?.teor,4,25,1),estagio_meses:numero(raw?.estagioMeses,0,400),estagio_texto:texto(raw?.estagioTexto,160),notas_prova:texto(raw?.notasProva,600),harmonizacao:texto(raw?.harmonizacao,300),ai_resumo:texto(raw?.resumo,900),beber_de:de,beber_ate:ate,quantidade:Math.round(numero(raw?.quantidade,1,60)??1),aviso:texto(raw?.aviso,300)};
+ const o:Record<string,unknown>={nome,produtor:texto(raw?.produtor,90),ano:ano(raw?.ano),tipo:escolha(raw?.tipo,TIPOS),estilo:escolha(raw?.estilo,ESTILOS),regiao:texto(raw?.regiao,60),sub_regiao:texto(raw?.subRegiao,60),mencao:escolha(raw?.mencao,MENCOES),classificacao:escolha(raw?.classificacao,CLASSIF),castas,teor:numero(raw?.teor,4,25,1),estagio_meses:numero(raw?.estagioMeses,0,400),estagio_texto:texto(raw?.estagioTexto,160),notas_prova:texto(raw?.notasProva,1200),harmonizacao:texto(raw?.harmonizacao,400),ai_resumo:texto(raw?.resumo,900),beber_de:de,beber_ate:ate,quantidade:Math.round(numero(raw?.quantidade,1,60)??1),ficheiro:numero(raw?.ficheiro,1,MAX_IMAGENS),aviso:texto(raw?.aviso,300)};
  Object.keys(o).forEach(k=>{const v=o[k];if(v===null||v===""||(Array.isArray(v)&&!v.length))delete o[k];});return o;
 }
-function prompt(qtd:number){return [
- "És um assistente a transcrever uma garrafeira doméstica a partir de "+qtd+" fotografia(s).",
- "Lê APENAS texto realmente visível em rótulos, caixas, listas manuscritas ou prateleiras. Uma foto pode ter vários vinhos; imagens repetidas podem mostrar duas faces da mesma garrafa. Junta repetições e usa quantidade se vires várias garrafas iguais.",
- "Não pesquisas na internet e não completas dados de memória. Se não se vê, omite. Não inventes produtor, ano, região, castas, teor, tipo ou quantidade. Não cries entradas para menus, preços ou acessórios.",
- "IDIOMA: o nome, o produtor e as castas ficam como estão no rótulo; todo o outro texto (estagioTexto, notasProva, harmonizacao, resumo, aviso) em português de Portugal — se o rótulo o traz noutra língua (inglês, espanhol…), TRADUZ. A região com o nome português (\"Douro\", nunca \"Douro Valley\").",
- "Responde APENAS JSON, sem markdown: {\"vinhos\":[{\"nome\":\"texto visível\",\"produtor\":\"\",\"ano\":2020,\"tipo\":\"Tinto | Branco | Rosé | Espumante | Licoroso | Frisante\",\"estilo\":\"Maduro | Verde | Colheita Tardia | Palhete\",\"regiao\":\"\",\"subRegiao\":\"\",\"mencao\":\"Reserva | Grande Reserva | Garrafeira | Colheita Selecionada | Vinhas Velhas | Superior | Grande Escolha\",\"classificacao\":\"DOC | Vinho Regional | Vinho\",\"castas\":[\"\"],\"teor\":13.5,\"estagioMeses\":18,\"estagioTexto\":\"\",\"notasProva\":\"\",\"harmonizacao\":\"\",\"resumo\":\"\",\"beberDe\":2026,\"beberAte\":2030,\"quantidade\":1,\"aviso\":\"dúvida opcional\"}],\"aviso\":\"observação geral opcional\"}"
+// A cor NÃO se adivinha (era "Tinto" por omissão): a app usa-a para achar o
+// vinho que já existe, e um branco lido como tinto ia atualizar o vinho
+// errado. Sem cor, a app pede-a a quem cria.
+function prompt(fs:Ficheiro[]){return [
+ "És um assistente a ler informação de vinhos a partir de "+fs.length+" ficheiro(s): fotografias de rótulos, garrafas ou prateleiras, prints, listas, fichas técnicas de produtores (PDF ou imagem) ou texto. Cada ficheiro vem marcado [Ficheiro N].",
+ "O objetivo é encaixar nos atributos o que os ficheiros dizem de cada vinho: tanto para criar vinhos novos como para completar a ficha de vinhos que já existem. Uma ficha técnica traz normalmente as castas, a região, o teor, o estágio, as notas de prova, a harmonização e a janela de consumo — aproveita tudo o que lá estiver.",
+ "Lê APENAS o que está realmente nos ficheiros. Um ficheiro pode ter vários vinhos; ficheiros diferentes podem ser o mesmo vinho (frente e verso, rótulo e ficha técnica) — junta-os num só. Usa quantidade se vires várias garrafas iguais.",
+ "Não pesquisas na internet e não completas dados de memória. Se não está nos ficheiros, omite. Não inventes produtor, ano, região, castas, teor, cor ou quantidade — a cor (tipo) só se o ficheiro a disser ou a garrafa a mostrar sem dúvida. Não cries entradas para menus, preços ou acessórios.",
+ "Em \"ficheiro\" põe o número do ficheiro de onde tiraste a maior parte da informação desse vinho.",
+ "IDIOMA: o nome, o produtor e as castas ficam como estão no ficheiro; todo o outro texto (estagioTexto, notasProva, harmonizacao, resumo, aviso) em português de Portugal — se o ficheiro o traz noutra língua (inglês, espanhol…), TRADUZ. A região com o nome português (\"Douro\", nunca \"Douro Valley\").",
+ "Responde APENAS JSON, sem markdown: {\"vinhos\":[{\"nome\":\"texto visível\",\"produtor\":\"\",\"ano\":2020,\"tipo\":\"Tinto | Branco | Rosé | Espumante | Licoroso | Frisante\",\"estilo\":\"Maduro | Verde | Colheita Tardia | Palhete\",\"regiao\":\"\",\"subRegiao\":\"\",\"mencao\":\"Reserva | Grande Reserva | Garrafeira | Colheita Selecionada | Vinhas Velhas | Superior | Grande Escolha\",\"classificacao\":\"DOC | Vinho Regional | Vinho\",\"castas\":[\"\"],\"teor\":13.5,\"estagioMeses\":18,\"estagioTexto\":\"\",\"notasProva\":\"\",\"harmonizacao\":\"\",\"resumo\":\"\",\"beberDe\":2026,\"beberAte\":2030,\"quantidade\":1,\"ficheiro\":1,\"aviso\":\"dúvida opcional\"}],\"aviso\":\"observação geral opcional\"}"
  ].join("\n");}
 function comLimite(pai:AbortSignal,ms:number){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms),a=()=>c.abort();pai.addEventListener("abort",a,{once:true});return{signal:c.signal,limpar:()=>{clearTimeout(t);pai.removeEventListener("abort",a);}};}
-async function ler(imagens:{mime:string,data:string}[],signal:AbortSignal,grande:boolean){
+async function ler(imagens:Ficheiro[],signal:AbortSignal,grande:boolean){
  if(!GEMINI_KEY)throw new Error("a importação ainda não está configurada: falta GEMINI_FREE_API_KEY");
  const modelos=candidatosPara(await candidatos(signal),grande);
- const parts=[{text:prompt(imagens.length)},...imagens.map(i=>({inline_data:{mime_type:i.mime,data:i.data}}))];
+ // Cada ficheiro leva à frente a sua marca [Ficheiro N] — é por ela que o
+ // modelo diz de onde veio cada vinho, e a app o mostra.
+ const parts:any[]=[{text:prompt(imagens)}];
+ imagens.forEach((f,i)=>{
+  parts.push({text:"[Ficheiro "+(i+1)+": "+(f.nome||"sem nome")+" — "+tipoRot(f.mime)+"]"});
+  parts.push(f.texto!=null?{text:f.texto}:{inline_data:{mime_type:f.mime,data:f.data}});
+ });
  let ultimo="";const tentativas:{modelo:string,estado:number|string,finishReason?:string,usageMetadata?:UsageMetadata}[]=[];let usageTotal:UsageMetadata|null=null;
- for(let i=0;i<modelos.length;i++){const modelo=modelos[i],lim=comLimite(signal,i?18000:40000);try{
-   const r=await fetch(API+"/models/"+modelo+":generateContent?key="+GEMINI_KEY,{method:"POST",headers:{"Content-Type":"application/json"},signal:lim.signal,body:JSON.stringify({contents:[{role:"user",parts}],generationConfig:{temperature:0,responseMimeType:"application/json",maxOutputTokens:8192}})});
+ for(let i=0;i<modelos.length;i++){const modelo=modelos[i],lim=comLimite(signal,i?25000:75000);try{
+   const r=await fetch(API+"/models/"+modelo+":generateContent?key="+GEMINI_KEY,{method:"POST",headers:{"Content-Type":"application/json"},signal:lim.signal,body:JSON.stringify({contents:[{role:"user",parts}],generationConfig:{temperature:0,responseMimeType:"application/json",maxOutputTokens:32768}})});
    lim.limpar();
    if(!r.ok){tentativas.push({modelo,estado:r.status});ultimo="Gemini respondeu "+r.status+": "+(await r.text()).slice(0,240);continue;}
    const d=await r.json(),uso=usageMetadata(d),cand=d?.candidates?.[0],motivo=String(cand?.finishReason??"")||"resposta vazia",bruto=(cand?.content?.parts??[]).map((p:any)=>p?.text??"").join("").trim();
@@ -161,8 +185,8 @@ async function quota(auth:string,quem:string,signal:AbortSignal){
  const inicio=new Date().toISOString().slice(0,10)+"T00:00:00.000Z",url=SB_URL+"/rest/v1/importacoes?select=id&quem=eq."+encodeURIComponent(quem)+"&plano_ia=eq.gratis&criado_em=gte."+encodeURIComponent(inicio)+"&limit="+LIMITE_GRATIS;
  const r=await fetch(url,{headers:{apikey:SB_SRV,Authorization:auth,"Content-Profile":"garrafeira"},signal});return r.ok&&(await r.json()).length<LIMITE_GRATIS;
 }
-async function criar(auth:string,gid:number,qtd:number,signal:AbortSignal){
- const r=await fetch(SB_URL+"/rest/v1/importacoes",{method:"POST",headers:{apikey:SB_SRV,Authorization:auth,"Content-Type":"application/json","Content-Profile":"garrafeira",Prefer:"return=representation"},body:JSON.stringify({garrafeira_id:gid,pedido:{quantidade_imagens:qtd}}),signal});
+async function criar(auth:string,gid:number,fs:Ficheiro[],signal:AbortSignal){
+ const r=await fetch(SB_URL+"/rest/v1/importacoes",{method:"POST",headers:{apikey:SB_SRV,Authorization:auth,"Content-Type":"application/json","Content-Profile":"garrafeira",Prefer:"return=representation"},body:JSON.stringify({garrafeira_id:gid,pedido:{quantidade_imagens:fs.length,tipos:fs.map(f=>tipoRot(f.mime))}}),signal});
  if(!r.ok)throw new Error("não foi possível criar a importação");const id=(await r.json())?.[0]?.id;if(typeof id!=="number")throw new Error("a importação não devolveu identificador");return id;
 }
 async function fechar(id:number,quem:string,patch:Record<string,unknown>){await fetch(SB_URL+"/rest/v1/importacoes?id=eq."+id+"&quem=eq."+encodeURIComponent(quem),{method:"PATCH",headers:{apikey:SB_SRV,Authorization:"Bearer "+SB_SRV,"Content-Type":"application/json","Content-Profile":"garrafeira",Prefer:"return=minimal"},body:JSON.stringify(patch)});}
@@ -175,9 +199,24 @@ Deno.serve(async(req)=>{
  try{
   const body=await req.json().catch(()=>({})),gid=Number(body?.garrafeiraId),recebidas=Array.isArray(body?.imagens)?body.imagens:[];
   if(!Number.isSafeInteger(gid)||gid<1)return json({error:"falta a garrafeira"},400);
-  if(!recebidas.length||recebidas.length>MAX_IMAGENS)return json({error:"escolhe entre 1 e "+MAX_IMAGENS+" imagens"},400);
-  const imagens:{mime:string,data:string}[]=[];
-  for(const x of recebidas){const mime=String(x?.mime??"").toLowerCase(),data=String(x?.data??"").replace(/\s/g,"");if(!/^(image\/jpeg|image\/png|image\/webp)$/.test(mime)||data.length<100||data.length>MAX_BASE64||!/^[A-Za-z0-9+/]+={0,2}$/.test(data))return json({error:"uma das imagens não é válida ou ficou demasiado grande"},400);imagens.push({mime,data});}
+  if(!recebidas.length||recebidas.length>MAX_IMAGENS)return json({error:"escolhe entre 1 e "+MAX_IMAGENS+" ficheiros"},400);
+  const imagens:Ficheiro[]=[];let total=0;
+  for(const x of recebidas){
+   const mime=String(x?.mime??"").toLowerCase(),data=String(x?.data??"").replace(/\s/g,""),nome=texto(x?.nome,120);
+   if(!/^(image\/jpeg|image\/png|image\/webp|application\/pdf|text\/plain)$/.test(mime)||data.length<8||!/^[A-Za-z0-9+/]+={0,2}$/.test(data))return json({error:"um dos ficheiros não é válido (só fotografias, PDFs e texto)"},400);
+   const max=mime==="application/pdf"?MAX_PDF64:mime==="text/plain"?MAX_TXT64:MAX_BASE64;
+   if(data.length>max)return json({error:"um dos ficheiros ficou demasiado grande"},400);
+   total+=data.length;if(total>MAX_TOTAL64)return json({error:"juntos, os ficheiros são demasiado grandes"},400);
+   if(mime==="application/pdf"){
+    let cab="";try{cab=atob(data.slice(0,8));}catch(_){}
+    if(!cab.startsWith("%PDF-"))return json({error:"um dos ficheiros diz ser PDF mas não é"},400);
+   }
+   if(mime==="text/plain"){
+    let t="";try{t=new TextDecoder("utf-8").decode(Uint8Array.from(atob(data),c=>c.charCodeAt(0)));}catch(_){return json({error:"não consegui ler um dos ficheiros de texto"},400);}
+    t=t.trim().slice(0,MAX_TEXTO);if(!t)return json({error:"um dos ficheiros de texto está vazio"},400);
+    imagens.push({mime,data:"",nome,texto:t});
+   }else imagens.push({mime,data,nome});
+  }
   const token=req.headers.get("Authorization")??"",auth=await autorizar(token,gid,ctrl.signal);quem=auth.email;
   if(!auth.ok)return json({error:"não autorizado para importar nesta garrafeira"},403);
   if(auth.plano==="gratis"&&!(await quota(token,quem,ctrl.signal)))return json({error:"atingiste o limite diário de "+LIMITE_GRATIS+" importações sem pesquisa web — tenta amanhã ou pede acesso ao modo com pesquisa web"},429);
@@ -186,8 +225,8 @@ Deno.serve(async(req)=>{
   // nunca um valor que o browser escolha sozinho para quem não tem esse
   // direito (o mesmo princípio do `plano` em vinho-info.ts).
   const grande=body?.modelo==="grande"&&auth.plano==="premium";
-  const id=await criar(token,gid,imagens.length,ctrl.signal);await registar("pedido",{id,garrafeira_id:gid,imagens:imagens.length,plano:auth.plano,modelo:grande?"grande":"barato"},quem);
-  EdgeRuntime.waitUntil((async()=>{const proc=new AbortController(),t=setTimeout(()=>proc.abort(),105000);try{const resultado=await ler(imagens,proc.signal,grande);await fechar(id,quem,{estado:"concluido",resultado});await registar("ok",{id,vinhos:resultado.vinhos.length,modelo:resultado.modelo,...(resultado.usageMetadata?{usageMetadata:resultado.usageMetadata}:{}),...(resultado.tentativas?{tentativas:resultado.tentativas}:{} )},quem);}catch(e){const erro=texto((e as Error).message||"a importação falhou",400),tentativas=(e as any)?.tentativas;await fechar(id,quem,{estado:"erro",erro});await registar("erro",{id,passo:"gemini",erro,...(tentativas?{tentativas}:{})},quem);}finally{clearTimeout(t);}})());
+  const id=await criar(token,gid,imagens,ctrl.signal);await registar("pedido",{id,garrafeira_id:gid,imagens:imagens.length,tipos:imagens.map(f=>tipoRot(f.mime)),plano:auth.plano,modelo:grande?"grande":"barato"},quem);
+  EdgeRuntime.waitUntil((async()=>{const proc=new AbortController(),t=setTimeout(()=>proc.abort(),140000);try{const resultado=await ler(imagens,proc.signal,grande);await fechar(id,quem,{estado:"concluido",resultado});await registar("ok",{id,vinhos:resultado.vinhos.length,modelo:resultado.modelo,...(resultado.usageMetadata?{usageMetadata:resultado.usageMetadata}:{}),...(resultado.tentativas?{tentativas:resultado.tentativas}:{} )},quem);}catch(e){const erro=texto((e as Error).message||"a importação falhou",400),tentativas=(e as any)?.tentativas;await fechar(id,quem,{estado:"erro",erro});await registar("erro",{id,passo:"gemini",erro,...(tentativas?{tentativas}:{})},quem);}finally{clearTimeout(t);}})());
   return json({id,estado:"pendente"});
  }catch(e){const erro=texto((e as Error).message||"erro inesperado",300);await registar("erro",{passo:"entrada",erro},quem||null);return json({error:erro},500);}finally{clearTimeout(timer);}
 });

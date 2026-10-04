@@ -1143,7 +1143,9 @@ function fecharModal(id){
   // Todos os caminhos de saída do modal da IA (✕, Escape, a margem, o fim
   // natural do lote) passam por aqui — é o único sítio onde arrumar o
   // estado de um lote a meio, sem repetir a limpeza em cada botão.
-  if(id==='modal-ia')loteAoFecharModalIA();
+  if(id==='modal-ia'){loteAoFecharModalIA();importarAoFecharModalIA();}
+  // O "Passar para a garrafeira" aberto a meio de uma importação volta a ela.
+  if(id==='modal-edit')importarRetomar();
 }
 // Fechar tocando no fundo (mas não ao arrastar de dentro para fora).
 // A página do vinho não entra: aí o "fundo" são as margens da folha, e
@@ -6037,7 +6039,7 @@ function limparPosicaoLayout(prefix){
   renderPickerPosicoes(prefix,pickerGid(prefix));
 }
 
-/* ── FAB — "Novo vinho", "Atualização massiva" e "Importar por imagens" ──
+/* ── FAB — "Novo vinho", "Atualização massiva" e "Importar de imagens ou documentos" ──
    Mesmo desenho da WineCatalog: um "+" flutuante que abre duas ações, em
    vez de um botão só. O FAB do Garrafeira já vive a z-index 90, ABAIXO
    dos modais (200) — ao contrário da WineCatalog não há aqui o bug do FAB
@@ -6053,7 +6055,9 @@ function limparPosicaoLayout(prefix){
    diz porque é que não dá, em vez de desaparecer sem explicação.
    No Catálogo (aos curadores) é o MESMO menu, menos a wishlist: o vinho
    novo vai à `winecatalog.criar`, e a atualização massiva e a importação
-   gravam no catálogo (`iaAplicarCat`, `importarGuardarCat`). */
+   gravam no catálogo (`iaAplicarCat`, `importarCriar`).
+   Desde 04/10/2026 a importação lê também documentos (PDF, texto) e serve
+   também para completar a ficha dos vinhos que já existem. */
 function fabToggle(){
   if(tabAtiva==='desejos'&&!modoCat()){novoDesejo();return;}
   const w=document.getElementById('fab-wrap');
@@ -7216,6 +7220,8 @@ async function iaProfunda(){
    pesquisou é "da IA (sem dizer de onde)"; não se inventa uma origem. */
 function iaFonteHTML(k,res){
   if(!res)return '';
+  // A importação de imagens e documentos: tudo veio do ficheiro.
+  if(res.documento)return `<span class="rv-de">↳ de ${esc(res.documento)}</span>`;
   if(res.modelo===IA_MANUAL_MARCA)return '<span class="rv-de">↳ da resposta que colaste</span>';
   if(Array.isArray(res.catalogoCampos)?res.catalogoCampos.includes(k):res.origem==='catalogo')
     return '<span class="rv-de">↳ do Catálogo</span>';
@@ -7305,17 +7311,23 @@ function iaMostrarResultado(res,vinhoId){
   // em `iaMostrarErro` — aí sim é um caminho a sério, não uma segunda opinião.)
   const valeAOutro=IA_MOTOR==='gratis';
 
-  const loteProg=IA_LOTE_ATIVO?` · ${LOTE_IDX+1}/${LOTE_FILA.length}`:'';
-  const loteSaltarBtn=IA_LOTE_ATIVO?'<button class="btn ghost" onclick="loteSaltar()">Saltar »</button>':'';
+  /* Em fila: a atualização massiva ou a importação de imagens e documentos
+     (`IMPORT_ATIVO`, que traz o "Este é:" no topo). As duas param, saltam e
+     avançam; nenhuma oferece a segunda opinião nem a pesquisa profunda. */
+  const emFila=IA_LOTE_ATIVO||IMPORT_ATIVO;
+  const loteProg=IA_LOTE_ATIVO?` · ${LOTE_IDX+1}/${LOTE_FILA.length}`:IMPORT_ATIVO?importarProgresso():'';
+  const loteSaltarBtn=IA_LOTE_ATIVO?'<button class="btn ghost" onclick="loteSaltar()">Saltar »</button>'
+    :IMPORT_ATIVO?'<button class="btn ghost" onclick="importarAvancar()">Saltar »</button>':'';
   document.getElementById('modal-ia-in').innerHTML=`
-    <div class="mtop"><div><h3>${cmp?esc(rot1)+' vs '+esc(rot2):'O que se encontrou'}</h3>
+    <div class="mtop"><div><h3>${cmp?esc(rot1)+' vs '+esc(rot2):IMPORT_ATIVO?'Completar a ficha':'O que se encontrou'}</h3>
       <div class="note" style="margin-top:3px">${esc(v.nome||'')} ${v.ano||''}${loteProg}</div></div>
       <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
+    ${IMPORT_ATIVO?importarTopoHTML():''}
 
     ${iaOrigemHTML(IA_RES)}
-    ${!cmp&&!IA_LOTE_ATIVO?iaMemoriaHTML(IA_RES,'iaProfunda()'):''}
+    ${!cmp&&!emFila?iaMemoriaHTML(IA_RES,'iaProfunda()'):''}
     ${IA_ERRO2?`<div class="erro">A segunda opinião não deu: ${esc(IA_ERRO2)}. Fica o que a ${esc(rot1)} trouxe.</div>`:''}
-    ${!cmp&&temPremium()&&valeAOutro&&linhas?`<div class="ia-prbar">
+    ${!cmp&&!IMPORT_ATIVO&&temPremium()&&valeAOutro&&linhas?`<div class="ia-prbar">
       <span>Isto foi a <b>${esc(rot1)}</b>. Queres ver o que a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))} diz ao lado?</span>
       <button class="mini o" onclick="iaSegundaOpiniao()">✨ Comparar</button></div>`:''}
 
@@ -7331,15 +7343,15 @@ function iaMostrarResultado(res,vinhoId){
         <button class="btn prim" id="ia-btn" onclick="iaAplicar()">Guardar o que ${cmp?'escolhi':'está marcado'}</button>
         ${cmp?'':'<button class="btn ghost" onclick="iaTodos(true)">Marcar tudo</button>'}
         ${loteSaltarBtn}
-        <button class="btn ghost" onclick="fecharModal('modal-ia')">${IA_LOTE_ATIVO?'Parar aqui':'Cancelar'}</button>
+        <button class="btn ghost" onclick="fecharModal('modal-ia')">${emFila?'Parar aqui':'Cancelar'}</button>
       </div>`
-    :`<div class="note" style="margin-top:14px">A procura não trouxe nada de novo — o que está na ficha já bate certo com o que se encontrou.</div>
-      <div class="macoes">${!cmp&&temPremium()&&valeAOutro&&!IA_LOTE_ATIVO?`<button class="btn ghost" onclick="iaSegundaOpiniao()">✨ Tentar com a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))}</button>`:''}
+    :`<div class="note" style="margin-top:14px">${IMPORT_ATIVO?'O que se leu já está na ficha deste vinho — não há nada para completar.':'A procura não trouxe nada de novo — o que está na ficha já bate certo com o que se encontrou.'}</div>
+      <div class="macoes">${!cmp&&temPremium()&&valeAOutro&&!emFila?`<button class="btn ghost" onclick="iaSegundaOpiniao()">✨ Tentar com a ${esc(rotuloMotor(motorOposto(IA_MOTOR)))}</button>`:''}
         ${loteSaltarBtn}
-        <button class="btn ghost" onclick="fecharModal('modal-ia')">${IA_LOTE_ATIVO?'Parar aqui':'Fechar'}</button></div>`}
+        <button class="btn ghost" onclick="fecharModal('modal-ia')">${emFila?'Parar aqui':'Fechar'}</button></div>`}
 
     ${fontesDe(IA_RES,rot1)}${cmp?fontesDe(IA_RES2,rot2):''}
-    ${IA_LOTE_ATIVO?'':`<div class="ia-fontes"><i>${semNet
+    ${emFila?'':`<div class="ia-fontes"><i>${semNet
       ? '⚠️ Isto saiu da memória do modelo, sem pesquisa na net — confere tudo antes de aceitar.'
       : 'Leitura automática de páginas da net. Vale como ponto de partida, não como certeza.'}</i></div>`}`;
   abrirModal('modal-ia');
@@ -7426,6 +7438,11 @@ async function iaAplicar(){
     if(IA_LOTE_ATIVO){
       renderLista();
       loteAvancar();
+    }else if(IMPORT_ATIVO){
+      IMPORT_FEITOS.atualizados++;
+      renderLista();refrescarVinhoAberto();
+      curadorAviso(v.id);
+      importarAvancar();
     }else{
       fecharModal('modal-ia');renderLista();refrescarVinhoAberto();
       toast('Ficha atualizada ✓');
@@ -7464,6 +7481,10 @@ async function iaAplicarCat(v){
       LOTE_CAT_MUDOU=true;
       renderLista();
       loteAvancar();
+    }else if(IMPORT_ATIVO){
+      IMPORT_CAT_MUDOU=true;IMPORT_FEITOS.atualizados++;
+      renderLista();
+      importarAvancar();
     }else{
       const n=(r&&Number(r.campos))||0;
       fecharModal('modal-ia');
@@ -7739,6 +7760,12 @@ function parPerto(a,b){
 }
 // Os parecidos, do mais para o menos parecido, na forma da `colheitas`.
 function catParecidos(nome,produtor,tipo,max){
+  return parecidosEm(CAT_VINHOS||[],nome,produtor,tipo,max).map(v=>({id:v.cat_id,nome:v.nome,produtor:v.produtor||'',ano:v.ano??null,tipo:v.tipo||'',
+    castas:v.castas||[],regiao:v.regiao||''}));
+}
+/* A mesma conta sobre qualquer lista de vinhos — a importação de imagens e
+   documentos usa-a também sobre a garrafeira. Devolve os vinhos. */
+function parecidosEm(lista,nome,produtor,tipo,max){
   const qn=parPalavras(nome), qp=parPalavras(produtor);
   const q=[...new Set(qn.concat(qp))];
   if(!q.length)return [];
@@ -7747,7 +7774,7 @@ function catParecidos(nome,produtor,tipo,max){
   fortes=[...new Set(fortes)];
   const cor=tipo?chave(tipo):'';
   const out=[];
-  (CAT_VINHOS||[]).forEach(v=>{
+  (lista||[]).forEach(v=>{
     if(cor&&v.tipo&&chave(v.tipo)!==cor)return;
     const wn=parPalavras(v.nome), wa=[...new Set(wn.concat(parPalavras(v.produtor)))];
     const perto=t=>wa.reduce((m,w)=>Math.max(m,parPerto(t,w)),0);
@@ -7760,8 +7787,7 @@ function catParecidos(nome,produtor,tipo,max){
     // As palavras do nome DELE que não se escreveram: "Crasto Reserva" vem
     // antes de "Crasto Reserva Vinhas Velhas".
     const aMais=wn.filter(w=>!q.some(t=>parPerto(t,w))).length;
-    out.push({c:{id:v.cat_id,nome:v.nome,produtor:v.produtor||'',ano:v.ano??null,tipo:v.tipo||'',
-      castas:v.castas||[],regiao:v.regiao||''},pontos:f*3+g-aMais*.5});
+    out.push({c:v,pontos:f*3+g-aMais*.5});
   });
   return out.sort((a,b)=>b.pontos-a.pontos||(b.c.ano||0)-(a.c.ano||0)).slice(0,max||8).map(x=>x.c);
 }
@@ -11033,50 +11059,83 @@ function pdfPreImprimir(){
   window.focus();
 }
 
-// ── IMPORTAR VINHOS POR IMAGENS ─────────────────────────────────────
-/* No Catálogo (aos curadores, 02/10/2026) é a MESMA leitura — a mesma Edge
-   Function, o mesmo ecrã de revisão — e o que se escolhe nasce no catálogo
-   pela `winecatalog.criar` (`importarGuardarCat`), sem garrafas: a cor é
-   obrigatória (é chave do catálogo, e a leitura põe "Tinto" quando não a
-   vê), as garrafas e o formato não aparecem. `IMPORT_CAT` é o destino
-   escolhido ao abrir, não o modo de agora — mudar de modo a meio não
-   muda para onde vai o que já se leu. */
+// ── IMPORTAR DE IMAGENS OU DOCUMENTOS ───────────────────────────────
+/* Desde 04/10/2026 (o dono das apps: "o importar por imagens passa a ser
+   importar por imagens/docs, e deixa de ser apenas para adicionar novos
+   vinhos"): fotografias, prints, PDFs (a ficha técnica do produtor) e
+   ficheiros de texto. Serve para MELHORAR A INFORMAÇÃO — criar vinhos novos
+   ou completar a ficha dos que já existem —, nunca para acrescentar
+   garrafas a um vinho que já cá está (para isso há o "Nova garrafa").
+
+   A leitura é a mesma Edge Function (`importar-vinhos`), sem pesquisa na
+   net: a IA só lê e encaixa nos atributos. Depois, UM ECRÃ POR VINHO LIDO
+   (`IMPORT_FILA`), com "Este é:" no topo (`importarTopoHTML`):
+   - um vinho que já existe → o ecrã da atualização massiva, campo a campo
+     (`iaMostrarResultado`/`iaAplicar`/`iaAplicarCat`, que sabem que estão a
+     meio de uma importação por `IMPORT_ATIVO`); nunca o nome, o produtor, o
+     ano nem a cor;
+   - um vinho novo → a ficha lida, com o nome, o produtor, o ano e a cor
+     editáveis (e as garrafas, na garrafeira), e o Criar
+     (`importarNovoHTML`/`importarCriar`).
+   Quem é o vinho decide-o a pessoa: a app só PRÉ-ESCOLHE o que é igual
+   (nome, produtor, cor e colheita — `importarCandidatos`); a outra colheita
+   e os parecidos estão no seletor, nunca pré-escolhidos (a lição dos
+   Duplicados da WineCatalog: a semelhança sugere, nunca decide).
+
+   No Catálogo (aos curadores) é a MESMA leitura; o que se cria nasce no
+   catálogo pela `winecatalog.criar`, sem garrafas, e o que se atualiza
+   corrige a linha pela `winecatalog.editar`. `IMPORT_CAT` é o destino
+   escolhido ao abrir, não o modo de agora — mudar de modo a meio não muda
+   para onde vai o que já se leu. */
 let IMPORT_CAT=false;
-let IMPORT_RESULTADO=[];
-// Guarda as imagens já preparadas (encolhidas, em base64) para o "tenta com
-// um modelo de IA diferente": só em memória do browser, nunca gravadas —
-// serve só para não obrigar a escolher as fotos outra vez no mesmo ecrã.
+let IMPORT_RESULTADO=[], IMPORT_AVISO='', IMPORT_MODELO='';
+// Os ficheiros já preparados (encolhidos, em base64) para o "tenta com um
+// modelo de IA diferente": só em memória do browser, nunca gravados.
 let IMPORT_IMAGENS=[];
+let IMPORT_FILA=[], IMPORT_IDX=0, IMPORT_ATIVO=false, IMPORT_PAUSA=false;
+let IMPORT_CANDS={}, IMPORT_ESC={};   // por vinho lido: os candidatos e o escolhido (id ou 'novo')
+let IMPORT_FEITOS={criados:[],atualizados:0}, IMPORT_CAT_MUDOU=false;
+const IMPORT_MAX=3, IMPORT_PDF_MAX=6e6, IMPORT_TXT_MAX=200e3, IMPORT_TOTAL=10e6;
 
 function importarAbrir(){
   if(modoCat()?!catPodeCriar():roGuard())return;
   if(!podeUsarIA()){toast('A importação por IA não está incluída no teu acesso',1);return;}
   // A Edge Function grava o pedido numa garrafeira em que se pode mexer: no
   // Catálogo é a aberta se for minha, senão a minha.
-  IMPORT_CAT=modoCat();
-  if(IMPORT_CAT&&importarGid()==null){toast('Para ler imagens precisas de uma garrafeira tua — vê em Definições › Garrafeiras',1);return;}
+  IMPORT_CAT=modoCat();IMPORT_ATIVO=false;IMPORT_PAUSA=false;
+  if(IMPORT_CAT&&importarGid()==null){toast('Para importar precisas de uma garrafeira tua — vê em Definições › Garrafeiras',1);return;}
   IMPORT_IMAGENS=[];
   document.getElementById('modal-ia-in').innerHTML=
-    "<div class='mtop'><div><h3>📷 Importar vinhos por imagens</h3><div class='note' style='margin-top:3px'>Até 3 fotos de rótulos, uma lista ou uma prateleira.</div></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
-    "<div class='aviso'>As imagens são encolhidas no teu telemóvel, lidas pela IA e descartadas no fim. <b>Nada entra "+(IMPORT_CAT?"no catálogo":"na garrafeira")+" sem revisão tua.</b> A leitura não pesquisa na internet.</div>"+
-    "<label>Imagens (máximo 3)</label><input id='imp-ficheiros' type='file' accept='image/jpeg,image/png,image/webp' multiple onchange='importarEscolha(this)'>"+
-    "<div class='note' id='imp-estado' style='margin-top:8px'>Escolhe fotografias nítidas; podes juntar frente e verso do mesmo rótulo.</div>"+
-    "<div class='macoes'><button class='btn prim' id='imp-btn' onclick='importarEnviar()'>Ler imagens</button><button class='btn ghost' onclick=\"fecharModal('modal-ia')\">Cancelar</button></div>";
+    "<div class='mtop'><div><h3>📷 Importar de imagens ou documentos</h3><div class='note' style='margin-top:3px'>Até 3 ficheiros: fotografias de rótulos ou prateleiras, prints, a ficha técnica em PDF, um ficheiro de texto.</div></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
+    "<div class='aviso'>Serve para criar vinhos novos ou completar a ficha dos que já "+(IMPORT_CAT?"estão no catálogo":"tens")+". Os ficheiros são lidos pela IA e descartados no fim — a leitura não pesquisa na internet. <b>Nada entra "+(IMPORT_CAT?"no catálogo":"na garrafeira")+" sem confirmares, vinho a vinho.</b></div>"+
+    "<label>Ficheiros (máximo 3)</label><input id='imp-ficheiros' type='file' accept='image/*,application/pdf,.pdf,text/plain,.txt' multiple onchange='importarEscolha(this)'>"+
+    "<div class='note' id='imp-estado' style='margin-top:8px'>Podes juntar frente e verso do mesmo rótulo, ou o rótulo e a ficha técnica.</div>"+
+    "<div class='macoes'><button class='btn prim' id='imp-btn' onclick='importarEnviar()'>Ler</button><button class='btn ghost' onclick=\"fecharModal('modal-ia')\">Cancelar</button></div>";
   abrirModal('modal-ia');
 }
 function importarEscolha(input){
   const estado=document.getElementById('imp-estado'),n=(input.files||[]).length;
-  if(n>3){estado.textContent='Escolheste '+n+' imagens; usa no máximo 3.';estado.style.color='var(--dg)';return;}
-  estado.style.color='';estado.textContent=n?n+' imagem(ns) escolhida(s). Serão encolhidas antes de enviar.':'Escolhe fotografias nítidas; podes juntar frente e verso do mesmo rótulo.';
+  if(n>IMPORT_MAX){estado.textContent='Escolheste '+n+' ficheiros; usa no máximo '+IMPORT_MAX+'.';estado.style.color='var(--dg)';return;}
+  estado.style.color='';estado.textContent=n?n+' ficheiro(s) escolhido(s). As fotografias são encolhidas antes de enviar.':'Podes juntar frente e verso do mesmo rótulo, ou o rótulo e a ficha técnica.';
 }
-async function importarBase64(file){
-  const blob=await encolherImagem(file,1400,0.82);
+/* Uma fotografia é encolhida aqui (como sempre); um PDF vai como está (até
+   6 MB) e um texto também (até 200 KB). O tipo de um PDF confere-o a
+   função pelos bytes. */
+async function importarPreparar(f){
+  const nome=String(f.name||'ficheiro').slice(0,120);
+  const pdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name);
+  const txt=f.type==='text/plain'||/\.(txt|text)$/i.test(f.name);
+  let blob=f,mime;
+  if(pdf){if(f.size>IMPORT_PDF_MAX)throw new Error('o PDF tem mais de '+(IMPORT_PDF_MAX/1e6)+' MB');mime='application/pdf';}
+  else if(txt){if(f.size>IMPORT_TXT_MAX)throw new Error('o texto tem mais de '+(IMPORT_TXT_MAX/1e3)+' KB');mime='text/plain';}
+  else if(/^image\//.test(f.type)||/\.(jpe?g|png|webp|heic|heif)$/i.test(f.name)){blob=await encolherImagem(f,1400,0.82);mime='image/jpeg';}
+  else throw new Error('só se leem fotografias, PDFs e ficheiros de texto');
   const data=await new Promise((resolve,reject)=>{
-    const r=new FileReader();r.onerror=()=>reject(new Error('não consegui ler essa imagem'));
+    const r=new FileReader();r.onerror=()=>reject(new Error('não consegui ler o ficheiro'));
     r.onload=()=>resolve(String(r.result||'').split(',')[1]||'');r.readAsDataURL(blob);
   });
-  if(!data)throw new Error('não consegui preparar essa imagem');
-  return {mime:'image/jpeg',data};
+  if(!data)throw new Error('o ficheiro está vazio');
+  return {mime,data,nome,bytes:blob.size};
 }
 // Pedido à função, partilhado entre o envio normal e o "tenta com outro
 // modelo" — só muda o corpo (`extra`), tudo o resto (erros, 404) é igual.
@@ -11089,7 +11148,7 @@ function importarGid(){
 async function importarPedir(imagens,extra){
   const r=await sbFetch(SB_URL+'/functions/v1/importar-vinhos',{
     method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY},
-    body:JSON.stringify(Object.assign({garrafeiraId:importarGid(),imagens},extra||{}))
+    body:JSON.stringify(Object.assign({garrafeiraId:importarGid(),imagens:imagens.map(x=>({mime:x.mime,data:x.data,nome:x.nome}))},extra||{}))
   });
   let d={};try{d=await r.json();}catch(_){}
   if(!r.ok){
@@ -11101,32 +11160,37 @@ async function importarPedir(imagens,extra){
 }
 async function importarEnviar(){
   const input=document.getElementById('imp-ficheiros'),files=Array.from(input.files||[]);
-  if(!files.length||files.length>3){toast('Escolhe entre 1 e 3 imagens',1);return;}
+  if(!files.length||files.length>IMPORT_MAX){toast('Escolhe entre 1 e '+IMPORT_MAX+' ficheiros',1);return;}
   const btn=document.getElementById('imp-btn'),estado=document.getElementById('imp-estado');
   btn.disabled=true;btn.textContent='A preparar…';estado.style.color='';
   try{
-    const imagens=[];
+    const prontos=[];let total=0;
     for(let i=0;i<files.length;i++){
-      estado.textContent='A preparar imagem '+(i+1)+' de '+files.length+'…';
-      imagens.push(await importarBase64(files[i]));
+      estado.textContent='A preparar '+(i+1)+' de '+files.length+'…';
+      let x;
+      try{x=await importarPreparar(files[i]);}catch(e){throw new Error(files[i].name+': '+e.message);}
+      total+=x.bytes;if(total>IMPORT_TOTAL)throw new Error('juntos, os ficheiros passam de '+(IMPORT_TOTAL/1e6)+' MB');
+      prontos.push(x);
     }
-    IMPORT_IMAGENS=imagens;
+    IMPORT_IMAGENS=prontos;
     estado.textContent='A enviar para leitura…';btn.textContent='A ler…';
-    importarEspera(await importarPedir(imagens));
+    importarEspera(await importarPedir(prontos));
   }catch(e){
     estado.style.color='var(--dg)';estado.textContent='Não deu: '+e.message;
     btn.disabled=false;btn.textContent='Tentar outra vez';
   }
 }
 // Só para quem tem IA premium, e só depois de já se ter visto o resultado do
-// modelo barato: um pedido explícito de "outro modelo", com as MESMAS
-// imagens já preparadas — não obriga a escolher as fotos outra vez.
+// modelo barato: um pedido explícito de "outro modelo", com os MESMOS
+// ficheiros já preparados — não obriga a escolhê-los outra vez.
 async function importarTentarOutroModelo(){
   if(!IMPORT_IMAGENS.length)return;
+  IMPORT_ATIVO=false;
   document.getElementById('modal-ia-in').innerHTML=
     "<div class='mtop'><div><h3>📷 A tentar com outro modelo…</h3></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
-    "<div class='note' id='imp-estado'>A reler as mesmas imagens com um modelo de IA diferente. Pode levar até dois minutos.</div>"+
+    "<div class='note' id='imp-estado'>A reler os mesmos ficheiros com um modelo de IA diferente. Pode levar até três minutos.</div>"+
     "<div class='macoes'><button class='btn ghost' id='imp-btn' disabled>A ler…</button></div>";
+  abrirModal('modal-ia');
   try{
     importarEspera(await importarPedir(IMPORT_IMAGENS,{modelo:'grande'}));
   }catch(e){
@@ -11135,8 +11199,8 @@ async function importarTentarOutroModelo(){
   }
 }
 async function importarEspera(id){
-  const estado=document.getElementById('imp-estado'),btn=document.getElementById('imp-btn'),fim=Date.now()+150000;
-  btn.disabled=true;btn.textContent='A ler…';estado.textContent='A IA está a ler as imagens. Pode levar até dois minutos; mantém esta janela aberta para rever o resultado.';
+  const estado=document.getElementById('imp-estado'),btn=document.getElementById('imp-btn'),fim=Date.now()+180000;
+  btn.disabled=true;btn.textContent='A ler…';estado.textContent='A IA está a ler os ficheiros. Pode levar até três minutos; mantém esta janela aberta para rever o resultado.';
   while(Date.now()<fim){
     await new Promise(resolve=>setTimeout(resolve,2500));
     try{
@@ -11149,124 +11213,246 @@ async function importarEspera(id){
       btn.disabled=false;btn.textContent='Tentar outra vez';return;
     }
   }
-  estado.textContent='Ainda está a processar. Podes fechar e tentar novamente daqui a pouco; não foi criado nenhum vinho.';
+  estado.textContent='Ainda está a processar. Podes fechar e tentar novamente daqui a pouco; não foi gravado nada.';
   btn.disabled=false;btn.textContent='Nova leitura';
+}
+// Só faz sentido oferecer "outro modelo" quando o resultado veio do barato
+// (o modelo grande já é a última carta) e há premium para o pagar.
+function importarOutroModeloHTML(){
+  return (temPremium()&&IMPORT_IMAGENS.length&&/lite/.test(IMPORT_MODELO))
+    ?"<div class='note' style='margin-top:8px'>Não ficaste satisfeito com a leitura? <a href='#' onclick='importarTentarOutroModelo();return false'>Experimenta um modelo de IA diferente</a>.</div>":"";
 }
 function importarMostrarResultado(resultado){
   IMPORT_RESULTADO=Array.isArray(resultado.vinhos)?resultado.vinhos:[];
-  const aviso=resultado.aviso?'<div class="aviso">'+esc(resultado.aviso)+'</div>':'';
-  // Só faz sentido oferecer "outro modelo" quando este resultado veio do
-  // barato (o modelo grande já é a última carta) e há premium para o pagar.
-  const outroModelo=(temPremium()&&IMPORT_IMAGENS.length&&/lite/.test(resultado.modelo||''))
-    ?"<div class='note' style='margin-top:8px'>Não ficaste satisfeito? Tira uma fotografia mais nítida ou <a href='#' onclick='importarTentarOutroModelo();return false'>experimenta um modelo de IA diferente</a>.</div>":"";
-  const linhas=IMPORT_RESULTADO.map((v,i)=>{
-    const detalhes=[v.tipo,v.regiao,v.mencao,v.teor?v.teor+'%':'',(v.castas||[]).join(', ')].filter(Boolean).join(' · ');
-    return "<div class='ia-linha' style='display:block'>"+
-      "<div style='display:flex;gap:8px;align-items:center'><input type='checkbox' class='imp-sel' data-i='"+i+"' checked>"+
-      "<div style='flex:1;min-width:0'><label style='margin-top:0'>Nome</label><input class='imp-nome' data-i='"+i+"' value='"+esc(capitalizarLivre(v.nome||""))+"'></div></div>"+
-      "<div><label>Produtor</label><input class='imp-produtor' data-i='"+i+"' value='"+esc(capitalizarLivre(v.produtor||""))+"'></div>"+
-      (IMPORT_CAT
-        // No Catálogo: a cor (chave da linha) no lugar das garrafas e do formato.
-        ?"<div class='mrow'><div><label>Ano</label><input class='imp-ano' data-i='"+i+"' inputmode='numeric' value='"+esc(v.ano||"")+"'></div><div><label>Cor</label><select class='imp-tipo' data-i='"+i+"'><option value=''>— escolhe a cor —</option>"+TIPOS.map(function(x){return "<option value='"+esc(x)+"'"+(x===v.tipo?" selected":"")+">"+esc(x)+"</option>";}).join('')+"</select></div></div>"
-        :"<div class='mrow'><div><label>Ano</label><input class='imp-ano' data-i='"+i+"' inputmode='numeric' value='"+esc(v.ano||"")+"'></div><div><label>Garrafas</label><input class='imp-qtd' data-i='"+i+"' type='number' min='1' max='60' value='"+esc(v.quantidade||1)+"'></div><div><label>Formato</label><select class='imp-formato' data-i='"+i+"'>"+FORMATOS.map(function(x){return "<option value='"+esc(x)+"'>"+esc(x)+"</option>";}).join('')+"</select></div></div>")+
-      (detalhes?"<div class='note' style='margin-top:6px'>"+esc(detalhes)+"</div>":"")+
-      (v.aviso?"<div class='note' style='margin-top:4px'>⚠️ "+esc(v.aviso)+"</div>":"")+"</div>";
-  }).join('');
-  const sub=IMPORT_CAT
-    ?" vinho(s) proposto(s). Confere o nome, o produtor, o ano e a cor antes de criar — nascem no catálogo, para toda a gente."
-    :" vinho(s) proposto(s). Edita nome, produtor, ano ou quantidade antes de adicionar.";
-  document.getElementById('modal-ia-in').innerHTML=
-    "<div class='mtop'><div><h3>Rever antes de "+(IMPORT_CAT?"criar no catálogo":"importar")+"</h3><div class='note' style='margin-top:3px'>"+IMPORT_RESULTADO.length+sub+"</div></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
-    aviso+outroModelo+(linhas||"<div class='note' style='margin-top:14px'>Não foi possível identificar nenhum vinho com segurança. Tenta fotos mais nítidas ou uma imagem de cada vez.</div>")+
-    "<div id='imp-falhas'></div>"+
-    "<div class='macoes'><button class='btn prim' id='imp-guardar' "+(linhas?"onclick='importarGuardar()'":"disabled")+">"+(IMPORT_CAT?"Criar no catálogo":"Adicionar selecionados")+"</button><button class='btn ghost' onclick=\"fecharModal('modal-ia')\">Cancelar</button></div>";
-}
-function importarValor(classe,i){
-  const e=document.querySelector('.'+classe+'[data-i=\"'+i+'\"]');
-  return e?e.value.trim():'';
-}
-async function importarGuardar(){
-  if(IMPORT_CAT)return importarGuardarCat();
-  const selecionados=Array.from(document.querySelectorAll('.imp-sel:checked')).map(e=>parseInt(e.dataset.i,10)).filter(Number.isInteger);
-  if(!selecionados.length){toast('Seleciona pelo menos um vinho',1);return;}
-  const btn=document.getElementById('imp-guardar');btn.disabled=true;btn.textContent='A adicionar…';
-  let feitos=0;const novos=[];
-  try{
-    for(const i of selecionados){
-      const origem=IMPORT_RESULTADO[i]||{},nome=importarValor('imp-nome',i);
-      if(!nome)continue;
-      const anoLido=inteiro(importarValor('imp-ano',i));
-      const vinho=Object.assign({},origem,{nome,produtor:importarValor('imp-produtor',i),ano:(anoLido&&anoLido>=1900&&anoLido<=2100)?anoLido:null,garrafeira_id:GA_ID});
-      const castas=Array.isArray(vinho.castas)?vinho.castas:[];delete vinho.castas;delete vinho.quantidade;delete vinho.aviso;
-      if(TEM_ATUALIZADO)vinho.atualizado_em=new Date().toISOString();
-      const criados=await sbReq('POST','vinhos',[vinho],{'Prefer':'return=representation'});
-      const vinhoId=criados&&criados[0]&&criados[0].id;if(!vinhoId)throw new Error('não foi possível criar '+nome);
-      if(castas.length)await sbRpc('definir_castas',{p_vinho_id:vinhoId,p_nomes:castas});
-      const qtd=Math.max(1,Math.min(60,inteiro(importarValor('imp-qtd',i))||1));
-      const formato=importarValor('imp-formato',i)||'0,75 L';
-      await sbReq('POST','garrafas',Array.from({length:qtd},()=>({vinho_id:vinhoId,formato:formato})),{'Prefer':'return=minimal'});
-      feitos++;novos.push(vinhoId);
-    }
-    await carregarGarrafeira();await recarregarCastas();renderLista();fecharModal('modal-ia');
-    toast(feitos+' vinho(s) e respetivas garrafas adicionados ✓');
-    await oferecerRetirarDesejos(novos.map(id=>IDXV[id]));
-  }catch(e){
-    toast('A importação parou: '+e.message+'. O que já entrou ficou guardado.',1);
-    btn.disabled=false;btn.textContent='Tentar guardar restantes';
-  }
-}
-/* Os escolhidos nascem no CATÁLOGO, um a um, pela `winecatalog.criar` — a
-   mesma do Vinho novo (`catGuardarNovo`), que recusa um vinho e colheita
-   que já lá estejam. Uma recusa não pára os outros: o que entrou desmarca-se
-   e fica dito, o que não entrou fica marcado com o porquê, para se corrigir
-   (o nome, a cor) e tentar outra vez. */
-async function importarGuardarCat(){
-  if(!catPodeCriar())return;
-  const selecionados=Array.from(document.querySelectorAll('.imp-sel:checked')).map(e=>parseInt(e.dataset.i,10)).filter(Number.isInteger);
-  if(!selecionados.length){toast('Seleciona pelo menos um vinho',1);return;}
-  for(const i of selecionados){
-    if(!importarValor('imp-nome',i)){toast('Há um vinho escolhido sem nome',1);return;}
-    if(!importarValor('imp-tipo',i)){
-      toast('Escolhe a cor de '+importarValor('imp-nome',i),1);
-      const el=document.querySelector('.imp-tipo[data-i="'+i+'"]');if(el)el.focus();
-      return;
-    }
-  }
-  const btn=document.getElementById('imp-guardar');btn.disabled=true;btn.textContent='A criar…';
-  const WC={'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'};
-  const criados=[],falhas=[];
-  for(const i of selecionados){
-    const origem=IMPORT_RESULTADO[i]||{},nome=importarValor('imp-nome',i);
-    const anoLido=inteiro(importarValor('imp-ano',i));
-    const ano=(anoLido&&anoLido>=1900&&anoLido<=2100)?anoLido:null;
-    const campos={};
-    CAT_FICHA_FORM.forEach(k=>{if(origem[k]!=null&&origem[k]!=='')campos[k]=origem[k];});
-    campos.tipo=importarValor('imp-tipo',i);
-    if(ano==null)IA_JANELA.forEach(k=>delete campos[k]);
-    const cs=Array.isArray(origem.castas)?origem.castas.filter(Boolean):[];
-    if(cs.length)campos.castas=cs.slice().sort((a,b)=>String(a).localeCompare(String(b),'pt'));
-    try{
-      const r=await sbReq('POST','rpc/criar',{p_nome:nome,p_produtor:importarValor('imp-produtor',i),p_ano:ano,p_campos:campos},WC);
-      criados.push({i,id:r&&r.id});
-      const cx=document.querySelector('.imp-sel[data-i="'+i+'"]');if(cx)cx.checked=false;
-    }catch(e){falhas.push({i,nome,erro:e.message});}
-  }
-  if(criados.length){
-    CAT_VINHOS=null;
-    try{await catCarregar();}catch(_){}
-    renderLista();
-  }
-  if(!falhas.length){
-    fecharModal('modal-ia');
-    toast(criados.length+' vinho(s) criado(s) no catálogo ✓');
-    if(criados.length===1&&criados[0].id&&IDXV[-criados[0].id])verVinho(-criados[0].id);
+  IMPORT_AVISO=resultado.aviso||'';IMPORT_MODELO=resultado.modelo||'';
+  if(!IMPORT_RESULTADO.length){
+    document.getElementById('modal-ia-in').innerHTML=
+      "<div class='mtop'><div><h3>Não se leu nenhum vinho</h3></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
+      (IMPORT_AVISO?"<div class='aviso'>"+esc(IMPORT_AVISO)+"</div>":"")+
+      "<div class='note' style='margin-top:14px'>Não foi possível identificar nenhum vinho com segurança. Tenta fotografias mais nítidas ou um ficheiro de cada vez.</div>"+
+      importarOutroModeloHTML()+
+      "<div class='macoes'><button class='btn ghost' onclick=\"fecharModal('modal-ia')\">Fechar</button></div>";
+    abrirModal('modal-ia');
     return;
   }
-  const box=document.getElementById('imp-falhas');
-  if(box)box.innerHTML="<div class='erro'>"+(criados.length?criados.length+" criado(s) no catálogo. ":"")+
-    "Não entraram:<br>"+falhas.map(f=>"<b>"+esc(f.nome)+"</b> — "+esc(f.erro)).join('<br>')+"</div>";
-  toast(falhas.length+' vinho(s) não entraram no catálogo — vê porquê',1);
-  btn.disabled=false;btn.textContent='Tentar outra vez';
+  IMPORT_CANDS={};IMPORT_ESC={};
+  IMPORT_RESULTADO.forEach((l,i)=>{
+    const c=importarCandidatos(l);
+    IMPORT_CANDS[i]=c;
+    // Só um igual é pré-escolhido: dois (o branco e o tinto, lido sem cor)
+    // é uma pergunta, e fica "vinho novo" até a pessoa escolher.
+    const exatos=c.filter(x=>x.tipo==='exato');
+    IMPORT_ESC[i]=exatos.length===1?exatos[0].v.id:'novo';
+  });
+  IMPORT_FILA=IMPORT_RESULTADO.map((_,i)=>i);IMPORT_IDX=0;
+  IMPORT_FEITOS={criados:[],atualizados:0};IMPORT_CAT_MUDOU=false;
+  IMPORT_ATIVO=true;
+  importarMostrarAtual();
+}
+
+/* ── Quem é este vinho? ──
+   Igual é o mesmo nome (pelo `chave()` e as siglas, e com o produtor à
+   frente do nome também: "Casa Ferreirinha Quinta da Leda"), o mesmo
+   produtor (quando os dois o dizem), a mesma cor (idem) e a mesma colheita.
+   Só esse vem pré-escolhido. A seguir as outras colheitas do mesmo vinho
+   (na garrafeira são outros vinhos, no catálogo outras linhas) e os
+   parecidos (`parecidosEm`, a conta da 1.ª etapa do vinho novo). */
+function importarNorm(s){return siglas(chave(s||'')).replace(/[^a-z0-9]+/g,' ').trim();}
+function importarCandidatos(l){
+  const U=IMPORT_CAT?(CAT_VINHOS||[]):db.vinhos;
+  const n=importarNorm(l.nome),p=importarNorm(l.produtor),cor=l.tipo||'',ano=l.ano??null;
+  const out=[],vistos=new Set();
+  const por=(v,tipo)=>{if(!v||vistos.has(v.id))return;vistos.add(v.id);out.push({v,tipo});};
+  const mesmos=U.filter(v=>{
+    if(cor&&v.tipo&&v.tipo!==cor)return false;
+    const vn=importarNorm(v.nome),vp=importarNorm(v.produtor);
+    const nomeOk=vn===n||(!!vp&&n===vp+' '+vn);
+    const prodOk=!p||!vp||vp===p||vp.includes(p)||p.includes(vp);
+    return nomeOk&&prodOk;
+  });
+  mesmos.filter(v=>(v.ano??null)===ano).forEach(v=>por(v,'exato'));
+  mesmos.slice().sort((a,b)=>(b.ano||0)-(a.ano||0)).forEach(v=>por(v,'colheita'));
+  parecidosEm(U,l.nome,l.produtor,cor,8).forEach(v=>por(v,'parecido'));
+  return out.slice(0,8);
+}
+function importarDeOnde(l){
+  const f=l&&l.ficheiro&&IMPORT_IMAGENS[l.ficheiro-1];
+  return f?f.nome:(IMPORT_IMAGENS.length===1?IMPORT_IMAGENS[0].nome:'');
+}
+function importarTopoHTML(){
+  const i=IMPORT_FILA[IMPORT_IDX],l=IMPORT_RESULTADO[i]||{},cands=IMPORT_CANDS[i]||[],alvo=IMPORT_ESC[i];
+  const de=importarDeOnde(l);
+  const opt=(val,txt)=>`<option value="${esc(String(val))}"${String(alvo)===String(val)?' selected':''}>${esc(txt)}</option>`;
+  const rot=c=>{
+    const v=c.v;
+    return (c.tipo==='colheita'?'Outra colheita · ':c.tipo==='parecido'?'Parecido · ':'')+
+      v.nome+(v.ano?' '+v.ano:'')+(v.produtor?' · '+v.produtor:'')+(v.tipo?' ('+v.tipo+')':'')+(desejado(v)?' ⭐':'');
+  };
+  const va=alvo!=='novo'?IDXV[alvo]:null;
+  // Um da wishlist que se tem nas mãos: passa-se para a garrafeira daqui
+  // mesmo (o Editar em modo 'converter', por cima; volta-se a este ecrã).
+  const desejo=va&&!IMPORT_CAT&&desejado(va)
+    ?`<div class="note" style="margin-top:6px">⭐ Este vinho está na tua wishlist. <a href="#" onclick="importarConverter(${va.id});return false">Passar para a garrafeira</a></div>`:'';
+  return `<div class="imp-topo">
+    <div class="imp-lido"><b>Lido:</b> ${esc(l.nome||'')}${l.ano?' '+esc(String(l.ano)):''}${l.produtor?' · <i>'+esc(l.produtor)+'</i>':''}${l.tipo?' · '+esc(l.tipo):''}
+      ${de?`<span class="rv-de">↳ de ${esc(de)}</span>`:''}</div>
+    <label>Este é</label>
+    <select onchange="importarAlvo(this.value)">
+      ${cands.map(c=>opt(c.v.id,'Atualizar: '+rot(c))).join('')}
+      ${opt('novo',IMPORT_CAT?'Um vinho novo no catálogo':'Um vinho novo na garrafeira')}
+    </select>
+    ${alvo==='novo'&&cands.filter(c=>c.tipo==='exato').length>1?'<div class="note" style="margin-top:6px">⚠️ Há mais do que um vinho com este nome — escolhe qual é.</div>':''}
+    ${l.aviso?`<div class="note" style="margin-top:6px">⚠️ ${esc(l.aviso)}</div>`:''}
+    ${desejo}
+    ${IMPORT_IDX===0&&IMPORT_AVISO?`<div class="aviso">${esc(IMPORT_AVISO)}</div>`:''}
+    ${IMPORT_IDX===0?importarOutroModeloHTML():''}
+  </div>`;
+}
+function importarProgresso(){return ' · '+(IMPORT_IDX+1)+'/'+IMPORT_FILA.length;}
+function importarAlvo(val){
+  const i=IMPORT_FILA[IMPORT_IDX];
+  IMPORT_ESC[i]=val==='novo'?'novo':Number(val);
+  importarMostrarAtual();
+}
+/* O que se leu, como proposta para um vinho que já existe: sem a
+   identidade (nome, produtor, ano, cor) e sem a quantidade. De outra
+   colheita só os factos do VINHO (`CAT_DA_COLHEITA` fica de fora); sem
+   colheita no vinho, sem janela. */
+function importarFicha(l,v){
+  const fora=['nome','produtor','ano','tipo','quantidade','ficheiro','aviso'];
+  const res={};
+  Object.keys(l).forEach(k=>{if(!fora.includes(k))res[k]=l[k];});
+  if(v.ano&&l.ano&&v.ano!==l.ano)CAT_DA_COLHEITA.forEach(k=>delete res[k]);
+  if(!v.ano)IA_JANELA.forEach(k=>delete res[k]);
+  // Não começa por "gemini" de propósito: o `iaUltimaProcura` não toma uma
+  // leitura de ficheiros por uma pesquisa na net.
+  res.modelo='leitura de ficheiros'+(IMPORT_MODELO?' ('+IMPORT_MODELO+')':'');
+  res.documento=importarDeOnde(l)||'os ficheiros que enviaste';
+  return res;
+}
+function importarMostrarAtual(){
+  const i=IMPORT_FILA[IMPORT_IDX],l=IMPORT_RESULTADO[i],alvo=IMPORT_ESC[i];
+  const v=alvo!=='novo'?IDXV[alvo]:null;
+  if(v){
+    IA_RES2=null;IA_MOTOR2='';IA_ERRO2='';IA_MOTOR='gratis';
+    iaMostrarResultado(importarFicha(l,v),v.id);
+    return;
+  }
+  IMPORT_ESC[i]='novo';
+  document.getElementById('modal-ia-in').innerHTML=importarNovoHTML(i,l);
+  abrirModal('modal-ia');
+}
+function importarNovoHTML(i,l){
+  const de=importarDeOnde(l);
+  const det=IA_CAMPOS.filter(c=>!['produtor','ano','tipo'].includes(c.k)).map(c=>{
+    const t=iaTxt(c,l);
+    return t?`<div class="imp-det"><b>${esc(c.rot)}</b> ${escLink(t)}</div>`:'';
+  }).join('');
+  const corSel=`<select id="imp-tipo"><option value="">— escolhe a cor —</option>${TIPOS.map(x=>`<option value="${esc(x)}"${x===l.tipo?' selected':''}>${esc(x)}</option>`).join('')}</select>`;
+  return `<div class="mtop"><div><h3>Vinho novo</h3>
+      <div class="note" style="margin-top:3px">${IMPORT_CAT?'Nasce no catálogo, para toda a gente':'Entra na garrafeira, por arrumar'}${importarProgresso()}</div></div>
+      <button class="mx" onclick="fecharModal('modal-ia')">✕</button></div>
+    ${importarTopoHTML()}
+    <label>Nome</label><input id="imp-nome" value="${esc(capitalizarLivre(l.nome||''))}">
+    <label>Produtor</label><input id="imp-produtor" value="${esc(capitalizarLivre(l.produtor||''))}">
+    <div class="mrow"><div><label>Ano</label><input id="imp-ano" inputmode="numeric" value="${esc(l.ano||'')}"></div><div><label>Cor</label>${corSel}</div></div>
+    ${IMPORT_CAT?'':`<div class="mrow"><div><label>Garrafas</label><input id="imp-qtd" type="number" min="1" max="60" value="${esc(l.quantidade||1)}"></div>
+      <div><label>Formato</label><select id="imp-formato">${FORMATOS.map(x=>`<option value="${esc(x)}"${x==='0,75 L'?' selected':''}>${esc(x)}</option>`).join('')}</select></div></div>`}
+    ${det?`<div class="imp-dets"><div class="note">O que se leu${de?` <span class="rv-de">↳ de ${esc(de)}</span>`:''}</div>${det}</div>`
+      :'<div class="note" style="margin-top:10px">Além do nome, não se leu mais nada deste vinho.</div>'}
+    <div id="imp-falhas"></div>
+    <div class="macoes">
+      <button class="btn prim" id="imp-guardar" onclick="importarCriar()">${IMPORT_CAT?'Criar no catálogo':'Adicionar à garrafeira'}</button>
+      <button class="btn ghost" onclick="importarAvancar()">Saltar »</button>
+      <button class="btn ghost" onclick="fecharModal('modal-ia')">Parar aqui</button>
+    </div>`;
+}
+function importarCampo(id){const e=document.getElementById(id);return e?e.value.trim():'';}
+async function importarCriar(){
+  const i=IMPORT_FILA[IMPORT_IDX],l=IMPORT_RESULTADO[i]||{};
+  const nome=importarCampo('imp-nome'),produtor=importarCampo('imp-produtor'),tipo=importarCampo('imp-tipo');
+  const anoLido=inteiro(importarCampo('imp-ano')),ano=(anoLido&&anoLido>=1900&&anoLido<=2100)?anoLido:null;
+  if(!nome){toast('Falta o nome',1);return;}
+  if(!tipo){toast('Escolhe a cor',1);const e=document.getElementById('imp-tipo');if(e)e.focus();return;}
+  if(IMPORT_CAT?!catPodeCriar():roGuard())return;
+  const btn=document.getElementById('imp-guardar'),txt=btn.textContent;btn.disabled=true;btn.textContent='A gravar…';
+  const fora=['nome','produtor','ano','tipo','castas','quantidade','ficheiro','aviso'];
+  const castas=Array.isArray(l.castas)?l.castas.filter(Boolean):[];
+  try{
+    if(IMPORT_CAT){
+      const campos={};
+      CAT_FICHA_FORM.forEach(k=>{if(!fora.includes(k)&&l[k]!=null&&l[k]!=='')campos[k]=l[k];});
+      campos.tipo=tipo;
+      if(ano==null)IA_JANELA.forEach(k=>delete campos[k]);
+      if(castas.length)campos.castas=castas.slice().sort((a,b)=>String(a).localeCompare(String(b),'pt'));
+      const r=await sbReq('POST','rpc/criar',{p_nome:nome,p_produtor:produtor,p_ano:ano,p_campos:campos},
+        {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
+      IMPORT_CAT_MUDOU=true;
+      if(r&&r.id)IMPORT_FEITOS.criados.push(r.id);
+    }else{
+      const vinho={garrafeira_id:GA_ID,nome,produtor,ano,tipo};
+      Object.keys(l).forEach(k=>{if(!fora.includes(k)&&l[k]!=null&&l[k]!=='')vinho[k]=l[k];});
+      if(ano==null)IA_JANELA.forEach(k=>delete vinho[k]);
+      if(TEM_ATUALIZADO)vinho.atualizado_em=new Date().toISOString();
+      const criados=await sbReq('POST','vinhos',[vinho],{'Prefer':'return=representation'});
+      const id=criados&&criados[0]&&criados[0].id;if(!id)throw new Error('não foi possível criar '+nome);
+      IMPORT_FEITOS.criados.push(id);
+      if(castas.length)await sbRpc('definir_castas',{p_vinho_id:id,p_nomes:castas});
+      const qtd=Math.max(1,Math.min(60,inteiro(importarCampo('imp-qtd'))||1));
+      const formato=importarCampo('imp-formato')||'0,75 L';
+      await sbReq('POST','garrafas',Array.from({length:qtd},()=>({vinho_id:id,formato})),{'Prefer':'return=minimal'});
+    }
+    importarAvancar();
+  }catch(e){
+    // Uma recusa (o catálogo já tem este vinho e colheita, a rede) fica dita
+    // aqui, com o vinho à espera: corrige-se e tenta-se outra vez, ou salta-se.
+    const box=document.getElementById('imp-falhas');
+    if(box)box.innerHTML=`<div class="erro">Não entrou: ${esc(e.message)}</div>`;
+    btn.disabled=false;btn.textContent=txt;
+  }
+}
+function importarAvancar(){
+  IMPORT_IDX++;
+  if(IMPORT_IDX>=IMPORT_FILA.length){fecharModal('modal-ia');return;}
+  importarMostrarAtual();
+}
+function importarConverter(id){
+  IMPORT_PAUSA=true;
+  document.getElementById('modal-ia').classList.remove('on');   // sem o fecharModal: a importação continua
+  abrirEditarVinho(id,'converter');
+  if(!document.getElementById('modal-edit').classList.contains('on')){IMPORT_PAUSA=false;abrirModal('modal-ia');}
+}
+// Chamado pelo `fecharModal('modal-edit')`: o "Passar para a garrafeira"
+// acabou (gravado ou não) e volta-se ao mesmo vinho da importação.
+function importarRetomar(){
+  if(!IMPORT_PAUSA)return;
+  IMPORT_PAUSA=false;
+  if(IMPORT_ATIVO)setTimeout(importarMostrarAtual,0);
+}
+// Chamado por `fecharModal('modal-ia')` — o ✕, o Escape, o "Parar aqui" ou o
+// fim da fila: é o único sítio por onde todos passam (como no lote).
+function importarAoFecharModalIA(){
+  if(!IMPORT_ATIVO||IMPORT_PAUSA)return;
+  IMPORT_ATIVO=false;
+  const {criados,atualizados}=IMPORT_FEITOS,total=IMPORT_FILA.length,vistos=Math.min(IMPORT_IDX,total);
+  const catMudou=IMPORT_CAT_MUDOU;IMPORT_CAT_MUDOU=false;
+  IMPORT_FILA=[];
+  const feito=[criados.length?criados.length+(criados.length===1?' criado':' criados'):'',
+    atualizados?atualizados+(atualizados===1?' atualizado':' atualizados'):''].filter(Boolean).join(' e ');
+  toast(vistos>=total?(feito?'Importação concluída: '+feito+' ✓':'Importação concluída — não se gravou nada')
+    :'Importação parada — '+vistos+' de '+total+' vistos'+(feito?' ('+feito+')':''));
+  (async()=>{
+    if(IMPORT_CAT){
+      if(!catMudou)return;
+      CAT_VINHOS=null;
+      try{await catCarregar();}catch(_){}
+      renderLista();refrescarVinhoAberto();
+      if(criados.length===1&&!atualizados&&IDXV[-criados[0]])verVinho(-criados[0]);
+    }else if(criados.length){
+      await carregarGarrafeira();await recarregarCastas();renderLista();
+      await oferecerRetirarDesejos(criados.map(id=>IDXV[id]));
+    }
+  })().catch(()=>{});
 }
 
 function exportarJSON(){
@@ -11383,7 +11569,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='177';
+const APP_BUILD='178';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
