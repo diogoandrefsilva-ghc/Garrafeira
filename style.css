@@ -2267,3 +2267,14 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
 #s-sugestoes .hist-orc{font-weight:500;color:var(--mu);font-size:12px}
 #s-sugestoes .hist-top{font-size:12px;color:var(--mu);margin-top:2px}
 #s-sugestoes .hist-data{font-size:11px;color:var(--mu);white-space:nowrap}
+
+/* ── IMPORTAR DE IMAGENS OU DOCUMENTOS ──
+   O topo de cada vinho lido: o que se leu, de que ficheiro, e "Este é:" — o
+   vinho que já existe (a atualização) ou um vinho novo. */
+.imp-topo{margin-top:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--bo);border-radius:12px}
+.imp-topo label{margin-top:8px}
+.imp-topo select{width:100%}
+.imp-lido{font-size:13.5px;line-height:1.4}
+.imp-dets{margin-top:12px;border-top:1px solid var(--bo);padding-top:8px}
+.imp-det{font-size:13px;line-height:1.45;margin-top:5px}
+.imp-det b{font-weight:600;margin-right:4px}

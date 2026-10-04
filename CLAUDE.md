@@ -1145,7 +1145,7 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
 - **A atualização massiva e a importação no Catálogo** (02/10/2026, o dono:
   "no separador do Catálogo, não tenho atualização massiva ou importação por
   fotos"). O "+" do Catálogo é o MESMO menu da garrafeira, menos a wishlist
-  (`.so-gar`): Vinho novo, Atualização massiva, Importar por imagens — aos
+  (`.so-gar`): Vinho novo, Atualização massiva, Importar de imagens ou documentos — aos
   curadores e ao admin do catálogo (`catPodeCriar`), mesmo com uma
   garrafeira emprestada aberta (o `fabSincronizar` tira-lhe o `ro-hide` no
   catálogo). São os mesmos ecrãs; muda para onde se grava:
@@ -1159,14 +1159,16 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
     Como na procura de um vinho, a `vinho-info` responde primeiro com o
     catálogo — num campo que a linha já tem (e não envelheceu), a IA não é
     chamada e não há nada a propor;
-  - **a importação por imagens** lê pela mesma `importar-vinhos` (que grava
-    o pedido numa garrafeira em que se pode mexer: a aberta se for minha,
-    senão a minha — `importarGid`) e cria cada vinho escolhido pela
-    `winecatalog.criar` (`importarGuardarCat`), sem garrafas. A cor é
-    obrigatória — é chave da linha, e a leitura põe "Tinto" quando não a vê
-    —, por isso a revisão pede-a no lugar das garrafas e do formato. Uma
-    recusa (o vinho e a colheita já lá estão) não pára os outros: fica dita
-    ao pé do botão, com esse vinho ainda marcado.
+  - **a importação de imagens ou documentos** lê pela mesma
+    `importar-vinhos` (que grava o pedido numa garrafeira em que se pode
+    mexer: a aberta se for minha, senão a minha — `importarGid`); um vinho
+    novo nasce pela `winecatalog.criar` (`importarCriar`), sem garrafas, e
+    um que o catálogo já tem corrige-se pela `winecatalog.editar`
+    (`iaAplicarCat`), como na atualização massiva. A cor é obrigatória a
+    criar — é chave da linha —, por isso o ecrã do vinho novo pede-a no
+    lugar das garrafas e do formato. Uma recusa (o vinho e a colheita já lá
+    estão) fica dita no ecrã desse vinho, que se corrige ou se salta. Ver
+    "Importar de imagens ou documentos".
 
 ### As colheitas num cartão só (04/10/2026)
 O dono das apps: "Na garrafeira não tenho dúvidas: se um gajo tem dois
@@ -2785,20 +2787,69 @@ gravação seguinte fazia nascer lá outra linha com o nome antigo. Agora:
 cabeça: sem elas, o nome do catálogo era rearrumado à chegada ou a escrita
 voltava ao catálogo.
 
-## Importar por imagens (`importar-vinhos`)
+## Importar de imagens ou documentos (`importar-vinhos`)
 
-A **"📷 Importar por imagens"** vive no **FAB**, ao lado do "Novo vinho" e da
-"Atualização massiva" — as três formas de ACRESCENTAR vinhos no mesmo sítio.
-Esteve em Definições › Dados e veio de lá: aquele cartão é o das cópias de
-segurança, por onde os dados SAEM, e quem acabou de fotografar a prateleira
-procura o "+". No Catálogo (aos curadores) o que se escolhe nasce no
-catálogo, sem garrafas (ver "A atualização massiva e a importação no
-Catálogo"). Aceita uma a três fotos de rótulos, listas ou prateleiras. `encolherImagem()` reduz cada uma no
-browser; a função recebe os base64 apenas em memória, envia-os ao Gemini e
-descarta-os no fim. Não há upload para Storage nem imagens dentro da tabela
-`garrafeira.importacoes`: essa tabela guarda somente os metadados do pedido e
-o resultado pendente, associado ao email do JWT e à garrafeira que o editor
-pode alterar.
+A **"📷 Importar de imagens ou documentos"** vive no **FAB**, ao lado do
+"Novo vinho" e da "Atualização massiva". Esteve em Definições › Dados e veio
+de lá: aquele cartão é o das cópias de segurança, por onde os dados SAEM, e
+quem acabou de fotografar a prateleira procura o "+".
+
+**Desde 04/10/2026 lê documentos e serve também para ATUALIZAR** (o dono das
+apps: "o importar por imagens passa a ser importar por imagens/docs, e deixa
+de ser apenas para adicionar novos vinhos, passa a ser para corrigir/melhorar
+a informação dos que já existam"). Aceita até três ficheiros: fotografias e
+prints (encolhidos no browser, `encolherImagem`), PDFs até 6 MB (a ficha
+técnica do produtor) e ficheiros de texto até 200 KB (`importarPreparar`).
+Um PDF ou uma imagem vai INTEIRO ao Gemini em anexo (`inline_data`, como os
+`documentos` da `vinho-info`), um texto vai como texto; cada ficheiro vai
+marcado "[Ficheiro N]" e cada vinho lido diz de qual veio (`ficheiro`), que
+a app mostra ("↳ de ficha.pdf"). O tipo de um PDF confere-o a função pelos
+BYTES. **A IA só lê e encaixa nos atributos — sem pesquisa na net, sem
+memória**: a informação que se quer está nos ficheiros. Os ficheiros não se
+guardam: nem no Storage nem na `garrafeira.importacoes` (que guarda só o
+número e o tipo dos ficheiros e o resultado pendente, com o email do JWT e a
+garrafeira que o editor pode alterar).
+
+**Com os ficheiros vai uma caixa de INDICAÇÕES** (opcional, até 800
+caracteres, `IMPORT_INDICACOES` → `indicacoes` no pedido): "lê só as notas
+de prova e a harmonização", "só os vinhos da página 2", "o Arinto é
+branco". O modelo segue-as para escolher que vinhos e que atributos traz, ou
+para tirar uma dúvida — nunca para inventar o que os ficheiros não dizem.
+
+**Um ecrã por vinho lido, e é a pessoa que diz quem ele é** (`IMPORT_FILA`;
+secção "IMPORTAR DE IMAGENS OU DOCUMENTOS" no app.js). No topo de cada ecrã,
+o que se leu e **"Este é:"** (`importarTopoHTML`): um vinho que já existe
+("Atualizar: …") ou um vinho novo. Os candidatos são os do sítio onde se
+abriu — a garrafeira aberta (com a wishlist) ou o Catálogo
+(`importarCandidatos`): o IGUAL (o mesmo nome pelo `chave()` e as siglas,
+também com o produtor à frente do nome; o mesmo produtor e a mesma cor
+quando os dois os dizem; a mesma colheita), as outras colheitas do mesmo
+vinho e os parecidos (`parecidosEm`, a conta da 1.ª etapa do vinho novo).
+**Só vem pré-escolhido um igual que seja o ÚNICO** — dois (o branco e o
+tinto, lidos sem cor) ficam em "vinho novo" com um aviso; a outra colheita e
+os parecidos nunca. A semelhança sugere, nunca decide.
+- **Um vinho que já existe** é o ecrã da atualização massiva tal e qual
+  (`iaMostrarResultado`/`iaAplicar`/`iaAplicarCat`, que sabem que estão a
+  meio de uma importação por `IMPORT_ATIVO`): campo a campo, o de agora
+  riscado ao lado do lido, marcados só os VAZIOS. Nunca o nome, o produtor,
+  o ano nem a cor (`importarFicha`); de outra colheita só os factos do vinho
+  (sem `CAT_DA_COLHEITA`). O carimbo é "leitura de ficheiros (…)" — não
+  começa por "gemini", e o `iaUltimaProcura` não o toma por uma pesquisa.
+  **Nunca acrescenta garrafas** (o dono: "isto nunca vai servir para
+  adicionar garrafas a um vinho que já existe"). Um da wishlist tem ali o
+  "Passar para a garrafeira" (o Editar em modo `converter`, por cima;
+  fechá-lo volta à importação — `importarConverter`/`importarRetomar`).
+- **Um vinho novo** (`importarNovoHTML`/`importarCriar`): o nome, o
+  produtor, o ano e a COR editáveis (a cor é obrigatória — a leitura já não
+  põe "Tinto" quando não a vê, que um branco lido como tinto ia atualizar o
+  vinho errado), as garrafas e o formato na garrafeira, e por baixo o que se
+  leu. Na garrafeira entra por arrumar; no Catálogo nasce pela
+  `winecatalog.criar`.
+- **Saltar** e **Parar aqui** em todos; fechar por qualquer lado passa pelo
+  `importarAoFecharModalIA` (o resumo, o catálogo relido uma vez, o
+  `oferecerRetirarDesejos` dos criados). Uma lista comprida são muitos ecrãs
+  — aceite (o dono: "acho que nunca vai acontecer"); a função lê até 40
+  vinhos e deixa ao modelo 32k tokens de resposta.
 
 `importar-vinhos.ts` usa só `GEMINI_FREE_API_KEY`, nunca a chave premium, e
 não usa pesquisa web. Os modelos tentados começam pelos PONTEIROS
@@ -2812,10 +2863,8 @@ tem acesso a nenhum) de 429 (sem quota no Google) — mesma lógica do
 `vinho-info.ts`. O plano
 grátis tem o limite por utilizador `GEMINI_IMPORT_FREE_DAILY_LIMIT` (3 por
 defeito); premium não tem esse limite. A função corre a leitura em segundo
-plano com `EdgeRuntime.waitUntil`, e a app consulta `importacoes` até ficar
-concluída ou com erro. O resultado é sempre uma proposta: a UI deixa escolher
-cada vinho e editar nome, produtor, ano e quantidade; só `importarGuardar()`
-cria o vinho, as castas e as garrafas.
+plano com `EdgeRuntime.waitUntil` (até 140 s), e a app consulta
+`importacoes` até ficar concluída ou com erro.
 - Quem pode chamar é qualquer **editor** — e a pergunta é feita à BD
   (RPC `is_editor()`) com o JWT de quem chamou, não comparando emails dentro
   da função. Assim a regra vive num sítio só e mudar de admin não obriga a
