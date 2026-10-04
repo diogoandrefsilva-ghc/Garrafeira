@@ -2085,20 +2085,23 @@ body.cat .fab-op.so-gar{display:none!important}
    Um vinho do catálogo com várias colheitas é UM cartão, com setas para
    andar entre elas (ver "AS COLHEITAS NO CATÁLOGO" no app.js). Verde porque
    é coisa do catálogo, como o cabeçalho e o selo de "tenho".
-   Na LISTA as setas são o cartão inteiro de cada lado, como na grelha são
-   os lados da garrafa (o dono: "na vista em lista também ficava melhor
-   assim"): zonas de toque da altura do cartão, nos 26px que o cartão ganha
-   de cada lado. Só estes cartões os ganham — a garrafa deles fica um pouco
-   mais para dentro do que a dos vizinhos, e isso também diz que são outros. */
-.vcard.multi{padding-left:26px;padding-right:26px}
-.vcard.multi .vc-match{margin-left:-26px;margin-right:-26px;padding-left:26px;padding-right:26px}
-.vc-seta{position:absolute;top:0;bottom:0;z-index:1;width:24px;padding:0;border:0;background:none;
-  color:#1d4a3b;font-family:var(--fd);font-weight:600;font-size:26px;line-height:1;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
-.vc-seta.esq{left:0;border-radius:var(--r) 0 0 var(--r)}
-.vc-seta.dir{right:0;border-radius:0 var(--r) var(--r) 0}
+   Na LISTA as setas são dois botões redondos POUSADOS NO REBORDO do
+   cartão, a meio da altura e meio fora dele, como o selo no canto (o dono,
+   04/10/2026: "em cima da linha"). Foram faixas de 26px de cada lado, da
+   altura do cartão, e roubavam esse espaço à imagem do vinho; assim o
+   cartão tem as medidas de todos os outros. O `::before` alarga o toque
+   aos 44px que um dedo precisa. */
+.vc-seta{position:absolute;top:50%;z-index:2;width:26px;height:26px;margin-top:-13px;padding:0;
+  border:1px solid #cfe3d7;border-radius:50%;background:var(--card);color:#1d4a3b;
+  font-family:var(--fd);font-weight:600;font-size:18px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 2px var(--bg),0 2px 5px -1px rgba(43,10,22,.25);-webkit-tap-highlight-color:transparent}
+.vc-seta::before{content:'';position:absolute;inset:-9px}
+.vc-seta.esq{left:-13px}
+.vc-seta.dir{right:-13px}
 .vc-seta:not(.off):hover{background:#eaf3ee}
-.vc-seta.off,.vg-seta.off{color:#cfe0d6;cursor:default}
+.vc-seta.off{color:#cfe0d6;border-color:var(--bo);box-shadow:0 0 0 2px var(--bg);cursor:default}
+.vg-seta.off{color:#cfe0d6;cursor:default}
 .vm-ano.mud{font-weight:600;color:#1d4a3b}
 .vc-colh{display:flex;align-items:center;gap:7px;margin-top:5px;font-size:10.5px;font-weight:600;color:#1d4a3b}
 .colh-dots{display:inline-flex;gap:3px;flex-shrink:0}
@@ -2134,6 +2137,9 @@ body.cat .fab-op.so-gar{display:none!important}
 .colh-row:first-child{border-top:0}
 .colh-row:hover{background:var(--bg)}
 .colh-row.on{background:#eaf3ee;cursor:default}
+/* O que a colheita é para mim (🍾 ⭐ 📖) vai À FRENTE do ano, numa coluna
+   própria para os anos ficarem alinhados (o dono, 04/10/2026). */
+.colh-row .cmeu{width:18px;flex-shrink:0;margin-right:-4px;font-size:13px;text-align:center}
 .colh-row .cy{font-family:var(--fd);font-weight:600;font-size:16px;width:42px;flex-shrink:0}
 .colh-row.on .cy{color:#1d4a3b}
 .colh-row .cm{flex:1;min-width:0;font-size:11px;color:var(--mu);line-height:1.4}

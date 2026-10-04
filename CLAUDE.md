@@ -1178,9 +1178,11 @@ como na grelha, e com a nota "Várias colheitas no Catálogo"). Secção "AS
 COLHEITAS NO CATÁLOGO" no app.js e no style.css.
 - **No Detalhe do catálogo, as linhas do mesmo vinho são UM cartão**
   (`catFamChave`: nome, produtor e cor, pelo `chave()`). O cartão mostra
-  uma colheita de cada vez; as setas ‹ › — na lista, os lados do cartão
-  inteiro (`.vcard.multi`, 26px de cada lado); na grelha, por cima das
-  bordas da garrafa, que assim não encolhe — passam à anterior e à
+  uma colheita de cada vez; as setas ‹ › — na lista, dois botões redondos
+  pousados no rebordo do cartão, a meio da altura e meio fora dele, como o
+  selo (o dono, 04/10/2026: foram faixas de 26px de cada lado dentro do
+  cartão e roubavam espaço à imagem); na grelha, por cima das bordas da
+  garrafa, que assim não encolhe — passam à anterior e à
   seguinte, e TUDO o que é da colheita muda com ela: a nota do Vivino, o
   preço, a janela, a menção, a imagem. O ano fica no sítio de sempre, a
   verde (`.vm-ano.mud`). Nas pontas as setas apagam-se e não fazem nada
@@ -1203,8 +1205,9 @@ COLHEITAS NO CATÁLOGO" no app.js e no style.css.
   lote, cada colheita é uma linha a atualizar, e o "Marcar 10" marca linhas.
 - **A página do vinho** tem as setas ao lado do ano, na capa
   (`catColhCapaHTML`), e a tabela **"Colheitas no Catálogo"**
-  (`catColheitasHTML`: ano, janela, menção, nota, preço, e 🍾/⭐/📖 nas
-  minhas). Mudar de colheita refaz a MESMA página (`catColhPagina`, sem
+  (`catColheitasHTML`: ano, janela, menção, nota, preço; o 🍾/⭐/📖 das
+  minhas vai À FRENTE do ano, numa coluna própria que só aparece quando
+  alguma colheita é minha). Mudar de colheita refaz a MESMA página (`catColhPagina`, sem
   passo novo na história) e o cartão do Detalhe por trás acompanha. O "Na
   tua garrafeira" junta os meus vinhos de todas as colheitas (com o ano), e
   o botão diz "Pôr a 2021 na garrafeira".

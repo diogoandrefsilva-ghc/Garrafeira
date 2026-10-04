@@ -1415,14 +1415,19 @@ function catColhCapaHTML(v){
 function catColheitasHTML(v){
   const l=catColheitas(v);
   if(l.length<2)return '';
+  // O que cada colheita é para mim vai À FRENTE do ano (o dono, 04/10/2026),
+  // numa coluna própria — só quando alguma o é, senão era uma coluna vazia.
+  const que=new Map(l.map(x=>[x,catEstado(x).que]));
+  const marcas=[...que.values()].some(Boolean);
   const linhas=l.slice().reverse().map(x=>{
-    const p=precoPrincipal(x), q=catEstado(x).que;
-    const meu=q==='tenho'?'🍾 ':q==='desejo'?'⭐ ':q==='bebido'?'📖 ':'';
+    const p=precoPrincipal(x), q=que.get(x);
+    const meu=q==='tenho'?['🍾','Na tua garrafeira']:q==='desejo'?['⭐','Na tua wishlist']:q==='bebido'?['📖','Já bebido']:['',''];
     const cm=[x.beber_de||x.beber_ate?`Beber ${x.beber_de||'?'} – ${x.beber_ate||'?'}`:'',
       x.mencao?`<b>${esc(x.mencao)}</b>`:''].filter(Boolean).join(' · ');
     return `<button type="button" class="colh-row${x===v?' on':''}" onclick="catColhPagina(${x.id})">
+      ${marcas?`<span class="cmeu"${meu[1]?` title="${meu[1]}"`:''}>${meu[0]}</span>`:''}
       <span class="cy">${x.ano?esc(String(x.ano)):'s/a'}</span>
-      <span class="cm">${meu}${cm}</span>
+      <span class="cm">${cm}</span>
       ${notaVivinoBadge(x)}
       <span class="cp">${p?esc(eur0(p.preco)):''}</span>
     </button>`;
@@ -11378,7 +11383,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='176';
+const APP_BUILD='177';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
