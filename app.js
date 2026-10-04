@@ -11091,7 +11091,7 @@ let IMPORT_CAT=false;
 let IMPORT_RESULTADO=[], IMPORT_AVISO='', IMPORT_MODELO='';
 // Os ficheiros já preparados (encolhidos, em base64) para o "tenta com um
 // modelo de IA diferente": só em memória do browser, nunca gravados.
-let IMPORT_IMAGENS=[];
+let IMPORT_IMAGENS=[], IMPORT_INDICACOES='';
 let IMPORT_FILA=[], IMPORT_IDX=0, IMPORT_ATIVO=false, IMPORT_PAUSA=false;
 let IMPORT_CANDS={}, IMPORT_ESC={};   // por vinho lido: os candidatos e o escolhido (id ou 'novo')
 let IMPORT_FEITOS={criados:[],atualizados:0}, IMPORT_CAT_MUDOU=false;
@@ -11104,11 +11104,14 @@ function importarAbrir(){
   // Catálogo é a aberta se for minha, senão a minha.
   IMPORT_CAT=modoCat();IMPORT_ATIVO=false;IMPORT_PAUSA=false;
   if(IMPORT_CAT&&importarGid()==null){toast('Para importar precisas de uma garrafeira tua — vê em Definições › Garrafeiras',1);return;}
-  IMPORT_IMAGENS=[];
+  IMPORT_IMAGENS=[];IMPORT_INDICACOES='';
   document.getElementById('modal-ia-in').innerHTML=
     "<div class='mtop'><div><h3>📷 Importar de imagens ou documentos</h3><div class='note' style='margin-top:3px'>Até 3 ficheiros: fotografias de rótulos ou prateleiras, prints, a ficha técnica em PDF, um ficheiro de texto.</div></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
     "<div class='aviso'>Serve para criar vinhos novos ou completar a ficha dos que já "+(IMPORT_CAT?"estão no catálogo":"tens")+". Os ficheiros são lidos pela IA e descartados no fim — a leitura não pesquisa na internet. <b>Nada entra "+(IMPORT_CAT?"no catálogo":"na garrafeira")+" sem confirmares, vinho a vinho.</b></div>"+
     "<label>Ficheiros (máximo 3)</label><input id='imp-ficheiros' type='file' accept='image/*,application/pdf,.pdf,text/plain,.txt' multiple onchange='importarEscolha(this)'>"+
+    // As indicações vão à IA com os ficheiros (o dono, 04/10/2026): "atualiza
+    // só a harmonização", "só os tintos", "o segundo é branco".
+    "<label>Indicações para a IA <i style='text-transform:none;letter-spacing:0;font-weight:400'>(opcional)</i></label><textarea id='imp-indicacoes' rows='3' maxlength='800' placeholder='Ex.: lê só as notas de prova e a harmonização · só os vinhos da página 2 · o Arinto é branco'></textarea>"+
     "<div class='note' id='imp-estado' style='margin-top:8px'>Podes juntar frente e verso do mesmo rótulo, ou o rótulo e a ficha técnica.</div>"+
     "<div class='macoes'><button class='btn prim' id='imp-btn' onclick='importarEnviar()'>Ler</button><button class='btn ghost' onclick=\"fecharModal('modal-ia')\">Cancelar</button></div>";
   abrirModal('modal-ia');
@@ -11148,7 +11151,8 @@ function importarGid(){
 async function importarPedir(imagens,extra){
   const r=await sbFetch(SB_URL+'/functions/v1/importar-vinhos',{
     method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY},
-    body:JSON.stringify(Object.assign({garrafeiraId:importarGid(),imagens:imagens.map(x=>({mime:x.mime,data:x.data,nome:x.nome}))},extra||{}))
+    body:JSON.stringify(Object.assign({garrafeiraId:importarGid(),imagens:imagens.map(x=>({mime:x.mime,data:x.data,nome:x.nome})),
+      ...(IMPORT_INDICACOES?{indicacoes:IMPORT_INDICACOES}:{})},extra||{}))
   });
   let d={};try{d=await r.json();}catch(_){}
   if(!r.ok){
@@ -11173,6 +11177,7 @@ async function importarEnviar(){
       prontos.push(x);
     }
     IMPORT_IMAGENS=prontos;
+    IMPORT_INDICACOES=(document.getElementById('imp-indicacoes')?.value||'').trim().slice(0,800);
     estado.textContent='A enviar para leitura…';btn.textContent='A ler…';
     importarEspera(await importarPedir(prontos));
   }catch(e){
@@ -11569,7 +11574,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='178';
+const APP_BUILD='179';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

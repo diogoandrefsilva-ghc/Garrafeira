@@ -117,22 +117,23 @@ function normalizar(raw:any):Record<string,unknown>|null{
 // A cor NÃO se adivinha (era "Tinto" por omissão): a app usa-a para achar o
 // vinho que já existe, e um branco lido como tinto ia atualizar o vinho
 // errado. Sem cor, a app pede-a a quem cria.
-function prompt(fs:Ficheiro[]){return [
+function prompt(fs:Ficheiro[],indicacoes:string){return [
  "És um assistente a ler informação de vinhos a partir de "+fs.length+" ficheiro(s): fotografias de rótulos, garrafas ou prateleiras, prints, listas, fichas técnicas de produtores (PDF ou imagem) ou texto. Cada ficheiro vem marcado [Ficheiro N].",
  "O objetivo é encaixar nos atributos o que os ficheiros dizem de cada vinho: tanto para criar vinhos novos como para completar a ficha de vinhos que já existem. Uma ficha técnica traz normalmente as castas, a região, o teor, o estágio, as notas de prova, a harmonização e a janela de consumo — aproveita tudo o que lá estiver.",
  "Lê APENAS o que está realmente nos ficheiros. Um ficheiro pode ter vários vinhos; ficheiros diferentes podem ser o mesmo vinho (frente e verso, rótulo e ficha técnica) — junta-os num só. Usa quantidade se vires várias garrafas iguais.",
  "Não pesquisas na internet e não completas dados de memória. Se não está nos ficheiros, omite. Não inventes produtor, ano, região, castas, teor, cor ou quantidade — a cor (tipo) só se o ficheiro a disser ou a garrafa a mostrar sem dúvida. Não cries entradas para menus, preços ou acessórios.",
+ ...(indicacoes?["INDICAÇÕES DE QUEM ENVIOU (segue-as: podem dizer que vinhos ler, que atributos trazer — omite os outros —, ou esclarecer uma dúvida como a cor; nunca servem para inventar o que os ficheiros não dizem): \""+indicacoes+"\""]:[]),
  "Em \"ficheiro\" põe o número do ficheiro de onde tiraste a maior parte da informação desse vinho.",
  "IDIOMA: o nome, o produtor e as castas ficam como estão no ficheiro; todo o outro texto (estagioTexto, notasProva, harmonizacao, resumo, aviso) em português de Portugal — se o ficheiro o traz noutra língua (inglês, espanhol…), TRADUZ. A região com o nome português (\"Douro\", nunca \"Douro Valley\").",
  "Responde APENAS JSON, sem markdown: {\"vinhos\":[{\"nome\":\"texto visível\",\"produtor\":\"\",\"ano\":2020,\"tipo\":\"Tinto | Branco | Rosé | Espumante | Licoroso | Frisante\",\"estilo\":\"Maduro | Verde | Colheita Tardia | Palhete\",\"regiao\":\"\",\"subRegiao\":\"\",\"mencao\":\"Reserva | Grande Reserva | Garrafeira | Colheita Selecionada | Vinhas Velhas | Superior | Grande Escolha\",\"classificacao\":\"DOC | Vinho Regional | Vinho\",\"castas\":[\"\"],\"teor\":13.5,\"estagioMeses\":18,\"estagioTexto\":\"\",\"notasProva\":\"\",\"harmonizacao\":\"\",\"resumo\":\"\",\"beberDe\":2026,\"beberAte\":2030,\"quantidade\":1,\"ficheiro\":1,\"aviso\":\"dúvida opcional\"}],\"aviso\":\"observação geral opcional\"}"
  ].join("\n");}
 function comLimite(pai:AbortSignal,ms:number){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms),a=()=>c.abort();pai.addEventListener("abort",a,{once:true});return{signal:c.signal,limpar:()=>{clearTimeout(t);pai.removeEventListener("abort",a);}};}
-async function ler(imagens:Ficheiro[],signal:AbortSignal,grande:boolean){
+async function ler(imagens:Ficheiro[],indicacoes:string,signal:AbortSignal,grande:boolean){
  if(!GEMINI_KEY)throw new Error("a importação ainda não está configurada: falta GEMINI_FREE_API_KEY");
  const modelos=candidatosPara(await candidatos(signal),grande);
  // Cada ficheiro leva à frente a sua marca [Ficheiro N] — é por ela que o
  // modelo diz de onde veio cada vinho, e a app o mostra.
- const parts:any[]=[{text:prompt(imagens)}];
+ const parts:any[]=[{text:prompt(imagens,indicacoes)}];
  imagens.forEach((f,i)=>{
   parts.push({text:"[Ficheiro "+(i+1)+": "+(f.nome||"sem nome")+" — "+tipoRot(f.mime)+"]"});
   parts.push(f.texto!=null?{text:f.texto}:{inline_data:{mime_type:f.mime,data:f.data}});
@@ -200,6 +201,8 @@ Deno.serve(async(req)=>{
   const body=await req.json().catch(()=>({})),gid=Number(body?.garrafeiraId),recebidas=Array.isArray(body?.imagens)?body.imagens:[];
   if(!Number.isSafeInteger(gid)||gid<1)return json({error:"falta a garrafeira"},400);
   if(!recebidas.length||recebidas.length>MAX_IMAGENS)return json({error:"escolhe entre 1 e "+MAX_IMAGENS+" ficheiros"},400);
+  // As indicações escritas na app (opcionais): que vinhos, que atributos, a cor.
+  const indicacoes=texto(body?.indicacoes,800);
   const imagens:Ficheiro[]=[];let total=0;
   for(const x of recebidas){
    const mime=String(x?.mime??"").toLowerCase(),data=String(x?.data??"").replace(/\s/g,""),nome=texto(x?.nome,120);
@@ -225,8 +228,8 @@ Deno.serve(async(req)=>{
   // nunca um valor que o browser escolha sozinho para quem não tem esse
   // direito (o mesmo princípio do `plano` em vinho-info.ts).
   const grande=body?.modelo==="grande"&&auth.plano==="premium";
-  const id=await criar(token,gid,imagens,ctrl.signal);await registar("pedido",{id,garrafeira_id:gid,imagens:imagens.length,tipos:imagens.map(f=>tipoRot(f.mime)),plano:auth.plano,modelo:grande?"grande":"barato"},quem);
-  EdgeRuntime.waitUntil((async()=>{const proc=new AbortController(),t=setTimeout(()=>proc.abort(),140000);try{const resultado=await ler(imagens,proc.signal,grande);await fechar(id,quem,{estado:"concluido",resultado});await registar("ok",{id,vinhos:resultado.vinhos.length,modelo:resultado.modelo,...(resultado.usageMetadata?{usageMetadata:resultado.usageMetadata}:{}),...(resultado.tentativas?{tentativas:resultado.tentativas}:{} )},quem);}catch(e){const erro=texto((e as Error).message||"a importação falhou",400),tentativas=(e as any)?.tentativas;await fechar(id,quem,{estado:"erro",erro});await registar("erro",{id,passo:"gemini",erro,...(tentativas?{tentativas}:{})},quem);}finally{clearTimeout(t);}})());
+  const id=await criar(token,gid,imagens,ctrl.signal);await registar("pedido",{id,garrafeira_id:gid,imagens:imagens.length,tipos:imagens.map(f=>tipoRot(f.mime)),indicacoes:!!indicacoes,plano:auth.plano,modelo:grande?"grande":"barato"},quem);
+  EdgeRuntime.waitUntil((async()=>{const proc=new AbortController(),t=setTimeout(()=>proc.abort(),140000);try{const resultado=await ler(imagens,indicacoes,proc.signal,grande);await fechar(id,quem,{estado:"concluido",resultado});await registar("ok",{id,vinhos:resultado.vinhos.length,modelo:resultado.modelo,...(resultado.usageMetadata?{usageMetadata:resultado.usageMetadata}:{}),...(resultado.tentativas?{tentativas:resultado.tentativas}:{} )},quem);}catch(e){const erro=texto((e as Error).message||"a importação falhou",400),tentativas=(e as any)?.tentativas;await fechar(id,quem,{estado:"erro",erro});await registar("erro",{id,passo:"gemini",erro,...(tentativas?{tentativas}:{})},quem);}finally{clearTimeout(t);}})());
   return json({id,estado:"pendente"});
  }catch(e){const erro=texto((e as Error).message||"erro inesperado",300);await registar("erro",{passo:"entrada",erro},quem||null);return json({error:erro},500);}finally{clearTimeout(timer);}
 });

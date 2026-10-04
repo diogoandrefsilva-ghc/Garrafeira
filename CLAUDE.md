@@ -2810,6 +2810,12 @@ guardam: nem no Storage nem na `garrafeira.importacoes` (que guarda só o
 número e o tipo dos ficheiros e o resultado pendente, com o email do JWT e a
 garrafeira que o editor pode alterar).
 
+**Com os ficheiros vai uma caixa de INDICAÇÕES** (opcional, até 800
+caracteres, `IMPORT_INDICACOES` → `indicacoes` no pedido): "lê só as notas
+de prova e a harmonização", "só os vinhos da página 2", "o Arinto é
+branco". O modelo segue-as para escolher que vinhos e que atributos traz, ou
+para tirar uma dúvida — nunca para inventar o que os ficheiros não dizem.
+
 **Um ecrã por vinho lido, e é a pessoa que diz quem ele é** (`IMPORT_FILA`;
 secção "IMPORTAR DE IMAGENS OU DOCUMENTOS" no app.js). No topo de cada ecrã,
 o que se leu e **"Este é:"** (`importarTopoHTML`): um vinho que já existe
