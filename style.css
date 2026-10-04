@@ -1347,6 +1347,16 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .pq-links-bt{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
 .pq-links-bt .note{flex:1;min-width:150px}
 .pq-links{margin-top:6px}
+/* "Num documento" (`pqDocsHTML`): um ficheiro por linha — o nome, o tamanho
+   e o ✕ para o tirar —, e o botão de escolher por baixo. O botão é um
+   <label> (é ele que abre o seletor), com a especificidade do `.mbox label.btn`. */
+.pq-docs{display:grid;gap:6px;margin-top:6px}
+.pq-doc{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--bo);border-radius:11px;background:var(--card);font-size:13px}
+.pq-doc span{flex:1;min-width:0;overflow-wrap:anywhere}
+.pq-doc i{font-style:normal;font-size:11.5px;color:var(--mu);white-space:nowrap}
+.pq-doc-x{flex:0 0 auto;width:26px;height:26px;padding:0;border:0;border-radius:50%;background:none;color:var(--mu);font:inherit;font-size:13px;cursor:pointer}
+.pq-doc-x:hover,.pq-doc-x:focus-visible{background:var(--bg);color:var(--tx)}
+.mbox label.pq-doc-bt{cursor:pointer;justify-self:start;color:var(--tx)}
 .pq-grupo{margin:12px 0 2px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
 .pq-grupo:first-child{margin-top:4px}
 .btn.pq-mais{display:block;width:100%;margin-top:10px}

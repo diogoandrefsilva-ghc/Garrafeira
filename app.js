@@ -6671,7 +6671,9 @@ async function iaLog(estado,detalhe){
    O browser consegue pedir MENOS do que tem, nunca mais. */
 async function iaPedir(pedido,vinhoId,motor){
   motor=motor==='premium'?'premium':'gratis';
-  await iaLog('pedido',{pedido,vinho_id:vinhoId||null,plano:planoIA(),motor});
+  // Dos documentos, só o nome e o tamanho: os dados não vão para o registo.
+  const pedidoLog=pedido.documentos?Object.assign({},pedido,{documentos:pedido.documentos.map(d=>({nome:d.nome,tamanho:Math.round((d.dados||'').length*3/4)}))}):pedido;
+  await iaLog('pedido',{pedido:pedidoLog,vinho_id:vinhoId||null,plano:planoIA(),motor});
   let r;
   try{
     r=await sbFetch(`${SB_URL}/functions/v1/vinho-info`,{
@@ -6687,6 +6689,7 @@ async function iaPedir(pedido,vinhoId,motor){
   if(!r.ok){
     await iaLog('erro',{passo:'http',status:r.status,erro:d.error||''});
     if(r.status===404)throw new Error('A função `vinho-info` ainda não está publicada no Supabase. Ver o README.');
+    if(r.status===413)throw new Error('Os ficheiros são grandes demais para enviar — tenta um PDF mais pequeno, ou uma fotografia.');
     throw new Error(d.error||('O servidor respondeu HTTP '+r.status));
   }
   // Sem `id` a função respondeu no modo antigo (síncrono) — já traz tudo.
@@ -7414,7 +7417,7 @@ function pqAtualForm(){
 }
 function pqNovoEstado(novo,id,atual){
   return {novo,vid:novo?null:id.vid,id,atual,hist:{},iguais:new Set(),esc:{},et:{},res:{},
-    fase:'cat',corre:'',repetir:null,escolher:null,tipo:null,sites:[],sitesPedido:[],soSites:false,notas:'',colheitaEsp:false,pedidoCampos:null,
+    fase:'cat',corre:'',repetir:null,escolher:null,tipo:null,sites:[],sitesPedido:[],soSites:false,docs:[],notas:'',colheitaEsp:false,pedidoCampos:null,
     ultima:'',preenchidos:{},cat:null};
 }
 // Ainda há alguma coisa a fazer com esta procura (a correr, ou por rever)?
@@ -7707,6 +7710,11 @@ function pqLerCaixas(){
   if(s)P.sites=pqColados(s.value);
   const n=document.getElementById('pq-notas');
   if(n)P.notas=n.value.trim().slice(0,300);
+  // E o que se marcou em "O que pedir" (juntar um ficheiro repinta o ecrã).
+  const cs=document.querySelectorAll('#modal-ia-in .pq-campo');
+  if(cs.length)P.camposMarca=[...cs].filter(e=>e.checked).map(e=>e.value);
+  const ce=document.getElementById('pq-colheita');
+  if(ce)P.colheitaEsp=ce.checked;
 }
 function pqColados(txt){return String(txt||'').split(/[,\n]/).map(s=>s.trim()).filter(Boolean).slice(0,5);}
 // Um link de uma PÁGINA, não só o endereço do site.
@@ -7724,6 +7732,9 @@ function pqEPagina(x){
        ("Procurar links"), onde se escolhem até 2. Só a pedido, NUNCA ao
        entrar: cada lista é uma pesquisa Serper, que se paga (o dono).
      · 'ia'    — a pesquisa de sempre, sem sites.
+     · 'doc'   ("Num documento", 04/10/2026) — a ficha técnica em PDF ou uma
+       fotografia do rótulo, enviadas daqui; a IA lê SÓ o que lá estiver
+       (`soSites`, como nos sites). Ver `pqDocsEscolher`.
    Os sites "de referência" misturados com a pesquisa geral deixaram de ser
    uma opção no ecrã, como na WineCatalog: não se sabia de onde vinha o quê. */
 function pqTipo(t){
@@ -7738,6 +7749,67 @@ function pqLinksVer(ver){
   pqLerCaixas();
   P.linksVer=!!ver;
   pqPintar();
+}
+/* NUM DOCUMENTO (04/10/2026, o dono das apps: o link da ficha técnica em
+   PDF do produtor não dava nada — "cria a hipótese de fazer upload de uma
+   imagem ou documento (PDF) para tentarmos preencher a partir do que lá
+   estiver"). Até `PQ_DOCS_MAX` ficheiros: um PDF vai como está (até
+   `PQ_DOC_MAX`), uma fotografia é encolhida aqui (`encolherImagem`, como na
+   importação por imagens). Ficam no PQ — fechar a janela não os perde — e
+   vão na `vinho-info` como `documentos`, que os passa ao Gemini e os
+   descarta: não se guardam no Storage nem nos registos. O mesmo PDF também
+   se lê por LINK, no "Em sites concretos". */
+const PQ_DOCS_MAX=3;
+const PQ_DOC_MAX=6e6;
+const PQ_DOCS_TOTAL=10e6;
+function pqTamanho(b){return b>=1e6?`${(b/1e6).toFixed(1).replace('.',',')} MB`:`${Math.max(1,Math.round(b/1e3))} KB`;}
+async function pqDocLer(f){
+  const pdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name);
+  let blob=f,mime='application/pdf';
+  if(pdf){if(f.size>PQ_DOC_MAX)throw new Error(`o PDF tem mais de ${PQ_DOC_MAX/1e6} MB`);}
+  else if(/^image\//.test(f.type)||/\.(jpe?g|png|webp|heic|heif)$/i.test(f.name)){
+    blob=await encolherImagem(f,1600,0.85);mime='image/jpeg';
+  }else throw new Error('só se leem PDFs e fotografias');
+  const dados=await new Promise((resolve,reject)=>{
+    const r=new FileReader();r.onerror=()=>reject(new Error('não consegui ler o ficheiro'));
+    r.onload=()=>resolve(String(r.result||'').split(',')[1]||'');r.readAsDataURL(blob);
+  });
+  if(!dados)throw new Error('não consegui ler o ficheiro');
+  return {nome:String(f.name||'documento').slice(0,120),mime,dados,bytes:blob.size};
+}
+async function pqDocsEscolher(input){
+  const P=PQ;if(!P)return;
+  const fs=[...(input.files||[])];
+  input.value='';                          // deixa escolher o MESMO ficheiro outra vez
+  pqLerCaixas();
+  P.docs=P.docs||[];
+  P.docsLer=true;pqPintar();
+  for(const f of fs){
+    if(P.docs.length>=PQ_DOCS_MAX){toast(`No máximo ${PQ_DOCS_MAX} ficheiros de cada vez`,1);break;}
+    try{
+      const d=await pqDocLer(f);
+      if(PQ!==P)return;
+      if(P.docs.reduce((t,x)=>t+x.bytes,0)+d.bytes>PQ_DOCS_TOTAL){toast(`Juntos, os ficheiros passam de ${PQ_DOCS_TOTAL/1e6} MB`,1);break;}
+      P.docs.push(d);
+    }catch(e){toast(`${f.name}: ${e.message}`,1);}
+  }
+  if(PQ!==P)return;
+  P.docsLer=false;pqPintar();
+}
+function pqDocTirar(i){
+  const P=PQ;if(!P||!P.docs)return;
+  pqLerCaixas();
+  P.docs.splice(i,1);
+  pqPintar();
+}
+function pqDocsHTML(P){
+  const ds=P.docs||[];
+  return `<div class="pq-docs">${ds.map((d,i)=>`<div class="pq-doc"><span>${d.mime==='application/pdf'?'📄':'🖼️'} ${esc(d.nome)}</span>
+      <i>${esc(pqTamanho(d.bytes))}</i><button class="pq-doc-x" onclick="pqDocTirar(${i})" aria-label="Tirar ${esc(d.nome)}">✕</button></div>`).join('')}
+    ${P.docsLer?'<div class="note">A preparar o ficheiro…</div>':''}
+    ${ds.length<PQ_DOCS_MAX?`<label class="btn ghost pq-doc-bt">📎 ${ds.length?'Juntar outro ficheiro':'Escolher o PDF ou a fotografia'}
+      <input type="file" accept="application/pdf,image/*" multiple style="display:none" onchange="pqDocsEscolher(this)"></label>`:''}
+  </div>`;
 }
 function pqTipoVoltar(){
   const P=PQ;if(!P)return;
@@ -7776,10 +7848,16 @@ async function pqIA(repetir){
     P.pedidoCampos=campos;
     P.colheitaEsp=!!document.getElementById('pq-colheita')?.checked;
     pqLerCaixas();
+    // A escolha já foi para o pedido: a próxima volta recomeça pelos que faltam.
+    P.camposMarca=null;
     // Nos sites: os links marcados na lista do "Procurar links" e os colados,
     // sem repetir — e é sempre "só estes sites" (ver `pqTipo`).
     const sites=P.tipo==='sites'
       ?[...(P.links?pqLinksMarcados(P):[]),...P.sites].filter((s,i,a)=>a.indexOf(s)===i).slice(0,5):[];
+    if(P.tipo==='doc'&&!(P.docs&&P.docs.length)){
+      toast(P.docsLer?'Espera que o ficheiro acabe de se preparar':'Escolhe o PDF ou a fotografia',1);
+      return;
+    }
     if(P.tipo==='sites'&&!sites.length){
       toast(P.links?'Marca um link da lista, ou cola o de uma página':'Cola o link da página do vinho',1);
       document.getElementById('pq-sites')?.focus();
@@ -7793,7 +7871,7 @@ async function pqIA(repetir){
       document.getElementById('pq-sites')?.focus();
       return;
     }
-    P.sitesPedido=sites;P.soSites=P.tipo==='sites';
+    P.sitesPedido=sites;P.soSites=P.tipo==='sites'||P.tipo==='doc';
     if(!P.novo&&!P.cat){
       // A cor é a do vinho: gravar um vinho já a exige (fase 4 dos nomes),
       // e deixou de se confirmar aqui (o dono, 30/09/2026).
@@ -7804,8 +7882,9 @@ async function pqIA(repetir){
       // Cada procura custa dinheiro, e a ficha de um vinho não muda de uma
       // semana para a outra: se foi há pouco, pergunta-se (`iaUltimaProcura`).
       // Não depois de "Pesquisar de outra forma": a última foi a que se acabou
-      // de deitar fora, e voltar atrás já foi a decisão.
-      const ult=P.jaPesquisou?null:await iaUltimaProcura(P.vid);
+      // de deitar fora, e voltar atrás já foi a decisão. Nem com um documento:
+      // é informação nova, que a última procura não leu.
+      const ult=P.jaPesquisou||P.tipo==='doc'?null:await iaUltimaProcura(P.vid);
       if(PQ!==P)return;
       if(ult){P.repetir=ult;pqPintar();return;}
     }
@@ -7825,12 +7904,16 @@ async function pqIA(repetir){
   pedido.colheitaEspecifica=P.colheitaEsp;
   if(P.notas)pedido.notas=P.notas;
   if(P.soSites&&P.sitesPedido.length){pedido.sites=P.sitesPedido;pedido.soSites=true;}
+  // Os documentos (ver "NUM DOCUMENTO"): só eles, e "só o que lá estiver".
+  if(P.tipo==='doc'&&P.docs&&P.docs.length){
+    pedido.documentos=P.docs.map(d=>({nome:d.nome,dados:d.dados}));pedido.soSites=true;
+  }
   // O resultado do Vivino que a procura de links trouxe vai junto: o link e
   // as estrelas do Google, sem outra pesquisa (o Vivino não se abre).
   if(P.links&&P.linksVivino&&pedido.soSites)pedido.vivinoGoogle=P.linksVivino;
   // A lista já serviu: os sites da pesquisa passam para a caixa, que é com
   // eles que se tenta outra vez se ela falhar.
-  if(P.soSites)P.sites=P.sitesPedido.slice();
+  if(P.tipo==='sites')P.sites=P.sitesPedido.slice();
   P.links=null;P.linksMarca=[];P.linksProx=null;
   P.corre='ia';P.et.ia={estado:'corre'};
   pqPintar();
@@ -7848,6 +7931,7 @@ async function pqIA(repetir){
     P.et.ia={estado:'feito',n:n.novos,dif:n.dif,outro:n.outro,memoria:res.pesquisaWeb===false,
       sites:Array.isArray(res.sites)?res.sites:[],confianca:res.confianca||null,
       paginas:Array.isArray(res.paginas)?res.paginas:[],soSites:!!res.soSites,
+      docs:Array.isArray(res.paginas)?res.paginas.filter(p=>p&&p.doc&&!p.url):[],
       semFonte:Array.isArray(res.semFonte)?res.semFonte:[],
       origem:res.origemCampos&&typeof res.origemCampos==='object'?res.origemCampos:{},
       catalogoCampos:Array.isArray(res.catalogoCampos)?res.catalogoCampos:[],
@@ -7902,7 +7986,7 @@ function pqSitesHTML(f){
   const lnk=p=>p.url?`<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.titulo||p.url)}</a>`:'';
   const pagFrase=p=>{
     const l=lnk(p);
-    if(p.estado==='lida')return `página lida${p.dada?' (a que colaste)':''} — ${l}`;
+    if(p.estado==='lida')return `${p.doc?(p.doc==='application/pdf'?'PDF lido':'imagem lida'):'página lida'}${p.dada?' (a que colaste)':''} — ${l}`;
     if(p.estado==='recusada')return `a página recusou a leitura (${esc(p.motivo||'bloqueio')})${l?' — '+l:''}`;
     if(p.estado==='vazia')return `${esc(p.motivo||'a página não tem texto')}${l?' — '+l:''}`;
     if(p.estado==='nao_encontrada')return 'o vinho não apareceu na procura neste site';
@@ -7919,6 +8003,15 @@ function pqSitesHTML(f){
   });
   return `<div class="ia-fontes">${titulo}:<ul class="pq-sites">${linhas.join('')}</ul></div>`;
 }
+/* Os documentos ENVIADOS (ver "NUM DOCUMENTO"): não têm site nem link, por
+   isso não cabem no `pqSitesHTML` — numa linha, o que se leu. */
+function pqSoDocs(f){return !!f&&Array.isArray(f.docs)&&f.docs.length>0&&!(Array.isArray(f.sites)&&f.sites.length);}
+function pqDocsResHTML(f){
+  const ds=f&&Array.isArray(f.docs)?f.docs:[];
+  if(!ds.length)return '';
+  return `<div class="ia-fontes">${ds.length===1?'Documento enviado':'Documentos enviados'}: ${ds.map(d=>
+    `<b>${esc(d.titulo||'documento')}</b> (${d.doc==='application/pdf'?'PDF':'imagem'}${d.bytes?', '+esc(pqTamanho(d.bytes)):''})`).join(' · ')} — lido${ds.length===1?'':'s'} e descartado${ds.length===1?'':'s'}.</div>`;
+}
 /* DE ONDE VEIO cada campo que a IA trouxe (27/09/2026, o dono das apps): a
    página ou o resultado que ela diz ter lido (`origemCampos`), o link do
    Vivino colado, ou a pesquisa Google do grounding — que não diz a página.
@@ -7926,6 +8019,7 @@ function pqSitesHTML(f){
 function pqDeOndeHTML(o){
   if(!o||typeof o!=='object')return '';
   if(o.google)return 'pesquisa Google';
+  if(o.documento&&!o.url)return `o documento «${esc(o.titulo||'enviado')}»`;
   if(!o.url)return '';
   return `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.site||o.url)}</a>`;
 }
@@ -7976,11 +8070,12 @@ function pqRelatoHTML(P){
   const f=P.ultima==='ia'?P.et.ia:null;
   let caixas='';
   if(f&&f.estado==='feito'){
-    const quem=f.soSites?'A leitura dos sites escolhidos':'A pesquisa com IA';
+    const soDocs=pqSoDocs(f);
+    const quem=soDocs?(f.docs.length===1?'A leitura do documento':'A leitura dos documentos'):f.soSites?'A leitura dos sites escolhidos':'A pesquisa com IA';
     const n=pqLinhasIA(P).length;
     out.push(`${quem} terminou e ${n?`trouxe informação nova em ${pqQtd(n,'campo','campos')}.`:'não trouxe nada de novo.'}`);
     if(f.aviso)caixas+=`<div class="rv-aviso">⚠️ ${esc(f.aviso)}</div>`;
-    if(f.semFonte&&f.semFonte.length)caixas+=`<div class="rv-aviso">${f.semFonte.length===1?'1 campo veio':f.semFonte.length+' campos vieram'} sem a IA dizer de que página o tirou (${esc(f.semFonte.map(pqRot).join(', '))}) — pode não ser dos sites escolhidos. Mostra-se para comparares; onde já havia valor, não vem marcado.</div>`;
+    if(f.semFonte&&f.semFonte.length)caixas+=`<div class="rv-aviso">${f.semFonte.length===1?'1 campo veio':f.semFonte.length+' campos vieram'} sem a IA dizer de ${soDocs?'onde':'que página'} o tirou (${esc(f.semFonte.map(pqRot).join(', '))}) — pode não ${soDocs?'estar no documento':'ser dos sites escolhidos'}. Mostra-se para comparares; onde já havia valor, não vem marcado.</div>`;
     if(f.memoria)caixas+='<div class="rv-aviso">🧠 A IA respondeu <b>de memória</b>, sem pesquisar na net — confere antes de guardar.</div>';
   }
   return out.map(t=>`<p>${t}</p>`).join('')+caixas;
@@ -7991,18 +8086,20 @@ function pqRodapeHTML(P){
   const f=P.ultima==='ia'?P.et.ia:null;
   if(!f||f.estado!=='feito')return '';
   const fim=f.pesquisaWeb===false?'⚠️ Isto saiu da memória do modelo, sem pesquisa na net — confere tudo antes de aceitar.'
+    :pqSoDocs(f)?'Lido só do que enviaste — confere antes de aceitar.'
     :f.soSites?'Lido só das páginas e dos resultados dos sites escolhidos — confere antes de aceitar.'
     :f.pesquisaWeb===true?'Pesquisado no Google. Leitura automática de páginas da net — vale como ponto de partida, não como certeza.'
     :'';
-  return pqFontesHTML(f.fontes)+pqSitesHTML(f)
+  return pqFontesHTML(f.fontes)+pqSitesHTML(f)+pqDocsResHTML(f)
     +(fim||f.modelo?`<div class="ia-fontes"><i>${esc(fim)}${f.modelo?`${fim?' · ':''}${esc(f.modelo)}`:''}</i></div>`:'');
 }
 function pqCamposHTML(P){
   const ks=pqChavesIA(P);
   const falta=k=>pqVazio(P.atual[k])&&!P.hist[k]&&!P.preenchidos[k];
-  const marcados=ks.filter(falta);
+  const meus=Array.isArray(P.camposMarca);
+  const marcados=meus?ks.filter(k=>P.camposMarca.includes(k)):ks.filter(falta);
   const n=marcados.length;
-  return `<details class="pq-campos"><summary>O que pedir: ${n?`${n} ${n===1?'campo':'campos'} (os que faltam)`:'nenhum — já não falta nada; escolhe o que queres confirmar'}</summary>
+  return `<details class="pq-campos"${meus?' open':''}><summary>O que pedir: ${n?`${n} ${n===1?'campo':'campos'}${meus?'':' (os que faltam)'}`:meus?'nenhum':'nenhum — já não falta nada; escolhe o que queres confirmar'}</summary>
     <div class="ia-escs">${ks.map(k=>`<label class="ia-esc">
       <input type="checkbox" class="pq-campo" value="${esc(k)}"${marcados.includes(k)?' checked':''}>
       <span>${esc(pqRot(k))}${pqVazio(P.atual[k])?'':'<i>já tem</i>'}${P.hist[k]||P.preenchidos[k]?'<i>já encontrado</i>':''}</span></label>`).join('')}</div>
@@ -8136,6 +8233,8 @@ function pqTipoHTML(P,aMao){
       <button class="pq-tipo" onclick="pqTipo('sites')"><b>🔗 Em sites concretos</b>
         <span>${prem?'Colas o link de 1 ou 2 páginas que já tenhas copiado, ou a app sugere-te alguns sites.'
           :'Colas o link de 1 ou 2 páginas que já tenhas copiado.'}</span></button>
+      <button class="pq-tipo" onclick="pqTipo('doc')"><b>📄 Num documento</b>
+        <span>Envias a ficha técnica em PDF ou uma fotografia do rótulo, e a IA lê só o que lá estiver.</span></button>
       <button class="pq-tipo" onclick="pqTipo('ia')"><b>✨ Perguntar à IA</b>
         <span>${prem?'Pesquisa no Google e no Vivino, e a IA lê o que encontrar.'
           :'A IA pesquisa no Google. Às vezes responde de memória, e diz-to.'}</span></button>
@@ -8188,12 +8287,21 @@ function pqPerguntaHTML(P){
     const nMarca=P.links?pqLinksMarcados(P).length:0;
     return `${erro}<p class="pq-q">🔗 Em sites concretos</p>
       <label for="pq-sites">O link da página do vinho</label>
-      <textarea id="pq-sites" rows="2" placeholder="ex.: o link da página do vinho numa loja">${esc(P.sites.join('\n'))}</textarea>
+      <textarea id="pq-sites" rows="2" placeholder="ex.: o link da página do vinho numa loja, ou o de uma ficha técnica em PDF">${esc(P.sites.join('\n'))}</textarea>
       ${!temPremium()?'':P.links
         ?`<div class="pq-links-bt"><button class="btn ghost" onclick="pqLinksVer(true)">💡 Ver os sites sugeridos${nMarca?` (${nMarca} ${nMarca===1?'marcado':'marcados'})`:''}</button></div>`
         :`<div class="pq-links-bt"><button class="btn ghost" onclick="pqLinks()">💡 Sugere-me sites</button></div>`}
       ${pqCamposHTML(P)}${pqOpcoesHTML(P)}
       <div class="macoes"><button class="btn prim" onclick="pqIA()">🔎 ${falhou?'Tentar de novo':'Pesquisar'}</button>${voltar}${pqFecharJunto(P)}</div>`;
+  }
+  if(P.tipo==='doc'){
+    const n=(P.docs||[]).length;
+    return `${erro}<p class="pq-q">📄 Num documento</p>
+      ${pqDocsHTML(P)}
+      <p class="note">Até ${PQ_DOCS_MAX} ficheiros: a ficha técnica em PDF (até ${PQ_DOC_MAX/1e6} MB) ou fotografias do rótulo e do contra-rótulo.
+        A IA lê-os e são descartados — não ficam guardados.</p>
+      ${pqCamposHTML(P)}${pqOpcoesHTML(P)}
+      <div class="macoes"><button class="btn prim" onclick="pqIA()"${P.docsLer?' disabled':''}>🔎 ${falhou?'Tentar de novo':n>1?`Ler os ${n} ficheiros`:'Ler o documento'}</button>${voltar}${pqFecharJunto(P)}</div>`;
   }
   return `${erro}<p class="pq-q">✨ Perguntar à IA</p>
     ${pqCamposHTML(P)}${pqOpcoesHTML(P)}
@@ -8239,10 +8347,11 @@ function pqFonteHTML(k,f,P){
   const o=ia.origem&&ia.origem[k];
   if(o&&typeof o==='object'){
     if(o.google)return '<span class="rv-de">↳ da pesquisa Google <i>(a IA não diz a página)</i></span>';
+    if(o.documento&&!o.url)return `<span class="rv-de">↳ do documento que enviaste <i>· ${esc(o.titulo||'')}</i></span>`;
     if(o.url){
       const lnk=`<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.site||o.url)}</a>`;
       if(o.dada&&!o.pagina)return `<span class="rv-de">↳ do link que colaste · ${lnk}</span>`;
-      return `<span class="rv-de">↳ de ${lnk} <i>${o.pagina?'· página lida':'· resumo no Google'}</i></span>`;
+      return `<span class="rv-de">↳ de ${lnk} <i>${o.documento?(o.documento==='application/pdf'?'· PDF lido':'· imagem lida'):o.pagina?'· página lida':'· resumo no Google'}</i></span>`;
     }
   }
   // O que a vinho-info respondeu do catálogo do lado dela (uma pesquisa
@@ -8250,7 +8359,8 @@ function pqFonteHTML(k,f,P){
   if(Array.isArray(ia.catalogoCampos)&&ia.catalogoCampos.includes(k))
     return '<span class="rv-de">↳ do Catálogo <i>· de uma pesquisa anterior</i></span>';
   if(ia.soSites&&Array.isArray(ia.semFonte)&&ia.semFonte.includes(k))
-    return '<span class="rv-de">↳ da IA <i>(sem dizer de que página — pode não ser dos sites escolhidos)</i></span>';
+    return pqSoDocs(ia)?'<span class="rv-de">↳ da IA <i>(sem dizer de onde — pode não estar no documento)</i></span>'
+      :'<span class="rv-de">↳ da IA <i>(sem dizer de que página — pode não ser dos sites escolhidos)</i></span>';
   return '<span class="rv-de">↳ da IA <i>(sem dizer de onde)</i></span>';
 }
 function pqLinhasHTML(P){
@@ -11082,7 +11192,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='174';
+const APP_BUILD='175';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

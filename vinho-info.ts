@@ -431,13 +431,13 @@ resposta — não vale a pena gastar procura com o que já está preenchido do
 lado de cá.
 ` : ""}
 ${soSites ? `
-SÓ ESTES SITES: quem procura quer APENAS o que dizem ${sites.join(", ")} — a base de
+SÓ ESTAS FONTES: quem procura quer APENAS o que dizem ${sites.join(", ")} — a base de
 evidência abaixo é só deles. Não completes com o que sabes nem com mais nada: o que
-estas páginas e resultados não disserem fica fora do JSON.
+estas páginas, documentos e resultados não disserem fica fora do JSON.
 ` : sites.length ? `
 FONTES DE CONFIANÇA: dá prioridade a informação vinda de ${sites.join(", ")}. Só uses outra fonte se estas não tiverem a resposta. Na base de evidência, as páginas destes sites vêm primeiro, e os resultados deles vêm marcados com ★ FONTE DE CONFIANÇA.
 ` : ""}
-BASE DE EVIDÊNCIA (páginas abertas e trechos de pesquisa web já recolhidos):
+BASE DE EVIDÊNCIA (páginas abertas, documentos em anexo e trechos de pesquisa web já recolhidos):
 ${textosPesquisa}
 
 REGRAS, e são a sério:
@@ -467,8 +467,8 @@ ${colheitaEspecifica && ano ? `10. ${regraColheita(ano)}
    PRODUTO", se houver), nunca o de produtos relacionados ou sugeridos, nem o de
    uma caixa ou de uma garrafa grande. A avaliação dos clientes de uma loja NÃO é
    a nota do Vivino.
-${colheitaEspecifica && ano ? 12 : 11}. "deOnde" diz, para CADA campo que preencheres, o número [n] da página ou do
-   resultado de onde o tiraste — ex.: "castas": 1, "precoMedio": 3.${soSites ? " Um campo sem número em \"deOnde\" é deitado fora." : ""}
+${colheitaEspecifica && ano ? 12 : 11}. "deOnde" diz, para CADA campo que preencheres, o número [n] da página, do
+   documento ou do resultado de onde o tiraste — ex.: "castas": 1, "precoMedio": 3.${soSites ? " Um campo sem número em \"deOnde\" é deitado fora." : ""}
 
 ${regraIdioma}
 
@@ -962,6 +962,78 @@ const EVIDENCIA_EXTRA_MAX = 20_000;
 const UA_PAGINA = "Mozilla/5.0 (compatible; Garrafeira/1.0)";
 const RECUSA = /just a moment|attention required|access denied|captcha|verify you are human|unusual traffic|verifica[çc][ãa]o de seguran[çc]a/i;
 
+/* ── OS DOCUMENTOS: um PDF ou uma imagem (04/10/2026) ──
+   O dono das apps colou o link da ficha técnica em PDF do produtor
+   ("realcompanhiavelha.com/dandy/assets/files/dandy_branco_PTENG.pdf") e a
+   IA "não conseguiu fazer nada": a página abria (HTTP 200), mas a leitura
+   só conhecia HTML e recusava-a — "não é uma página (application/pdf)" —, e
+   com o "só estes sites" não sobrava nada para ler. As fichas técnicas dos
+   produtores são quase sempre PDFs, e são a fonte mais fidedigna que há.
+   Agora um PDF ou uma imagem — por LINK (`abrirPagina`) ou ENVIADO da app
+   (`documentos` no pedido, `lerDocumentos`) — vai INTEIRO ao Gemini, em
+   anexo (`inline_data`): ele lê PDFs e imagens, as tabelas e o próprio
+   rótulo, sem biblioteca nenhuma deste lado. Na base de evidência fica um
+   bloco [n] a dizer que o documento vai em anexo, e o anexo leva o MESMO
+   [n] — é por ele que o `deOnde` diz de onde veio cada campo. Não se
+   guarda em lado nenhum: nem no Storage, nem nas `analises`, nem no
+   `sync_log` (só o nome, o tipo e o tamanho).
+   O tipo decide-o o que os BYTES dizem (`tipoDoc`), nunca o nome nem o
+   cabeçalho: um "PDF" que não comece por %PDF não vai ao modelo. O tecto
+   (8 MB cada, 3 de cada vez, 12 MB juntos) é o do pedido ao Gemini (20 MB
+   com o base64) e o da memória da função (250 MB). */
+const DOC_MAX_BYTES = 8_000_000;
+const DOCS_MAX = 3;
+const DOCS_MAX_TOTAL = 12_000_000;
+// Ler um documento é mais lento do que ler texto: o Gemini tem mais tempo.
+const GEMINI_TIMEOUT_MS_DOC = 45_000;
+type Documento = { mime: string; b64: string; bytes: number };
+type Anexo = { n: number; nome: string; mime: string; b64: string };
+function tipoDoc(b: Uint8Array): string {
+  if (b.length >= 5 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 && b[4] === 0x2d) return "application/pdf";
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b.length >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "image/webp";
+  return "";
+}
+function paraBase64(b: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+const docRotulo = (mime: string) => mime === "application/pdf" ? "PDF" : "imagem";
+// O nome do ficheiro no fim do endereço ("dandy_branco_PTENG.pdf").
+function nomeDoFicheiro(url: string): string {
+  try {
+    const u = new URL(url);
+    const ult = decodeURIComponent(u.pathname.split("/").filter(Boolean).pop() ?? "");
+    return texto(ult, 120) || siteDe(url);
+  } catch { return ""; }
+}
+/* Os documentos ENVIADOS da app: `[{nome, dados}]`, com os dados em base64.
+   Só se descodifica o princípio (o tipo vem dos bytes); o resto segue tal e
+   qual para o Gemini. Entram como páginas já lidas, sem endereço. */
+function lerDocumentos(v: unknown): { docs: Pagina[]; erro?: string } {
+  if (!Array.isArray(v) || !v.length) return { docs: [] };
+  if (v.length > DOCS_MAX) return { docs: [], erro: `no máximo ${DOCS_MAX} documentos de cada vez` };
+  const docs: Pagina[] = [];
+  let total = 0;
+  for (const d of v as Record<string, unknown>[]) {
+    const nome0 = texto(d?.nome, 120);
+    const b64 = String(d?.dados ?? "").replace(/\s+/g, "");
+    if (!b64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return { docs: [], erro: `não consegui ler ${nome0 ? `«${nome0}»` : "um dos documentos"}` };
+    const bytes = Math.floor(b64.length * 3 / 4) - (b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0);
+    let mime = "";
+    try { mime = tipoDoc(Uint8Array.from(atob(b64.slice(0, 24)), (c) => c.charCodeAt(0))); } catch { /* fica vazio */ }
+    if (!mime) return { docs: [], erro: `${nome0 ? `«${nome0}»` : "um dos documentos"} não é um PDF nem uma imagem (JPEG, PNG ou WebP)` };
+    if (bytes > DOC_MAX_BYTES) return { docs: [], erro: `«${nome0 || docRotulo(mime)}» tem mais de ${DOC_MAX_BYTES / 1e6} MB` };
+    total += bytes;
+    if (total > DOCS_MAX_TOTAL) return { docs: [], erro: `os documentos juntos passam de ${DOCS_MAX_TOTAL / 1e6} MB` };
+    docs.push({ url: "", site: "", dada: true, estado: "lida", titulo: nome0 || docRotulo(mime), doc: { mime, b64, bytes } });
+  }
+  return { docs };
+}
+
 function hostPublico(u: URL): boolean {
   if (u.protocol !== "https:" && u.protocol !== "http:") return false;
   if (u.port || u.username || u.password) return false;
@@ -1296,6 +1368,8 @@ type Pagina = {
   // O que se leu A MAIS numa página comprida (ver "A PARTE DA PÁGINA QUE É
   // DESTE VINHO"): a secção do `#…` e quantos trechos com o nome.
   extra?: string; secao?: boolean; trechos?: number;
+  // Um PDF ou uma imagem (ver "OS DOCUMENTOS"): vai em anexo ao Gemini.
+  doc?: Documento;
 };
 // `nome`: o do vinho que se procura — é por ele que se acham os trechos.
 async function abrirPagina(url0: string, dada: boolean, signal: AbortSignal, nome = ""): Promise<Pagina> {
@@ -1311,7 +1385,7 @@ async function abrirPagina(url0: string, dada: boolean, signal: AbortSignal, nom
       if (!hostPublico(u)) return { ...base(), motivo: "endereço não permitido" };
       r = await fetch(u, {
         redirect: "manual", signal: sinal,
-        headers: { "User-Agent": UA_PAGINA, Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5", "Accept-Language": "pt-PT,pt;q=0.9,en;q=0.5" },
+        headers: { "User-Agent": UA_PAGINA, Accept: "text/html,application/xhtml+xml;q=0.9,application/pdf;q=0.8,*/*;q=0.5", "Accept-Language": "pt-PT,pt;q=0.9,en;q=0.5" },
       });
       const loc = r.status >= 300 && r.status < 400 ? r.headers.get("location") : null;
       if (!loc) break;
@@ -1330,6 +1404,20 @@ async function abrirPagina(url0: string, dada: boolean, signal: AbortSignal, nom
       return { ...base(), http: r.status, motivo: `HTTP ${r.status}` };
     }
     if (tipo && !/html|xml/i.test(tipo)) {
+      // Um PDF ou uma imagem (ver "OS DOCUMENTOS"): não se lê aqui, vai
+      // inteiro ao Gemini. Quem decide o tipo são os bytes, não o cabeçalho.
+      if (/pdf|image\/|octet-stream|binary/i.test(tipo)) {
+        const bytes = await lerAte(r, DOC_MAX_BYTES + 1);
+        if (bytes.length > DOC_MAX_BYTES) {
+          return { ...base(), http: r.status, motivo: `o documento tem mais de ${DOC_MAX_BYTES / 1e6} MB` };
+        }
+        const mime = tipoDoc(bytes);
+        if (mime) {
+          return { ...base(), estado: "lida", http: r.status, titulo: nomeDoFicheiro(url) || docRotulo(mime),
+            doc: { mime, b64: paraBase64(bytes), bytes: bytes.length } };
+        }
+        return { ...base(), http: r.status, motivo: `não é uma página nem um PDF ou uma imagem que se leia (${tipo.split(";")[0]})` };
+      }
       await r.body?.cancel().catch(() => {});
       return { ...base(), http: r.status, motivo: `não é uma página (${tipo.split(";")[0]})` };
     }
@@ -1373,28 +1461,46 @@ async function abrirPagina(url0: string, dada: boolean, signal: AbortSignal, nom
 type PaginaRes = {
   site: string; url?: string; dada?: boolean; estado: string; http?: number; titulo?: string; motivo?: string;
   secao?: boolean; trechos?: number;
+  // Um documento (ver "OS DOCUMENTOS"): o tipo e o tamanho — nunca os dados.
+  doc?: string; bytes?: number;
 };
 const paginaRes = (p: Pagina): PaginaRes => ({
   site: p.site, url: p.url, dada: p.dada, estado: p.estado,
   ...(p.http ? { http: p.http } : {}), ...(p.titulo ? { titulo: p.titulo } : {}), ...(p.motivo ? { motivo: p.motivo } : {}),
   ...(p.secao ? { secao: true } : {}), ...(p.trechos ? { trechos: p.trechos } : {}),
+  ...(p.doc ? { doc: p.doc.mime, bytes: p.doc.bytes } : {}),
 });
 
 /* A base de evidência: as páginas abertas primeiro, depois os resultados
    da pesquisa (os dos sites de confiança à frente) — tudo numerado de
    seguida, que é o número que o modelo devolve em `deOnde`. */
-type Origem = { url: string; site: string; titulo: string; pagina?: boolean; dada?: boolean; google?: boolean };
+type Origem = { url: string; site: string; titulo: string; pagina?: boolean; dada?: boolean; google?: boolean; documento?: string };
 function montarEvidencia(paginas: Pagina[], resultados: Resultado[], ano: number | null, dominios: string[]) {
   const lista: Origem[] = [];
   const blocos: string[] = [];
   const doBloco: { p: Pagina; inteiro: boolean }[] = [];
+  // Os documentos (ver "OS DOCUMENTOS"): vão em anexo, com o número do bloco.
+  const anexos: Anexo[] = [];
   let resto = EVIDENCIA_PAGINAS_MAX;
   for (const p of paginas) {
-    if (p.estado !== "lida" || !p.texto || resto <= 0) continue;
-    lista.push({ url: p.url, site: p.site, titulo: p.titulo || p.site, pagina: true, ...(p.dada ? { dada: true } : {}) });
-    const b = `[${lista.length}] PÁGINA ABERTA de ${p.site}${p.dada
-      ? " (indicada por quem pesquisa como sendo a deste vinho)"
-      : ` (a primeira que a procura só em ${p.site} devolveu — confirma que é deste vinho)`}\nURL: ${p.url.split("#")[0]}\n${p.texto}`;
+    if (p.estado !== "lida" || (!p.texto && !p.doc) || resto <= 0) continue;
+    lista.push({ url: p.url, site: p.site, titulo: p.titulo || p.site, pagina: true, ...(p.dada ? { dada: true } : {}),
+      ...(p.doc ? { documento: p.doc.mime } : {}) });
+    const n = lista.length;
+    let b: string;
+    if (p.doc) {
+      anexos.push({ n, nome: p.titulo || docRotulo(p.doc.mime), mime: p.doc.mime, b64: p.doc.b64 });
+      b = `[${n}] ${p.doc.mime === "application/pdf" ? "DOCUMENTO PDF" : "IMAGEM"} ${p.url
+        ? `de ${p.site} (indicado por quem pesquisa como sendo deste vinho)\nURL: ${p.url.split("#")[0]}`
+        : `«${p.titulo}», enviado por quem pesquisa como sendo deste vinho`}\n` +
+        `VAI EM ANEXO a este pedido, a seguir ao texto, com a marca «ANEXO [${n}]». Lê-o todo: numa ficha técnica ` +
+        `as tabelas (castas, álcool, estágio) contam tanto como o texto, e num rótulo conta o que está impresso. ` +
+        `Se for de OUTRO vinho ou de outra cor, ignora-o; se for de outra colheita, diz no "aviso" de que colheita é.`;
+    } else {
+      b = `[${n}] PÁGINA ABERTA de ${p.site}${p.dada
+        ? " (indicada por quem pesquisa como sendo a deste vinho)"
+        : ` (a primeira que a procura só em ${p.site} devolveu — confirma que é deste vinho)`}\nURL: ${p.url.split("#")[0]}\n${p.texto}`;
+    }
     blocos.push(b.slice(0, resto));
     doBloco.push({ p, inteiro: b.length <= resto });
     resto -= b.length;
@@ -1430,8 +1536,10 @@ function montarEvidencia(paginas: Pagina[], resultados: Resultado[], ano: number
   return {
     texto: texto_,
     lista,
-    fontes: lista.slice(0, 8).map((o) => ({ titulo: o.titulo.slice(0, 120), url: o.url.slice(0, 400) })),
+    // Um documento enviado não tem endereço: não é uma fonte que se abra.
+    fontes: lista.filter((o) => o.url).slice(0, 8).map((o) => ({ titulo: o.titulo.slice(0, 120), url: o.url.slice(0, 400) })),
     confianca,
+    anexos,
   };
 }
 /* `deOnde` → de que página/resultado veio cada campo (as chaves da ficha).
@@ -1446,7 +1554,7 @@ function origemDosCampos(deOnde: unknown, lista: Origem[], ficha: Record<string,
     const n = Array.isArray(bruto) ? bruto[0] : bruto;
     const s = String(n ?? "").trim();
     const o = /^https?:\/\//i.test(s)
-      ? lista.find((x) => x.url === s || s.startsWith(x.url))
+      ? lista.find((x) => x.url && (x.url === s || s.startsWith(x.url)))
       : lista[parseInt(s.replace(/\D+/g, " ").trim().split(" ")[0], 10) - 1];
     if (o) out[k] = o;
   }
@@ -1713,6 +1821,9 @@ function fontesGrounding(body: any): Fonte[] {
 
 async function chamarGemini(
   modelo: string, textoPrompt: string, signal: AbortSignal, maxTokens = 2048, semThinking = true, comGrounding = false,
+  // Os documentos (ver "OS DOCUMENTOS"): a seguir ao texto, cada um com a
+  // marca do seu número na base de evidência.
+  anexos: Anexo[] = [],
 ) {
   // A pesquisa (grounding) precisa de "pensar" para decidir o quê e quando
   // pesquisar: pedir thinkingBudget:0 ao mesmo tempo que se liga o tool
@@ -1731,7 +1842,10 @@ async function chamarGemini(
       headers: { "Content-Type": "application/json" },
       signal,
       body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: textoPrompt }] }],
+        contents: [{ role: "user", parts: [{ text: textoPrompt }, ...anexos.flatMap((a) => [
+          { text: `ANEXO [${a.n}] — ${a.nome}:` },
+          { inline_data: { mime_type: a.mime, data: a.b64 } },
+        ])] }],
         generationConfig,
         ...(comGrounding ? { tools: [{ google_search: {} }] } : {}),
       }),
@@ -1787,6 +1901,9 @@ async function produzirFicha(
   // nome impresso na carta é a confirmação, e o que se encontrar vai logo
   // para o catálogo (ver "MAS SÓ COM UM NOME CONFIRMADO", mais abaixo).
   daCarta: boolean = false,
+  // Os documentos ENVIADOS da app (ver "OS DOCUMENTOS"), já como páginas
+  // lidas: vão em anexo, à frente das páginas abertas.
+  documentos: Pagina[] = [],
 ): Promise<Res> {
   if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
   const inicio = Date.now();
@@ -1797,7 +1914,8 @@ async function produzirFicha(
   // catálogo (onde essa resposta de memória foi parar) respondem por ela.
   // COM SITES também não (27/09/2026): quem os escreve quer que se LEIAM
   // agora — e o catálogo já respondeu na etapa 1 do ecrã, à parte.
-  const semAtalhos = profunda || sites.length > 0;
+  // E com documentos também não (04/10/2026): a resposta é o que está NELES.
+  const semAtalhos = profunda || sites.length > 0 || documentos.length > 0;
   // Da carta também não se lê a cache: uma resposta de lá não volta a ir ao
   // catálogo, e é para lá que esta procura tem de ir. O catálogo responde
   // primeiro na mesma.
@@ -1956,7 +2074,7 @@ async function produzirFicha(
     consultasFeitas = [...consultasFeitas, ...qs];
     rs2.forEach((r, i) => { if (r.status === "fulfilled") resultados.push(...r.value.filter((x) => doSite(x.url, semLeitura[i]))); });
   }
-  const abertas = [...abertasDadas, ...abertasAchadas];
+  const abertas = [...documentos, ...abertasDadas, ...abertasAchadas];
   paginasRes = [...abertas.map(paginaRes), ...paginasRes];
   const paginasLidas = abertas.filter((p) => p.estado === "lida").length;
   const ev = montarEvidencia(abertas, resultados, ano, dominios);
@@ -1985,18 +2103,22 @@ async function produzirFicha(
   // Uma fase = uma pergunta ao Gemini (o barato, e o maior só se o barato
   // falhar tecnicamente). `comSerper`: lê os resultados do Serper, sem tool;
   // senão, grounding.
+  // Os documentos enviados dizem-se pelo nome, ao lado dos sites.
+  const fontesPedidas = [...sites, ...documentos.map((d) => `o documento «${d.titulo}»`)];
   const fase = async (comSerper: boolean, camposFase: string[] | null) => {
     const texto = comSerper
       ? prompt(nome, ano, produtor, regiao, tipo, notas, hoje, camposFase, pesquisa.texto, colheitaEspecifica,
-          vivinoGoogle ? [...sites, "vivino.com (o resultado do Google)"] : sites, soSites)
+          vivinoGoogle ? [...fontesPedidas, "vivino.com (o resultado do Google)"] : fontesPedidas, soSites)
       : promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, hoje, camposFase, colheitaEspecifica);
     let fontesG: Fonte[] = [];
+    // Os documentos só vão com a base de evidência (no grounding já não fazem falta).
+    const anexos = comSerper ? ev.anexos : [];
     const run = async (modelo: string, modo: string, maxTokens: number, semThinking: boolean) => {
-      const ms = Math.max(8_000, Math.min(GEMINI_TIMEOUT_MS, budgetMs - (Date.now() - inicio) - 2_000));
+      const ms = Math.max(8_000, Math.min(anexos.length ? GEMINI_TIMEOUT_MS_DOC : GEMINI_TIMEOUT_MS, budgetMs - (Date.now() - inicio) - 2_000));
       if (ms < 2_000) return null;
       const { signal: sp, limpar } = comLimiteProprio(signal, ms);
       try {
-        const g = await chamarGemini(modelo, texto, sp, maxTokens, semThinking, !comSerper);
+        const g = await chamarGemini(modelo, texto, sp, maxTokens, semThinking, !comSerper, anexos);
         limpar();
         usageTotal = somarUsage(usageTotal, g.usage ?? null);
         tentativas.push({ modelo, modo: (comSerper ? "serper-" : "grounding-") + modo, estado: g.ok ? 200 : g.status, ...(g.usage ? { usageMetadata: g.usage } : {}) });
@@ -2192,7 +2314,7 @@ async function produzirFicha(
       plano: modoIA,
       ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}),
       ...(profunda ? { profunda: true } : {}),
-      ...(sites.length ? {
+      ...(sites.length || documentos.length ? {
         sites, confianca,
         ...(paginasRes.length ? { paginas: paginasRes } : {}),
         ...(soSites ? { soSites: true, ...(semFonte.length ? { semFonte, semFonteValores } : {}) } : {}),
@@ -2689,8 +2811,15 @@ Deno.serve(async (req) => {
       ? { url: texto(vg.url, 400), titulo: texto(vg.titulo, 200), snippet: texto(vg.snippet, 400),
           rating: numero(vg.rating, 0, 5, 1), ratingCount: numero(vg.ratingCount, 0, 10_000_000, 0) }
       : null;
-    // "Usar só a informação destes sites" — sem sites não quer dizer nada.
-    const soSites = body?.soSites === true && sites.length > 0;
+    // Os documentos enviados da app (ver "OS DOCUMENTOS").
+    const lidos = lerDocumentos(body?.documentos);
+    if (lidos.erro) {
+      await registar("erro", { passo: "documentos", erro: lidos.erro }, quem);
+      return json({ error: lidos.erro }, 400);
+    }
+    const documentos = lidos.docs;
+    // "Usar só a informação destes sites" — sem sites (nem documentos) não quer dizer nada.
+    const soSites = body?.soSites === true && (sites.length > 0 || documentos.length > 0);
     const notas = texto(body?.notas, 300);
     const vinhoId = typeof body?.vinhoId === "number" ? body.vinhoId : null;
     // Um vinho lido numa carta (as Sugestões): o nome da carta é a confirmação.
@@ -2726,7 +2855,10 @@ Deno.serve(async (req) => {
        existir, `criarAnalise` devolve null e cai-se no modo síncrono em vez
        de rebentar. */
     if (body?.assincrono === true) {
-      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, tipo, notas, sites, ...(soSites ? { soSites } : {}), ...(daCarta ? { daCarta } : {}), campos: camposPedidos }, vinhoId, quem!, ctrl.signal);
+      const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, tipo, notas, sites, ...(soSites ? { soSites } : {}), ...(daCarta ? { daCarta } : {}),
+        // Dos documentos, só o nome, o tipo e o tamanho — os dados não se guardam.
+        ...(documentos.length ? { documentos: documentos.map(paginaRes).map(({ titulo, doc, bytes }) => ({ nome: titulo, tipo: doc, bytes })) } : {}),
+        campos: camposPedidos }, vinhoId, quem!, ctrl.signal);
       if (analiseId != null) {
         const dono = quem!;
         // NÃO faz await: o trabalho pesado sobrevive ao pedido original.
@@ -2734,7 +2866,7 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle, daCarta), vivinoDado, camposPedidos);
+          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle, daCarta, documentos), vivinoDado, camposPedidos);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
@@ -2752,7 +2884,7 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle, daCarta), vivinoDado, camposPedidos);
+    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle, daCarta, documentos), vivinoDado, camposPedidos);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";

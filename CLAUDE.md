@@ -2053,6 +2053,30 @@ seguinte, quando os `id` o dizem) e os trechos mais abaixo onde o nome
 aparece (`extraDaPagina`). Só acrescenta: o princípio vai igual e o extra tem
 uma quota à parte na base de evidência (`EVIDENCIA_EXTRA_MAX`); no registo, a
 página diz `secao`/`trechos`.
+**Os documentos: um PDF ou uma fotografia** (04/10/2026, o dono das apps:
+colou o link da ficha técnica em PDF do produtor — o Dandy de Cidrô da Real
+Companhia Velha — e "a IA não consegue fazer nada"). A página abria (HTTP
+200), mas a leitura só conhecia HTML e recusava-a, "não é uma página
+(application/pdf)"; com o "só estes sites" não sobrava nada. Agora um PDF ou
+uma imagem vai INTEIRO ao Gemini, em anexo (`inline_data`, que lê PDFs,
+tabelas e rótulos sem biblioteca nenhuma deste lado), por dois caminhos:
+- **por link**, no "Em sites concretos" (`abrirPagina`: até 8 MB);
+- **enviado da app**, no terceiro caminho de "Como queres procurar?", **📄
+  Num documento** (`pqDocsHTML`/`pqDocsEscolher`; até 3 ficheiros, o PDF até
+  6 MB, a fotografia encolhida aqui a 1600 px) → `documentos` no pedido
+  (`lerDocumentos`), e é sempre "só o que lá estiver" (`soSites`). Não pede
+  Serper: está nos dois pacotes.
+Na base de evidência o documento é um bloco [n] que diz que vai em anexo, e o
+anexo leva a marca do MESMO [n] — é por ele que o `deOnde` diz de onde veio
+cada campo ("↳ do documento que enviaste · ficha.pdf", "↳ de
+realcompanhiavelha.com · PDF lido"). O tipo decide-o o que os BYTES dizem
+(`tipoDoc`: PDF, JPEG, PNG, WebP), nunca o nome nem o cabeçalho. **Não se
+guarda em lado nenhum**: nem no Storage, nem nas `analises`, nem no
+`sync_log` (do documento só vão o nome, o tipo e o tamanho — o `iaLog` da
+app também os tira); com documentos não se lê nem escreve a cache, nem se
+pergunta "pesquisaste há pouco". Uma ficha técnica de outra colheita lê-se na
+mesma, e o "aviso" di-lo. A `catalogo-info` da WineCatalog não tem isto, de
+propósito (como o "Procurar links"): o Catálogo vai ser fundido na Garrafeira.
 
 **Procurar links** (29/09/2026, o dono das apps: "dar um link ao Gemini e
 dizer 'procura só neste link' é o que traz a informação mais fidedigna, e
@@ -2271,8 +2295,11 @@ de botões que apareciam e desapareciam. Agora:
   lista só se pede, nunca abre sozinha** (o dono, 30/09/2026: cada lista é
   uma pesquisa Serper, que se paga); fechada com "‹ Voltar" não se perde
   (`pqLinksVer`), e o que lá se marcou continua a ir. No intermédio é só a
-  caixa (procurar dentro de um site precisa do Serper) — ou **✨ Perguntar
-  à IA**, sem sites. Depois, os campos e "Mais opções" (as notas). Os sites
+  caixa (procurar dentro de um site precisa do Serper) — ou **📄 Num
+  documento** (a ficha técnica em PDF ou fotografias do rótulo, enviadas
+  daqui; ver "Os documentos", mais acima) — ou **✨ Perguntar à IA**, sem
+  sites. Depois, os campos e "Mais opções" (as notas); o que se marcou nos
+  campos sobrevive a juntar um ficheiro (`P.camposMarca`). Os sites
   "de referência" misturados com a pesquisa geral saíram do ecrã, como na
   WineCatalog: não se sabia de onde vinha o quê (a `vinho-info` continua a
   aceitá-los). O "‹ Voltar" (`pqTipoVoltar`) volta à escolha; um erro fica
