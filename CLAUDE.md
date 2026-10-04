@@ -1168,6 +1168,52 @@ grava: a app abre sempre na garrafeira. Decisões do dono:
     recusa (o vinho e a colheita já lá estão) não pára os outros: fica dita
     ao pé do botão, com esse vinho ainda marcado.
 
+### As colheitas num cartão só (04/10/2026)
+O dono das apps: "Na garrafeira não tenho dúvidas: se um gajo tem dois
+vinhos de colheitas diferentes, têm que aparecer os dois. Mas no Catálogo,
+talvez devesse aparecer apenas o vinho e depois um botão para andar para
+trás e para a frente entre as colheitas." Decidido sobre um mockup (a
+primeira versão tinha as setas à volta do ano; ficaram no cartão inteiro,
+como na grelha, e com a nota "Várias colheitas no Catálogo"). Secção "AS
+COLHEITAS NO CATÁLOGO" no app.js e no style.css.
+- **No Detalhe do catálogo, as linhas do mesmo vinho são UM cartão**
+  (`catFamChave`: nome, produtor e cor, pelo `chave()`). O cartão mostra
+  uma colheita de cada vez; as setas ‹ › — na lista, os lados do cartão
+  inteiro (`.vcard.multi`, 26px de cada lado); na grelha, por cima das
+  bordas da garrafa, que assim não encolhe — passam à anterior e à
+  seguinte, e TUDO o que é da colheita muda com ela: a nota do Vivino, o
+  preço, a janela, a menção, a imagem. O ano fica no sítio de sempre, a
+  verde (`.vm-ano.mud`). Nas pontas as setas apagam-se e não fazem nada
+  (`.off`, não `disabled`: o toque num botão desligado caía no cartão).
+  Só o cartão se volta a desenhar (`catColhPintar`).
+- **A colheita à vista**: a que se escolheu nesta sessão (`CAT_COLH`), senão
+  a que tenho (ou quero, ou bebi — `catEstadoFam`), senão a mais recente. O
+  selo do canto é do VINHO (tenho alguma colheita) e o rodapé diz qual
+  ("🍾 Tens a 2019") quando a de agora não é a minha.
+- **Junta-se DEPOIS dos filtros e dos grupos** (`catJuntarColheitas`): o
+  cartão só anda pelas colheitas que passam na procura e caem no mesmo
+  grupo. Por Ano cada colheita fica no seu ano (sem setas); por casta, um
+  vinho cujas colheitas tenham castas diferentes aparece em cada grupo com
+  as suas. O lugar no grupo é o da MELHOR colheita e não muda com as setas.
+- **As contagens contam VINHOS** (`catNVinhos`: a barra, o painel da
+  procura, os grupos; e `opcoesCampo` conta chaves, não linhas) — senão
+  diziam um número e a lista mostrava outro. **O Resumo do catálogo
+  continua a contar linhas** (colheitas), como estava.
+- **Na atualização massiva não se junta** (`catPorVinho`): a escolher o
+  lote, cada colheita é uma linha a atualizar, e o "Marcar 10" marca linhas.
+- **A página do vinho** tem as setas ao lado do ano, na capa
+  (`catColhCapaHTML`), e a tabela **"Colheitas no Catálogo"**
+  (`catColheitasHTML`: ano, janela, menção, nota, preço, e 🍾/⭐/📖 nas
+  minhas). Mudar de colheita refaz a MESMA página (`catColhPagina`, sem
+  passo novo na história) e o cartão do Detalhe por trás acompanha. O "Na
+  tua garrafeira" junta os meus vinhos de todas as colheitas (com o ano), e
+  o botão diz "Pôr a 2021 na garrafeira".
+- **Só junta o que se escreve igual.** "Quinta de Cidrô Touriga Nacional" e
+  "Quinta de Cidrô Touriga Nacional Douro" continuam dois cartões — isso é
+  dos Duplicados da WineCatalog, não daqui.
+- A garrafeira não muda: duas garrafas de colheitas diferentes são dois
+  vinhos.
+
 ### As notas da casa (30/09/2026, migração 33)
 O dono das apps: "gostava que os utilizadores da garrafeira pudessem dar
 notas/avaliações aos vinhos do catálogo (notas de 0 a 5, com possibilidade de

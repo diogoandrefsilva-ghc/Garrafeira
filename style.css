@@ -2081,6 +2081,66 @@ body.cat .fab-op.so-gar{display:none!important}
    canto do selo — e é ele que interessa enquanto se escolhe. */
 .lote-modo .cat-selo{display:none}
 
+/* ── AS COLHEITAS NO CATÁLOGO (04/10/2026, o dono das apps) ──
+   Um vinho do catálogo com várias colheitas é UM cartão, com setas para
+   andar entre elas (ver "AS COLHEITAS NO CATÁLOGO" no app.js). Verde porque
+   é coisa do catálogo, como o cabeçalho e o selo de "tenho".
+   Na LISTA as setas são o cartão inteiro de cada lado, como na grelha são
+   os lados da garrafa (o dono: "na vista em lista também ficava melhor
+   assim"): zonas de toque da altura do cartão, nos 26px que o cartão ganha
+   de cada lado. Só estes cartões os ganham — a garrafa deles fica um pouco
+   mais para dentro do que a dos vizinhos, e isso também diz que são outros. */
+.vcard.multi{padding-left:26px;padding-right:26px}
+.vcard.multi .vc-match{margin-left:-26px;margin-right:-26px;padding-left:26px;padding-right:26px}
+.vc-seta{position:absolute;top:0;bottom:0;z-index:1;width:24px;padding:0;border:0;background:none;
+  color:#1d4a3b;font-family:var(--fd);font-weight:600;font-size:26px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.vc-seta.esq{left:0;border-radius:var(--r) 0 0 var(--r)}
+.vc-seta.dir{right:0;border-radius:0 var(--r) var(--r) 0}
+.vc-seta:not(.off):hover{background:#eaf3ee}
+.vc-seta.off,.vg-seta.off{color:#cfe0d6;cursor:default}
+.vm-ano.mud{font-weight:600;color:#1d4a3b}
+.vc-colh{display:flex;align-items:center;gap:7px;margin-top:5px;font-size:10.5px;font-weight:600;color:#1d4a3b}
+.colh-dots{display:inline-flex;gap:3px;flex-shrink:0}
+.colh-dots i{width:5px;height:5px;border-radius:50%;background:#b9d3c5}
+.colh-dots i.on{background:#1d4a3b}
+/* Na GRELHA as setas ficam por cima das bordas da garrafa, com um fundo de
+   papel para se lerem sobre uma fotografia — fora dela, a garrafa destes
+   cartões encolhia e deixava de ter o tamanho das vizinhas. */
+.vg-img{width:100%}
+.vg-mold{position:relative}
+.vg-seta{position:absolute;top:50%;z-index:1;width:24px;height:40px;margin-top:-20px;padding:0;border:0;border-radius:9px;
+  background:rgba(255,253,251,.9);box-shadow:0 1px 4px -1px rgba(43,10,22,.28);color:#1d4a3b;
+  font-family:var(--fd);font-weight:600;font-size:22px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.vg-seta.esq{left:-6px}
+.vg-seta.dir{right:-6px}
+.vg-seta.off{background:rgba(255,253,251,.55);box-shadow:none}
+.vg-img .colh-dots{display:flex;justify-content:center;margin-top:7px}
+/* Na página: o ano entre as setas, na linha da origem da capa. */
+.mhero-colh{display:inline-flex;align-items:center;vertical-align:middle;height:26px;margin-left:1px;
+  border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.12);border-radius:99px}
+.mhero-colh b{font-family:var(--fd);font-weight:600;font-size:13px;color:#fff;padding:0 1px}
+.mhero-colh button{position:relative;width:26px;height:24px;padding:0;border:0;background:none;color:#fff;
+  font-family:var(--fd);font-weight:600;font-size:18px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+.mhero-colh button::before{content:'';position:absolute;inset:-9px -2px}
+.mhero-colh button.off{color:rgba(255,255,255,.3);cursor:default}
+/* E a tabela "Colheitas no Catálogo": uma linha por colheita, a de agora
+   acesa; tocar noutra passa a página para ela. */
+.colh-tab{background:var(--card);border:1px solid var(--bo);border-radius:12px;overflow:hidden;margin-top:8px}
+.colh-row{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:8px 12px;border:0;
+  border-top:1px solid var(--bo);background:none;text-align:left;font-family:inherit;color:var(--tx);cursor:pointer}
+.colh-row:first-child{border-top:0}
+.colh-row:hover{background:var(--bg)}
+.colh-row.on{background:#eaf3ee;cursor:default}
+.colh-row .cy{font-family:var(--fd);font-weight:600;font-size:16px;width:42px;flex-shrink:0}
+.colh-row.on .cy{color:#1d4a3b}
+.colh-row .cm{flex:1;min-width:0;font-size:11px;color:var(--mu);line-height:1.4}
+.colh-row .cm b{font-weight:600;color:var(--ou2)}
+.colh-row .bdg.viv{font-size:10px;padding:2px 8px;flex-shrink:0}
+.colh-row .cp{font-family:var(--fd);font-weight:600;font-size:13px;min-width:36px;text-align:right;flex-shrink:0}
+
 /* ── SUGESTÕES (que vinho peço?, no catálogo — 30/09/2026, refeitas a
    03/10/2026) ─────
    Nasceram da página "Sugerir" da WineSelection, com o CSS de lá e as
