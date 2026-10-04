@@ -1230,13 +1230,28 @@ function catEstado(v){
 // No rodapé do cartão: o que tenho deste vinho, se tiver. A média das
 // notas de quem usa a Garrafeira já não vem aqui: passou para a direita do
 // nome, por baixo da do Vivino (01/10/2026, o dono das apps).
-function catTensHTML(v,curto){
-  const {que}=catEstado(v);
+function catTensHTML(v,curto,fam){
+  let {que}=catEstado(v), outra='';
+  // Num cartão de várias colheitas (`fam`), a que está à vista pode não ser
+  // a minha: diz-se qual é ("Tens a 2019") em vez de calar.
+  if(!que&&fam){
+    const e=catEstadoFam(fam.linhas);
+    if(e.que){que=e.que;outra=e.v.ano?String(e.v.ano):'s/a';}
+  }
   if(!que)return '';
   // Sem o número de garrafas (01/10/2026, o dono): esse fica na página.
-  const txt=que==='tenho'?(curto?'🍾':'🍾 Na tua garrafeira')
+  const txt=outra
+    ?(que==='tenho'?`🍾 Tens a ${outra}`:que==='desejo'?`⭐ A ${outra} na wishlist`:`📖 Bebeste a ${outra}`)
+    :que==='tenho'?(curto?'🍾':'🍾 Na tua garrafeira')
     :que==='desejo'?(curto?'⭐':'⭐ Na tua wishlist'):(curto?'📖':'📖 Já bebido');
-  return `<span class="bdg cat-tens ${que}">${txt}</span>`;
+  return `<span class="bdg cat-tens ${que}">${esc(txt)}</span>`;
+}
+// O que um vinho de várias colheitas é para mim: o mais forte das colheitas
+// (tenho > quero > bebi), e qual delas.
+function catEstadoFam(linhas){
+  const es=linhas.map(x=>({v:x,que:catEstado(x).que}));
+  for(const q of ['tenho','desejo','bebido']){const e=es.find(x=>x.que===q);if(e)return e;}
+  return {que:'',v:null};
 }
 // O REBORDO do cartão diz a COR do vinho (01/10/2026, o dono das apps): cor
 // de vinho no tinto, dourado no branco, cor-de-rosa no rosé; o fundo fica
@@ -1251,9 +1266,11 @@ function corFundoCls(v){const c=COR_FUNDO[(v||{}).tipo];return c?' '+c:'';}
 // o bebi. A mesma regra do crachá (`catEstado`). Esteve no canto da
 // imagem e passou para o do cartão (01/10/2026, o dono).
 const SELO_GARRAFA='<svg viewBox="0 0 10 26" aria-hidden="true"><path d="M3.5 0h3v2.6h-.3v3.6c0 1.5 3.8 2.7 3.8 6.9v11.4A1.5 1.5 0 0 1 8.5 26h-7A1.5 1.5 0 0 1 0 24.5V13.1c0-4.2 3.8-5.4 3.8-6.9V2.6h-.3z" fill="currentColor"/><rect x="1.3" y="14.5" width="7.4" height="6" rx=".8" fill="#fff" fill-opacity=".38"/></svg>';
-function catSeloHTML(v){
+function catSeloHTML(v,fam){
   if(!(v.id<0))return '';
-  const {que}=catEstado(v);
+  // Num cartão de várias colheitas, o selo é do VINHO: tenho-o se tenho
+  // alguma das colheitas (qual delas diz o rodapé).
+  const {que}=fam?catEstadoFam(fam.linhas):catEstado(v);
   if(!que)return '';
   const t=que==='tenho'?'Na tua garrafeira':que==='desejo'?'Na tua wishlist':'Já bebido';
   const c=que==='tenho'?SELO_GARRAFA:que==='desejo'?'★':'✓';
@@ -1268,7 +1285,12 @@ function catSeloHTML(v){
 // para a garrafeira, ou acrescenta-se uma garrafa). Já bebido conta como
 // não o ter — voltar a comprá-lo é uma pergunta legítima.
 function catNaMinhaHTML(v){
-  const meus=catMeus(v), {que}=catEstado(v);
+  // Os meus vinhos de TODAS as colheitas deste vinho no catálogo: na página
+  // da 2020 vê-se que tenho a 2019 (com o ano, que não é o desta linha). Os
+  // botões continuam a ser desta colheita — ter a 2019 não responde a
+  // "quero a 2020?".
+  const colh=catColheitas(v);
+  const meus=colh.flatMap(catMeus), {que}=catEstado(v);
   const linhas=meus.map(m=>{
     const n=stockDe(m.id);
     const txt=n?`🍾 ${n} garrafa${n>1?'s':''} na garrafeira`:desejado(m)?'⭐ Na wishlist':'📖 Já bebido';
@@ -1279,9 +1301,146 @@ function catNaMinhaHTML(v){
   return `<div class="msec">${garrafeiraAtiva()&&!souDonoDaGarrafeira()?esc(nomeGarrafeira()):'Na tua garrafeira'}</div>
     ${linhas||'<div class="note" style="padding:8px 0">Ainda não está na garrafeira.</div>'}
     ${que==='tenho'||que==='desejo'?'':`<div class="macoes ro-hide">
-      <button class="btn prim" onclick="catPor(${v.id},'')">🍷 Pôr na garrafeira</button>
+      <button class="btn prim" onclick="catPor(${v.id},'')">🍷 Pôr ${colh.length>1&&v.ano?`a ${esc(String(v.ano))} `:''}na garrafeira</button>
       ${TEM_DESEJO?`<button class="btn ghost" onclick="catPor(${v.id},'desejo')">⭐ Pôr na wishlist</button>`:''}
     </div>`}`;
+}
+/* ── AS COLHEITAS NO CATÁLOGO (04/10/2026, o dono das apps) ──
+   "Na garrafeira não tenho dúvidas: se um gajo tem dois vinhos de colheitas
+   diferentes, têm que aparecer os dois normalmente. Mas no Catálogo, talvez
+   devesse aparecer apenas o vinho e depois uma espécie de botão para andar
+   para trás e para a frente entre as colheitas." No Detalhe do catálogo as
+   linhas do mesmo vinho (nome, produtor e cor — `catFamChave`) juntam-se
+   num cartão só, que mostra UMA colheita de cada vez. As setas ‹ › nos
+   lados do cartão (na grelha, nos lados da garrafa) passam à anterior e à
+   seguinte, e tudo o que é da colheita muda com ela: a nota do Vivino, o
+   preço, a janela, a menção, a imagem. Os pontinhos e o "Várias colheitas
+   no Catálogo" dizem que há mais. Na página do vinho, as mesmas setas ao
+   lado do ano e a tabela "Colheitas no Catálogo".
+   - Só no Detalhe do CATÁLOGO e fora da atualização massiva (`catPorVinho`):
+     a escolher para o lote, cada colheita é uma linha a atualizar (e o
+     "Marcar 10" marca linhas). A garrafeira não muda.
+   - Junta-se DEPOIS dos filtros e dos grupos: o cartão só anda pelas
+     colheitas que passam na procura e caem no mesmo grupo. Por Ano, cada
+     ano tem a sua; por região ou casta, um vinho cujas colheitas digam
+     coisas diferentes aparece em cada grupo com as suas.
+   - A colheita à vista: a que se escolheu (`CAT_COLH`, só nesta sessão),
+     senão a que tenho (ou quero, ou bebi), senão a mais recente.
+   - O lugar do cartão no grupo é o da sua MELHOR colheita (a lista vem
+     ordenada pelo Vivino) e não muda ao andar pelas setas.
+   - As contagens (a barra, os grupos, os cartões dos filtros) contam
+     VINHOS e não linhas (`catNVinhos`, `opcoesCampo`): senão diziam um
+     número e a lista mostrava outro. O Resumo do catálogo conta linhas. */
+function catFamChave(v){return [chave(v.nome),chave(v.produtor),chave(v.tipo)].join('|');}
+function catColhOrdem(a,b){return (a.ano||0)-(b.ano||0)||(a.cat_id||0)-(b.cat_id||0);}
+let CAT_FAM_IDX=null, CAT_FAM_DE=null;
+// As colheitas deste vinho no catálogo INTEIRO (a própria incluída), da mais
+// antiga para a mais recente — a página do vinho não vê filtros. O índice
+// refaz-se quando o catálogo é relido (o `CAT_VINHOS` é sempre outro array).
+function catColheitas(v){
+  if(CAT_FAM_DE!==CAT_VINHOS){
+    CAT_FAM_IDX=new Map();CAT_FAM_DE=CAT_VINHOS;
+    (CAT_VINHOS||[]).forEach(x=>{
+      const k=catFamChave(x);
+      if(!CAT_FAM_IDX.has(k))CAT_FAM_IDX.set(k,[]);
+      CAT_FAM_IDX.get(k).push(x);
+    });
+    CAT_FAM_IDX.forEach(l=>l.sort(catColhOrdem));
+  }
+  return CAT_FAM_IDX.get(catFamChave(v))||[v];
+}
+function catPorVinho(){return modoCat()&&!LOTE_SEL_MODO;}
+function catNVinhos(lista){return catPorVinho()?new Set(lista.map(catFamChave)).size:lista.length;}
+// Uma lista já filtrada e ordenada, junta por vinho: cada um na posição da
+// primeira colheita que aparece.
+function catJuntarColheitas(lista){
+  const m=new Map();
+  lista.forEach(v=>{const k=catFamChave(v);if(!m.has(k))m.set(k,[]);m.get(k).push(v);});
+  return [...m].map(([k,l])=>({k,linhas:l.sort(catColhOrdem)}));
+}
+let CAT_COLH={};        // chave do vinho -> cat_id da colheita à vista
+let CAT_FAMS_VISTA=[];  // os cartões de várias colheitas que o Detalhe desenhou
+function catColhAtual(f){
+  const l=f.linhas, sel=CAT_COLH[f.k];
+  const x=sel!=null&&l.find(v=>v.cat_id===sel);
+  if(x)return x;
+  const e=catEstadoFam(l);
+  if(e.v)return e.v;
+  return l.filter(v=>v.ano).pop()||l[l.length-1];
+}
+function catColhPontos(f,v){
+  return `<span class="colh-dots" aria-hidden="true">${f.linhas.map(x=>`<i${x===v?' class="on"':''}></i>`).join('')}</span>`;
+}
+// As duas setas do cartão. Nas pontas ficam apagadas e não fazem nada — sem
+// `disabled`, que num botão desligado o toque podia cair no cartão e abrir
+// o vinho.
+function catColhSetas(f,v,cls){
+  const i=f.linhas.indexOf(v), n=f.linhas.length;
+  const b=(d,lado,txt,tit)=>{
+    const ok=d<0?i>0:i<n-1;
+    return `<button type="button" class="${cls} ${lado}${ok?'':' off'}" onclick="catColhPassar(event,${f.n},${d})"${
+      ok?'':' aria-disabled="true"'} aria-label="${tit}" title="${tit}">${txt}</button>`;
+  };
+  return b(-1,'esq','‹','Colheita anterior')+b(1,'dir','›','Colheita seguinte');
+}
+function catColhPassar(ev,n,d){
+  if(ev)ev.stopPropagation();
+  const f=CAT_FAMS_VISTA[n];
+  if(!f)return;
+  const j=f.linhas.indexOf(catColhAtual(f))+d;
+  if(j<0||j>=f.linhas.length)return;
+  CAT_COLH[f.k]=f.linhas[j].cat_id;
+  catColhPintar(f);
+}
+// Só o cartão volta a desenhar-se: o resto da lista não mudou.
+function catColhPintar(f){
+  const el=document.querySelector(`#detalhe-grupos [data-fam="${f.n}"]`);
+  if(!el)return;
+  el.outerHTML=(DET_VISTA==='grelha'?vinhoGrelhaHTML:vinhoCardHTML)(catColhAtual(f),termosProcura(),false,f);
+}
+// Na capa da página: o ano entre as setas, quando há mais colheitas.
+function catColhCapaHTML(v){
+  const l=catColheitas(v);
+  if(l.length<2)return v.ano?`<b>${v.ano}</b>`:'';
+  const i=l.indexOf(v);
+  const b=(j,txt,tit)=>{
+    const ok=j>=0&&j<l.length;
+    return `<button type="button"${ok?'':' class="off" aria-disabled="true"'} onclick="catColhPagina(${ok?l[j].id:0})" aria-label="${tit}" title="${tit}">${txt}</button>`;
+  };
+  return `<span class="mhero-colh">${b(i-1,'‹','Colheita anterior')}<b>${v.ano?esc(String(v.ano)):'s/a'}</b>${b(i+1,'›','Colheita seguinte')}</span>`;
+}
+// A tabela da página: uma linha por colheita, da mais recente para a mais
+// antiga — o ano, a janela, a menção, a nota e o preço que contam, e o que
+// cada uma é para mim. Tocar numa linha passa a página para essa colheita.
+function catColheitasHTML(v){
+  const l=catColheitas(v);
+  if(l.length<2)return '';
+  const linhas=l.slice().reverse().map(x=>{
+    const p=precoPrincipal(x), q=catEstado(x).que;
+    const meu=q==='tenho'?'🍾 ':q==='desejo'?'⭐ ':q==='bebido'?'📖 ':'';
+    const cm=[x.beber_de||x.beber_ate?`Beber ${x.beber_de||'?'} – ${x.beber_ate||'?'}`:'',
+      x.mencao?`<b>${esc(x.mencao)}</b>`:''].filter(Boolean).join(' · ');
+    return `<button type="button" class="colh-row${x===v?' on':''}" onclick="catColhPagina(${x.id})">
+      <span class="cy">${x.ano?esc(String(x.ano)):'s/a'}</span>
+      <span class="cm">${meu}${cm}</span>
+      ${notaVivinoBadge(x)}
+      <span class="cp">${p?esc(eur0(p.preco)):''}</span>
+    </button>`;
+  }).join('');
+  return `<div class="msec">Colheitas no Catálogo</div><div class="colh-tab">${linhas}</div>`;
+}
+// Passar a página para outra colheita: a mesma página (sem passo novo na
+// história — sai-se dela de uma vez), e o cartão do Detalhe por trás passa
+// a mostrar a mesma colheita.
+function catColhPagina(id){
+  const v=IDXV[id];
+  if(!v||!(v.id<0)||id===VINHO_ABERTO)return;
+  VINHO_ABERTO=id;
+  CAT_COLH[catFamChave(v)]=v.cat_id;
+  document.getElementById('modal-vinho-in').innerHTML=vinhoDetalheHTML(v);
+  pgMedirEncolhe();
+  catNotaPintar();
+  CAT_FAMS_VISTA.forEach(f=>{if(f.k===catFamChave(v)&&f.linhas.includes(v))catColhPintar(f);});
 }
 /* ── AS NOTAS AOS VINHOS DO CATÁLOGO (migração 33, 30/09/2026) ──
    O dono das apps: "gostava que os utilizadores da garrafeira pudessem dar
@@ -2828,8 +2987,8 @@ function renderFiltrados(){
   }else{
     info.classList.add('on');fl.style.display='';
     const res=vinhosFiltrados();
-    const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
-    fc.textContent=`${res.length} vinho${res.length===1?'':'s'}`+(modoCat()?'':` · ${nGar} garrafa${nGar===1?'':'s'}`);
+    const nGar=res.reduce((s,v)=>s+stockDe(v.id),0), nV=catNVinhos(res);
+    fc.textContent=`${nV} vinho${nV===1?'':'s'}`+(modoCat()?'':` · ${nGar} garrafa${nGar===1?'':'s'}`);
   }
   renderDetalhe();
   // No catálogo não há Locais à vista: o mapa volta a desenhar-se ao
@@ -3044,16 +3203,22 @@ function rotuloFiltro(k,val){
 function opcoesCampo(k){
   const termos=termosProcura();
   const base=vinhosUniverso().filter(v=>passaFiltros(v,termos,k));
+  // No catálogo conta-se VINHOS e não colheitas: é o que a lista mostra
+  // (ver "AS COLHEITAS NO CATÁLOGO"). Um vinho com a 2020 e a 2021 conta
+  // uma vez no Douro, e uma vez em cada ano.
+  const porVinho=catPorVinho();
   const m=new Map();
   base.forEach(v=>{
-    const cs=v.castas||[];
+    const cs=v.castas||[], fk=porVinho?catFamChave(v):null;
     valorDe(v,k).forEach(x=>{
       if(k==='casta'&&CASTAS_TODAS&&!F.casta.every(c=>c===x||cs.includes(c)))return;
-      m.set(x,(m.get(x)||0)+1);
+      if(porVinho){if(!m.has(x))m.set(x,new Set());m.get(x).add(fk);}
+      else m.set(x,(m.get(x)||0)+1);
     });
   });
+  const conta=x=>{const c=m.get(x);return c instanceof Set?c.size:(c||0);};
   const on=ligados(k);
-  return valoresDe(k).map(([v,r])=>[v,r,m.get(v)||0])
+  return valoresDe(k).map(([v,r])=>[v,r,conta(v)])
     .filter(o=>o[2]>0||on.includes(o[0]));
 }
 
@@ -3567,14 +3732,17 @@ function sitiosDe(gs){
    linha de baixo do nome. O produtor fica sempre numa linha só dele.
    `ano` vem de fora porque cada cartão decide o que diz sem ele ('s/a' ou
    nada, na wishlist). */
-function vinhoMetaHTML(v,ano){
+function vinhoMetaHTML(v,ano,mud){
   const p=[];
   if(v.tipo)p.push(`<span class="vc-cor">${esc(v.tipo)}</span>`);
   if(v.regiao)p.push(`<span class="vm-reg">${esc(v.regiao)}</span>`);
-  if(ano)p.push(`<span class="vm-ano">${esc(String(ano))}</span>`);
+  // `mud`: o ano é o que as setas mudam (várias colheitas no catálogo).
+  if(ano)p.push(`<span class="vm-ano${mud?' mud':''}">${esc(String(ano))}</span>`);
   return p.length?`<span class="vc-meta">${p.join('<span class="vm-sep"> · </span>')}</span>`:'';
 }
-function vinhoCardHTML(v,termos,loteSel){
+// `fam`: um vinho do catálogo com várias colheitas (ver "AS COLHEITAS NO
+// CATÁLOGO") — o cartão ganha as setas, os pontinhos e a nota.
+function vinhoCardHTML(v,termos,loteSel,fam){
   const gs=garrafasDe(v.id,true);
   const cl=castaLabel(v);
   const jan=janelaBeber(v);
@@ -3590,7 +3758,8 @@ function vinhoCardHTML(v,termos,loteSel){
   // "s/a" lia-se como um dado em branco. Cala-se, e a nota do Vivino sobe
   // para o lugar dele. Um desejo COM ano (uma colheita em concreto) mostra-o.
   const semAno=!v.ano&&desejado(v);
-  return `<article class="vcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${corFundoCls(v)}" onclick="${clique}">${catSeloHTML(v)}
+  return `<article class="vcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${corFundoCls(v)}${fam?' multi':''}"${
+    fam?` data-fam="${fam.n}"`:''} onclick="${clique}">${catSeloHTML(v,fam)}${fam?catColhSetas(fam,v,'vc-seta'):''}
     <div class="vc-top">
       ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
       <div class="vc-main">
@@ -3600,8 +3769,9 @@ function vinhoCardHTML(v,termos,loteSel){
           const notas=notaVivinoBadge(v)+(v.id<0?catNotaBdgHTML(v,true):'');
           return notas?`<div class="vc-anofloat">${notas}</div>`:'';
         })()}
-        <div class="vc-nome">${esc(v.nome)} ${vinhoMetaHTML(v,semAno?'':(v.ano||'s/a'))}</div>
+        <div class="vc-nome">${esc(v.nome)} ${vinhoMetaHTML(v,semAno?'':(v.ano||'s/a'),!!fam)}</div>
         ${v.produtor?`<div class="vc-prod">${esc(v.produtor)}</div>`:''}
+        ${fam?`<div class="vc-colh">${catColhPontos(fam,v)}Várias colheitas no Catálogo</div>`:''}
         <div class="vc-badges">
           ${castasTxt?`<span class="bdg cas">🍇 ${esc(castasTxt)}</span>`:''}
           ${cl?`<span class="bdg mono">${esc(cl)}</span>`:''}
@@ -3612,7 +3782,7 @@ function vinhoCardHTML(v,termos,loteSel){
           // No catálogo o rodapé pode não ter nada (nem garrafas, nem janela):
           // sem isto ficava o filete sozinho a separar coisa nenhuma.
           const pe=sitios.map(x=>`<span class="vc-l"><span class="vc-pip" style="background:${esc(x.cor)}"></span><b>${esc(x.txt)}</b></span>`).join('')
-            +(v.id<0?catTensHTML(v):'')+janelaBadge(v,jan);
+            +(v.id<0?catTensHTML(v,false,fam):'')+janelaBadge(v,jan);
           return pe.trim()||v.id>0?`<div class="vc-foot">${pe}</div>`:'';
         })()}
       </div>
@@ -3653,15 +3823,19 @@ function vinhoCardHTML(v,termos,loteSel){
    produtor e as notas vão SEMPRE no HTML, mesmo vazios: são as filas 4 e 5
    do cartão, e um que faltasse fazia subir os de baixo para a fila errada.
    A faixa da procura é a fila 6 e pode faltar — é a última. */
-function vinhoGrelhaHTML(v,termos,loteSel){
+function vinhoGrelhaHTML(v,termos,loteSel,fam){
   const gs=garrafasDe(v.id,true);
   const on=loteSel&&loteSelTem(v.id);
   const cheio=loteSel&&!on&&loteSelCheio();
   const clique=loteSel?`loteSelToggle(${v.id})`:`verVinho(${v.id})`;
-  return `<article class="vgcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${corFundoCls(v)}" onclick="${clique}">${catSeloHTML(v)}
-    ${vinhoThumb(v,gs.length)}${loteSel?`<span class="lote-chk">✓</span>`:''}
+  // Com várias colheitas (`fam`), a garrafa leva as setas dos lados e os
+  // pontinhos por baixo, numa moldura só — é a fila 1 da `subgrid`.
+  const thumb=vinhoThumb(v,gs.length);
+  return `<article class="vgcard${loteSel?' lote-modo':''}${on?' lote-on':''}${cheio?' lote-cheio':''}${corFundoCls(v)}${fam?' multi':''}"${
+    fam?` data-fam="${fam.n}"`:''} onclick="${clique}">${catSeloHTML(v,fam)}
+    ${fam?`<div class="vg-img"><div class="vg-mold">${catColhSetas(fam,v,'vg-seta')}${thumb}</div>${catColhPontos(fam,v)}</div>`:thumb}${loteSel?`<span class="lote-chk">✓</span>`:''}
     <div class="vg-nome">${esc(v.nome)}</div>
-    <div class="vg-sub">${vinhoMetaHTML(v,desejado(v)&&!v.ano?'':(v.ano||'s/a'))}</div>
+    <div class="vg-sub">${vinhoMetaHTML(v,desejado(v)&&!v.ano?'':(v.ano||'s/a'),!!fam)}</div>
     <div class="vg-prod">${esc(v.produtor||'')}</div>
     <div class="vg-foot">${notaVivinoBadge(v)}${v.id<0?catNotaBdgHTML(v,true):''}</div>
     ${trechosMatch(v,termos)}
@@ -3697,8 +3871,10 @@ function renderDetalhe(){
   const termos=termosProcura();
   const nGar=res.reduce((s,v)=>s+stockDe(v.id),0);
   if(modoCat()){
+    // Vinhos e não linhas: as colheitas do mesmo vinho são um cartão só.
+    const nV=catNVinhos(res);
     document.getElementById('det-count').innerHTML=
-      `${res.length} vinho${res.length===1?'':'s'}<span class="det-gar"> no catálogo</span>`;
+      `${nV} vinho${nV===1?'':'s'}<span class="det-gar"> no catálogo</span>`;
     if(!CAT_VINHOS){box.innerHTML='<div class="vazio"><b>A abrir o catálogo…</b></div>';return;}
     if(!res.length){box.innerHTML='<div class="vazio"><b>Nada encontrado</b>Nenhum vinho do catálogo corresponde a esta procura.</div>';return;}
   }
@@ -3718,10 +3894,19 @@ function renderDetalhe(){
   }
   const grupos=agruparVinhos(res,DET_AGRUPAR);
   const grelha=DET_VISTA==='grelha';
+  // No catálogo, as colheitas do mesmo vinho juntam-se num cartão (ver "AS
+  // COLHEITAS NO CATÁLOGO"); fora dele, cada vinho é a sua entrada.
+  const juntar=catPorVinho();
+  CAT_FAMS_VISTA=[];
   box.innerHTML=grupos.map(g=>{
-    const itens=g.vinhos.map(v=>(grelha?vinhoGrelhaHTML:vinhoCardHTML)(v,termos,LOTE_SEL_MODO)).join('');
+    const fams=juntar?catJuntarColheitas(g.vinhos):g.vinhos.map(v=>({linhas:[v]}));
+    const itens=fams.map(f=>{
+      let fam=null, v=f.linhas[0];
+      if(f.linhas.length>1){f.n=CAT_FAMS_VISTA.push(f)-1;fam=f;v=catColhAtual(f);}
+      return (grelha?vinhoGrelhaHTML:vinhoCardHTML)(v,termos,LOTE_SEL_MODO,fam);
+    }).join('');
     return `<div class="dgrupo">
-      <div class="dgrupo-tit">${esc(g.titulo)} <span class="dgrupo-n">${g.vinhos.length}</span></div>
+      <div class="dgrupo-tit">${esc(g.titulo)} <span class="dgrupo-n">${fams.length}</span></div>
       ${grelha?`<div class="vgrelha">${itens}</div>`:itens}
     </div>`;
   }).join('');
@@ -5233,6 +5418,7 @@ function vinhoDetalheHTML(v){
   // da garrafa e de quem a tem (onde está, as minhas notas, as bebidas,
   // editar, apagar) e entra o "Na tua garrafeira" (`catNaMinhaHTML`).
   const cat=v.id<0;
+  const colh=cat?catColheitas(v).length:1;   // quantas colheitas no catálogo
   const ativas=garrafasDe(v.id,true), bebidas=garrafasDe(v.id,false).filter(g=>g.estado==='consumida');
   const cl=castaLabel(v), jan=janelaBeber(v);
   const estagio=v.estagio_texto||(v.estagio_meses?`${v.estagio_meses} meses`:'');
@@ -5262,7 +5448,7 @@ function vinhoDetalheHTML(v){
         <div class="mhero-tx">
           <div class="mhero-k">${cat?esc(['📚 Catálogo',v.estilo,v.classificacao].filter(Boolean).join(' · ')):`${desejado(v)?'⭐ Wishlist · ':''}${esc([v.estilo,v.classificacao].filter(Boolean).join(' · '))||(desejado(v)?'':'&nbsp;')}`}</div>
           <h3>${esc(v.nome)}${v.tipo?` <span class="mhero-cor">${esc(v.tipo)}</span>`:''}</h3>
-          <div class="mhero-s"><span class="mhero-o">${origem}${origem&&v.ano?' · ':''}</span>${v.ano?`<b>${v.ano}</b>`:''}</div>
+          <div class="mhero-s"><span class="mhero-o">${origem}${origem&&(v.ano||colh>1)?' · ':''}</span>${cat?catColhCapaHTML(v):v.ano?`<b>${v.ano}</b>`:''}</div>
           ${v.ano?`<div class="mhero-ab">${v.ano}</div>`:''}
           ${notaVivinoHeroHTML(v)}
           ${jan?`<span class="mhero-n">${JANELA_TXT[jan]}</span>`:''}
@@ -5285,7 +5471,7 @@ function vinhoDetalheHTML(v){
     </div>
     ${catTiraHTML(v)}`}
 
-    ${cat?catNotasHTML(v)+catNaMinhaHTML(v):desejado(v)?`<div class="msec">Wishlist</div>
+    ${cat?catColheitasHTML(v)+catNotasHTML(v)+catNaMinhaHTML(v):desejado(v)?`<div class="msec">Wishlist</div>
     <div class="desejo-faixa">
       <div class="note">${bebidas.length?'⭐ Já foi bebido e quer-se voltar a ter.'
         :`⭐ Ainda não está na garrafeira — é um vinho que se quer ter.${v.criado_em?` Na wishlist desde ${dataPT(String(v.criado_em).slice(0,10))}.`:''}`}</div>
@@ -9046,14 +9232,14 @@ function loteAbrir(){
   fabSincronizar();
   document.getElementById('lotebar').classList.add('on');
   loteSelBarra();
-  renderDetalhe();
+  renderFiltrados();   // e não só o Detalhe: a contagem da procura passa a contar colheitas
 }
 function loteSelCancelar(){
   LOTE_SEL_MODO=false;
   LOTE_SEL=new Map();
   fabSincronizar();
   document.getElementById('lotebar').classList.remove('on');
-  renderDetalhe();
+  renderFiltrados();
 }
 function loteSelTem(id){return LOTE_SEL.has(id);}
 function loteSelCheio(){return LOTE_SEL.size>=LOTE_MAX_VINHOS;}
@@ -9102,7 +9288,7 @@ function loteSelSeguinte(){
   LOTE_SEL_MODO=false;
   fabSincronizar();
   document.getElementById('lotebar').classList.remove('on');
-  renderDetalhe();
+  renderFiltrados();
   loteCampos();
 }
 function loteVoltarSelecao(){
@@ -9111,7 +9297,7 @@ function loteVoltarSelecao(){
   fabSincronizar();
   document.getElementById('lotebar').classList.add('on');
   loteSelBarra();
-  renderDetalhe();
+  renderFiltrados();
 }
 function loteChipsHTML(){
   return `<div class="lote-chips">${[...LOTE_SEL.values()].map(v=>
@@ -11192,7 +11378,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='175';
+const APP_BUILD='176';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
