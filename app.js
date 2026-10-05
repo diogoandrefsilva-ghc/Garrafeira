@@ -2566,7 +2566,7 @@ function scCardFav(rotulo,nome,sub,qual){
    os monocasta para o card do meio, todos os com stock para os outros. */
 const RESUMO_NOME={mono:'Monocasta',regiao:'Regiões',casta:'Castas',valor:'Valor',falta:'A completar',
   cor:'Cores',regiao_tinto:'Tintos por região',regiao_branco:'Brancos por região',
-  casta_tinto:'Tintos por casta',casta_branco:'Brancos por casta'};
+  casta_tinto:'Tintos por casta',casta_branco:'Brancos por casta',produtor:'Produtores'};
 function resumoPainel(id,titulo,rows,filtroFn,listaBase,notaTop){
   const fechar=`<button class="rdet-x" onclick="resumoFechar()" title="Fechar">✕</button>`;
   if(RESUMO_DRILL){
@@ -2913,6 +2913,12 @@ function renderResumo(){
   const topRegiao=regRows.length&&regRows[0].nome!=='Sem região'?regRows[0]:null;
   const topCasta=casRows.length?casRows[0]:null;
   const topCastaMono=topCasta?(monoRows.find(m=>m.nome===topCasta.nome)||{n:0}).n:0;
+  // O PRODUTOR com mais vinhos — "Produtor preferido" na garrafeira, "Top
+  // Produtor" no catálogo. Fica no fim, antes do "A completar" (o dono,
+  // 05/10/2026); abre a contagem produtor a produtor já na linha do topo.
+  const prodDe=v=>String(v.produtor||'').trim();
+  const prodRows=contarPor(comStock,v=>[prodDe(v)]);
+  const topProd=prodRows.length?prodRows[0]:null;
   let favHtml='';
   // No catálogo: os tintos e os brancos, e o topo de cada um.
   const daCor=c=>comStock.filter(v=>chave(v.tipo||'')===c);
@@ -2948,6 +2954,8 @@ function renderResumo(){
     (cat?'':scCard('co','Valor estimado',`<span class="sc-eur">${esc(eur0(valorTotal))}</span>`,
       comPreco.length===ativas.length?`${ativas.length} garrafa${ativas.length===1?'':'s'}`
         :`${comPreco.length} de ${ativas.length} garrafas com preço`,'valor'))+
+    (topProd?scCardFav(cat?'Top Produtor':'Produtor preferido',topProd.nome,
+      `${topProd.n} vinho${topProd.n===1?'':'s'}`,'produtor'):'')+
     scCard('cb','A completar',faltosos.length,
       faltosos.length?'vinhos com dados em falta':'está tudo preenchido','falta');
 
@@ -2971,6 +2979,8 @@ function renderResumo(){
     html+=resumoPainel(RESUMO_ABERTO,r.titulo,r.rows,
       r.casta?v=>(v.castas||[]).includes(RESUMO_DRILL):v=>(v.regiao||'Sem região')===RESUMO_DRILL,r.lista);
   }
+  if(RESUMO_ABERTO==='produtor')
+    html+=resumoPainel('produtor','Vinhos por produtor',prodRows,v=>prodDe(v)===RESUMO_DRILL,comStock);
   if(RESUMO_ABERTO==='falta')
     html+=resumoPainel('falta','O que falta preencher',falRows,
       v=>faltasDe(v).includes(RESUMO_DRILL),comStock);
@@ -13230,7 +13240,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='184';
+const APP_BUILD='185';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
