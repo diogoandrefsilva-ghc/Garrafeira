@@ -417,6 +417,9 @@ nome português ("Douro", nunca "Douro Valley"; "Península de Setúbal", nunca
 const prompt = (
   nome: string, ano: number | null, produtor: string, regiao: string, tipo: string, notas: string, hoje: string,
   campos: string[] | null, textosPesquisa: string, colheitaEspecifica: boolean, sites: string[] = [], soSites = false,
+  // Há um documento ENVIADO da app em anexo, e a imagem foi pedida: a IA diz
+  // onde está a garrafa nele (ver "A IMAGEM DE UM DOCUMENTO").
+  imagemDoc = false,
 ) => `
 És um enólogo a preencher a ficha de um vinho para a garrafeira de uma casa particular.
 
@@ -460,7 +463,12 @@ REGRAS, e são a sério:
    (termina em .jpg/.jpeg/.png/.webp), de uma página que tenhas mesmo visto —
    site do produtor ou de uma loja. Não é o link da página, é o da imagem. Se
    não tiveres a certeza, deixa vazio: uma imagem errada é pior do que nenhuma,
-   porque quem olha para a ficha fica a pensar que é aquele o vinho.
+   porque quem olha para a ficha fica a pensar que é aquele o vinho.${imagemDoc ? `
+   NUM DOCUMENTO EM ANEXO não há link: se um anexo enviado mostrar uma FOTOGRAFIA
+   (ou um desenho fiel) da garrafa DESTE vinho, preenche "imagemDoc" com o número do
+   anexo, a página (1 = a primeira) e a caixa à volta da garrafa inteira, do gargalo
+   à base, em [ymin, xmin, ymax, xmax] de 0 a 1000 sobre essa página. Só a garrafa,
+   sem o texto à volta; sem garrafa no documento, deixa "imagemDoc" de fora.` : ""}
 ${colheitaEspecifica && ano ? `10. ${regraColheita(ano)}
 ` : ""}${colheitaEspecifica && ano ? 11 : 10}. Uma PÁGINA ABERTA de OUTRO vinho (outro nome, outra gama, outra cor) não
    serve: ignora-a. O preço de uma página é o do produto DELA (o de "DADOS DO
@@ -493,7 +501,8 @@ ${ano ? `  "vivinoNota": 4.2,
   "vivinoAvaliacoesGlobal": 5234,
   "vivinoUrl": "",
   "imagemUrl": "",
-  "precoMedio": 18.5,
+${imagemDoc ? `  "imagemDoc": {"anexo": 1, "pagina": 1, "caixa": [120, 40, 900, 330]},
+` : ""}  "precoMedio": 18.5,
 ${ano ? `  "beberDe": 2026,
   "beberAte": 2034,
 ` : ""}  "notasProva": "duas ou três frases sobre aroma, boca e final",
@@ -987,7 +996,7 @@ const DOCS_MAX_TOTAL = 12_000_000;
 // Ler um documento é mais lento do que ler texto: o Gemini tem mais tempo.
 const GEMINI_TIMEOUT_MS_DOC = 45_000;
 type Documento = { mime: string; b64: string; bytes: number };
-type Anexo = { n: number; nome: string; mime: string; b64: string };
+type Anexo = { n: number; nome: string; mime: string; b64: string; pag?: Pagina };
 function tipoDoc(b: Uint8Array): string {
   if (b.length >= 5 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 && b[4] === 0x2d) return "application/pdf";
   if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
@@ -1013,6 +1022,23 @@ function nomeDoFicheiro(url: string): string {
 /* Os documentos ENVIADOS da app: `[{nome, dados}]`, com os dados em base64.
    Só se descodifica o princípio (o tipo vem dos bytes); o resto segue tal e
    qual para o Gemini. Entram como páginas já lidas, sem endereço. */
+/* O `imagemDoc` da resposta → `{doc, pagina, caixa}`, com `doc` a posição
+   do documento no pedido (é a ordem da app). Só de um anexo ENVIADO, e só
+   uma caixa que faça sentido: quatro números de 0 a 1000, ao direito, e
+   não um ponto. */
+function caixaDoDocumento(raw: unknown, anexos: Anexo[], documentos: Pagina[]) {
+  const r = raw as Record<string, unknown> | null;
+  if (!r || typeof r !== "object") return null;
+  const a = anexos.find((x) => x.n === Number(r.anexo));
+  const doc = a && a.pag ? documentos.indexOf(a.pag) : -1;
+  if (doc < 0) return null;
+  const c = Array.isArray(r.caixa) ? r.caixa.map(Number) : [];
+  if (c.length !== 4 || c.some((x) => !Number.isFinite(x) || x < 0 || x > 1000)) return null;
+  const [y0, x0, y1, x1] = c;
+  if (y1 - y0 < 30 || x1 - x0 < 15) return null;
+  const pg = Math.round(Number(r.pagina));
+  return { doc, pagina: Number.isFinite(pg) && pg >= 1 && pg <= 50 ? pg : 1, caixa: c.map(Math.round) };
+}
 function lerDocumentos(v: unknown): { docs: Pagina[]; erro?: string } {
   if (!Array.isArray(v) || !v.length) return { docs: [] };
   if (v.length > DOCS_MAX) return { docs: [], erro: `no máximo ${DOCS_MAX} documentos de cada vez` };
@@ -1560,7 +1586,7 @@ function montarEvidencia(paginas: Pagina[], resultados: Resultado[], ano: number
     const n = lista.length;
     let b: string;
     if (p.doc) {
-      anexos.push({ n, nome: p.titulo || docRotulo(p.doc.mime), mime: p.doc.mime, b64: p.doc.b64 });
+      anexos.push({ n, nome: p.titulo || docRotulo(p.doc.mime), mime: p.doc.mime, b64: p.doc.b64, pag: p });
       b = `[${n}] ${p.doc.mime === "application/pdf" ? "DOCUMENTO PDF" : "IMAGEM"} ${p.url
         ? `de ${p.site} (indicado por quem pesquisa como sendo deste vinho)\nURL: ${p.url.split("#")[0]}`
         : `«${p.titulo}», enviado por quem pesquisa como sendo deste vinho`}\n` +
@@ -2191,10 +2217,18 @@ async function produzirFicha(
   // senão, grounding.
   // Os documentos enviados dizem-se pelo nome, ao lado dos sites.
   const fontesPedidas = [...sites, ...documentos.map((d) => `o documento «${d.titulo}»`)];
+  /* A IMAGEM DE UM DOCUMENTO (05/10/2026, o dono das apps: as fichas técnicas
+     do Dandy de Cidrô em PDF encheram a ficha, "as imagens não ficaram").
+     Dentro de um PDF não há link de imagem — o `imagemUrl` exige um — e por
+     isso a garrafa da ficha técnica nunca chegava. Num documento ENVIADO da
+     app, a IA diz em que anexo, página e caixa está a garrafa
+     (`imagemDoc`); quem recorta é a APP, que tem o ficheiro na mão
+     (`pqImagemDoc`). Por link não: a app não tem os bytes. */
+  const comImagemDoc = documentos.length > 0 && (!campos_ia || campos_ia.includes("imagem_url"));
   const fase = async (comSerper: boolean, camposFase: string[] | null) => {
     const texto = comSerper
       ? prompt(nome, ano, produtor, regiao, tipo, notas, hoje, camposFase, pesquisa.texto, colheitaEspecifica,
-          vivinoGoogle ? [...fontesPedidas, "vivino.com (o resultado do Google)"] : fontesPedidas, soSites)
+          vivinoGoogle ? [...fontesPedidas, "vivino.com (o resultado do Google)"] : fontesPedidas, soSites, comImagemDoc)
       : promptComGrounding(nome, ano, produtor, regiao, tipo, notas, sites, hoje, camposFase, colheitaEspecifica);
     let fontesG: Fonte[] = [];
     // Os documentos só vão com a base de evidência (no grounding já não fazem falta).
@@ -2237,6 +2271,7 @@ async function produzirFicha(
       ficha: parsed ? normalizar(parsed, ano, camposFase) : null,
       // De onde veio cada campo (só na leitura da base de evidência).
       deOnde: comSerper ? parsed?.deOnde : undefined,
+      imagemDoc: comSerper && comImagemDoc ? caixaDoDocumento(parsed?.imagemDoc, ev.anexos, documentos) : null,
       pesquisou: pesquisouF, erro, modelo, modo,
       fontes: comSerper ? pesquisa.fontes : (pesquisouF ? fontesG : []),
     };
@@ -2429,6 +2464,8 @@ async function produzirFicha(
         ...(paginasRes.length ? { paginas: paginasRes } : {}),
         ...(soSites ? { soSites: true, ...(semFonte.length ? { semFonte, semFonteValores } : {}) } : {}),
       } : {}),
+      // Onde está a garrafa num documento enviado (ver "A IMAGEM DE UM DOCUMENTO").
+      ...(f1.imagemDoc ? { imagemDoc: f1.imagemDoc } : {}),
       // De onde veio cada campo (a página, o resultado, ou o grounding) —
       // a app mostra-o ao lado de cada proposta.
       ...(Object.keys(origemCampos).length ? { origemCampos } : {}),

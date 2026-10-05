@@ -2309,6 +2309,23 @@ app também os tira); com documentos não se lê nem escreve a cache, nem se
 pergunta "pesquisaste há pouco". Uma ficha técnica de outra colheita lê-se na
 mesma, e o "aviso" di-lo. A `catalogo-info` da WineCatalog não tem isto, de
 propósito (como o "Procurar links"): o Catálogo vai ser fundido na Garrafeira.
+**Num documento pedem-se TODOS os campos** (05/10/2026, o dono das apps: "devia
+por defeito validar todos os campos e não apenas campos em falta"): a ficha
+técnica é a fonte mais fidedigna, e o que já está confere-se com ela
+(`pqCamposHTML`). **E a garrafa do documento vem como imagem** (o dono: "as
+imagens não ficaram"): dentro de um PDF não há link, e o `imagemUrl` exige um.
+Num documento ENVIADO, a `vinho-info` pede ao Gemini ONDE está a garrafa
+(`imagemDoc`: o anexo, a página e a caixa `[ymin,xmin,ymax,xmax]` de 0 a 1000,
+`caixaDoDocumento`) e é a APP que a recorta (`pqImagemDoc`): a página desenha-se
+com o pdf.js (do cdnjs, só quando faz falta), olha-se uma zona mais larga do que
+a caixa e fica o bloco de tinta com mais peso dentro dela — a garrafa, nunca o
+texto ao lado (separado por uma faixa branca) nem um filete —, numa JPEG de
+800 px. A proposta é um `data:` revisto como as outras e só sobe ao GUARDAR
+(`pqImagemGravar`): a quem corrige o catálogo vai para o bucket público
+(`cat/`, migração 36) e fica o `imagem_url`; aos outros fica a SUA imagem do
+vinho (`imagem_path`, `fotoPropriaGravar`; num vinho novo, depois de gravado —
+`_imagemDocNovo`). Por link (o PDF colado em "Em sites concretos") ainda não: a
+app não tem os bytes.
 
 **Procurar links** (29/09/2026, o dono das apps: "dar um link ao Gemini e
 dizer 'procura só neste link' é o que traz a informação mais fidedigna, e

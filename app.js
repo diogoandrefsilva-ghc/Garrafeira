@@ -5777,6 +5777,42 @@ async function encolherImagem(file,max=1000,q=0.85){
   return blob;
 }
 
+/* Enviar para o Storage; um erro do serviço vem com a mensagem dele. */
+async function storageEnviar(bucket,caminho,blob,upsert){
+  const r=await sbFetch(`${SB_URL}/storage/v1/object/${bucket}/${caminho}`,{
+    method:'POST',
+    headers:Object.assign({'apikey':SB_KEY,'Content-Type':blob.type||'image/jpeg'},upsert?{'x-upsert':'true'}:{}),
+    body:blob
+  });
+  if(!r.ok){
+    let m='HTTP '+r.status;try{m=(await r.json()).message||m;}catch(_){}
+    throw new Error(m);
+  }
+}
+// Nome novo em cada envio: um caminho fixo ficava preso à cache do
+// browser e da CDN, e a imagem trocada só aparecia horas depois.
+function nomeImagem(){return `${Date.now().toString(36)}${Math.random().toString(36).slice(2,8)}.jpg`;}
+/* A MINHA imagem de um vinho da garrafeira (`imagem_path`, bucket privado). */
+async function fotoPropriaGravar(v,blob){
+  const caminho=`v${v.id}/${nomeImagem()}`;
+  await storageEnviar(BUCKET,caminho,blob,true);
+  const antigo=String(v.imagem_path||'').trim();
+  await sbReq('PATCH',`vinhos?id=eq.${v.id}`,{imagem_path:caminho});
+  v.imagem_path=caminho;
+  // A anterior deixa de servir para alguma coisa — fica lixo pago no
+  // bucket. Falhar a apagá-la não estraga nada, por isso não trava.
+  if(antigo&&antigo!==caminho)apagarObjeto(antigo);
+  await assinarImagens();
+}
+/* Uma imagem de TODA a gente (migração 36): o bucket público, pasta `cat/`
+   — só os curadores e o admin do catálogo (`catPodeCriar`) lá escrevem.
+   Devolve o link público. */
+async function imagemPublicaSubir(blob,prefixo){
+  const caminho=`cat/${prefixo}-${nomeImagem()}`;
+  await storageEnviar('garrafeira-imagens',caminho,blob,false);
+  return `${SB_URL}/storage/v1/object/public/garrafeira-imagens/${caminho}`;
+}
+
 async function enviarFoto(input){
   if(roGuard())return;
   const file=(input.files||[])[0];
@@ -5788,26 +5824,8 @@ async function enviarFoto(input){
   est.textContent='A preparar a imagem…';
   try{
     const blob=await encolherImagem(file);
-    // Nome novo em cada envio: um caminho fixo ficava preso à cache do
-    // browser e da CDN, e a imagem trocada só aparecia horas depois.
-    const caminho=`v${v.id}/${Date.now().toString(36)}${Math.random().toString(36).slice(2,8)}.jpg`;
     est.textContent=`A enviar (${Math.round(blob.size/1024)} KB)…`;
-    const r=await sbFetch(`${SB_URL}/storage/v1/object/${BUCKET}/${caminho}`,{
-      method:'POST',
-      headers:{'apikey':SB_KEY,'Content-Type':'image/jpeg','x-upsert':'true'},
-      body:blob
-    });
-    if(!r.ok){
-      let m='HTTP '+r.status;try{m=(await r.json()).message||m;}catch(_){}
-      throw new Error(m);
-    }
-    const antigo=String(v.imagem_path||'').trim();
-    await sbReq('PATCH',`vinhos?id=eq.${v.id}`,{imagem_path:caminho});
-    v.imagem_path=caminho;
-    // A anterior deixa de servir para alguma coisa — fica lixo pago no
-    // bucket. Falhar a apagá-la não estraga nada, por isso não trava.
-    if(antigo&&antigo!==caminho)apagarObjeto(antigo);
-    await assinarImagens();
+    await fotoPropriaGravar(v,blob);
     est.textContent='';
     renderLista();refrescarVinhoAberto();abrirFoto(v.id);
     if(tabAtiva==='locais')renderMapa();
@@ -5832,18 +5850,8 @@ async function enviarFotoCat(input){
   try{
     // 800 px, como as das lojas depois de reduzidas (migração 35).
     const blob=await encolherImagem(file,800,0.82);
-    const caminho=`cat/${v.cat_id}-${Date.now().toString(36)}${Math.random().toString(36).slice(2,8)}.jpg`;
     est.textContent=`A enviar (${Math.round(blob.size/1024)} KB)…`;
-    const r=await sbFetch(`${SB_URL}/storage/v1/object/garrafeira-imagens/${caminho}`,{
-      method:'POST',
-      headers:{'apikey':SB_KEY,'Content-Type':'image/jpeg'},
-      body:blob
-    });
-    if(!r.ok){
-      let m='HTTP '+r.status;try{m=(await r.json()).message||m;}catch(_){}
-      throw new Error(m);
-    }
-    const url=`${SB_URL}/storage/v1/object/public/garrafeira-imagens/${caminho}`;
+    const url=await imagemPublicaSubir(blob,v.cat_id);
     await sbReq('POST','rpc/editar',{p_id:v.cat_id,p_campos:{imagem_url:url}},
       {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
     v.imagem_url=url;
@@ -6228,7 +6236,7 @@ function abrirEditarVinho(id,modo){
   const rotulo=noCat?'Criar no catálogo':catEd?'Guardar no catálogo':conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
   _catBaseNovo=null;
   _iaExtraNovo=null;   // o que a procura trouxe é de UM formulário, não fica de um para o outro
-  _precosProcura=null;
+  _precosProcura=null;_imagemDocNovo=null;
   const o=(k,d)=>v?(v[k]==null?'':v[k]):(d==null?'':d);
   const opts=(arr,sel)=>arr.map(x=>`<option value="${esc(x)}"${String(sel)===String(x)?' selected':''}>${esc(x||'—')}</option>`).join('');
   const locOpts=db.locais.map(l=>`<option value="${l.id}">${esc(l.nome)}</option>`).join('');
@@ -6507,6 +6515,13 @@ async function guardarVinho(id,modo){
       reindexar();
     }
     _iaExtraNovo=null;
+    // A garrafa recortada de um documento, por quem não escreve no catálogo:
+    // fica a minha imagem do vinho acabado de nascer.
+    if(!id&&_imagemDocNovo){
+      const u=_imagemDocNovo;_imagemDocNovo=null;
+      try{await fotoPropriaGravar(IDXV[vinhoId],await dataUrlBlob(u));}
+      catch(e){toast('A imagem do documento não foi: '+e.message,1);}
+    }
     fecharModal('modal-edit');renderLista();refrescarVinhoAberto();
     if(outraChave)precosDaProcuraLevar(id?0:vinhoId).then(()=>recarregarPrecosLoja());
     if(tabAtiva==='locais')renderMapa();
@@ -8171,6 +8186,119 @@ function pqDocsHTML(P){
       <input type="file" accept="application/pdf,image/*" multiple style="display:none" onchange="pqDocsEscolher(this)"></label>`:''}
   </div>`;
 }
+/* A GARRAFA DE UM DOCUMENTO (05/10/2026, o dono das apps: as fichas técnicas
+   do Dandy de Cidrô em PDF encheram a ficha, mas "as imagens não ficaram").
+   Num PDF não há link de imagem, e o `imagem_url` só aceita um link. Agora a
+   `vinho-info` devolve ONDE está a garrafa (`imagemDoc`: o documento, a
+   página e a caixa, de 0 a 1000) e é a app, que tem o ficheiro na mão, que
+   a recorta: a página do PDF desenha-se com o pdf.js (carregado do cdnjs só
+   quando faz falta), corta-se a caixa com uma folga pequena, tiram-se as
+   margens brancas e fica uma JPEG de 800 px no máximo. A proposta é essa
+   imagem (um `data:`), revista como as outras; só sobe ao Storage ao
+   GUARDAR (`pqImagemGravar`) — uma proposta deitada fora não deixa lixo. */
+const PDFJS_URL='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+let _pdfjs=null;
+function pdfjsCarregar(){
+  if(_pdfjs)return _pdfjs;
+  _pdfjs=new Promise((ok,ko)=>{
+    const sc=document.createElement('script');
+    sc.src=PDFJS_URL+'pdf.min.js';
+    sc.onload=()=>{
+      const L=window.pdfjsLib;
+      if(!L){_pdfjs=null;ko(new Error('não consegui abrir o leitor de PDF'));return;}
+      L.GlobalWorkerOptions.workerSrc=PDFJS_URL+'pdf.worker.min.js';
+      ok(L);
+    };
+    sc.onerror=()=>{_pdfjs=null;ko(new Error('não consegui abrir o leitor de PDF'));};
+    document.head.appendChild(sc);
+  });
+  return _pdfjs;
+}
+function b64Bytes(b64){const t=atob(b64);const u=new Uint8Array(t.length);for(let i=0;i<t.length;i++)u[i]=t.charCodeAt(i);return u;}
+// A página do documento num <canvas> (um PDF a ~2400 px no lado maior).
+async function docPaginaCanvas(d,pagina){
+  const c=document.createElement('canvas');
+  if(d.mime==='application/pdf'){
+    const L=await pdfjsCarregar();
+    const pdf=await L.getDocument({data:b64Bytes(d.dados)}).promise;
+    try{
+      const pg=await pdf.getPage(Math.min(Math.max(1,pagina||1),pdf.numPages));
+      const v1=pg.getViewport({scale:1});
+      const vp=pg.getViewport({scale:Math.min(4,2400/Math.max(v1.width,v1.height))});
+      c.width=Math.round(vp.width);c.height=Math.round(vp.height);
+      const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+      await pg.render({canvasContext:ctx,viewport:vp}).promise;
+    }finally{try{pdf.destroy();}catch(_){}}
+    return c;
+  }
+  const bmp=await createImageBitmap(new Blob([b64Bytes(d.dados)],{type:d.mime}));
+  c.width=bmp.width;c.height=bmp.height;
+  const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+  ctx.drawImage(bmp,0,0);bmp.close&&bmp.close();
+  return c;
+}
+async function pqImagemDoc(P,im){
+  const d=P.docs&&P.docs[im.doc];if(!d||!Array.isArray(im.caixa))return '';
+  const c=await docPaginaCanvas(d,im.pagina);
+  const W=c.width,H=c.height,[y0,x0,y1,x1]=im.caixa;
+  // Uma zona mais larga do que a caixa: a da IA às vezes corta o gargalo, a
+  // base ou um lado da garrafa, e o recorte cresce até à margem branca.
+  const fx=(x1-x0)*0.5,fy=(y1-y0)*0.3;
+  let L=Math.max(0,Math.floor((x0-fx)/1000*W)),T=Math.max(0,Math.floor((y0-fy)/1000*H));
+  let R=Math.min(W,Math.ceil((x1+fx)/1000*W)),B=Math.min(H,Math.ceil((y1+fy)/1000*H));
+  if(R-L<20||B-T<20)return '';
+  // As margens brancas fora, e o que está do outro lado delas também: uma
+  // caixa larga de mais apanha o texto ao lado, e entre a garrafa e o texto
+  // há sempre uma faixa branca. Coluna a coluna e depois linha a linha, com
+  // um respiro à volta.
+  const px=c.getContext('2d').getImageData(L,T,R-L,B-T).data,w=R-L,h=B-T;
+  const cheio=(x,y)=>{const i=(y*w+x)*4;return px[i]<238||px[i+1]<238||px[i+2]<238;};
+  // Os blocos de tinta separados por uma faixa branca; fica o que tem mais
+  // tinta dentro da caixa da IA ([c0,c1] na zona) — a garrafa, que é quase
+  // toda cheia, e não o texto ao lado nem um filete. Pequeno de mais (menos
+  // de um quinto da caixa), não se confia: fica a caixa.
+  const bloco=(n,tinta,c0,c1)=>{
+    const peso=[],occ=[];for(let i=0;i<n;i++){peso.push(tinta(i));occ.push(peso[i]>0);}
+    const gap=Math.max(3,Math.round(n*0.02)),bs=[];
+    let a0=-1,a1=-1,v=0;
+    for(let i=0;i<=n;i++){
+      if(i<n&&occ[i]){if(a0<0)a0=i;a1=i;v=0;}
+      else if(a0>=0&&(i===n||++v>gap)){bs.push([a0,a1]);a0=-1;v=0;}
+    }
+    let melhor=null,pts=0;
+    bs.forEach(([a,b])=>{let t=0;for(let i=Math.max(a,c0);i<=Math.min(b,c1);i++)t+=peso[i];if(t>pts){pts=t;melhor=[a,b];}});
+    if(!melhor||melhor[1]-melhor[0]<(c1-c0)*0.2)return [Math.max(0,c0),Math.min(n-1,c1)];
+    return melhor;
+  };
+  // A tinta de uma coluna (ou linha) — zero quando é pouca: um filete fino a
+  // atravessar a página não liga a garrafa ao texto.
+  const denso=(n,f)=>{let c=0,t=0;for(let i=0;i<n;i+=2){t++;if(f(i))c++;}return c>Math.max(1,t*0.01)?c:0;};
+  const cx=bloco(w,x=>denso(h,y=>cheio(x,y)),Math.round(x0/1000*W)-L,Math.round(x1/1000*W)-L);
+  const cy=bloco(h,y=>denso(cx[1]-cx[0]+1,i=>cheio(cx[0]+i,y)),Math.round(y0/1000*H)-T,Math.round(y1/1000*H)-T);
+  if(cx&&cy&&cx[1]>cx[0]&&cy[1]>cy[0]){
+    const m=Math.round(Math.max(cx[1]-cx[0],cy[1]-cy[0])*0.04);
+    R=L+Math.min(w,cx[1]+m+1);B=T+Math.min(h,cy[1]+m+1);L+=Math.max(0,cx[0]-m);T+=Math.max(0,cy[0]-m);
+  }
+  const k=Math.min(1,800/Math.max(R-L,B-T));
+  const o=document.createElement('canvas');
+  o.width=Math.round((R-L)*k);o.height=Math.round((B-T)*k);
+  const ctx=o.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,o.width,o.height);
+  ctx.drawImage(c,L,T,R-L,B-T,0,0,o.width,o.height);
+  return o.toDataURL('image/jpeg',0.86);
+}
+function imgDoc(x){return typeof x==='string'&&x.startsWith('data:image/');}
+async function dataUrlBlob(u){return (await fetch(u)).blob();}
+/* Guardar a imagem recortada. Quem corrige o catálogo (`catPodeCriar`)
+   põe-na no bucket público, e o vinho fica com o link (`imagem_url`) — vai
+   ao catálogo como qualquer imagem. Quem não pode escrever lá fica com ela
+   como a SUA imagem do vinho (`imagem_path`, privada): devolve '' e quem
+   chama trata disso (`fotoPropriaGravar`, ou `_imagemDocNovo` num vinho
+   ainda por gravar). */
+let _imagemDocNovo=null;
+async function pqImagemGravar(dataUrl,prefixo){
+  if(!catPodeCriar())return '';
+  return imagemPublicaSubir(await dataUrlBlob(dataUrl),prefixo);
+}
 function pqTipoVoltar(){
   const P=PQ;if(!P)return;
   pqLerCaixas();
@@ -8287,13 +8415,21 @@ async function pqIA(repetir){
     // mostra-se na mesma — nunca marcado onde já há valor (`pqDefeito`):
     // quem pede um campo que tem quer ver alternativas (30/09/2026, o dono).
     const sfv=res.semFonteValores&&typeof res.semFonteValores==='object'?res.semFonteValores:{};
-    const n=pqJuntar(P,'ia',{...sfv,...res});
+    // A garrafa do documento (ver "A GARRAFA DE UM DOCUMENTO"): recortada
+    // aqui, entra como a proposta da imagem quando não veio um link.
+    let docImg='';
+    if(res.imagemDoc&&!res.imagem_url&&P.tipo==='doc'){
+      try{docImg=await pqImagemDoc(P,res.imagemDoc);}catch(e){console.warn('imagem do documento',e);}
+      if(PQ!==P)return;
+    }
+    const n=pqJuntar(P,'ia',{...sfv,...res,...(docImg?{imagem_url:docImg}:{})});
     P.et.ia={estado:'feito',n:n.novos,dif:n.dif,outro:n.outro,memoria:res.pesquisaWeb===false,
       sites:Array.isArray(res.sites)?res.sites:[],confianca:res.confianca||null,
       paginas:Array.isArray(res.paginas)?res.paginas:[],soSites:!!res.soSites,
       docs:Array.isArray(res.paginas)?res.paginas.filter(p=>p&&p.doc&&!p.url):[],
       semFonte:Array.isArray(res.semFonte)?res.semFonte:[],
-      origem:res.origemCampos&&typeof res.origemCampos==='object'?res.origemCampos:{},
+      origem:Object.assign({},res.origemCampos&&typeof res.origemCampos==='object'?res.origemCampos:{},
+        docImg?{imagem_url:{documento:P.docs[res.imagemDoc.doc].mime,titulo:P.docs[res.imagemDoc.doc].nome,recorte:true}}:{}),
       catalogoCampos:Array.isArray(res.catalogoCampos)?res.catalogoCampos:[],
       pesquisaWeb:res.pesquisaWeb,modelo:res.modelo||'',
       fontes:Array.isArray(res.fontes)?res.fontes:[],aviso:res.aviso||''};
@@ -8457,9 +8593,14 @@ function pqCamposHTML(P){
   const ks=pqChavesIA(P);
   const falta=k=>pqVazio(P.atual[k])&&!P.hist[k]&&!P.preenchidos[k];
   const meus=Array.isArray(P.camposMarca);
-  const marcados=meus?ks.filter(k=>P.camposMarca.includes(k)):ks.filter(falta);
+  // Num documento (a ficha técnica do produtor) pedem-se TODOS: é a fonte
+  // mais fidedigna que há, e o que já está também se confere com ela — o
+  // que vier igual diz-se, o que vier diferente fica para escolher
+  // (05/10/2026, o dono das apps).
+  const todos=P.tipo==='doc';
+  const marcados=meus?ks.filter(k=>P.camposMarca.includes(k)):todos?ks:ks.filter(falta);
   const n=marcados.length;
-  return `<details class="pq-campos"${meus?' open':''}><summary>O que pedir: ${n?`${n} ${n===1?'campo':'campos'}${meus?'':' (os que faltam)'}`:meus?'nenhum':'nenhum — já não falta nada; escolhe o que queres confirmar'}</summary>
+  return `<details class="pq-campos"${meus?' open':''}><summary>O que pedir: ${n?`${n} ${n===1?'campo':'campos'}${meus?'':todos?' (todos — confere também o que já está)':' (os que faltam)'}`:meus?'nenhum':'nenhum — já não falta nada; escolhe o que queres confirmar'}</summary>
     <div class="ia-escs">${ks.map(k=>`<label class="ia-esc">
       <input type="checkbox" class="pq-campo" value="${esc(k)}"${marcados.includes(k)?' checked':''}>
       <span>${esc(pqRot(k))}${pqVazio(P.atual[k])?'':'<i>já tem</i>'}${P.hist[k]||P.preenchidos[k]?'<i>já encontrado</i>':''}</span></label>`).join('')}</div>
@@ -8690,6 +8831,7 @@ function pqLinhasIA(P){return pqChaves(P).filter(k=>P.hist[k]&&'ia' in P.hist[k]
    No vinho novo, só as da IA: o Catálogo já está no formulário. */
 function pqValorHTML(k,v){
   if(pqVazio(v))return '<em class="rv-vazio">vazio</em>';
+  if(imgDoc(v))return `<img class="rv-img" src="${v}" alt="">`;
   if(Array.isArray(v))return esc(v.join(', '));
   if(typeof v==='object')return esc(JSON.stringify(v));
   const s=String(v);
@@ -8707,7 +8849,7 @@ function pqFonteHTML(k,f,P){
   const o=ia.origem&&ia.origem[k];
   if(o&&typeof o==='object'){
     if(o.google)return '<span class="rv-de">↳ da pesquisa Google <i>(a IA não diz a página)</i></span>';
-    if(o.documento&&!o.url)return `<span class="rv-de">↳ do documento que enviaste <i>· ${esc(o.titulo||'')}</i></span>`;
+    if(o.documento&&!o.url)return `<span class="rv-de">↳ ${o.recorte?'recortada do':'do'} documento que enviaste <i>· ${esc(o.titulo||'')}</i></span>`;
     if(o.url){
       const lnk=`<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.site||o.url)}</a>`;
       if(o.dada&&!o.pagina)return `<span class="rv-de">↳ do link que colaste · ${lnk}</span>`;
@@ -8845,6 +8987,9 @@ async function pqGuardar(){
   });
   if(P.anoEscolhido&&!v.ano)patch.ano=P.anoEscolhido;
   if(!(patch.ano||v.ano))IA_JANELA.forEach(k=>delete patch[k]);
+  // A garrafa recortada de um documento: um link público, ou a minha imagem.
+  const docImg=imgDoc(patch.imagem_url)?patch.imagem_url:'';
+  if(docImg)delete patch.imagem_url;
   if(outros.length){
     // O carimbo da procura: de onde veio, para daqui a um ano se saber.
     const r=P.res.ia;
@@ -8855,6 +9000,11 @@ async function pqGuardar(){
   const b=document.getElementById('pq-guardar');
   if(b){b.disabled=true;b.textContent='A guardar…';}
   try{
+    if(docImg){
+      const url=await pqImagemGravar(docImg,`doc-v${v.id}`);
+      if(url)patch.imagem_url=url;
+      else await fotoPropriaGravar(v,await dataUrlBlob(docImg));
+    }
     if(Object.keys(patch).length){
       const r=await sbReq('PATCH',`vinhos?id=eq.${P.vid}`,patch,{'Prefer':'return=representation'});
       Object.assign(v,patch,(r&&r[0])||{});
@@ -8902,6 +9052,7 @@ async function pqGuardarCat(){
   if(b){b.disabled=true;b.textContent='A guardar…';}
   let n=0,erroIdt='';
   try{
+    if(imgDoc(campos.imagem_url))campos.imagem_url=await imagemPublicaSubir(await dataUrlBlob(campos.imagem_url),P.cat);
     if(Object.keys(campos).length){
       const r=await sbReq('POST','rpc/editar',{p_id:P.cat,p_campos:campos},WC);
       n+=(r&&Number(r.campos))||0;
@@ -8949,11 +9100,27 @@ function pqPorNoForm(P,fonte){
    quiser, depois abre o vinho em edição" — como na WineCatalog). Abre-se a
    página do vinho, onde está o Editar. "Rever antes de gravar" (`rever`)
    abre o formulário inteiro, como era. */
-function pqPassarForm(rever){
+async function pqPassarForm(rever){
   const P=PQ;if(!P||!P.novo)return;
   // O preço das lojas abertas vai com o vinho quando ele for gravado.
   if(P.res.ia&&P.res.ia._analise&&!(P.res.ia.precosGravados>0))_precosProcura=P.res.ia._analise;
   const escs=pqEscolhas(P);
+  // A garrafa recortada de um documento não cabe num campo de texto: sobe
+  // já (um link público), ou espera pelo vinho gravado (`_imagemDocNovo`).
+  _imagemDocNovo=null;
+  const ei=escs.findIndex(e=>e.k==='imagem_url'&&imgDoc(e.val));
+  if(ei>=0){
+    const b=document.getElementById('pq-guardar');
+    if(b){b.disabled=true;b.textContent='A guardar…';}
+    try{
+      const url=await pqImagemGravar(escs[ei].val,'doc-novo');
+      if(url)escs[ei]={...escs[ei],val:url};
+      else{_imagemDocNovo=escs[ei].val;escs.splice(ei,1);}
+    }catch(e){
+      toast('A imagem do documento não foi: '+e.message,1);escs.splice(ei,1);
+    }
+    if(PQ!==P)return;
+  }
   if(escs.length){
     const res={}, antes={};
     escs.forEach(e=>{
@@ -13477,7 +13644,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='188';
+const APP_BUILD='189';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
