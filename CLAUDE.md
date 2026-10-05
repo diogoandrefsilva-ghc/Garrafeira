@@ -129,6 +129,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   Garrafeira — as cartas lidas (`garrafeira.cartas`), a ligação de cada
   vinho da carta ao catálogo com a cor (`carta_ligar`) e as marcas dos
   amigos que já não baralham tintos com brancos (`garrafeira.marcas_amigos`).
+  `migracao-precos-pagina.sql` é a 41: o preço de cada loja aberta no
+  "Procurar informação" vai para o catálogo, loja a loja (ver "O preço de
+  um vinho" › "O preço da página da loja").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -2061,6 +2064,27 @@ outras lojas e o `preco_medio`). Quando o script das lojas falha é na
 página, não na colheita — o Casa de Saima Garrafeira veio a 8,49 € do
 Vivino com as lojas a 63 € e 69 €. Aparece riscado no detalhe e nunca é o
 principal; sem outro preço com que comparar, conta.
+
+**O preço da página da loja** (migração 41, 05/10/2026, o dono das apps:
+"estamos a guardar o preço de referência mas não o preço obtido em cada um
+desses sites, conforme fazemos no batch"). Quando o "Procurar informação"
+ABRE uma página da Garrafeira Nacional, da Granvine ou da Vinha
+(`LOJAS_PRECO` na `vinho-info`), o preço que a página declara — o JSON-LD
+`offers` (com o `priceSpecification` da Granvine) ou a etiqueta
+`product:price:amount` (`precoDaLoja`) — vai para `ficha.precos.<loja>` no
+catálogo, na forma do script das lojas, mais `de: "pesquisa"`. Não é o
+`precoMedio` do Gemini, que pode ser a média de duas páginas. A colheita é
+a do nome do produto (senão a do endereço), quando lá houver um ano só.
+Só de uma página dada (colada ou escolhida nos links) ou que a IA disse ter
+usado. Com o nome confirmado (a regra da `juntar`, ver "O catálogo
+partilhado") grava-se logo (`catalogo_precos_pagina`) e a app relê os
+preços (`iaPrecosChegaram`); no vinho NOVO a linha só nasce ao gravar, e a
+app leva-o a seguir (`_precosProcura` → `precos_da_procura`, que vai buscar
+os preços à `analises.resultado` do servidor, nunca ao browser). Junta-se
+loja a loja (`catalogo_precos_por`): a `juntar` trocava o objeto `precos`
+inteiro e apagava as outras lojas. Uma loja retirada pelo admin com a mesma
+página fica retirada. O lote (atualização massiva) não abre páginas, por
+isso não entra.
 
 Um preço que o admin **retirou** na WineCatalog (Editar › Fontes de preço,
 `retirado:true` na entrada) não sai da `precos_lojas` — nem riscado: para

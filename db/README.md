@@ -638,6 +638,21 @@ No mesmo dia, mais uma coluna: `cartas.ordem` (a ordem da lista que o
 Gemini sugere no fim da leitura) — `ADD COLUMN IF NOT EXISTS`, no mesmo
 ficheiro.
 
+### Migração 41 — o preço da página da loja (por aplicar)
+
+`db/migracao-precos-pagina.sql`, depois da 28. Só cria três funções:
+`catalogo_precos_por` e `catalogo_precos_pagina` (só a service role — a
+`vinho-info`) juntam ao `ficha.precos` do catálogo, loja a loja, o preço
+que a página da Garrafeira Nacional, da Granvine ou da Vinha declara;
+`precos_da_procura` (a app, `authenticated`) faz o mesmo para o vinho novo
+depois de gravado, com os preços tirados da `analises` do servidor. Ver o
+`CLAUDE.md`, "O preço da página da loja". Ensaiada a 05/10/2026 numa função
+temporária contra a linha #174 (com `rollback`): a Granvine entrou, a
+Garrafeira Nacional foi substituída, a Vinha e o Vivino ficaram, o Vivino e
+um preço inválido foram recusados, e o histórico (`alteracoes`) registou a
+origem `vinho-info-pagina`. Publica-se com a `vinho-info` nova (sem a
+migração, a função responde 0 e a procura segue igual).
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -692,6 +707,8 @@ Numa base de dados limpa:
 12. **`migracao-sugestoes.sql`** — as cartas das Sugestões, a ligação de
    cada vinho da carta ao catálogo e as marcas dos amigos com a cor
    (migração 40). Só depois do `winecatalog` e do `anniversarygifts`.
+13. **`migracao-precos-pagina.sql`** — o preço de cada loja aberta no
+   "Procurar informação" (migração 41). Depois da 28.
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)

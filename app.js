@@ -1578,6 +1578,7 @@ async function catGuardarNovo(){
       {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
     _iaExtraNovo=null;FORM_CAT=false;
     fecharModal('modal-edit');
+    if(r&&r.id)await precosDaProcuraLevar(-r.id);
     CAT_VINHOS=null;await catCarregar();renderLista();
     toast('No catálogo ✓');
     if(r&&r.id&&IDXV[-r.id])verVinho(-r.id);
@@ -6112,6 +6113,7 @@ function abrirEditarVinho(id,modo){
   const rotulo=noCat?'Criar no catálogo':catEd?'Guardar no catálogo':conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
   _catBaseNovo=null;
   _iaExtraNovo=null;   // o que a procura trouxe é de UM formulário, não fica de um para o outro
+  _precosProcura=null;
   const o=(k,d)=>v?(v[k]==null?'':v[k]):(d==null?'':d);
   const opts=(arr,sel)=>arr.map(x=>`<option value="${esc(x)}"${String(sel)===String(x)?' selected':''}>${esc(x||'—')}</option>`).join('');
   const locOpts=db.locais.map(l=>`<option value="${l.id}">${esc(l.nome)}</option>`).join('');
@@ -6391,7 +6393,7 @@ async function guardarVinho(id,modo){
     }
     _iaExtraNovo=null;
     fecharModal('modal-edit');renderLista();refrescarVinhoAberto();
-    if(outraChave)recarregarPrecosLoja();
+    if(outraChave)precosDaProcuraLevar(id?0:vinhoId).then(()=>recarregarPrecosLoja());
     if(tabAtiva==='locais')renderMapa();
     toast(conv?'Na garrafeira ✓':id?'Guardado ✓':paraDesejo?'Na wishlist ⭐':'Vinho adicionado ✓');
     if(id)curadorAviso(vinhoId);
@@ -6891,7 +6893,31 @@ async function iaPedir(pedido,vinhoId,motor){
   }
   // Sem `id` a função respondeu no modo antigo (síncrono) — já traz tudo.
   if(!d.id)return d;
-  return await iaEsperar(d.id);
+  const res=await iaEsperar(d.id);
+  iaPrecosChegaram(res,d.id);
+  return res;
+}
+/* O PREÇO DE CADA LOJA aberta na procura (migração 41, 05/10/2026): a
+   `vinho-info` lê o preço que a página da Garrafeira Nacional, da Granvine
+   ou da Vinha declara e guarda-o no catálogo, ao lado dos do script das
+   lojas (`ficha.precos`). Com o nome confirmado já lá está
+   (`precosGravados`): relê-se. No vinho NOVO a linha do catálogo só nasce
+   quando ele for gravado — fica aqui à espera (`_precosProcura`), e o
+   `guardarVinho`/`catGuardarNovo` leva-o pela `precos_da_procura`, que vai
+   buscar os preços à análise do servidor, nunca ao browser. */
+let _precosProcura=null;
+function iaPrecosChegaram(res,analise){
+  if(!res||!res.precosLoja||!Object.keys(res.precosLoja).length)return;
+  res._analise=analise;
+  if(res.precosGravados>0){
+    recarregarPrecosLoja();
+    if(CAT_VINHOS)boCatMudou();
+  }
+}
+async function precosDaProcuraLevar(vinhoId){
+  const pp=_precosProcura;_precosProcura=null;
+  if(!pp||!vinhoId)return 0;
+  try{return Number(await sbRpc('precos_da_procura',{p_analise:pp,p_vinho:vinhoId}))||0;}catch(e){return 0;}
 }
 /* Irmã do `iaPedir`, para VÁRIOS vinhos de uma vez — manda `vinhos` em vez
    de `nome`/`ano`/etc., e a função do lado do servidor (`vinho-info.ts`)
@@ -8810,6 +8836,8 @@ function pqPorNoForm(P,fonte){
    abre o formulário inteiro, como era. */
 function pqPassarForm(rever){
   const P=PQ;if(!P||!P.novo)return;
+  // O preço das lojas abertas vai com o vinho quando ele for gravado.
+  if(P.res.ia&&P.res.ia._analise&&!(P.res.ia.precosGravados>0))_precosProcura=P.res.ia._analise;
   const escs=pqEscolhas(P);
   if(escs.length){
     const res={}, antes={};
@@ -13009,7 +13037,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='181';
+const APP_BUILD='182';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

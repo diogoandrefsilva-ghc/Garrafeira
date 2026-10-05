@@ -1105,7 +1105,7 @@ function metaDe(html: string, nome: string): string {
 /* O que a loja declara do produto (JSON-LD `Product`, dentro ou fora de um
    `@graph`). A classificação que lá vier é a dos CLIENTES DA LOJA, nunca a
    do Vivino — e diz-se isso ao modelo. */
-function produtoDaPagina(html: string): string {
+function produtoLd(html: string): any {
   const ld: any[] = [];
   const junta = (x: any) => {
     if (!x || typeof x !== "object") return;
@@ -1116,7 +1116,10 @@ function produtoDaPagina(html: string): string {
   for (const m of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
     try { junta(JSON.parse(m[1].trim())); } catch { /* um JSON-LD partido não deita a página abaixo */ }
   }
-  const p = ld.find((x) => /Product|Wine/i.test(String(x?.["@type"] ?? "")));
+  return ld.find((x) => /Product|Wine/i.test(String(x?.["@type"] ?? ""))) ?? null;
+}
+function produtoDaPagina(html: string): string {
+  const p = produtoLd(html);
   if (!p) return "";
   const um = (v: any) => (Array.isArray(v) ? v[0] : v);
   const t = (v: unknown, n: number) => texto(semTags(String(v ?? "")), n);
@@ -1144,6 +1147,70 @@ function produtoDaPagina(html: string): string {
   if (p.description) linhas.push(`descrição: ${t(p.description, 1500)}`);
   return linhas.join("\n");
 }
+/* O PREÇO DA LOJA (05/10/2026, o dono das apps: "estamos a guardar o
+   preço de referência mas não o preço obtido em cada um desses sites,
+   conforme fazemos no batch"). Uma página de uma das lojas que a app
+   conhece (`LOJAS` no app.js) declara o preço aos motores de busca — o
+   JSON-LD `offers` ou a etiqueta `product:price:amount` — e é esse que se
+   guarda, tal e qual, em `ficha.precos.<loja>` do catálogo
+   (`garrafeira.catalogo_precos_pagina`, migração 41), na forma do script
+   das lojas. Não é o `precoMedio` do Gemini: esse pode ser a média de duas
+   páginas, e aqui quer-se o que ESTA loja pede. A colheita é a do título
+   ou do endereço, quando lá houver um ano só. */
+type PrecoLoja = { loja: string; preco: number; nome: string; colheita: number | null };
+const LOJAS_PRECO: Record<string, string> = {
+  "garrafeiranacional.com": "garrafeira_nacional", "granvine.com": "granvine", "vinha.pt": "vinha",
+};
+function lojaDoSite(url: string): string {
+  const h = siteDe(url);
+  for (const [d, k] of Object.entries(LOJAS_PRECO)) if (h === d || h.endsWith("." + d)) return k;
+  return "";
+}
+function numeroPreco(v: unknown): number | null {
+  let s = String(v ?? "").replace(/[^\d.,]/g, "");
+  if (!s) return null;
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  const n = Number(s);
+  return isFinite(n) && n >= 0.5 && n <= 100_000 ? Math.round(n * 100) / 100 : null;
+}
+function anoUnico(s: string): number | null {
+  const max = new Date().getFullYear() + 1;
+  const anos = new Set<number>();
+  for (const m of (s || "").matchAll(/(?<!\d)(19[5-9]\d|20\d\d)(?!\d)/g)) {
+    const y = Number(m[1]);
+    if (y <= max) anos.add(y);
+  }
+  return anos.size === 1 ? [...anos][0] : null;
+}
+function precoDaLoja(html: string, url: string, titulo: string): PrecoLoja | null {
+  const loja = lojaDoSite(url);
+  if (!loja) return null;
+  const p = produtoLd(html);
+  const um = (v: any) => (Array.isArray(v) ? v[0] : v);
+  let preco: number | null = null;
+  let nome = "";
+  if (p) {
+    nome = texto(semTags(String(p.name ?? "")), 200);
+    const of = um(p.offers);
+    if (of && typeof of === "object") {
+      const ps = um(of.priceSpecification);
+      const moeda = String(of.priceCurrency ?? ps?.priceCurrency ?? "EUR").toUpperCase();
+      if (moeda === "EUR") preco = numeroPreco(of.price ?? ps?.price ?? of.lowPrice);
+    }
+  }
+  if (preco === null) {
+    const moeda = (metaDe(html, "product:price:currency") || "EUR").toUpperCase();
+    if (moeda === "EUR") preco = numeroPreco(metaDe(html, "product:price:amount") || metaDe(html, "price"));
+  }
+  if (preco === null) return null;
+  if (!nome) nome = metaDe(html, "og:title") || titulo;
+  let caminho = "";
+  try { caminho = decodeURIComponent(new URL(url).pathname); } catch { /* fica sem */ }
+  // O nome do produto primeiro: o título da Granvine traz também os anos
+  // dos prémios ("… 2019 | Melhor Vinho do Ano 2025 - Revista de Vinhos 2026").
+  return { loja, preco, nome: nome.slice(0, 200), colheita: anoUnico(nome) ?? anoUnico(caminho) };
+}
+
 /* O texto da zona principal (o `<main>`, se houver), sem menus, rodapé,
    scripts nem botões. As tabelas ficam "rótulo | valor" numa linha — é
    onde as lojas escrevem as castas, a região, o teor e o estágio. Em
@@ -1370,6 +1437,8 @@ type Pagina = {
   extra?: string; secao?: boolean; trechos?: number;
   // Um PDF ou uma imagem (ver "OS DOCUMENTOS"): vai em anexo ao Gemini.
   doc?: Documento;
+  // A página de uma LOJA (ver "O PREÇO DA LOJA"): o preço que ela declara.
+  loja?: PrecoLoja;
 };
 // `nome`: o do vinho que se procura — é por ele que se acham os trechos.
 async function abrirPagina(url0: string, dada: boolean, signal: AbortSignal, nome = ""): Promise<Pagina> {
@@ -1447,8 +1516,10 @@ async function abrirPagina(url0: string, dada: boolean, signal: AbortSignal, nom
       return { ...base(), estado: "vazia", http: r.status, titulo, motivo: "a página quase não tem texto (é montada em JavaScript?)" };
     }
     const extra = inteiro.length > PAGINA_MAX_TEXTO ? extraDaPagina(html, linhas, ancora, nome) : null;
+    const loja = precoDaLoja(html, url, titulo);
     return {
       ...base(), estado: "lida", http: r.status, titulo, texto: partes.join("\n\n"),
+      ...(loja ? { loja } : {}),
       ...(extra ? { extra: extra.texto, ...(extra.secao ? { secao: true } : {}), ...(extra.trechos ? { trechos: extra.trechos } : {}) } : {}),
     };
   } catch (e) {
@@ -1602,6 +1673,21 @@ function catalogoResponde(c: Conhecido, pedidos: string[]): Record<string, unkno
     out[k] = v;
   }
   return out;
+}
+
+/* O preço de cada loja para a linha do catálogo (`garrafeira.catalogo_precos_pagina`,
+   migração 41): quantas lojas ficaram. Sem a migração, 0 — nunca falha a procura. */
+async function precosPagina(nome: string, produtor: string, ano: number | null, cor: string,
+                            precos: Record<string, unknown>, signal: AbortSignal): Promise<number> {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/catalogo_precos_pagina`, {
+      method: "POST", signal,
+      headers: { apikey: SB_SRV, Authorization: "Bearer " + SB_SRV, "Content-Type": "application/json", "Content-Profile": "garrafeira" },
+      body: JSON.stringify({ p_nome: nome, p_produtor: produtor || "", p_ano: ano, p_cor: cor || null, p_precos: precos }),
+    });
+    if (!r.ok) return 0;
+    return Number(await r.json()) || 0;
+  } catch { return 0; }
 }
 
 /* Que sites deixam ler as páginas (`garrafeira.paginas_por_site`, migração
@@ -2244,6 +2330,25 @@ async function produzirFicha(
      corrigir — escreve-se. A cor que a carta disse vai com ele (é a chave do
      catálogo: sem ela, o branco ia parar à linha do tinto). */
   let catalogoAdiado = false;
+  /* O PREÇO DE CADA LOJA aberta (ver "O PREÇO DA LOJA"): de uma página que
+     quem procura deu (colada, ou escolhida na lista dos links) ou de uma
+     que a IA disse ter usado — é isso que diz que a página é deste vinho.
+     Uma por loja. Vai para o catálogo com o nome confirmado, como a ficha;
+     no vinho novo ("adiado") vai na resposta, e a app leva-o quando o vinho
+     for gravado (`garrafeira.precos_da_procura`). */
+  const usadas = new Set(Object.values(origemCampos).map((o) => o.url).filter(Boolean));
+  const precosLoja: Record<string, Record<string, unknown>> = {};
+  if (ficha) {
+    for (const p of abertas) {
+      if (p.estado !== "lida" || !p.loja || precosLoja[p.loja.loja]) continue;
+      if (!p.dada && !usadas.has(p.url)) continue;
+      precosLoja[p.loja.loja] = {
+        preco: p.loja.preco, url: p.url.split("#")[0], nome: p.loja.nome,
+        ...(p.loja.colheita ? { colheita: p.loja.colheita } : {}), em: new Date().toISOString().slice(0, 10),
+      };
+    }
+  }
+  let precosGravados = 0;
   if (ficha) {
     const nomeConfirmado = vinhoGravado || daCarta || !!conhecido?.exato ||
       (semAtalhos && !!(await catalogoProcurar(nome, produtor, ano, signal, tipo))?.exato);
@@ -2257,6 +2362,10 @@ async function produzirFicha(
         fontesIA, signal,
       );
     } else catalogoAdiado = true;
+    // Depois da `juntar`: a linha pode ter nascido nela.
+    if (nomeConfirmado && Object.keys(precosLoja).length) {
+      precosGravados = await precosPagina(nome, produtor, ano, tipo, precosLoja, signal);
+    }
   }
 
   /* O catálogo por baixo, a IA por cima: a IA só foi chamada pelo que
@@ -2289,6 +2398,7 @@ async function produzirFicha(
     // O vinho novo com um nome que o catálogo não conhece: vai quando for gravado.
     ...(catalogoAdiado ? { catalogo: "adiado" } : {}),
     ...(daCarta ? { da_carta: true } : {}),
+    ...(Object.keys(precosLoja).length ? { precos_loja: Object.keys(precosLoja), precos_gravados: precosGravados } : {}),
     ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}), ...(profunda ? { profunda: true } : {}),
     ...(serperConsultas ? { serper_consultas: serperConsultas, consultas: consultasFeitas } : {}),
     // O que se fez com os sites de confiança: sem isto não havia maneira de
@@ -2322,6 +2432,8 @@ async function produzirFicha(
       // De onde veio cada campo (a página, o resultado, ou o grounding) —
       // a app mostra-o ao lado de cada proposta.
       ...(Object.keys(origemCampos).length ? { origemCampos } : {}),
+      // O preço de cada loja aberta; `precosGravados` diz se já está no catálogo.
+      ...(Object.keys(precosLoja).length ? { precosLoja, precosGravados } : {}),
       modelo: usadoModelo,
       modo: usadoModo,
       custoEstimadoEur: custoEstimado,
