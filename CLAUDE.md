@@ -140,6 +140,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   Ferreirinha → Sogrape), no schema `winecatalog` (ver "O Backoffice").
   `migracao-rcv-casas.sql` é a 44: a Real Companhia Velha passa a grupo —
   as quintas dela e o Evel passam a produtores, e os vinhos com eles.
+  `migracao-produtores-juntar.sql` é a 45: "não são o mesmo" com a mesma
+  chave, e juntar um produtor a outro à mão.
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1408,6 +1410,19 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   às garrafeiras pela ligação, e as quatro estão nos `produtores_no_nome`
   (o nome do vinho fica "Quinta de Cidrô Arinto"). Na Sogrape: Casa
   Ferreirinha, Herdade do Peso e Quinta dos Carvalhais.
+- **Confirmado / por confirmar e juntar à mão** (migração 45,
+  `db/migracao-produtores-juntar.sql`, o dono: "não sei o que significa
+  solta ou oficial … como posso juntar dois produtores que possas não estar
+  a ver"). Na vista Todos as etiquetas dizem **confirmado** (tem nome
+  oficial) e **por confirmar** (escrito assim nalgum vinho, sem nome
+  oficial), com uma linha a explicá-las. O editor tem **Juntar a outro
+  produtor** (`boProdJuntarHTML` → `winecatalog.produtor_juntar(de, para)`):
+  as grafias do primeiro passam ao segundo pela `produtor_definir`, as casas
+  de que era casa-mãe também, e ele desaparece. **"Não são o mesmo" serve
+  também a grafias com a MESMA chave** ("Adega Monte Branco" e "Herdade do
+  Monte Branco" dão as duas `branco`): ficam em
+  `produtores_distintos_grafias` e deixam de ser sugeridas, mas a chave não
+  muda — se uma passar a oficial, a outra vai atrás, e o confirm di-lo.
 - **Ficou de fora** a password temporária (já está nas Definições da
   Garrafeira, para o dono da conta) e o que só corre no PC (o painel, o
   script do Vivino e das lojas).

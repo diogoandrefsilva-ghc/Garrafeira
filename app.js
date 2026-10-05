@@ -10405,7 +10405,9 @@ function boProdPintar(){
   if(_boProdVista==='todos'){
     box.innerHTML=seg+`<div class="prod-procura"><input type="search" id="bo-prod-q" placeholder="Procurar produtor ou grafia…" oninput="boProdTodosPintar()"
         autocomplete="off"><span class="prod-conta" id="bo-prod-conta"></span></div>
-      <p class="prod-dica">${nOf} com nome oficial · ${T.length-nOf} ${T.length-nOf===1?'grafia ainda solta':'grafias ainda soltas'}. Toca num para mudar o nome oficial, o nome completo ou a casa-mãe.</p>
+      <p class="prod-dica"><span class="prod-tag">confirmado</span> tem nome oficial: quem o escrever de outra maneira passa a esse nome.
+        <span class="prod-tag solta">por confirmar</span> está escrito assim nalgum vinho e ainda ninguém o confirmou.
+        Toca num para mudar o nome, a casa-mãe ou juntá-lo a outro.</p>
       <div id="bo-prod-todos" class="prod-todos"></div>`;
     return boProdTodosPintar();
   }
@@ -10415,7 +10417,7 @@ function boProdPintar(){
 }
 function boProdGrupoHTML(g,i){
   const oficial=(g.grafias.find(s=>s.oficial)||{}).oficial||'';
-  const dif=g.pares.filter(p=>!p.mesmaChave);
+  const dif=g.pares;
   const linhas=g.grafias.map((s,j)=>{const of=oficial?s.produtor===oficial:j===0;
     return `<div class="prod-gl${of?' of':''}">
       <label class="prod-gc"><input type="checkbox" class="prod-inc" data-p="${esc(s.produtor)}" checked onchange="boProdMarcas(${i})">
@@ -10465,7 +10467,7 @@ function boProdItemHTML(x,k){
     boProdN(x.cat,x.gar),x.grafias.length?`${x.grafias.length} grafia${x.grafias.length>1?'s':''}`:''].filter(Boolean).join(' · ');
   const cab=`<button type="button" class="prod-rh" onclick="boProdAbrir(${k})">
       <span class="prod-rt"><b>${esc(x.nome)}</b><small>${sub}</small></span>
-      ${x.casas.length?'<span class="prod-tag">grupo</span>':x.id?'<span class="prod-tag">oficial</span>':'<span class="prod-tag solta">solta</span>'}
+      ${x.casas.length?'<span class="prod-tag">grupo</span>':x.id?'<span class="prod-tag">confirmado</span>':'<span class="prod-tag solta">por confirmar</span>'}
       <span class="prod-chev">${ab?'▾':'›'}</span></button>`;
   if(!ab)return `<div class="prod-r">${cab}</div>`;
   const vars=x.variantes.filter(v=>!v.oficial);
@@ -10475,6 +10477,7 @@ function boProdItemHTML(x,k){
       <label>Nome completo<input type="text" id="bo-prod-compl" value="${esc(x.completo)}" maxlength="200" placeholder="ex.: Quinta Nova de Nossa Senhora do Carmo"></label>
       <p class="prod-ajuda">Opcional. Aparece por baixo do produtor, na ficha do vinho.</p>
       ${boProdMaeHTML(x)}
+      ${boProdJuntarHTML(x,k)}
       ${vars.length?`<div class="prod-vars"><span>Grafias que passam a este nome</span>
         ${vars.map(v=>`<span class="prod-var">${((v.escritos&&v.escritos.length)?v.escritos:[v.escrito]).map(esc).join(' = ')}
           <a href="#" title="Deixar de trocar esta grafia (o que já foi corrigido fica)" onclick="boProdTirar('${escJs(v.chave)}');return false">✕</a></span>`).join('')}</div>`:''}
@@ -10510,6 +10513,32 @@ function boProdMaeHTML(x){
 async function boCasasRecarregar(){
   try{const m=await sbReq('POST','rpc/produtores_casas',{},{'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
     CASA_MAE=(m&&typeof m==='object')?m:{};renderLista();}catch(e){}
+}
+/* JUNTAR À MÃO (migração 45): para os pares que as sugestões não apanham
+   ("Vallado" e "Quinta do Vallado" apanham-se; "Symington" e "Quinta do
+   Vesúvio", não). O que se escolhe aqui DESAPARECE: as grafias dele passam
+   a ser do outro, e os vinhos com elas ficam com o nome do outro. */
+function boProdJuntarHTML(x,k){
+  const outros=_boProd.todos.map((o,j)=>({o,j})).filter(({j})=>j!==k);
+  const op=({o,j})=>`<option value="${j}">${esc(o.nome)}${o.mae?` (${esc(o.mae)})`:''}</option>`;
+  return `<label>Juntar a outro produtor<select id="bo-prod-juntar">
+        <option value="">— é um produtor à parte —</option>
+        <optgroup label="Confirmados">${outros.filter(({o})=>o.id).map(op).join('')}</optgroup>
+        <optgroup label="Por confirmar">${outros.filter(({o})=>!o.id).map(op).join('')}</optgroup>
+      </select></label>
+      <p class="prod-ajuda">Se este é o mesmo produtor que outro escrito de outra maneira, escolhe-o aqui e carrega em
+        <b>Juntar</b>: “${esc(x.nome)}” desaparece e os vinhos dele passam ao nome do outro.</p>
+      <div class="prod-juntar"><button class="btn ghost" onclick="boProdJuntarA(${k})">Juntar</button></div>`;
+}
+async function boProdJuntarA(k){
+  const x=_boProd.todos[k],sel=document.getElementById('bo-prod-juntar');
+  const y=sel&&sel.value!==''?_boProd.todos[Number(sel.value)]:null;
+  if(!y)return toast('Escolhe primeiro o produtor a que o queres juntar.',1);
+  if(!confirm(`Juntar “${x.nome}” a “${y.nome}”?\n\n“${x.nome}” deixa de existir: as grafias dele passam a “${y.nome}”, e os ${x.cat+x.gar} vinho(s) no catálogo e nas garrafeiras ficam com esse nome.`))return;
+  try{
+    boProdResultado(await boRpc('produtor_juntar',{p_de:x.nome,p_para:y.nome}));
+    _boProdAberto=null;await boProdCarregar();boCatMudou();boCasasRecarregar();
+  }catch(e){toast('Erro: '+e.message,1);}
 }
 async function boProdCriar(){
   const nome=((document.getElementById('bo-prod-q')||{}).value||'').trim();if(!nome)return;
@@ -10555,7 +10584,11 @@ async function boProdJuntar(i){
 }
 async function boProdDiferentes(i,k){
   const p=_boProd.grupos[i].pares[k];
-  if(!confirm(`“${p.a.produtor}” e “${p.b.produtor}” são produtores diferentes? O par não volta a ser sugerido.`))return;
+  // Com a mesma chave ("Adega Monte Branco" e "Herdade do Monte Branco" dão
+  // as duas "branco"), o par deixa de ser sugerido mas a chave não muda: se
+  // um passar a nome oficial, o outro vai atrás (migração 45).
+  const aviso=p.mesmaChave?`\n\nAtenção: a app lê os dois nomes da mesma maneira. Se um deles passar a nome oficial, o outro passa também — por isso deixa-os como estão.`:'';
+  if(!confirm(`“${p.a.produtor}” e “${p.b.produtor}” são produtores diferentes? O par não volta a ser sugerido.${aviso}`))return;
   try{await boRpc('produtores_diferentes',{p_a:p.a.produtor,p_b:p.b.produtor});boProdCarregar();}
   catch(e){toast('Erro: '+e.message,1);}
 }
@@ -13286,7 +13319,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='186';
+const APP_BUILD='187';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

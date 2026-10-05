@@ -2543,3 +2543,6 @@ body:not(.adm-cat) .itabs .it-backoffice{display:none!important}
 .prod-novo{display:block;width:100%;text-align:left;padding:11px 12px;border:none;border-top:1px dashed var(--bo2);background:#fcfaf7;
   font-family:inherit;font-size:13px;font-weight:600;color:var(--vh);cursor:pointer}
 .prod-novo:hover{background:var(--vhp)}
+.prod-dica .prod-tag{vertical-align:1px}
+.prod-juntar{margin:2px 0 4px}
+.prod-juntar .btn{margin-top:0;padding:7px 14px}
