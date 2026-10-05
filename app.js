@@ -297,6 +297,7 @@ async function carregar(){
     sbReq('POST','rpc/sou_admin',{},wc).catch(()=>false)
   ]);
   EU.curador=cur===true;EU.admin_catalogo=admCat===true;
+  boSincronizar();
 
   GA_LISTA=gars||[];
   // Quem pode editar e ainda não tem garrafeira nenhuma ganha a dele aqui —
@@ -2445,7 +2446,7 @@ async function wsAbrirHist(id){
 
 /* ── NAVEGAÇÃO ─────────────────────────────────────────────────────── */
 let tabAtiva='garrafeira';
-const ORDEM_TABS=['garrafeira','detalhe','locais','consumidos','desejos','sugestoes','cfg'];
+const ORDEM_TABS=['garrafeira','detalhe','locais','consumidos','desejos','sugestoes','backoffice','cfg'];
 function tab(nome,btn){
   tabAtiva=nome;
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));
@@ -2461,14 +2462,15 @@ function tab(nome,btn){
   if(nome==='consumidos')renderConsumidos();
   if(nome==='desejos')renderDesejos();
   if(nome==='sugestoes')wsAbrir();
+  if(nome==='backoffice')boAbrir();
   if(nome==='cfg')renderCfg();
   fabSincronizar();
   window.scrollTo({top:0,behavior:'instant'});
 }
 function restaurarTab(){
   let t=null;try{t=localStorage.getItem('gf_tab');}catch(e){}
-  // As Sugestões são do catálogo, e a app abre sempre na garrafeira.
-  if(!t||t==='garrafeira'||t==='sugestoes')return;
+  // As Sugestões e o Backoffice são do catálogo, e a app abre sempre na garrafeira.
+  if(!t||t==='garrafeira'||t==='sugestoes'||t==='backoffice')return;
   if(t==='desejos'&&!TEM_DESEJO)return;   // a migração 15 ainda não correu
   if(t==='locais'&&!temLocaisDesenhados())return;
   if(t==='consumidos'&&!temConsumidos())return;
@@ -9676,6 +9678,1439 @@ function loteAoFecharModalIA(){
   toast(feitos>=total?'Atualização massiva concluída ✓':`Atualização massiva parada — ${feitos} de ${total} vistos`);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   BACKOFFICE DO CATÁLOGO (05/10/2026, o dono das apps: "enriquecer a
+   Garrafeira com as features que neste momento temos apenas na WineCatalog,
+   nomeadamente os separadores Duplicados, Alertas e Definições … um único
+   menu na Garrafeira (na visão de Catálogo), um novo separador de
+   Backoffice … uma primeira página que depois encaminharia para uma outra
+   página de gestão individual de cada um destes temas").
+
+   É o back-office da WineCatalog trazido para cá, TAL E QUAL: as mesmas
+   funções do schema `winecatalog` (com o `sou_admin()` à porta de cada
+   uma), os mesmos ecrãs, as mesmas regras — "a semelhança sugere, nunca
+   decide", o "não são" gravado, fundir reversível, um filtro esconde e não
+   desmarca, só o marcado E à vista se grava. As regras vivem no SQL; aqui
+   só há ecrã. A fonte é o `app.js` da WineCatalog (secções DUPLICADOS,
+   PRODUTORES OFICIAIS, NOMES DOS VINHOS, ALERTAS, COMENTÁRIOS, LINKS DO
+   VIVINO, AS GARRAFEIRAS × O CATÁLOGO, HISTÓRICO, UTILIZADORES, O CATÁLOGO
+   EM NÚMEROS) — mexer numa é mexer na outra, até a WineCatalog se apagar.
+
+   - Só o ADMIN DO CATÁLOGO o vê (`EU.admin_catalogo`, `body.adm-cat`), e
+     só no modo Catálogo (`.so-cat`). Quem manda é a BD: esconder o botão
+     não é proteção nenhuma.
+   - UM separador, duas camadas: o HUB (`BO_PAGINAS`, uma pastilha por tema,
+     com o número do que está à espera de uma decisão) e a PÁGINA de cada
+     tema, com ‹ Backoffice para voltar. Não há passo na história do
+     browser: é como o painel do Resumo, que se abre e fecha no sítio.
+   - Os nomes levam `bo`/`BO_` à frente e os ids `bo-`: nada disto pode
+     pisar o resto da app (há `adm-*` e `wc*` cá dentro), e o CSS vive
+     debaixo de `#s-backoffice`.
+   - "Abrir a ficha" abre a PÁGINA do vinho do Catálogo (`verVinho(-id)`),
+     a mesma do Detalhe — com o Editar e o Procurar de quem corrige o
+     catálogo. Uma linha fundida já não está no Catálogo da app.
+   - O que se grava aqui muda o Catálogo: relê-se em fundo (`boCatMudou`).
+   ══════════════════════════════════════════════════════════════════════ */
+const BO_WC={'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'};
+async function boRpc(fn,args){
+  try{return await sbReq('POST','rpc/'+fn,args||{},BO_WC);}
+  catch(e){
+    const m=String(e&&e.message||e);
+    // A migração por correr é o erro mais provável no primeiro dia, e o
+    // "schema cache" não o diz a ninguém.
+    if(/does not exist|schema cache/i.test(m))throw new Error('Falta uma função do catálogo no Supabase ('+fn+') — ver o db/README.md da WineCatalog.');
+    throw e;
+  }
+}
+function boCatMudou(){
+  CAT_VINHOS=null;
+  catCarregar().then(()=>{renderLista();refrescarVinhoAberto();}).catch(()=>{});
+}
+function boVerFicha(id){
+  id=Number(id);if(!id)return;
+  const achar=()=>IDXV[-id]?-id:(Object.values(IDXV).find(v=>v.id<0&&(v.cat_ids||[]).includes(id))||{}).id;
+  if(achar()){verVinho(achar());return;}
+  // O Catálogo da app pode estar atrás (uma linha criada há pouco): relê-se
+  // uma vez antes de desistir.
+  CAT_VINHOS=null;
+  catCarregar().then(()=>{
+    if(achar())verVinho(achar());
+    else toast('Esta linha já não está no Catálogo (foi fundida noutra?)',1);
+  }).catch(()=>toast('Não foi possível ler o Catálogo',1));
+}
+
+/* ── FORMATAÇÃO ── */
+function boN(n){
+  if(n==null||n==='')return '—';
+  const x=Number(n);
+  return isFinite(x)?x.toLocaleString('pt-PT'):'—';
+}
+function boEur(n){
+  const x=Number(n||0);
+  return (isFinite(x)?x:0).toLocaleString('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
+}
+function boData(s){
+  if(!s)return '—';
+  const d=new Date(s);
+  return isNaN(d)?'—':d.toLocaleDateString('pt-PT',{day:'2-digit',month:'short',year:'numeric'});
+}
+const boSemAc=t=>String(t==null?'':t).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+const boPalavras=id=>boSemAc((document.getElementById(id)||{}).value).split(/\s+/).filter(Boolean);
+
+/* ── DE ONDE VEIO CADA CAMPO (o `WC_ORIGENS` da WineCatalog) ──
+   A força entra na legenda: `garrafeira` aparece a 3 e a 2, e são coisas
+   diferentes (o rótulo na mão × a nota e o preço copiados de um site). Uma
+   origem que não esteja aqui mostra-se crua — melhor do que inventar. */
+const BO_ORIGENS={
+  'garrafeira':{txt:'garrafeira (garrafa na mão)',cls:'og-forte'},
+  'garrafeira-bruto':{txt:'garrafeira (escrito à pressa)',cls:'og-fraca'},
+  'garrafeira-desejo':{txt:'wishlist de uma garrafeira',cls:'og-fraca'},
+  'prenda':{txt:'prenda de anos (AnniversaryGifts)',cls:'og-fraca'},
+  'ws-verificacao':{txt:'verificação com pesquisa Google',cls:'og-forte'},
+  'ws-sugestao':{txt:'sugestão da carta (com pesquisa)',cls:'og-media'},
+  'vinho-info-premium':{txt:'procura da Garrafeira (grounding)',cls:'og-media'},
+  'vinho-info-gratis':{txt:'procura da Garrafeira (pesquisa + extração)',cls:'og-media'},
+  'catalogo-admin':{txt:'correção à mão (admin)',cls:'og-forte'},
+  'catalogo-curador':{txt:'correção de um curador',cls:'og-forte'},
+  'catalogo-pesquisa':{txt:'pesquisa do catálogo',cls:'og-forte'},
+  'vivino-pagina':{txt:'página do Vivino (script)',cls:'og-forte'},
+  'vivino-serper':{txt:'Google → Vivino (script Serper)',cls:'og-media'},
+  'loja-garrafeira-nacional':{txt:'Garrafeira Nacional (loja)',cls:'og-forte'},
+  'loja-granvine':{txt:'Granvine (loja)',cls:'og-forte'},
+  'loja-vinha':{txt:'Vinha.pt (loja)',cls:'og-forte'},
+  'lojas-script':{txt:'lojas e Vivino (script)',cls:'og-forte'},
+  'reposto':{txt:'reposto à mão (origem perdida)',cls:'og-fraca'}
+};
+function boOrigemTxt(o,f){
+  if(o==='garrafeira'&&Number(f)===2)return 'garrafeira (nota/preço copiados)';
+  const d=BO_ORIGENS[o];
+  return d?d.txt:(o||'(sem origem)');
+}
+function boOrigemCls(o,f){
+  if(o==='garrafeira'&&Number(f)===2)return 'og-media';
+  const d=BO_ORIGENS[o];
+  if(d)return d.cls;
+  return Number(f)>=3?'og-forte':(Number(f)>=2?'og-media':'og-fraca');
+}
+
+/* Os campos da ficha do catálogo por nome legível, pela ordem da ficha (o
+   `WC_CAMPOS`/`WC_FICHA` da WineCatalog). Um campo que não esteja aqui
+   aparece com a chave crua. */
+const BO_CAMPOS=[
+  ['tipo','Tipo'],['estilo','Estilo'],['mencao','Menção'],
+  ['classificacao','Classificação'],['castas','Castas'],
+  ['regiao','Região'],['sub_regiao','Sub-região'],['pais','País'],
+  ['teor','Teor alcoólico'],['estagio_meses','Estágio (meses)'],
+  ['estagio_texto','Estágio'],
+  ['vivino_nota','Nota Vivino (colheita)'],['vivino_avaliacoes','Avaliações Vivino (colheita)'],
+  ['vivino_url','Vivino'],['preco_medio','Preço de referência'],
+  ['beber_de','Beber de'],['beber_ate','Beber até'],
+  ['notas_prova','Notas de prova'],['harmonizacao','Harmonização'],
+  ['ai_resumo','Resumo'],['imagem_url','Imagem']
+];
+const BO_ROTULOS_EXTRA={precos:'Preços nas lojas',
+  vivino_nota_global:'Nota Vivino (todas as colheitas)',
+  vivino_avaliacoes_global:'Avaliações Vivino (todas as colheitas)'};
+const BO_FICHA=BO_CAMPOS.flatMap(c=>c[0]==='vivino_avaliacoes'
+  ?[c,['vivino_nota_global',BO_ROTULOS_EXTRA.vivino_nota_global],['vivino_avaliacoes_global',BO_ROTULOS_EXTRA.vivino_avaliacoes_global]]:[c]);
+const BO_CAMPO_NOME=Object.assign({nome:'Nome',produtor:'Produtor',ano:'Colheita',_criado:'Criado'},
+  Object.fromEntries(BO_CAMPOS),BO_ROTULOS_EXTRA);
+const BO_PRECO_PRIORIDADE=['garrafeira_nacional','granvine','vinha','vivino'];
+const BO_LOJAS_NOMES={garrafeira_nacional:'Garrafeira Nacional',granvine:'Granvine',vinha:'Vinha.pt',vivino:'Vivino'};
+
+/* A nota de uma linha da lista (`resumo_linha` do catálogo): a mesma regra
+   do `notaVivino` (a da colheita com 100 avaliações; senão a que tem mais). */
+function boNotaLinhaHTML(v){
+  const n=x=>{if(x==null||x==='')return null;const y=Number(x);return isFinite(y)?y:null;};
+  const c=n(v.nota)!=null?{nota:n(v.nota),aval:n(v.aval),de:'colheita'}:null;
+  const g=n(v.notaGlobal)!=null?{nota:n(v.notaGlobal),aval:n(v.avalGlobal),de:'global'}:null;
+  const nv=(!c||!g)?(c||g):((c.aval||0)>=VIVINO_MIN_AVAL||(c.aval||0)>(g.aval||0)?c:g);
+  if(!nv)return '';
+  return `<span class="bo-nota" title="${esc(nv.de==='global'?'Nota do Vivino de todas as colheitas':'Nota do Vivino da colheita')}${nv.aval!=null?' · '+esc(boN(nv.aval))+' avaliações':''}">★ ${esc(String(nv.nota))}</span>`;
+}
+
+function boValorHTML(k,v){
+  if(v==null)return '—';
+  if(k==='precos'&&typeof v==='object'&&!Array.isArray(v)){
+    return BO_PRECO_PRIORIDADE.filter(l=>v[l]&&v[l].preco!=null).map(l=>{
+      const x=v[l];
+      const t=`${esc(BO_LOJAS_NOMES[l]||l)} ${esc(boEur(x.preco))}${x.colheita?` (colheita ${esc(String(x.colheita))})`:''}`;
+      const a=x.url?`<a href="${esc(x.url)}" target="_blank" rel="noopener">${t}</a>`:t;
+      return (x.retirado?`<s>${a}</s> <span class="note">· retirado à mão</span>`:a)+
+        (x.em&&!x.retirado?` <span class="note">· ${esc(x.em)}</span>`:'');
+    }).join('<br>')||'—';
+  }
+  if(Array.isArray(v))return esc(v.join(', '));
+  if(typeof v==='object')return esc(JSON.stringify(v));
+  const s=String(v);
+  if(/^https?:\/\//i.test(s))
+    return `<a href="${esc(s)}" target="_blank" rel="noopener">${esc(s.replace(/^https?:\/\/(www\.)?/,'').slice(0,42))}…</a>`;
+  if(k==='preco_medio')return esc(boEur(v));
+  if(k==='teor')return esc(s)+' %';
+  return esc(s);
+}
+/* As linhas "o que está → o que fica" (o `wcRv*` da WineCatalog). Os links
+   vão INTEIROS: é o fim deles que distingue dois, e decide-se abrindo-os. */
+function boRvVazio(v){return v==null||v===''||(Array.isArray(v)&&!v.length);}
+function boRvNome(k){
+  if(k==='produtor')return 'Produtor';
+  if(k==='vivino_url')return 'Link do Vivino';
+  const c=BO_FICHA.find(([x])=>x===k);
+  return c?c[1]:k;
+}
+function boRvValorHTML(k,v){
+  if(boRvVazio(v))return '<em class="rv-vazio">vazio</em>';
+  if(Array.isArray(v))return esc(v.join(', '));
+  if(typeof v==='object')return esc(JSON.stringify(v));
+  const s=String(v);
+  if(/^https?:\/\/\S+$/i.test(s)){
+    const img=k==='imagem_url'?`<img class="rv-img" src="${esc(s)}" alt="" onerror="this.remove()">`:'';
+    return img+`<a class="bo-lnk" href="${esc(s)}" target="_blank" rel="noopener">${esc(s)}<span>↗</span></a>`;
+  }
+  if(k==='preco_medio')return esc(boEur(v));
+  if(k==='teor')return esc(s)+' %';
+  return esc(s);
+}
+function boRvOrdem(k){
+  if(k==='produtor')return -1;
+  const i=BO_FICHA.findIndex(([c])=>c===k);
+  return i<0?999:i;
+}
+const boCaixa=(t,cls)=>`<div class="fcard"><p class="note${cls?' '+cls:''}">${t}</p></div>`;
+const boErro=e=>boCaixa(esc(e&&e.message||e),'bo-erro');
+
+/* ── O HUB E AS PÁGINAS ──────────────────────────────────────────────── */
+/* Uma pastilha por tema, arrumadas em quatro grupos. `n` é a chave do
+   número à espera de decisão (`BO_CONTA`), `abrir` o que corre ao entrar. */
+const BO_PAGINAS=[
+  {grupo:'Arrumar o catálogo'},
+  {id:'duplicados',ic:'🧬',t:'Duplicados',d:'Pares parecidos: fundir ou marcar que não são',abrir:()=>boDupCarregar()},
+  {id:'produtores',ic:'🏷️',t:'Produtores',d:'Nome oficial e as grafias que são ele',abrir:()=>boProdCarregar()},
+  {id:'nomes',ic:'✍️',t:'Nomes dos vinhos',d:'Sem produtor, cor nem colheita no nome',abrir:()=>{}},
+  {grupo:'O que chega das garrafeiras'},
+  {id:'alertas',ic:'⚠️',t:'Alertas',d:'Um campo que não bate certo com o catálogo',n:'rep',abrir:()=>boRepCarregar('aberto')},
+  {id:'comentarios',ic:'💬',t:'Comentários sobre vinhos',d:'“Algo não está bem?” na página do vinho',n:'vinho',abrir:()=>boComentarios('vinho','aberto')},
+  {id:'sugestoes',ic:'💡',t:'Sugestões de melhoria',d:'Ideias e coisas que não funcionam',n:'sugestao',abrir:()=>boComentarios('sugestao','aberto')},
+  {grupo:'O Vivino e as garrafeiras'},
+  {id:'vivino',ic:'🍇',t:'Links do Vivino por validar',d:'O que o script propõe e pede uma decisão',n:'viv',abrir:()=>boVivLista('pendente')},
+  {id:'glinks',ic:'🔗',t:'Links do Vivino nas garrafeiras',d:'Os links das garrafeiras × os do catálogo',abrir:()=>{}},
+  {id:'fichas',ic:'🗂️',t:'Fichas das garrafeiras',d:'O resto da ficha × o catálogo',abrir:()=>{}},
+  {grupo:'Registo e definições'},
+  {id:'historico',ic:'🕘',t:'Alterações ao catálogo',d:'Campo a campo, com “Repor”',abrir:()=>boHistorico()},
+  {id:'numeros',ic:'📊',t:'O catálogo em números',d:'Tamanho e de onde veio cada campo',abrir:()=>boNumeros()},
+  {id:'acesso',ic:'👥',t:'Quem entra na WineCatalog',d:'Pedidos de acesso e quem manda no catálogo',abrir:()=>boAcesso()},
+  {id:'vivcfg',ic:'⚙️',t:'O script do Vivino',d:'Quantos vinhos de cada vez',abrir:()=>boVivConfig()}
+];
+let BO_PAG=null;
+const BO_CONTA={rep:0,viv:0,vinho:0,sugestao:0};
+
+function boAbrir(){
+  if(!EU.admin_catalogo){
+    document.getElementById('bo-corpo').innerHTML=boCaixa('Só o admin do catálogo vê o Backoffice.');
+    return;
+  }
+  if(BO_PAG)boPagina(BO_PAG,true);else boHub();
+  boContar();
+}
+function boHub(){
+  BO_PAG=null;
+  const el=document.getElementById('bo-corpo');
+  if(!el)return;
+  el.innerHTML=`<div class="bo-intro note">O back-office do Catálogo — o que vivia na WineCatalog. Só o admin do catálogo o vê.</div>`+
+    BO_PAGINAS.map(p=>p.grupo?`<div class="bo-grupo">${esc(p.grupo)}</div>`
+      :`<button type="button" class="bo-tile" onclick="boPagina('${p.id}')">
+        <span class="bo-ic" aria-hidden="true">${p.ic}</span>
+        <span class="bo-tt"><b>${esc(p.t)}</b><small>${esc(p.d)}</small></span>
+        ${p.n?`<span class="bo-badge${BO_CONTA[p.n]?' on':''}" data-n="${p.n}">${BO_CONTA[p.n]||''}</span>`:''}
+        <span class="bo-chev" aria-hidden="true">›</span>
+      </button>`).join('');
+  window.scrollTo({top:0,behavior:'instant'});
+}
+function boPagina(id,refrescar){
+  const p=BO_PAGINAS.find(x=>x.id===id);if(!p)return;
+  BO_PAG=id;
+  const el=document.getElementById('bo-corpo');
+  el.innerHTML=`<div class="bo-barra">
+      <button type="button" class="bo-volta" onclick="boHub()">‹ Backoffice</button>
+      <span class="bo-titulo">${p.ic} ${esc(p.t)}</span>
+    </div>`+(BO_TPL[id]?BO_TPL[id]():'');
+  if(!refrescar)window.scrollTo({top:0,behavior:'instant'});
+  p.abrir();
+}
+/* O que está à espera de uma decisão do admin: os alertas, os links do
+   Vivino por validar e os comentários e sugestões por tratar (a vez dele —
+   os que esperam por quem escreveu não contam). No separador vai a soma. */
+async function boContar(){
+  if(!EU.admin_catalogo)return;
+  const [n1,n2,c]=await Promise.all([
+    boRpc('contar_reportes',{}).catch(()=>0),
+    boRpc('vivino_contar',{}).catch(()=>0),
+    boRpc('contar_comentarios',{}).catch(()=>null)]);
+  BO_CONTA.rep=Number(n1||0);BO_CONTA.viv=Number(n2||0);
+  BO_CONTA.vinho=Number((c&&c.vinho)||0);BO_CONTA.sugestao=Number((c&&c.sugestao)||0);
+  boPintarContas();
+}
+function boPintarContas(){
+  const tot=Object.values(BO_CONTA).reduce((a,b)=>a+b,0);
+  const t=document.getElementById('bo-n');
+  if(t){t.textContent=tot?String(tot):'';t.classList.toggle('on',tot>0);}
+  document.querySelectorAll('#s-backoffice .bo-badge').forEach(b=>{
+    const n=BO_CONTA[b.dataset.n]||0;b.textContent=n?String(n):'';b.classList.toggle('on',n>0);});
+}
+
+/* O cabeçalho de cada página: os cartões da WineCatalog, com as classes
+   daqui. Vazios no HTML — quem os enche é o `abrir` da página. */
+const BO_TPL={
+  duplicados:()=>`<div class="fcard">
+      <p class="note">Pares parecidos o suficiente para valer a pena olhar — <b>a semelhança sugere, nunca decide</b>.
+        Já apanhou um <em>Vallado</em> com um <em>Esporão</em> por partilharem o nome de uma casta.
+        Colheitas diferentes nunca aparecem aqui: essas nunca se fundem.</p>
+      <div class="bo-acoes"><button class="btn ghost" onclick="boDupCarregar()">🔄 Rever</button>
+        <button class="btn ghost" onclick="boVerDistintos()">Ver os “não são” gravados</button></div>
+    </div><div id="bo-dup-lista"></div>`,
+  produtores:()=>`<div class="fcard">
+      <p class="note">O mesmo produtor escrito de várias maneiras (“Ramos Pinto” e “Adriano Ramos Pinto”).
+        Escolhe o <b>nome oficial</b> e as grafias que são ele: passam a ser esse nome <b>no catálogo e em todas
+        as garrafeiras</b>, agora e em qualquer escrita futura. Parecido não quer dizer igual (“Quinta Nova” não é
+        “Herdade da Malhadinha Nova”) — o que não for, marca “não são o mesmo”, e o par não volta.</p>
+      <div id="bo-prod-lista"></div>
+    </div>`,
+  nomes:()=>`<div class="fcard bo-arr">
+      <p class="note">O nome é o que distingue o vinho: o <b>produtor</b>, a <b>cor</b> e a <b>colheita</b> são campos à parte.
+        A regra tira-os do nome — o produtor só da frente, e só se o que sobra se aguentar sozinho (“Cartuxa Colheita”
+        fica: chama-se pelo produtor) — no catálogo e em todas as garrafeiras. Os vinhos novos já passam por ela
+        sozinhos; esta lista é a dos que já cá estavam.</p>
+      <p class="note">Quando o nome que sobra fica vago (“1836 Grande Reserva”), desmarca-o e carrega em
+        <b>Manter o produtor no nome</b>: nos vinhos desse produtor, o produtor nunca mais sai da frente.
+        Os avisos decidem-se à mão, no Editar.</p>
+      <div class="bo-acoes"><button class="btn ghost" onclick="boNomesCarregar()">Ver o que muda</button></div>
+      <div id="bo-nomes-ctl" style="display:none">
+        <input type="text" id="bo-nomes-q" placeholder="procurar nome, produtor, garrafeira…" oninput="boNomesPintar()">
+        <div class="bo-filtros">
+          <select id="bo-nomes-onde" onchange="boNomesPintar()">
+            <option value="">todos</option><option value="catalogo">só o catálogo</option><option value="garrafeira">só as garrafeiras</option>
+          </select>
+          <select id="bo-nomes-mud" onchange="boNomesPintar()">
+            <option value="">qualquer mudança</option><option value="ano">sai a colheita</option>
+            <option value="produtor">sai o produtor</option><option value="produtor_entra">entra o produtor</option>
+            <option value="cor">sai a cor</option><option value="avisos">só os com avisos</option>
+          </select>
+        </div>
+        <label class="bo-chk"><input type="checkbox" id="bo-nomes-so" checked onchange="boNomesPintar()"> só os que mudam agora</label>
+        <p class="note" id="bo-nomes-n"></p>
+        <div class="bo-acoes"><button class="btn ghost" onclick="boNomesMarcar(true)">Marcar os que se veem</button>
+          <button class="btn ghost" onclick="boNomesMarcar(false)">Desmarcar os que se veem</button></div>
+      </div>
+      <div id="bo-nomes-lista"></div>
+      <div class="bo-acoes" id="bo-nomes-acoes" style="display:none">
+        <button class="btn prim" id="bo-btn-nomes" onclick="boNomesAplicar()" disabled>Aplicar os marcados</button>
+        <button class="btn ghost" id="bo-btn-nomes-manter" onclick="boNomesManter()" disabled
+          title="Os produtores dos desmarcados que se veem e a quem a regra tirava o produtor da frente">Manter o produtor no nome</button>
+      </div>
+      <details class="bo-det" ontoggle="if(this.open)boNomesManterListar()">
+        <summary>Produtores que ficam no nome</summary>
+        <div id="bo-nomes-manter"></div>
+      </details>
+    </div>`,
+  alertas:()=>`<div class="fcard">
+      <p class="note">Quem vê um número errado na sua garrafeira pode avisar — <b>corrigir só do lado dele deixava o erro
+        cá</b>. Cada alerta guarda os <b>dois valores</b> como estavam quando foi feito, e mostra ao lado o que está lá
+        <em>agora</em>.</p>
+      <div class="bo-acoes"><button class="btn ghost" onclick="boRepCarregar('aberto')">Por tratar</button>
+        <button class="btn ghost" onclick="boRepCarregar('todos')">Todos</button></div>
+    </div><div id="bo-rep-lista"></div>`,
+  comentarios:()=>`<div class="fcard">
+      <p class="note">Quem tem o vinho diz o que não está bem — <b>atributos errados</b>, um <b>site de onde atualizar</b>
+        a ficha, ou outro problema. Corrige-se no catálogo, e daí chega às garrafeiras. A resposta que escreveres ao
+        fechar é o que a pessoa lê, nas Definições dela.</p>
+      <div class="bo-acoes"><button class="btn ghost" onclick="boComentarios('vinho','aberto')">Por tratar</button>
+        <button class="btn ghost" onclick="boComentarios('vinho','todos')">Todos</button></div>
+    </div><div id="bo-com-vinho-lista"></div>`,
+  sugestoes:()=>`<div class="fcard">
+      <p class="note">Ideias para a app e coisas que não funcionam, escritas em Definições › Sugestões e comentários.</p>
+      <div class="bo-acoes"><button class="btn ghost" onclick="boComentarios('sugestao','aberto')">Por tratar</button>
+        <button class="btn ghost" onclick="boComentarios('sugestao','todos')">Todas</button></div>
+    </div><div id="bo-com-sugestao-lista"></div>`,
+  vivino:()=>`<div class="fcard">
+      <p class="note">Um script confere o link de cada vinho — <b>sem IA</b> — pelo Google (no GitHub) ou abrindo a
+        página do Vivino (no computador do admin), e <b>escreve no catálogo</b> o link, a nota e as avaliações que
+        encontra (vê em “Alterações ao catálogo”, e repõe o que quiseres). Aqui ficam só os casos que pedem uma
+        decisão: um link que não abre, ou que abre outro vinho.</p>
+      <div class="bo-acoes"><button class="btn ghost" onclick="boVivLista('pendente')">Por validar</button>
+        <button class="btn ghost" onclick="boVivLista('todos')">Histórico</button></div>
+    </div><div id="bo-viv-lista"></div>`,
+  glinks:()=>`<div class="fcard bo-arr">
+      <p class="note">Compara o link de cada vinho das garrafeiras com o do catálogo. Só propõe trocar quando o da
+        garrafeira <b>não tem o número do vinho</b> (<code>/wines/nº</code>, <code>/Wines/nome</code>…), <b>abre outro
+        vinho</b> ou está vazio — e só se o link do catálogo estiver confirmado. Um link para uma colheita do mesmo
+        vinho fica como a pessoa o pôs.</p>
+      <div class="bo-acoes"><button class="btn ghost" onclick="boGlComparar()">Comparar</button>
+        <span class="note" id="bo-gl-n"></span></div>
+      <div id="bo-gl-lista"></div>
+    </div>`,
+  fichas:()=>`<div class="fcard bo-arr">
+      <p class="note">O resto da ficha (nota, avaliações, preço, castas, teor, estágio, janela, notas de prova,
+        harmonização…), <b>só da mesma colheita</b>. Propõe o que está <b>vazio</b> na garrafeira e o catálogo tem, e o
+        que é <b>diferente</b> quando o do catálogo é <b>mais recente</b> do que a última vez que o dono gravou o vinho.
+        Nunca a cor, nunca a fotografia da pessoa; as notas pessoais nem vão ao catálogo.</p>
+      <div class="bo-acoes"><button class="btn ghost" onclick="boFichComparar()">Comparar</button>
+        <span class="note" id="bo-fich-n"></span></div>
+      <div id="bo-fich-ctl" style="display:none">
+        <input type="text" id="bo-fich-q" placeholder="procurar vinho, garrafeira, dono…" oninput="boFichPintar()">
+        <div class="bo-filtros">
+          <select id="bo-fich-campo" onchange="boFichPintar()"></select>
+          <select id="bo-fich-caso" onchange="boFichPintar()">
+            <option value="">todos os casos</option><option value="vazio">vazios na garrafeira</option>
+            <option value="mais_recente">mais recentes no catálogo</option>
+          </select>
+        </div>
+        <div class="bo-acoes"><button class="btn ghost" onclick="boFichMarcar(true)">Marcar os que se veem</button>
+          <button class="btn ghost" onclick="boFichMarcar(false)">Desmarcar os que se veem</button></div>
+      </div>
+      <div id="bo-fich-lista"></div>
+      <div class="bo-acoes" id="bo-fich-acoes" style="display:none">
+        <button class="btn prim" id="bo-btn-fich" onclick="boFichTrazer()" disabled>Trazer os marcados</button>
+      </div>
+    </div>`,
+  historico:()=>`<div class="fcard">
+      <p class="note">Tudo o que muda num vinho do catálogo — pelo script, por uma pesquisa, por uma garrafeira ou à mão —
+        fica aqui, campo a campo, com o valor de antes. Cada alteração pode ser <b>reposta</b>.</p>
+      <div class="bo-acoes"><button class="btn ghost" onclick="boHistorico()">🔄 Atualizar</button></div>
+    </div><div id="bo-hist-lista"></div>`,
+  numeros:()=>`<div id="bo-numeros"></div>`,
+  acesso:()=>`<div class="fcard">
+      <h3>Pedidos de acesso</h3>
+      <p class="note">Quem pede para entrar na WineCatalog. Para a Garrafeira, é em Definições › Utilizadores.</p>
+      <div id="bo-pedidos"></div>
+    </div>
+    <div class="fcard">
+      <h3>Com acesso à WineCatalog</h3>
+      <div id="bo-users"></div>
+    </div>
+    <div class="fcard">
+      <h3>Quem manda no catálogo</h3>
+      <p class="note">O catálogo não é da Garrafeira nem da WineSelection — tem o seu próprio admin, que aprova quem entra
+        na WineCatalog, decide as fusões e vê este Backoffice. Passá-lo a outra pessoa <b>não</b> passa a conta Supabase
+        nem o admin da Garrafeira — e passa também o que ele vê das garrafeiras de toda a gente (as comparações daqui).</p>
+      <p class="note" id="bo-admin-atual"></p>
+      <div class="bo-linha"><select id="bo-novo-admin"></select>
+        <button class="btn prim" onclick="boPassarAdmin()">Passar</button></div>
+    </div>`,
+  vivcfg:()=>`<div class="fcard">
+      <p class="note">Um script confere se o link de cada vinho abre o vinho certo, lê a nota e as avaliações do Vivino e o
+        preço nas lojas, e <b>escreve no catálogo</b>. Não usa IA. Cada alteração fica em <b>Alterações ao catálogo</b>,
+        com “Repor”. <b>Corre só quando o mandas correr</b>: no GitHub (Actions › “Vivino — verificar links (Serper)” ›
+        Run workflow), ou no computador do admin (<code>npm run vivino</code> na pasta <code>batch</code> da WineCatalog).</p>
+      <p class="note">Trata primeiro os vinhos pedidos e depois os que nunca foram verificados.</p>
+      <label for="bo-viv-lote">Vinhos de cada vez</label>
+      <div class="bo-linha"><input type="text" inputmode="numeric" id="bo-viv-lote" placeholder="10">
+        <button class="btn prim" onclick="boVivGuardar()">Guardar</button></div>
+      <p class="note" id="bo-viv-estado"></p>
+    </div>`
+};
+
+/* ── DUPLICADOS — a fusão manual ──────────────────────────────────────
+   A SEMELHANÇA SUGERE, NUNCA DECIDE: os números de cada par vão para o
+   ecrã COM o par, os dois lados mostram-se inteiros, e é preciso escolher
+   qual fica. Fundir é reversível (a WineCatalog tem o "Desfazer" na ficha
+   de lá; aqui ainda não). */
+async function boDupCarregar(){
+  const box=document.getElementById('bo-dup-lista');
+  if(!box)return;
+  box.innerHTML=boCaixa('A procurar pares…');
+  try{
+    const pares=await boRpc('candidatos',{p_limite:40});
+    box.innerHTML=(pares&&pares.length)?pares.map(boParHTML).join('')
+      :boCaixa('Nenhum par suspeito. Ou está tudo arrumado, ou os que restam já foram marcados como distintos.');
+  }catch(e){box.innerHTML=boErro(e);}
+}
+function boLadoHTML(v,outro){
+  const sub=[v.produtor,v.regiao].filter(Boolean).join(' · ');
+  const castas=Array.isArray(v.castas)?v.castas.join(', '):'';
+  return `<div class="par-lado">
+    <div class="par-nome" onclick="boVerFicha(${Number(v.id)})">${esc(v.nome||'(sem nome)')}${v.ano?` <span class="bo-ano">${esc(String(v.ano))}</span>`:''}</div>
+    <div class="par-sub">${esc(sub||'—')}</div>
+    ${castas?`<div class="par-sub"><em>${esc(castas)}</em></div>`:''}
+    <div class="par-meta">
+      <span>${boN(v.campos)} campos</span>
+      <span class="forca f${esc(String(v.forca))}">${esc(String(v.forca))}</span>
+      ${boNotaLinhaHTML(v)}
+    </div>
+    <div class="par-chave"><code>${esc(v.chave)}</code></div>
+    <button class="btn ghost full" onclick="boFundir(${Number(outro.id)},${Number(v.id)})">Ficar com esta</button>
+  </div>`;
+}
+function boParHTML(p){
+  const a=p.a,b=p.b;
+  // O que os aproximou, por palavras: "2 palavras em comum" escondia os
+  // pares que só tinham em comum "grande reserva".
+  const fortes=Array.isArray(p.fortes)?p.fortes:[];
+  return `<div class="fcard par">
+    <div class="par-cab">
+      <span class="par-sim">${Math.round(Number(p.sobreposicao||0)*100)}% parecidos</span>
+      <span class="note">${fortes.length?`em comum: ${fortes.map(f=>`<b>${esc(f)}</b>`).join(', ')}`
+        :`${esc(String(p.comuns))} palavras em comum`}${a.ano?` · colheita ${esc(String(a.ano))}`:' · sem colheita'}</span>
+    </div>
+    <div class="par-grid">${boLadoHTML(a,b)}${boLadoHTML(b,a)}</div>
+    <div class="par-acoes">
+      <button class="btn ghost" onclick="boNaoSao(${Number(a.id)},${Number(b.id)})">Não são o mesmo</button>
+      <span class="note">“Ficar com esta” funde a outra nesta — e dá para desfazer.</span>
+    </div>
+  </div>`;
+}
+async function boFundir(idDe,idPara){
+  if(!confirm('Fundir as duas linhas numa só?\n\nOs campos da outra passam para esta (respeitando a força de cada um), a outra fica estacionada — não se apaga — e isto dá para desfazer.'))return;
+  try{
+    const r=await boRpc('fundir',{p_id_de:idDe,p_id_para:idPara});
+    toast(`Fundidas ✓ ${(r&&r.campos)||0} campos passaram`);
+    boDupCarregar();boCatMudou();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+// O "não são" fica GRAVADO: uma lista que insiste em erros deixa de se ler.
+async function boNaoSao(idA,idB){
+  try{
+    await boRpc('marcar_distintos',{p_id_a:idA,p_id_b:idB});
+    toast('Marcado — não volta a aparecer');
+    boDupCarregar();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+// Desfazer um "não são" também tem de existir: também se erra.
+async function boVerDistintos(){
+  const box=document.getElementById('bo-dup-lista');
+  if(!box)return;
+  box.innerHTML=boCaixa('A carregar…');
+  try{
+    const ds=await boRpc('listar_distintos',{});
+    if(!ds||!ds.length){
+      box.innerHTML=`<div class="fcard"><p class="note">Nenhum par marcado como distinto ainda.</p>
+        <button class="btn ghost" onclick="boDupCarregar()">Voltar aos pares</button></div>`;
+      return;
+    }
+    box.innerHTML=`<div class="fcard">
+      <h3>Pares marcados como distintos</h3>
+      <p class="note">Estes não voltam a aparecer na lista. Se algum foi um engano, desfaz-se aqui.</p>
+      ${ds.map(d=>`<div class="bo-alias">
+        <div><b>${esc(d.nomeA||d.chaveA)}</b> ≠ <b>${esc(d.nomeB||d.chaveB)}</b>
+          <div class="note">${esc(boData(d.quando))}${d.quem?' · '+esc(d.quem):''}</div></div>
+        <button class="btn ghost" onclick="boDesmarcar('${escJs(d.chaveA)}','${escJs(d.chaveB)}')">Desfazer</button>
+      </div>`).join('')}
+      <button class="btn ghost full" style="margin-top:12px" onclick="boDupCarregar()">Voltar aos pares</button>
+    </div>`;
+  }catch(e){box.innerHTML=boErro(e);}
+}
+async function boDesmarcar(a,b){
+  try{
+    await boRpc('desmarcar_distintos',{p_chave_a:a,p_chave_b:b});
+    toast('Desfeito ✓');
+    boVerDistintos();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+
+/* ── PRODUTORES OFICIAIS (db/produtores.sql da WineCatalog) ──
+   As sugestões vêm aos pares (as palavras de uma grafia todas na outra) e
+   juntam-se em grupos para se escolher o oficial uma vez. Confirmar corrige
+   o catálogo e todas as garrafeiras; um vinho que fique com a chave de
+   outro que já existe não se mexe e vai para os Duplicados. */
+let _boProd=null;
+function boProdGrupos(pares){
+  const pai={},ref=x=>pai[x]===undefined?(pai[x]=x):(pai[x]===x?x:(pai[x]=ref(pai[x])));
+  const info={};
+  for(const p of pares){for(const s of [p.a,p.b])info[s.produtor]=s;const ra=ref(p.a.produtor),rb=ref(p.b.produtor);if(ra!==rb)pai[ra]=rb;}
+  const g={};for(const n of Object.keys(info))(g[ref(n)]=g[ref(n)]||[]).push(info[n]);
+  return Object.values(g).map(l=>l.sort((x,y)=>(y.catalogo+y.garrafeiras)-(x.catalogo+x.garrafeiras)))
+    .map(l=>({grafias:l,pares:pares.filter(p=>l.some(s=>s.produtor===p.a.produtor))}))
+    .sort((a,b)=>a.grafias[0].produtor.localeCompare(b.grafias[0].produtor,'pt'));
+}
+async function boProdCarregar(){
+  const box=document.getElementById('bo-prod-lista');
+  if(!box)return;
+  box.innerHTML='<p class="note">A procurar…</p>';
+  try{
+    const [sug,ofi]=await Promise.all([boRpc('produtores_sugestoes'),boRpc('produtores_listar')]);
+    _boProd={grupos:boProdGrupos(sug||[]),oficiais:ofi||[]};
+    boProdPintar();
+  }catch(e){box.innerHTML=`<p class="note bo-erro">${esc(e.message)}</p>`;}
+}
+function boProdPintar(){
+  const G=_boProd.grupos,O=_boProd.oficiais;
+  const grupos=G.length?G.map((g,i)=>{
+    const oficial=(g.grafias.find(s=>s.oficial)||{}).oficial||'';
+    const dif=g.pares.filter(p=>!p.mesmaChave);
+    return `<div class="prod-g" data-i="${i}">
+      ${g.grafias.map((s,j)=>`<div class="prod-l">
+        <input type="checkbox" class="prod-inc" data-p="${esc(s.produtor)}" checked title="Esta grafia é este produtor">
+        <label><input type="radio" name="bo-prod-of-${i}" value="${esc(s.produtor)}"${(oficial?s.produtor===oficial:j===0)?' checked':''}>
+          <span><b>${esc(s.produtor)}</b><small>${s.catalogo} no catálogo · ${s.garrafeiras} nas garrafeiras${s.oficial?` · já é de <b>${esc(s.oficial)}</b>`:''}</small></span></label>
+      </div>`).join('')}
+      <div class="prod-l"><label><input type="radio" name="bo-prod-of-${i}" value="__outro"> outro nome:</label>
+        <input type="text" class="prod-outro" placeholder="nome oficial"></div>
+      <div class="bo-acoes"><button class="btn prim" onclick="boProdJuntar(${i})">Juntar</button>
+        ${dif.map(p=>`<button class="btn ghost" onclick="boProdDiferentes(${i},${g.pares.indexOf(p)})">${g.pares.length>1?`${esc(p.a.produtor)} ≠ ${esc(p.b.produtor)}`:'Não são o mesmo'}</button>`).join('')}</div>
+    </div>`;}).join(''):'<p class="note">Nada por decidir.</p>';
+  const ofi=O.length?`<details class="bo-det"><summary>Produtores oficiais já definidos (${O.length})</summary>
+    ${O.map(p=>`<div class="prod-ofi"><b>${esc(p.nome)}</b>
+      <div class="bo-linha"><input type="text" id="bo-prod-compl-${p.id}" value="${esc(p.nome_completo||'')}" placeholder="nome completo (opcional)">
+        <button class="btn ghost" onclick="boProdCompleto(${Number(p.id)})">Guardar</button></div>
+      <span class="note">${(p.variantes||[]).map(v=>`${((v.escritos&&v.escritos.length)?v.escritos:[v.escrito]).map(esc).join(' = ')}${v.oficial?'':` <a href="#" title="Deixar de trocar esta grafia (o que já foi corrigido fica)" onclick="boProdTirar('${escJs(v.chave)}');return false">✕</a>`}`).join(' · ')}</span></div>`).join('')}
+  </details>`:'';
+  document.getElementById('bo-prod-lista').innerHTML=grupos+ofi;
+}
+async function boProdJuntar(i){
+  const el=document.querySelector(`#s-backoffice .prod-g[data-i="${i}"]`),g=_boProd.grupos[i];
+  const r_=el.querySelector(`input[name="bo-prod-of-${i}"]:checked`);
+  let oficial=r_?r_.value:'';if(oficial==='__outro')oficial=el.querySelector('.prod-outro').value.trim();
+  const grafias=[...el.querySelectorAll('.prod-inc:checked')].map(c=>c.dataset.p);
+  if(!oficial)return toast('Escolhe o nome oficial.',1);
+  if(grafias.filter(x=>x!==oficial).length<1)return toast('Marca pelo menos uma grafia além do nome oficial.',1);
+  const tot=g.grafias.filter(s=>grafias.includes(s.produtor)).reduce((a,s)=>a+s.catalogo+s.garrafeiras,0);
+  if(!confirm(`Passar a “${oficial}” as grafias: ${grafias.join(' · ')}?\n\n${tot} vinho(s) no catálogo e nas garrafeiras ficam com este nome.`))return;
+  try{
+    const r=await boRpc('produtor_definir',{p_oficial:oficial,p_grafias:grafias});
+    const d=r.duplicados||[];
+    toast(`“${r.oficial}” ✓ ${r.catalogo} no catálogo · ${r.garrafeiras} nas garrafeiras`);
+    if(d.length)alert(`Ficaram por mexer ${d.length}, porque já existe o mesmo vinho e colheita com o nome oficial — junta-os nos Duplicados:\n`+d.map(x=>`#${x.id} ${x.nome}${x.ano?' '+x.ano:''} → #${x.com}`).join('\n'));
+    boProdCarregar();boCatMudou();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function boProdDiferentes(i,k){
+  const p=_boProd.grupos[i].pares[k];
+  if(!confirm(`“${p.a.produtor}” e “${p.b.produtor}” são produtores diferentes? O par não volta a ser sugerido.`))return;
+  try{await boRpc('produtores_diferentes',{p_a:p.a.produtor,p_b:p.b.produtor});boProdCarregar();}
+  catch(e){toast('Erro: '+e.message,1);}
+}
+// O nome por extenso ao lado do oficial: só se lê na ficha do vinho.
+async function boProdCompleto(id){
+  const el=document.getElementById('bo-prod-compl-'+id);if(!el)return;
+  try{
+    await boRpc('produtor_nome_completo',{p_id:id,p_nome_completo:el.value.trim()});
+    toast(el.value.trim()?'Nome completo guardado ✓':'Nome completo retirado');
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function boProdTirar(chave){
+  if(!confirm('Deixar de trocar esta grafia pelo nome oficial? O que já foi corrigido fica como está.'))return;
+  try{await boRpc('produtor_tirar_variante',{p_chave:chave});boProdCarregar();}
+  catch(e){toast('Erro: '+e.message,1);}
+}
+
+/* ── NOMES DOS VINHOS (db/nomes-normalizar.sql + nomes-manter.sql) ──
+   `nomes_rever` sem `p_aplicar` é a simulação (catálogo e garrafeiras);
+   com ele aplica só os itens escolhidos, com a regra recalculada no
+   momento. Um desmarcado fica desmarcado ao mudar os filtros, e "Aplicar"
+   leva só os marcados QUE SE VEEM. */
+let _boNomes=null;
+const _boNomesOff=new Set();
+const BO_NOMES_MUD={ano:'sai a colheita',produtor:'sai o produtor',produtor_entra:'entra o produtor',cor:'sai a cor'};
+const boNomesChave=x=>x.fonte+':'+x.id;
+function boNomesMuda(x){return x.novo_nome!==x.nome||String(x.novo_ano??'')!==String(x.ano??'');}
+async function boNomesCarregar(){
+  const box=document.getElementById('bo-nomes-lista');
+  if(!box)return;
+  box.innerHTML='<p class="note">A simular…</p>';
+  try{
+    _boNomes=await boRpc('nomes_rever',{});
+    _boNomesOff.clear();
+    document.getElementById('bo-nomes-ctl').style.display='';
+    document.getElementById('bo-nomes-acoes').style.display='';
+    boNomesPintar();
+  }catch(e){box.innerHTML=`<p class="note bo-erro">${esc(e.message)}</p>`;}
+}
+function boNomesVisiveis(){
+  const so=document.getElementById('bo-nomes-so').checked;
+  const onde=document.getElementById('bo-nomes-onde').value,mud=document.getElementById('bo-nomes-mud').value;
+  const q=boPalavras('bo-nomes-q');
+  return ((_boNomes&&_boNomes.linhas)||[]).filter(x=>(!so||boNomesMuda(x))&&(!onde||x.fonte===onde)
+    &&(!mud||(mud==='avisos'?(x.avisos||[]).length>0:(x.mudancas||[]).includes(mud)))
+    &&(!q.length||(t=>q.every(p=>t.includes(p)))(boSemAc([x.nome,x.novo_nome,x.produtor,x.garrafeira,x.dono,x.ano,
+      x.fonte==='catalogo'?'catalogo #'+x.id:''].join(' ')))));
+}
+const boNomesMarcados=()=>boNomesVisiveis().filter(x=>boNomesMuda(x)&&!_boNomesOff.has(boNomesChave(x)));
+const boNomesAManter=()=>boNomesVisiveis().filter(x=>_boNomesOff.has(boNomesChave(x))&&(x.mudancas||[]).includes('produtor'));
+function boNomesContar(){
+  const todos=(_boNomes&&_boNomes.linhas)||[],vis=boNomesVisiveis().length,m=boNomesMarcados().length;
+  document.getElementById('bo-nomes-n').textContent=`${todos.filter(boNomesMuda).length} a mudar agora · ${todos.length} com alguma coisa · ${vis} à vista · ${m} marcado${m===1?'':'s'}`;
+  const b=document.getElementById('bo-btn-nomes');b.disabled=!m;b.textContent='Aplicar os marcados'+(m?` (${m})`:'');
+  const k=boNomesAManter().length,bm=document.getElementById('bo-btn-nomes-manter');
+  bm.disabled=!k;bm.textContent='Manter o produtor no nome'+(k?` (${k})`:'');
+}
+function boNomesPintar(){
+  if(!_boNomes)return;
+  const L=boNomesVisiveis();
+  document.getElementById('bo-nomes-lista').innerHTML=L.length?`<div class="rv-lista bo-rol">${L.map(x=>{
+    const m=boNomesMuda(x),on=m&&!_boNomesOff.has(boNomesChave(x));
+    const onde=x.fonte==='catalogo'
+      ?`<a href="#" onclick="event.preventDefault();boVerFicha(${Number(x.id)})">catálogo #${esc(String(x.id))}</a>`
+      :`${esc(x.garrafeira||'garrafeira')} · ${esc(x.dono||'')}`;
+    const tags=(x.mudancas||[]).map(k=>`<span class="bo-tag">${esc(BO_NOMES_MUD[k]||k)}</span>`).join('');
+    const av=(x.avisos||[]).map(a=>`<span class="bo-tag aviso">${esc(a)}</span>`).join('');
+    const ano=a=>a?` · ${esc(String(a))}`:'';
+    return `<label class="rv-linha${m&&!on?' off':''}">
+      ${m?`<input type="checkbox" data-k="${esc(boNomesChave(x))}"${on?' checked':''} onchange="boNomesMarca(this)">`:'<span class="bo-sem"></span>'}
+      <span class="rv-campo">
+        <b>${onde}</b>
+        ${m?`<span class="rv-antes">${esc(x.nome)}${ano(x.ano)}</span><span class="rv-seta">→</span><span class="rv-novo">${esc(x.novo_nome)}${ano(x.novo_ano)}</span>`
+          :`<span class="rv-novo">${esc(x.nome)}${ano(x.ano)}</span>`}
+        <span class="bo-sub">${esc(x.produtor||'(sem produtor)')} · ${esc(x.tipo||'sem cor')}</span>
+        ${tags||av?`<span class="bo-tags">${tags}${av}</span>`:''}
+      </span>
+    </label>`;}).join('')}</div>`
+    :`<p class="note">${(_boNomes.linhas||[]).length?'Nenhum com estes filtros.':'Nada a mudar — os nomes estão todos arrumados.'}</p>`;
+  boNomesContar();
+}
+function boNomesMarca(el){
+  const k=el.dataset.k;
+  if(el.checked)_boNomesOff.delete(k);else _boNomesOff.add(k);
+  el.closest('.rv-linha').classList.toggle('off',!el.checked);
+  boNomesContar();
+}
+function boNomesMarcar(on){
+  for(const x of boNomesVisiveis())if(boNomesMuda(x)){if(on)_boNomesOff.delete(boNomesChave(x));else _boNomesOff.add(boNomesChave(x));}
+  boNomesPintar();
+}
+async function boNomesAplicar(){
+  const itens=boNomesMarcados().map(x=>({fonte:x.fonte,id:x.id}));
+  if(!itens.length)return toast('Marca pelo menos um vinho.',1);
+  if(!confirm(`Aplicar o nome novo a ${itens.length} vinho(s) — os marcados que se veem?\n\nFica no histórico do catálogo e no registo da Garrafeira.`))return;
+  try{
+    const r=await boRpc('nomes_rever',{p_itens:itens,p_aplicar:true});
+    const d=r.duplicados||[];
+    toast(`Nomes ✓ ${r.catalogo} no catálogo · ${r.garrafeiras} nas garrafeiras`);
+    if(d.length)alert(`Ficaram por mexer ${d.length} do catálogo, porque passavam a ser o mesmo vinho e colheita que outro — junta-os nos Duplicados:\n`+
+      d.map(x=>`#${x.id} ${x.nome}${x.ano?' '+x.ano:''} → #${x.com}`).join('\n'));
+    boNomesCarregar();boCatMudou();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function boNomesManter(){
+  const lista=boNomesAManter();
+  const itens=lista.map(x=>({fonte:x.fonte,id:x.id}));
+  if(!itens.length)return toast('Desmarca os vinhos cujo produtor deve ficar no nome (os que o perdiam da frente).',1);
+  const prods=[...new Set(lista.map(x=>x.produtor||''))].filter(Boolean);
+  if(!confirm(`Nos vinhos destes produtores, o produtor fica no nome — e entra à frente, se lá não estiver (agora e nos que vierem; a colheita e a cor no fim continuam a sair):\n\n${prods.join('\n')}`))return;
+  try{
+    const r=await boRpc('produtores_no_nome_marcar',{p_itens:itens});
+    toast(`${r.marcados} produtor(es) acrescentado(s) à lista ✓`);
+    await boNomesCarregar();
+    const d=document.getElementById('bo-nomes-manter');
+    if(d&&d.closest('details').open)boNomesManterListar();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function boNomesManterListar(){
+  const el=document.getElementById('bo-nomes-manter');
+  if(!el)return;
+  el.innerHTML='<p class="note">A carregar…</p>';
+  try{
+    const L=await boRpc('produtores_no_nome_listar',{});
+    el.innerHTML=(L||[]).length?L.map(m=>`<div class="prod-ofi">${esc(m.produtor)}
+        <a href="#" title="Deixar a regra voltar a tirar este produtor da frente dos nomes" onclick="event.preventDefault();boNomesManterTirar('${escJs(m.chave)}')">✕</a></div>`).join('')
+      :'<p class="note">Nenhum.</p>';
+  }catch(e){el.innerHTML=`<p class="note bo-erro">${esc(e.message)}</p>`;}
+}
+async function boNomesManterTirar(chave){
+  if(!confirm('Tirar da lista? Os nomes deste produtor voltam a aparecer na simulação.'))return;
+  try{
+    await boRpc('produtores_no_nome_tirar',{p_chave:chave});
+    boNomesManterListar();
+    if(_boNomes)boNomesCarregar();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+
+/* ── ALERTAS — o catálogo a ouvir de volta ──
+   Cada alerta guarda os DOIS valores como estavam, e mostra ao lado o de
+   AGORA (só quando mudou). "O catálogo está certo" existe: metade dos
+   alertas hão de ser o catálogo a ter razão. */
+let _boRepEstado='aberto';
+async function boRepCarregar(estado){
+  _boRepEstado=estado||'aberto';
+  const box=document.getElementById('bo-rep-lista');
+  if(!box)return;
+  box.innerHTML=boCaixa('A carregar…');
+  try{
+    const l=await boRpc('listar_reportes',{p_estado:_boRepEstado});
+    box.innerHTML=(Array.isArray(l)&&l.length)?l.map(boRepHTML).join('')
+      :boCaixa(`${_boRepEstado==='aberto'?'Nada por tratar. ':'Ainda não chegou alerta nenhum. '}Os alertas chegam da página de um vinho, do botão ao lado de um campo que não bate certo com o catálogo.`);
+  }catch(e){box.innerHTML=boErro(e);}
+  boContar();
+}
+function boRepHTML(r){
+  const nome=(BO_FICHA.find(([x])=>x===r.campo)||[0,r.campo])[1];
+  const v=x=>(x==null?'<em>vazio</em>':esc(Array.isArray(x)?x.join(', '):String(x)));
+  const mudou=JSON.stringify(r.valorAgora??null)!==JSON.stringify(r.valorCatalogo??null);
+  const f=Number(r.forcaAgora||0);
+  return `<div class="fcard rep">
+    <div class="rep-cab">
+      <div><div class="bo-nome">${esc(r.nome||'')}${r.ano?` <span class="bo-ano">${esc(String(r.ano))}</span>`:''}</div>
+        <div class="bo-sub">${esc(r.produtor||'—')} · campo <b>${esc(nome)}</b></div></div>
+      <span class="rep-est ${esc(r.estado)}">${esc(r.estado)}</span>
+    </div>
+    <div class="rep-vals">
+      <div><span>no catálogo</span><b>${v(r.valorCatalogo)}</b></div>
+      <div class="deles"><span>na garrafeira de quem avisou</span><b>${v(r.valorDeles)}</b></div>
+      ${mudou?`<div class="agora"><span>agora</span><b>${v(r.valorAgora)}</b>
+        <span class="og-tag ${boOrigemCls(r.origemAgora,f)}">${esc(boOrigemTxt(r.origemAgora,f))}</span></div>`:''}
+    </div>
+    ${r.nota?`<p class="note rep-nota">“${esc(r.nota)}”</p>`:''}
+    <p class="note">${esc(r.quem||'')} · ${esc(boData(r.quando))} · ${esc(r.app||'')}</p>
+    ${r.resposta?`<p class="note">Resposta: ${esc(r.resposta)}</p>`:''}
+    <div class="rep-acoes">
+      ${r.vinhoId?`<button class="btn ghost" onclick="boVerFicha(${Number(r.vinhoId)})">Abrir a ficha</button>`
+        :'<span class="note">Este vinho já não existe no catálogo.</span>'}
+      ${r.estado==='aberto'?`
+        <button class="btn ghost" onclick="boRepResolver(${Number(r.id)},'resolvido')">Corrigido ✓</button>
+        <button class="btn ghost" onclick="boRepResolver(${Number(r.id)},'rejeitado')">O catálogo está certo</button>`
+      :`<button class="btn ghost" onclick="boRepResolver(${Number(r.id)},'aberto')">Reabrir</button>`}
+    </div>
+  </div>`;
+}
+async function boRepResolver(id,estado){
+  let resposta=null;
+  if(estado==='rejeitado'){
+    resposta=prompt('Porquê? (fica guardado com o alerta; deixa vazio se não quiseres explicar)');
+    if(resposta===null)return;
+  }
+  try{
+    await boRpc('resolver_reporte',{p_id:id,p_estado:estado,p_resposta:resposta||null});
+    toast(estado==='aberto'?'Reaberto':'Tratado ✓');
+    boRepCarregar(_boRepEstado);
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+
+/* ── COMENTÁRIOS E SUGESTÕES (db/comentarios.sql da WineCatalog) ──
+   Os que se escrevem aqui mesmo — "Algo não está bem?" na página do vinho
+   e "Enviar uma sugestão" em Definições. A resposta que se escreve ao
+   fechar é o que a pessoa lê, ao lado do que escreveu; "❓ Pedir mais
+   informação" põe-no à espera dela (`duvida`), e cada fala dá um push. */
+const BO_COM_MOTIVO={atributos:'Atributos errados',atualizar:'Atualizar a partir de um site',outro:'Outro problema',
+  melhoria:'Ideia / melhoria',problema:'Algo não funciona'};
+const BO_COM_ESTADO={aberto:'por tratar',duvida:'à espera de resposta',resolvido:'tratado',rejeitado:'recusado'};
+const _boCom={vinho:{estado:'aberto',lista:[]},sugestao:{estado:'aberto',lista:[]}};
+function boComFalasHTML(c){
+  const ms=c.mensagens||[];
+  if(!ms.length)return '';
+  const rot={duvida:'Perguntaste',resolvido:'Tratado',rejeitado:'Recusado'};
+  return `<div class="com-fio">${ms.map(m=>{
+    const adm=m.de==='admin';
+    return `<div class="com-fala${adm?' adm':''}"><b>${esc(adm?(rot[m.estado]||'Admin'):'Quem escreveu')} · ${esc(boData(m.quando))}${
+      adm&&m.quem?` · ${esc(m.quem)}`:''}</b>${m.texto?esc(m.texto):''}</div>`;}).join('')}</div>`;
+}
+function boComCampoNome(k){
+  const id={nome:'Nome',produtor:'Produtor',ano:'Ano'};
+  return id[k]||(BO_FICHA.find(([x])=>x===k)||[0,k])[1];
+}
+async function boComentarios(tipo,estado){
+  const st=_boCom[tipo];if(!st)return;
+  st.estado=estado||'aberto';
+  const box=document.getElementById('bo-com-'+tipo+'-lista');
+  if(!box)return;
+  box.innerHTML=boCaixa('A carregar…');
+  try{
+    const l=await boRpc('listar_comentarios',{p_tipo:tipo,p_estado:st.estado});
+    st.lista=Array.isArray(l)?l:[];
+    // "Por tratar" traz também os que esperam por quem escreveu; o número é
+    // só a vez do admin.
+    if(st.estado==='aberto'){BO_CONTA[tipo]=st.lista.filter(c=>c.estado==='aberto').length;boPintarContas();}
+    box.innerHTML=st.lista.length?st.lista.map(boComHTML).join('')
+      :boCaixa(`${st.estado==='aberto'?'Nada por tratar.':'Ainda não chegou nada.'} ${
+        tipo==='vinho'?'Os comentários chegam da página de cada vinho.':'As sugestões chegam de Definições.'}`);
+  }catch(e){box.innerHTML=boErro(e);}
+}
+function boComHTML(c){
+  const vinho=c.tipo==='vinho';
+  const val=x=>(x==null||x===''||(Array.isArray(x)&&!x.length)?'<em>vazio</em>'
+    :esc(Array.isArray(x)?x.join(', '):String(x)));
+  const motivo=esc(BO_COM_MOTIVO[c.motivo]||c.motivo);
+  const cab=vinho
+    ?`<div class="bo-nome">${esc(c.nome||'')}${c.ano?` <span class="bo-ano">${esc(String(c.ano))}</span>`:''}</div>
+      <div class="bo-sub">${esc([c.produtor||'—',c.cor].filter(Boolean).join(' · '))} · <b>${motivo}</b></div>`
+    :`<div class="bo-nome">${motivo}</div>`;
+  // Os campos de que se queixa: o que a pessoa tem, o que o catálogo tinha
+  // quando ela escreveu e — só se mudou — o de agora.
+  const cat=c.valoresCatalogo, ag=c.valoresAgora;
+  const campos=(c.campos||[]).map(k=>{
+    const agV=ag?ag[k]:undefined, catV=cat?cat[k]:undefined;
+    const mudou=cat&&ag&&JSON.stringify(agV??null)!==JSON.stringify(catV??null);
+    return `<div class="com-campo"><div class="com-campo-k">${esc(boComCampoNome(k))}</div>
+      <div class="rep-vals">
+        <div class="deles"><span>na garrafeira de quem escreveu</span><b>${val((c.valoresDeles||{})[k])}</b></div>
+        ${cat?`<div><span>no catálogo, então</span><b>${val(catV)}</b></div>`:''}
+        ${mudou||(!cat&&ag)?`<div class="agora"><span>no catálogo, agora</span><b>${val(agV)}</b></div>`:''}
+      </div></div>`;
+  }).join('');
+  const fechado=c.estado==='resolvido'||c.estado==='rejeitado';
+  return `<div class="fcard rep">
+    <div class="rep-cab"><div>${cab}</div>
+      <span class="rep-est ${esc(c.estado)}">${esc(BO_COM_ESTADO[c.estado]||c.estado)}</span></div>
+    ${c.texto?`<p class="com-texto">${esc(c.texto)}</p>`:''}
+    ${c.link?`<p class="note com-link">🔗 <a href="${esc(c.link)}" target="_blank" rel="noopener noreferrer">${esc(c.link)}</a></p>`:''}
+    ${campos}
+    ${boComFalasHTML(c)}
+    ${vinho&&c.vinhoId&&c.mesmaColheita===false?`<p class="note">A linha do catálogo é da colheita
+      ${c.anoCatalogo?esc(String(c.anoCatalogo)):'sem ano'}, não da de quem escreveu.</p>`:''}
+    <p class="note">${esc(c.quem||'')} · ${esc(boData(c.quando))} · ${esc(c.app||'')}</p>
+    <div class="rep-acoes">
+      ${vinho?(c.vinhoId?`<button class="btn ghost" onclick="boVerFicha(${Number(c.vinhoId)})">Abrir a ficha</button>
+        ${c.link?`<button class="btn ghost" onclick="boComProcurar(${Number(c.id)})" title="Abre o Procurar informação com este link">🔎 Procurar com este site</button>`:''}`
+        :'<span class="note">Este vinho ainda não está no catálogo.</span>'):''}
+      ${fechado?`<button class="btn ghost" onclick="boComResponder(${Number(c.id)},'aberto')">Reabrir</button>`
+        :`<button class="btn ghost" onclick="boComResponder(${Number(c.id)},'duvida')"
+            title="Pergunta a quem escreveu — fica à espera da resposta, e a pessoa recebe um aviso">❓ ${
+            c.estado==='duvida'?'Perguntar outra vez':'Pedir mais informação'}</button>
+          <button class="btn ghost" onclick="boComResponder(${Number(c.id)},'resolvido')">Tratado ✓</button>
+          <button class="btn ghost" onclick="boComResponder(${Number(c.id)},'rejeitado')">Recusar</button>`}
+    </div>
+  </div>`;
+}
+async function boComResponder(id,estado){
+  let resposta=null;
+  if(estado==='duvida'){
+    resposta=prompt('Que pergunta queres fazer a quem escreveu? Recebe um aviso e responde-te nas Definições dela.');
+    if(resposta===null)return;
+    if(!resposta.trim()){toast('Escreve a pergunta',1);return;}
+  }else if(estado!=='aberto'){
+    resposta=prompt(estado==='rejeitado'
+      ?'Porquê? Quem escreveu lê isto (deixa vazio se não quiseres explicar).'
+      :'Uma resposta para quem escreveu? Aparece-lhe nas Definições (opcional).');
+    if(resposta===null)return;
+  }
+  try{
+    await boRpc('responder_comentario',{p_id:id,p_estado:estado,p_resposta:resposta||null});
+    toast(estado==='aberto'?'Reaberto':estado==='duvida'?'Pergunta enviada ✓':'Tratado ✓');
+    const tipo=['vinho','sugestao'].find(t=>_boCom[t].lista.some(c=>c.id===id))||'vinho';
+    await boComentarios(tipo,_boCom[tipo].estado);
+    boContar();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+/* "Atualizem a partir deste site": a página do vinho e, por cima, o
+   Procurar informação já no caminho "Em sites concretos", com o link na
+   caixa. Nada grava sem a revisão de sempre. */
+function boComProcurar(id){
+  const c=_boCom.vinho.lista.find(x=>x.id===id);
+  if(!c||!c.vinhoId)return;
+  const vid=-Number(c.vinhoId);
+  const seguir=()=>{
+    if(!IDXV[vid]){toast('Esta linha já não está no Catálogo',1);return;}
+    verVinho(vid);
+    catAbrirProcura(vid);
+    if(PQ&&PQ.cat===Number(c.vinhoId)&&!pqPendente(PQ)){PQ.tipo='sites';PQ.sites=[c.link];pqPintar();}
+  };
+  if(IDXV[vid])seguir();
+  else{CAT_VINHOS=null;catCarregar().then(seguir).catch(()=>toast('Não foi possível ler o Catálogo',1));}
+}
+
+/* ── LINKS DO VIVINO — o que o script propõe (db/vivino.sql) ──
+   Os links errados que isto veio apanhar foram escritos por uma máquina
+   com ar de verdadeiros: trocá-los por outros escolhidos por outra
+   máquina, sem ninguém olhar, era repetir o erro. Decide-se aqui. */
+let _boVivRev='pendente', _boVivLista=[];
+const BO_VIV_ESTADO={
+  certo:['certo','o link abre este vinho'],
+  errado:['outro vinho','o link abre OUTRO vinho'],
+  diferente:['outro link','o Google aponta para outro link (o atual não foi aberto)'],
+  nao_existe:['não abre','o link não abre (não existe ou não é de um vinho)'],
+  nao_encontrado:['não encontrado','a procura não encontrou este vinho no Vivino'],
+  sem_link:['sem link','o catálogo não tinha link'],
+  bloqueado:['bloqueado','o Vivino recusou a página ao script'],
+  erro:['erro','o script falhou neste vinho']
+};
+async function boVivConfig(){
+  const out=document.getElementById('bo-viv-estado');
+  if(!out)return;
+  try{
+    const c=await boRpc('vivino_config',{});
+    document.getElementById('bo-viv-lote').value=c.lote||10;
+    out.innerHTML=`Última execução: <b>${esc(c.ultima?boData(c.ultima):'nunca')}</b> · verificados: ${boN(c.verificados)} de ${boN(c.total)}`+
+      (c.fila?` · <b>${boN(c.fila)}</b> pedido(s) na fila`:'')+
+      (c.pendentes?` · <b>${boN(c.pendentes)}</b> por validar`:'');
+  }catch(e){out.innerHTML=`<span class="bo-erro">${esc(e.message)}</span>`;}
+}
+// Só o lote: a frequência fica 'desligado' enquanto não houver cron.
+async function boVivGuardar(){
+  const lote=parseInt(String(document.getElementById('bo-viv-lote').value||'').replace(/\D/g,''),10);
+  if(!(lote>=1&&lote<=30)){toast('Vinhos de cada vez: de 1 a 30',1);return;}
+  try{
+    await boRpc('vivino_definir',{p_frequencia:'desligado',p_lote:lote});
+    toast(`Guardado ✓ — ${lote} de cada vez`);
+    boVivConfig();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function boVivLista(revisao){
+  _boVivRev=revisao||'pendente';
+  const box=document.getElementById('bo-viv-lista');
+  if(!box)return;
+  box.innerHTML=boCaixa('A carregar…');
+  try{
+    const l=await boRpc('vivino_listar',{p_revisao:_boVivRev});
+    _boVivLista=Array.isArray(l)?l:[];
+    box.innerHTML=_boVivLista.length?_boVivLista.map(boVivHTML).join('')
+      :boCaixa(`${_boVivRev==='pendente'?'Nada por validar.':'O script ainda não verificou nenhum vinho.'} Como correr a verificação: Backoffice › O script do Vivino.`);
+  }catch(e){box.innerHTML=boErro(e);}
+}
+function boVivLink(u){
+  if(u==null||u==='')return '<em>sem link</em>';
+  const t=esc(String(u));
+  return /^https?:\/\/[^\s]+$/.test(String(u))?`<a href="${t}" target="_blank" rel="noopener">${t}</a>`:t;
+}
+function boVivNum(n,casas){
+  if(n==null||n==='')return '—';
+  const x=Number(n);
+  return isFinite(x)?x.toLocaleString('pt-PT',casas?{minimumFractionDigits:casas,maximumFractionDigits:casas}:{}):esc(String(n));
+}
+function boVivGlobalHTML(x){
+  if(!x||(x.vivino_nota_global==null&&x.vivino_avaliacoes_global==null))return '';
+  return `<span class="viv-sub">todas as colheitas: ${boVivNum(x.vivino_nota_global,1)} ★ · ${boVivNum(x.vivino_avaliacoes_global)} avaliações</span>`;
+}
+/* Os "outros resultados" da procura, sem a proposta e sem o vinho do link
+   que já está no catálogo (esse foi aberto e não passou) — pelo NÚMERO. */
+const boVivId=u=>(String(u||'').match(/\/w\/(\d+)/)||[])[1]||null;
+function boVivCands(r){
+  const p=r.proposta||null;
+  const atual=boVivId((r.agora||{}).vivino_url)||boVivId(r.urlAntes);
+  const todos=(Array.isArray(r.candidatos)?r.candidatos:[]).filter(c=>c&&c.vivino_url&&(!p||c.vivino_url!==p.vivino_url));
+  const cands=todos.filter(c=>!atual||boVivId(c.vivino_url)!==atual);
+  return {cands,mesmo:cands.length<todos.length||!!(r.detalhe&&r.detalhe.procura&&r.detalhe.procura.mesmo_link)};
+}
+function boVivHTML(r,i){
+  const [rot,desc]=BO_VIV_ESTADO[r.estado]||[r.estado,''];
+  const a=r.agora||{}, p=r.proposta||null;
+  const apagar=p&&('vivino_url' in p)&&p.vivino_url==null;
+  const pesq='https://www.vivino.com/search/wines?q='+encodeURIComponent(
+    [r.nome,r.produtor&&!String(r.nome||'').toLowerCase().includes(String(r.produtor).toLowerCase())?r.produtor:'']
+      .join(' ').replace(/\(.*?\)/g,' ').trim());
+  const {cands,mesmo}=boVivCands(r);
+  const pend=r.revisao==='pendente';
+  const confirmar=r.estado==='errado'&&!p&&!!boVivId(a.vivino_url)&&boVivId(a.vivino_url)===boVivId(r.urlAntes);
+  const porque=r.estado==='errado'&&r.detalhe&&r.detalhe.atual&&Array.isArray(r.detalhe.atual.porque)?r.detalhe.atual.porque:[];
+  return `<div class="fcard rep">
+    <div class="rep-cab">
+      <div><div class="bo-nome">${esc(r.nome||'(vinho apagado)')}${r.ano?` <span class="bo-ano">${esc(String(r.ano))}</span>`:''}</div>
+        <div class="bo-sub">${esc(r.produtor||'—')}${r.tipo?' · '+esc(r.tipo):''}</div></div>
+      <span class="rep-est viv-${esc(r.estado)}" title="${esc(desc)}">${esc(rot)}</span>
+    </div>
+    <p class="note" style="margin-top:6px">${esc(desc)}${r.nomePagina?` — a página diz <b>“${esc(r.nomePagina)}”</b>`:''}</p>
+    ${porque.length?`<p class="note">O que não bate: ${porque.map(esc).join(' · ')}.</p>`:''}
+    ${mesmo&&r.estado==='errado'?`<p class="note">A procura no Vivino voltou a dar <b>este mesmo vinho</b> — não encontrou outro melhor. Se é mesmo este, “O link está certo”${porque.some(x=>/menção|palavras a mais|casta/.test(x))?' (ou corrige o nome no catálogo, em “Abrir a ficha”)':''}.</p>`:''}
+    <div class="rep-vals">
+      <div><span>no catálogo agora</span><b class="viv-url">${boVivLink(a.vivino_url)}</b>
+        <b>${boVivNum(a.vivino_nota,1)} ★ · ${boVivNum(a.vivino_avaliacoes)} avaliações</b>${boVivGlobalHTML(a)}</div>
+      ${p?`<div class="agora"><span>${apagar?'proposta':'o script propõe'}</span>
+        ${apagar?'<b>apagar o link (não encontrou o vinho no Vivino)</b>':
+        `<b class="viv-url">${boVivLink(p.vivino_url)}</b>
+         <b>${boVivNum(p.vivino_nota,1)} ★ · ${boVivNum(p.vivino_avaliacoes)} avaliações</b>${boVivGlobalHTML(p)}
+         ${p.nome?`<span class="viv-sub">“${esc(p.nome)}”${p.confianca!=null?` · parecença ${Math.round(Number(p.confianca)*100)}%`:''}</span>`:''}`}
+      </div>`:''}
+    </div>
+    ${cands.length?`<div class="viv-cands"><span class="viv-sub">Outros resultados da procura no Vivino:</span>
+      ${cands.map((c,k)=>`<div class="viv-cand">
+        <a href="${esc(c.vivino_url)}" target="_blank" rel="noopener">${esc(c.texto||c.vivino_url)}</a>
+        <span class="viv-sub">${c.parecenca!=null?Math.round(Number(c.parecenca)*100)+'%':''}${c.cor_bate===false?' · outra cor':''}${c.cor_bate!==false&&c.nome_bate===false?' · o nome não bate':''}</span>
+        ${pend?`<button class="btn ghost" onclick="boVivUsar(${i},${k})">Usar este</button>`:''}
+      </div>`).join('')}</div>`:''}
+    <p class="note">${esc(boData(r.quando))}${r.revisao!=='pendente'?` · ${esc(r.revisao)}${r.revistoPor?' por '+esc(r.revistoPor):''}`:''}</p>
+    <div class="rep-acoes">
+      ${pend&&p?`<button class="btn prim" onclick="boVivResolver(${Number(r.id)},'aceite')">${apagar?'Apagar o link':'Aplicar'}</button>`:''}
+      ${pend&&confirmar?`<button class="btn prim" onclick="boVivConfirmar(${Number(r.id)})">O link está certo</button>`:''}
+      ${pend&&!confirmar?`<button class="btn ghost" onclick="boVivResolver(${Number(r.id)},'recusado')">Deixar como está</button>`:''}
+      ${a.vivino_url&&!(pend&&apagar)?`<button class="btn ghost" onclick="boVivRetirar(${Number(r.id)})">Retirar o link</button>`:''}
+      ${!pend&&r.revisao!=='sem_acao'?`<button class="btn ghost" onclick="boVivResolver(${Number(r.id)},'pendente')">Reabrir</button>`:''}
+      <a class="btn ghost" href="${esc(pesq)}" target="_blank" rel="noopener">Procurar no Vivino ↗</a>
+      ${r.vinhoId?`<button class="btn ghost" onclick="boVerFicha(${Number(r.vinhoId)})">Abrir a ficha</button>`:''}
+    </div>
+  </div>`;
+}
+async function boVivResolver(id,decisao,campos,msg){
+  try{
+    await boRpc('vivino_resolver',{p_id:id,p_decisao:decisao,p_campos:campos||null});
+    toast(msg||(decisao==='aceite'?'Aplicado ✓':decisao==='pendente'?'Reaberto':'Fica como está ✓'));
+    boVivLista(_boVivRev);
+    boContar();
+    if(decisao==='aceite')boCatMudou();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+// O link que lá está é o certo — as regras do nome é que não o reconhecem.
+// Fica 'recusado' sem proposta, que o script lê como confirmado.
+function boVivConfirmar(id){
+  if(!confirm('Confirmar que este link é deste vinho? O script deixa de o dar como "outro vinho" (a cor e a colheita continuam a ser conferidas).'))return;
+  boVivResolver(id,'recusado',null,'Confirmado ✓ — o script deixa de o recusar');
+}
+function boVivRetirar(id){
+  if(!confirm('Retirar o link do Vivino deste vinho? A nota e as avaliações ficam como estão.'))return;
+  boVivResolver(id,'aceite',{vivino_url:null});
+}
+// Um dos outros resultados: só o LINK entra — a página dele não foi aberta,
+// e os números do vinho errado eram pior do que não os mudar.
+function boVivUsar(i,k){
+  const r=_boVivLista[i];if(!r)return;
+  const c=boVivCands(r).cands[k];if(!c)return;
+  boVivResolver(r.id,'aceite',{vivino_url:c.vivino_url});
+}
+
+/* ── AS GARRAFEIRAS × O CATÁLOGO (db/garrafeiras-rever.sql da WineCatalog,
+   que chama as migrações 18 e 19 daqui) ──
+   Sem `p_aplicar` é só a lista; com ele, só o que se marcou, e as regras
+   voltam a correr no momento. Só se compara quando se pede: são segundos a
+   varrer as garrafeiras todas. */
+function boLinkCat(id){
+  return id?`<a href="#" onclick="event.preventDefault();boVerFicha(${Number(id)})">catálogo #${esc(String(id))}</a>`:'';
+}
+let _boGl=null;
+const BO_GL_CASO={formato_invalido:'sem o nº do vinho',outro_vinho:'abre outro vinho',vazio:'sem link'};
+const BO_GL_CONTA={mesmo_vinho:'já com o link do catálogo',catalogo_sem_link:'sem link no catálogo',
+  sem_catalogo:'fora do catálogo',cor_diferente:'com cor diferente da do catálogo (não se tocam)'};
+async function boGlComparar(){
+  const box=document.getElementById('bo-gl-lista');
+  if(!box)return;
+  box.innerHTML='<p class="note">A comparar…</p>';
+  document.getElementById('bo-gl-n').textContent='';
+  try{_boGl=await boRpc('garrafeiras_links_rever',{});boGlPintar();}
+  catch(e){box.innerHTML=`<p class="note bo-erro">${esc(e.message)}</p>`;}
+}
+function boGlPintar(){
+  const L=_boGl.linhas||[],P=_boGl.por_confirmar||[],C=_boGl.contagens||{};
+  const ficam=Object.entries(BO_GL_CONTA).filter(([k])=>C[k]).map(([k,t])=>`${C[k]} ${t}`).join(' · ');
+  // O link é volátil e, vindo de uma garrafeira, vale 2.
+  const og=o=>o?`<span class="og-tag ${boOrigemCls(o,2)}">${esc(boOrigemTxt(o,2))}</span>`:'';
+  let h='';
+  if(L.length){
+    h+=`<div class="rv-lista bo-rol">${L.map(x=>`<label class="rv-linha">
+      <input type="checkbox" class="bo-gl-c" data-id="${Number(x.vinho_id)}" checked onchange="boGlBotao()">
+      <span class="rv-campo">
+        <b>${esc(x.garrafeira||'garrafeira')} · ${esc(x.dono||'')}</b>
+        <span class="bo-vnome">${esc(x.nome)}${x.ano?' '+esc(String(x.ano)):''} <span class="bo-tag">${esc(BO_GL_CASO[x.caso]||x.caso)}</span></span>
+        ${x.caso==='vazio'?'':`<span class="rv-antes">${boRvValorHTML('vivino_url',x.antes)}</span><span class="rv-seta">→</span>`}<span class="rv-novo">${boRvValorHTML('vivino_url',x.depois)}</span>
+        <span class="bo-sub">${boLinkCat(x.catalogo_id)} ${og(x.catalogo_origem)}</span>
+      </span>
+    </label>`).join('')}</div>`;
+  }else h+='<p class="note">Nada a corrigir.</p>';
+  if(P.length){
+    h+=`<p class="note" style="margin-top:12px"><b>Por confirmar</b> — o link da garrafeira parece errado, mas o do
+      catálogo ainda não foi confirmado. Abre os dois: se o do catálogo for o certo, marca <b>usar o do catálogo</b>. Na
+      dúvida, pede primeiro a verificação no Vivino e volta a comparar.</p>
+      <div class="rv-lista">${P.map(x=>`<div class="rv-linha">
+        <span class="rv-campo">
+          <b>${esc(x.garrafeira||'garrafeira')} · ${esc(x.dono||'')}</b>
+          <span class="bo-vnome">${esc(x.nome)}${x.ano?' '+esc(String(x.ano)):''} <span class="bo-tag">${esc(BO_GL_CASO[x.caso]||x.caso)}</span></span>
+          <span class="rv-antes">${boRvValorHTML('vivino_url',x.antes)}</span><span class="rv-seta">→</span><span class="rv-novo">${boRvValorHTML('vivino_url',x.catalogo_url)}</span>
+          <span class="bo-sub">${boLinkCat(x.catalogo_id)} ${og(x.catalogo_origem)}</span>
+          ${x.catalogo_url?`<label class="bo-chk"><input type="checkbox" class="bo-gl-f" data-id="${Number(x.vinho_id)}" onchange="boGlBotao()"> usar o do catálogo</label>`:''}
+        </span>
+      </div>`).join('')}</div>
+      <div class="bo-acoes"><button class="btn ghost" onclick="boGlPedir()">🍷 Pedir a verificação no Vivino</button></div>`;
+  }
+  if(ficam)h+=`<p class="note">Ficam como estão: ${esc(ficam)}.</p>`;
+  if(L.length||P.length)h+=`<div class="bo-acoes"><button class="btn prim" id="bo-btn-gl" onclick="boGlCorrigir()" disabled>Corrigir os marcados</button></div>`;
+  document.getElementById('bo-gl-lista').innerHTML=h;
+  document.getElementById('bo-gl-n').textContent=`${L.length} a corrigir`+(P.length?` · ${P.length} por confirmar`:'');
+  boGlBotao();
+}
+function boGlBotao(){
+  const b=document.getElementById('bo-btn-gl');
+  if(!b)return;
+  const n=document.querySelectorAll('.bo-gl-c:checked,.bo-gl-f:checked').length;
+  b.disabled=!n;
+  b.textContent='Corrigir os marcados'+(n?` (${n})`:'');
+}
+async function boGlPedir(){
+  const ids=[...new Set((_boGl.por_confirmar||[]).map(x=>Number(x.catalogo_id)).filter(Boolean))];
+  if(!ids.length)return;
+  try{
+    const r=await boRpc('vivino_pedir',{p_ids:ids});
+    toast(`Na fila ✓ ${ids.length} vinho(s) do catálogo (${r.fila} na fila)`);
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function boGlCorrigir(){
+  const ids=[...document.querySelectorAll('.bo-gl-c:checked')].map(c=>Number(c.dataset.id));
+  const forcar=[...document.querySelectorAll('.bo-gl-f:checked')].map(c=>Number(c.dataset.id));
+  const n=ids.length+forcar.length;
+  if(!n)return toast('Marca pelo menos um vinho.',1);
+  if(!confirm(`Trocar o link do Vivino de ${n} vinho(s) nas garrafeiras pelo do catálogo?`+
+    (forcar.length?`\n\n${forcar.length} por confirmar, confirmados por ti.`:'')))return;
+  try{
+    const r=await boRpc('garrafeiras_links_rever',{p_ids:[...new Set([...ids,...forcar])],p_aplicar:true,p_forcar:forcar.length?forcar:null});
+    toast(`${r.aplicados} link(s) corrigido(s) ✓ — fica no registo da Garrafeira`);
+    boGlComparar();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+
+/* ── O resto da ficha ── */
+let _boFich=null;
+const _boFichOff=new Set();          // `vinho:campo` desmarcados (sobrevivem aos filtros)
+const BO_FICH_CONTA={outra_colheita:'de outra colheita (não se tocam)',
+  cor_diferente:'com cor diferente da do catálogo (não se tocam)',sem_catalogo:'fora do catálogo'};
+const boFichNome=k=>BO_ROTULOS_EXTRA[k]||boRvNome(k);
+const boFichK=(v,c)=>v+':'+c;
+async function boFichComparar(erros){
+  const box=document.getElementById('bo-fich-lista');
+  if(!box)return;
+  box.innerHTML='<p class="note">A comparar…</p>';
+  document.getElementById('bo-fich-n').textContent='';
+  try{
+    _boFich=await boRpc('garrafeiras_fichas_rever',{});
+    if(erros&&erros.length)_boFich.erros=erros;
+    _boFichOff.clear();
+    boFichCampos();
+    document.getElementById('bo-fich-ctl').style.display='';
+    document.getElementById('bo-fich-acoes').style.display='';
+    boFichPintar();
+  }catch(e){box.innerHTML=`<p class="note bo-erro">${esc(e.message)}</p>`;}
+}
+function boFichCampos(){
+  const sel=document.getElementById('bo-fich-campo'),antes=sel.value,n={};
+  for(const x of _boFich.linhas||[])for(const c of x.campos||[])n[c.campo]=(n[c.campo]||0)+1;
+  const ks=Object.keys(n).sort((a,b)=>boRvOrdem(a)-boRvOrdem(b)||a.localeCompare(b));
+  sel.innerHTML='<option value="">todos os campos</option>'+ks.map(k=>`<option value="${esc(k)}">${esc(boFichNome(k))} (${n[k]})</option>`).join('');
+  sel.value=ks.includes(antes)?antes:'';
+}
+function boFichVisiveis(){
+  const q=boPalavras('bo-fich-q'),campo=document.getElementById('bo-fich-campo').value,caso=document.getElementById('bo-fich-caso').value;
+  return (_boFich.linhas||[]).map(x=>{
+    if(q.length){const t=boSemAc([x.nome,x.produtor,x.ano,x.garrafeira,x.dono].join(' '));if(!q.every(p=>t.includes(p)))return null;}
+    const cs=(x.campos||[]).filter(c=>(!campo||c.campo===campo)&&(!caso||c.caso===caso));
+    return cs.length?{x,cs}:null;
+  }).filter(Boolean);
+}
+function boFichMarcados(){
+  return boFichVisiveis().map(({x,cs})=>({vinho_id:x.vinho_id,
+    campos:cs.filter(c=>!_boFichOff.has(boFichK(x.vinho_id,c.campo))).map(c=>c.campo)})).filter(i=>i.campos.length);
+}
+function boFichContar(){
+  const tot=(_boFich.linhas||[]).reduce((a,x)=>a+(x.campos||[]).length,0);
+  const vis=boFichVisiveis(),nv=vis.reduce((a,v)=>a+v.cs.length,0);
+  const m=boFichMarcados().reduce((a,i)=>a+i.campos.length,0);
+  const nl=(_boFich.linhas||[]).length;
+  document.getElementById('bo-fich-n').textContent=`${tot} campo${tot===1?'':'s'} em ${nl} vinho${nl===1?'':'s'}`+
+    (nv!==tot?` · ${nv} à vista`:'')+` · ${m} marcado${m===1?'':'s'}`;
+  const b=document.getElementById('bo-btn-fich');
+  b.disabled=!m;b.textContent='Trazer os marcados'+(m?` (${m})`:'');
+}
+function boFichPintar(){
+  if(!_boFich)return;
+  const V=boFichVisiveis(),C=_boFich.contagens||{};
+  const ficam=Object.entries(BO_FICH_CONTA).filter(([k])=>C[k]).map(([k,t])=>`${C[k]} ${t}`).join(' · ');
+  let h='';
+  if((_boFich.erros||[]).length)h+=`<p class="note bo-erro">Não gravou: ${_boFich.erros.map(e=>`${esc(e.nome)} (${esc(e.erro)})`).join('; ')}</p>`;
+  if(V.length){
+    h+=`<div class="bo-rol">${V.map(({x,cs})=>{
+      const todos=cs.every(c=>!_boFichOff.has(boFichK(x.vinho_id,c.campo)));
+      return `<div class="bo-vinho">
+        <label class="rv-linha bo-vcab">
+          <input type="checkbox"${todos?' checked':''} onchange="boFichVinho(${Number(x.vinho_id)},this.checked)">
+          <span class="rv-campo">
+            <span class="bo-vnome">${esc(x.nome)}${x.ano?' '+esc(String(x.ano)):''}</span>
+            <span class="bo-sub">${esc(x.garrafeira||'garrafeira')} · ${esc(x.dono||'')} · ${boLinkCat(x.catalogo_id)}</span>
+          </span>
+        </label>
+        ${cs.map(c=>{
+          const on=!_boFichOff.has(boFichK(x.vinho_id,c.campo));
+          const vazio=c.caso==='vazio'||boRvVazio(c.antes);
+          return `<label class="rv-linha${on?'':' off'}">
+            <input type="checkbox" data-v="${Number(x.vinho_id)}" data-c="${esc(c.campo)}"${on?' checked':''} onchange="boFichMarca(this)">
+            <span class="rv-campo">
+              <b>${esc(boFichNome(c.campo))} · ${c.caso==='vazio'?'vazio na garrafeira':'mais recente no catálogo'}</b>
+              ${vazio?'':`<span class="rv-antes">${boRvValorHTML(c.campo,c.antes)}</span><span class="rv-seta">→</span>`}<span class="rv-novo">${boRvValorHTML(c.campo,c.depois)}</span>
+              ${c.origem?`<span class="og-tag ${boOrigemCls(c.origem,c.forca)}">no catálogo: ${esc(boOrigemTxt(c.origem,c.forca))}${c.em?' · '+esc(boData(c.em)):''}</span>`:''}
+            </span>
+          </label>`;}).join('')}
+      </div>`;}).join('')}</div>`;
+  }else h+=`<p class="note">${(_boFich.linhas||[]).length?'Nenhum com estes filtros.':'Nada a acertar — as garrafeiras batem com o catálogo.'}</p>`;
+  if(ficam)h+=`<p class="note">Ficam como estão: ${esc(ficam)}.</p>`;
+  document.getElementById('bo-fich-lista').innerHTML=h;
+  boFichContar();
+}
+function boFichMarca(el){
+  const k=boFichK(el.dataset.v,el.dataset.c);
+  if(el.checked)_boFichOff.delete(k);else _boFichOff.add(k);
+  el.closest('.rv-linha').classList.toggle('off',!el.checked);
+  boFichContar();
+}
+// O visto do vinho marca e desmarca os campos DELE que estão à vista.
+function boFichVinho(id,on){
+  const v=boFichVisiveis().find(({x})=>Number(x.vinho_id)===Number(id));
+  if(!v)return;
+  for(const c of v.cs){const k=boFichK(id,c.campo);if(on)_boFichOff.delete(k);else _boFichOff.add(k);}
+  boFichPintar();
+}
+function boFichMarcar(on){
+  for(const {x,cs} of boFichVisiveis())for(const c of cs){const k=boFichK(x.vinho_id,c.campo);if(on)_boFichOff.delete(k);else _boFichOff.add(k);}
+  boFichPintar();
+}
+async function boFichTrazer(){
+  const itens=boFichMarcados();
+  const n=itens.reduce((a,i)=>a+i.campos.length,0);
+  if(!n)return toast('Marca pelo menos um campo.',1);
+  if(!confirm(`Trazer do catálogo ${n} campo(s) em ${itens.length} vinho(s) das garrafeiras — os marcados que se veem?\n\nFica no registo da Garrafeira, com o antes e o depois.`))return;
+  try{
+    const r=await boRpc('garrafeiras_fichas_rever',{p_itens:itens,p_aplicar:true});
+    const erros=r.erros||[];
+    toast(`${r.aplicados} campo(s) em ${r.vinhos_aplicados} vinho(s) ✓`+(erros.length?` · ${erros.length} não gravaram`:''),erros.length>0);
+    boFichComparar(erros);
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+
+/* ── HISTÓRICO DE ALTERAÇÕES (db/historico.sql da WineCatalog) ──
+   As últimas do catálogo todo, campo a campo. "Repor" só aparece enquanto
+   o valor de agora ainda é o que aquela alteração lá pôs — senão apagava
+   uma mudança mais recente sem se dar por isso. */
+let _boHist=[];
+async function boHistorico(){
+  const box=document.getElementById('bo-hist-lista');
+  if(!box)return;
+  box.innerHTML=boCaixa('A carregar…');
+  try{
+    const l=await boRpc('historico',{p_vinho_id:null,p_limite:80});
+    _boHist=Array.isArray(l)?l:[];
+    box.innerHTML=_boHist.length?`<div class="fcard"><div class="bo-hist">${_boHist.map(boHistLinhaHTML).join('')}</div></div>`
+      :boCaixa('Ainda não há alterações registadas. O registo começou a 25/09/2026.');
+  }catch(e){box.innerHTML=boErro(e);}
+}
+function boHistLinhaHTML(a){
+  const campo=BO_CAMPO_NOME[a.campo]||a.campo;
+  const identidade=['nome','produtor','ano','_criado'].includes(a.campo);
+  const aindaEste=JSON.stringify(a.agora??null)===JSON.stringify(a.depois??null);
+  const val=v=>v==null?'<em>vazio</em>':boValorHTML(a.campo,v);
+  return `<div class="hist-l">
+    <div class="hist-cab">
+      <a href="#" onclick="boVerFicha(${Number(a.vinhoId)});return false"><b>${esc(a.nome||'(vinho)')}</b>${a.ano?' '+esc(String(a.ano)):''}</a> ·
+      <b>${esc(campo)}</b>
+      <span class="note">${esc(boData(a.quando))} · ${esc(a.quem||'?')}</span>
+      ${a.origem?`<span class="og-tag ${boOrigemCls(a.origem)}">${esc(boOrigemTxt(a.origem))}</span>`:''}
+    </div>
+    ${a.campo==='_criado'?`<div class="hist-v">vinho criado no catálogo</div>`:
+    `<div class="hist-v"><span class="hist-antes">${val(a.antes)}</span>
+      <span class="note">→</span><span>${val(a.depois)}</span></div>`}
+    ${!identidade&&aindaEste?`<button class="btn ghost hist-repor" onclick="boHistRepor(${Number(a.id)})">Repor o valor de antes</button>`:''}
+  </div>`;
+}
+async function boHistRepor(id){
+  const a=_boHist.find(x=>x.id===id);
+  const campo=a?(BO_CAMPO_NOME[a.campo]||a.campo):'o campo';
+  if(!confirm(`Repor ${campo} ao valor de antes?`+(a&&a.antes==null?' (o campo fica vazio)':'')))return;
+  try{
+    await boRpc('repor_alteracao',{p_id:id});
+    toast('Reposto ✓');
+    boHistorico();boCatMudou();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+
+/* ── O CATÁLOGO EM NÚMEROS (winecatalog.resumo) ──
+   O tamanho e de onde veio cada campo: é aqui que se vê se as pesquisas a
+   sério já estão a entrar, ou se está tudo a ser escrito à mão. O CUSTO
+   não vive aqui — é da AI-API-Control. */
+async function boNumeros(){
+  const box=document.getElementById('bo-numeros');
+  if(!box)return;
+  box.innerHTML=boCaixa('A carregar…');
+  try{
+    const cat=await boRpc('resumo',{});
+    if(!cat){box.innerHTML=boCaixa('Sem dados.');return;}
+    const og=(cat.origens||[]).slice().sort((a,b)=>(b.forca-a.forca)||(b.campos-a.campos));
+    const totalC=Number(cat.campos||0);
+    box.innerHTML=`<div class="fcard">
+      <div class="bo-mini">
+        <div><b>${boN(cat.linhas)}</b><span>linhas</span></div>
+        <div><b>${boN(cat.distintos)}</b><span>vinhos distintos</span></div>
+        <div><b>${boN(cat.campos)}</b><span>campos</span></div>
+        <div><b>${esc(String(cat.mediaCampos??'—'))}</b><span>média por linha</span></div>
+      </div>
+      <p class="note" style="margin-top:12px">
+        ${Number(cat.semAno)?`${boN(cat.semAno)} linhas sem colheita · `:''}
+        ${boN(cat.volateisVelhos)} campos voláteis com mais de 30 dias (nota e preço)
+        ${Number(cat.fusoes)?` · ${boN(cat.fusoes)} fusões feitas`:''}
+        ${Number(cat.distintosMarcados)?` · ${boN(cat.distintosMarcados)} pares marcados como distintos`:''}
+      </p>
+    </div>
+    <div class="fcard">
+      <h3>De onde vieram os campos</h3>
+      <p class="note">Durante semanas <em>todos</em> os campos estavam a força 3, vindos de garrafeiras — e nenhuma pesquisa
+        conseguia entrar, porque 3 tapa 2.</p>
+      ${og.length?og.map(o=>{
+        const pc=totalC?Math.round(o.campos*100/totalC):0;
+        return `<div class="og-row">
+          <div class="og-top"><span class="og-nome ${boOrigemCls(o.origem,o.forca)}">${esc(boOrigemTxt(o.origem,o.forca))}</span>
+            <span class="og-n">${boN(o.campos)} <em>força ${esc(String(o.forca))}</em></span></div>
+          <div class="og-bar"><i class="${boOrigemCls(o.origem,o.forca)}" style="width:${pc}%"></i></div>
+        </div>`;}).join(''):'<p class="note">Catálogo vazio.</p>'}
+    </div>`;
+  }catch(e){box.innerHTML=boErro(e);}
+}
+
+/* ── QUEM ENTRA NA WINECATALOG (winecatalog.allowed_users/access_requests) ──
+   É a lista de quem entra na OUTRA app — a da Garrafeira vive em
+   Definições › Utilizadores e não tem nada que ver com esta. Por REST, com
+   as policies de lá (só o admin do catálogo). A password temporária fica
+   onde está (Definições da Garrafeira): mexe na CONTA, não no catálogo. */
+async function boAcesso(){
+  const pe=document.getElementById('bo-pedidos'),us=document.getElementById('bo-users');
+  if(!pe||!us)return;
+  pe.innerHTML=us.innerHTML='<p class="note">A carregar…</p>';
+  const at=document.getElementById('bo-admin-atual');
+  if(at)at.textContent=`Agora és tu (${emailSessao()}).`;
+  try{
+    const reqs=await sbReq('GET','access_requests?select=email,requested_at&order=requested_at.asc',undefined,BO_WC)||[];
+    pe.innerHTML=reqs.length?reqs.map(r=>`<div class="ua-row">
+        <span class="em">${esc(r.email)}</span>
+        <button class="jdel" style="color:var(--vd)" title="Aprovar" onclick="boAcessoAprovar('${escJs(r.email)}')">✓</button>
+        <button class="jdel" title="Recusar" onclick="boAcessoRecusar('${escJs(r.email)}')">✕</button>
+      </div>`).join(''):'<p class="note">Sem pedidos pendentes.</p>';
+  }catch(e){pe.innerHTML=`<p class="note bo-erro">${esc(e.message)}</p>`;}
+  try{
+    const users=await sbReq('GET','allowed_users?select=email&order=email.asc',undefined,BO_WC)||[];
+    const eu=emailSessao();
+    us.innerHTML=users.length?users.map(u=>`<div class="ua-row">
+        <span class="em">${esc(u.email)}${u.email.toLowerCase()===eu?' <span class="tagme">admin</span>':''}</span>
+        <button class="jdel" title="Tirar acesso" onclick="boAcessoTirar('${escJs(u.email)}')">✕</button>
+      </div>`).join(''):'<p class="note">Ainda ninguém, além do admin.</p>';
+    const sel=document.getElementById('bo-novo-admin');
+    if(sel){
+      const cand=users.filter(u=>u.email.toLowerCase()!==eu);
+      sel.innerHTML=cand.length?cand.map(u=>`<option value="${esc(u.email)}">${esc(u.email)}</option>`).join('')
+        :'<option value="">(aprova alguém primeiro)</option>';
+    }
+  }catch(e){us.innerHTML=`<p class="note bo-erro">${esc(e.message)}</p>`;}
+}
+async function boAcessoAprovar(email){
+  try{
+    await sbReq('POST','allowed_users',{email},Object.assign({Prefer:'resolution=merge-duplicates'},BO_WC));
+    await sbReq('DELETE',`access_requests?email=eq.${encodeURIComponent(email)}`,undefined,BO_WC);
+    toast('Acesso aprovado ✓');
+    boAcesso();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function boAcessoRecusar(email){
+  try{
+    await sbReq('DELETE',`access_requests?email=eq.${encodeURIComponent(email)}`,undefined,BO_WC);
+    toast('Pedido removido');
+    boAcesso();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function boAcessoTirar(email){
+  if(!confirm(`Tirar o acesso à WineCatalog a ${email}? (a Garrafeira não muda)`))return;
+  try{
+    await sbReq('DELETE',`allowed_users?email=eq.${encodeURIComponent(email)}`,undefined,BO_WC);
+    toast('Acesso removido');
+    boAcesso();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function boPassarAdmin(){
+  const sel=document.getElementById('bo-novo-admin');
+  const email=sel&&sel.value;
+  if(!email){toast('Escolhe um utilizador',1);return;}
+  if(!confirm(`Passar o catálogo a ${email}?\n\nDeixas de poder aprovar quem entra na WineCatalog, decidir fusões e ver este Backoffice. A conta Supabase e o admin da Garrafeira não mudam.`))return;
+  try{
+    await boRpc('definir_admin',{p_email:email});
+    toast('Catálogo passado ✓');
+    // Deixei de ser o admin do catálogo: o separador sai.
+    EU.admin_catalogo=false;
+    boSincronizar();
+    tab('detalhe',document.querySelector(`.itabs .it[onclick^="tab('detalhe'"]`));
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+/* O separador só existe para o admin do catálogo — chamado no `carregar()`
+   (que é onde o `EU.admin_catalogo` se sabe). */
+function boSincronizar(){
+  document.body.classList.toggle('adm-cat',!!EU.admin_catalogo);
+  if(!EU.admin_catalogo&&tabAtiva==='backoffice')
+    tab('detalhe',document.querySelector(`.itabs .it[onclick^="tab('detalhe'"]`));
+  if(EU.admin_catalogo)boContar();
+}
+
 /* ── AUTH (SUPABASE) ───────────────────────────────────────────────
    Mesmo fluxo do Goals/FestasBV: login → confirmar que o email está em
    `allowed_users` → se não estiver, ecrã "sem acesso" com "Solicitar
@@ -11574,7 +13009,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='180';
+const APP_BUILD='181';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

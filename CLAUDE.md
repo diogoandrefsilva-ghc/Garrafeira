@@ -26,7 +26,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   organizada) · **Mapa dos locais** (um local de cada vez) · Consumidos · **Página do vinho** ·
   Modal editar/novo · Consumir garrafa · Modal da garrafa · **IA** ·
   Auth (Supabase) · Definições · Locais · **Garrafeiras** ·
-  **Utilizadores (admin)** · Exportar · Diagnóstico · Init.
+  **Utilizadores (admin)** · Exportar · Diagnóstico · **Backoffice do
+  catálogo** · Init.
 - `style.css` — todo o CSS. Ver **"A linguagem visual"** mais abaixo antes
   de lhe mexer: as cores e os tipos de letra são um sistema, não gosto.
 - `sw.js` — service worker (cache PWA).
@@ -1322,6 +1323,45 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
   EDITORES.
 - **As marcas dos amigos** (🍾 🍷 💭 🎁) são da `garrafeira.marcas_amigos`
   (ver "A exceção: as marcas dos amigos").
+
+### O Backoffice: o que vivia na WineCatalog (05/10/2026)
+O dono das apps: "enriquecer a app da Garrafeira com as features que neste
+momento temos apenas na WineCatalog, nomeadamente os separadores
+Duplicados, Alertas e Definições … um único menu na Garrafeira (na visão de
+Catálogo), um novo separador de Backoffice". Secção "BACKOFFICE DO
+CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
+`#s-backoffice`.
+- **Só no catálogo e só ao admin do catálogo** (`.so-cat` +
+  `body.adm-cat`, ligado pelo `boSincronizar` no `carregar()` a partir do
+  `EU.admin_catalogo`). Fica antes do ⚙️ e está no `ORDEM_TABS`; como as
+  Sugestões, não se restaura (a app abre na garrafeira).
+- **Duas camadas**: o HUB (`boHub`, `BO_PAGINAS`: uma pastilha por tema em
+  quatro grupos — arrumar o catálogo · o que chega das garrafeiras · o
+  Vivino e as garrafeiras · registo e definições) e a PÁGINA de cada tema
+  (`boPagina`, com "‹ Backoffice"). Sem passo na história do browser. O
+  número no separador e nas pastilhas é o que espera uma decisão do admin
+  (`boContar`: alertas, links do Vivino por validar, comentários e
+  sugestões na vez dele).
+- **É a WineCatalog tal e qual** — Duplicados (com os "não são"),
+  Produtores, Nomes dos vinhos, Alertas, Comentários, Sugestões, Links do
+  Vivino por validar, Links do Vivino nas garrafeiras, Fichas das
+  garrafeiras, Alterações ao catálogo (com "Repor"), O catálogo em números,
+  Quem entra na WineCatalog (os pedidos e o `definir_admin`) e o lote do
+  script do Vivino. As mesmas funções do schema `winecatalog` (`boRpc`, com
+  o `sou_admin()` de cada uma à porta); as regras vivem no SQL. O código
+  veio do `app.js` da WineCatalog — **mexer numa é mexer na outra**, até a
+  WineCatalog deixar de existir.
+- **"Abrir a ficha" é a página do vinho do Catálogo** (`boVerFicha` →
+  `verVinho(-id)`, também por uma linha fundida nele — `cat_ids`), com o
+  Editar e o Procurar de sempre; "🔎 Procurar com este site" abre o
+  Procurar já em "Em sites concretos" com o link. A ficha da WineCatalog
+  (a origem de cada campo, o histórico do vinho, o "Desfazer" de uma fusão)
+  ainda não veio.
+- O que se grava aqui muda o Catálogo, e ele relê-se em fundo
+  (`boCatMudou`).
+- **Ficou de fora** a password temporária (já está nas Definições da
+  Garrafeira, para o dono da conta) e o que só corre no PC (o painel, o
+  script do Vivino e das lojas).
 
 ### Os curadores do catálogo (30/09/2026, migração 32)
 O dono das apps: "eu quero definir quem cria novos vinhos no catálogo… e se
