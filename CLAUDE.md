@@ -132,6 +132,10 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-precos-pagina.sql` é a 41: o preço de cada loja aberta no
   "Procurar informação" vai para o catálogo, loja a loja (ver "O preço de
   um vinho" › "O preço da página da loja").
+  `migracao-fontes-catalogo.sql` é a 42: `catalogo_fontes`, os links das
+  pesquisas de uma linha do catálogo para a página do vinho (ver "O
+  Catálogo dentro da app" › "Os links das pesquisas e o histórico"); corre
+  depois do `db/fontes.sql` da WineCatalog.
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1365,6 +1369,35 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
 - **Ficou de fora** a password temporária (já está nas Definições da
   Garrafeira, para o dono da conta) e o que só corre no PC (o painel, o
   script do Vivino e das lojas).
+
+### Os links das pesquisas e o histórico, na página do vinho (05/10/2026, migração 42)
+O dono das apps: "os links dos vinhos que se capturaram nas pesquisas (com
+opções de poder remover um ou outro que esteja errado) … é uma cena
+pública, para todos (só não podem remover, só curadores). O histórico seria
+só para curadores." Secção "OS LINKS DAS PESQUISAS E O HISTÓRICO" no app.js
+(`pg*`, `PG_EXTRAS`), o CSS `.pf-*`.
+- **Links das pesquisas** (`#pg-fontes`, `pgFontesHTML`): as `fontes` da
+  linha do catálogo — a do vinho do Catálogo, ou a ligada a um vinho meu
+  (`catalogo_id`) — lidas UMA vez por vinho aberto pela
+  `garrafeira.catalogo_fontes` (a migração 31 deixou-as de fora da
+  `catalogo_vinhos`), mais as `ai_fontes` da minha procura que o catálogo
+  não tenha. Substituiu a linha "Fontes:" de antes. A toda a gente.
+- **Retirar um link é dos curadores e do admin do catálogo** (`catPodeCriar`):
+  o ✕ em cada link do catálogo (`winecatalog.fonte_retirar`) e, por baixo,
+  "Links retirados" com **Devolver** (`fonte_devolver`). Retirar não é só
+  tirar do array: as fontes juntam-se em cinco portas do catálogo, e a
+  pesquisa seguinte trazia o mesmo link — por isso fica na
+  `winecatalog.fontes_retiradas` e um trigger (`vinhos_fontes`) tira-o de
+  qualquer escrita. Devolver marca a linha (`devolvido_em`), não a apaga.
+  Os links da minha procura (`ai_fontes`) não têm ✕: são da minha garrafeira.
+- **Histórico de alterações** (`#pg-hist`, `pgHistHTML`): só num vinho do
+  Catálogo e só a quem o corrige; a `winecatalog.historico` de UM vinho
+  passou a aceitar os curadores (a de todos continua só do admin — o
+  Backoffice), e o "Repor" também (vai pela `editar`, que já os aceitava).
+  Fechado atrás de um botão, com as linhas do Backoffice
+  (`boHistLinhaHTML(a,false)`).
+- O que se leu fica em `PG_EXTRAS` por linha do catálogo: o
+  `refrescarVinhoAberto` não volta a pedir.
 
 ### Os curadores do catálogo (30/09/2026, migração 32)
 O dono das apps: "eu quero definir quem cria novos vinhos no catálogo… e se
