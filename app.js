@@ -8471,7 +8471,11 @@ async function pqIA(repetir){
     const querImg=!P.pedidoCampos||P.pedidoCampos.includes('imagem_url');
     if(P.tipo==='doc'&&!res.imagem_url&&querImg){
       try{
-        if(!res.imagemDoc)res.imagemDoc=await pqImagemDocSozinha(P);
+        // A deteção da app primeiro: a caixa da IA já veio copiada do exemplo
+        // do pedido (o branco do Dandy, 05/10/2026) e num formato inválido
+        // (o tinto). A da IA só serve quando a app não encontra nada.
+        const sozinha=await pqImagemDocSozinha(P);
+        if(sozinha)res.imagemDoc=sozinha;
         if(res.imagemDoc)docImg=await pqImagemDoc(P,res.imagemDoc);
       }catch(e){console.warn('imagem do documento',e);}
       if(PQ!==P)return;
@@ -13698,7 +13702,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='190';
+const APP_BUILD='191';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

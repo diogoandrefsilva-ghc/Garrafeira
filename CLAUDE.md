@@ -2320,13 +2320,15 @@ Num documento ENVIADO, a `vinho-info` pede ao Gemini ONDE está a garrafa
 com o pdf.js (do cdnjs, só quando faz falta), olha-se uma zona mais larga do que
 a caixa e fica o bloco de tinta com mais peso dentro dela — a garrafa, nunca o
 texto ao lado (separado por uma faixa branca) nem um filete —, numa JPEG de
-800 px. **O modelo barato nem sempre dá a caixa** (foi o caso da ficha do
-Dandy tinto, no primeiro teste): então a app procura a garrafa sozinha nas duas
+800 px. **Mas a caixa da IA não é de confiar** (05/10/2026: no tinto veio num
+formato inválido, no branco veio COPIADA do exemplo do pedido — por isso o
+exemplo já não tem números), e **a app procura primeiro a garrafa sozinha** nas duas
 primeiras páginas de cada PDF (`docAcharGarrafa`, `pqImagemDocSozinha`) — um
 bloco ALTO e CHEIO de tinta (colunas carregadas, linhas quase todas pintadas),
 que o texto nunca é, estendido para cima e para baixo pelo gargalo e pela
 cápsula enquanto houver tinta seguida; essa caixa é `exata` e o recorte quase
-não a alarga (senão apanhava o logótipo por cima). O registo da `vinho-info`
+não a alarga (senão apanhava o logótipo por cima). A da IA só se usa quando
+a app não encontra nenhuma. O registo da `vinho-info`
 diz o que a IA respondeu (`imagem_doc`). A proposta é um `data:` revisto como as outras e só sobe ao GUARDAR
 (`pqImagemGravar`): a quem corrige o catálogo vai para o bucket público
 (`cat/`, migração 36) e fica o `imagem_url`; aos outros fica a SUA imagem do

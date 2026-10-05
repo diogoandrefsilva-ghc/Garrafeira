@@ -501,7 +501,7 @@ ${ano ? `  "vivinoNota": 4.2,
   "vivinoAvaliacoesGlobal": 5234,
   "vivinoUrl": "",
   "imagemUrl": "",
-${imagemDoc ? `  "imagemDoc": {"anexo": 1, "pagina": 1, "caixa": [120, 40, 900, 330]},
+${imagemDoc ? `  "imagemDoc": {"anexo": "número do anexo", "pagina": "número da página", "caixa": ["ymin", "xmin", "ymax", "xmax"]},
 ` : ""}  "precoMedio": 18.5,
 ${ano ? `  "beberDe": 2026,
   "beberAte": 2034,
@@ -1032,7 +1032,9 @@ function caixaDoDocumento(raw: unknown, anexos: Anexo[], documentos: Pagina[]) {
   const a = anexos.find((x) => x.n === Number(r.anexo));
   const doc = a && a.pag ? documentos.indexOf(a.pag) : -1;
   if (doc < 0) return null;
-  const c = Array.isArray(r.caixa) ? r.caixa.map(Number) : [];
+  // Às vezes vem embrulhada noutra lista ([[y0, x0, y1, x1]]).
+  const cx = Array.isArray(r.caixa) && r.caixa.length === 1 && Array.isArray(r.caixa[0]) ? r.caixa[0] : r.caixa;
+  const c = Array.isArray(cx) ? cx.map(Number) : [];
   if (c.length !== 4 || c.some((x) => !Number.isFinite(x) || x < 0 || x > 1000)) return null;
   const [y0, x0, y1, x1] = c;
   if (y1 - y0 < 30 || x1 - x0 < 15) return null;
