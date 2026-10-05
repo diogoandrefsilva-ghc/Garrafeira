@@ -42,6 +42,10 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
 - `garrafeira-push.ts` — a Edge Function das notificações push (a chave
   pública VAPID para a app, e o envio da caixa de saída `push_avisos`; ver
   "Comentários e sugestões"). Deploy: `supabase functions deploy garrafeira-push`.
+- `garrafeira-produtores.ts` — a Edge Function da IA dos Produtores do
+  Backoffice: o pedido (para a IA manual), a limpeza de uma resposta colada e
+  a análise com o Gemini em segundo plano (migração 46; ver "O Backoffice").
+  Deploy: `supabase functions deploy garrafeira-produtores`.
 - `db/` — `schema.sql` → `functions.sql` → `policies.sql` → `seed.sql`
   (+ `README.md` com os passos manuais no painel do Supabase). Fonte de
   verdade do schema. `migracao-garrafeiras.sql` é a migração 07 (uma
@@ -142,6 +146,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   as quintas dela e o Evel passam a produtores, e os vinhos com eles.
   `migracao-produtores-juntar.sql` é a 45: "não são o mesmo" com a mesma
   chave, e juntar um produtor a outro à mão.
+  `migracao-produtores-ia.sql` é a 46: a lista dos produtores para a IA
+  (`winecatalog.produtores_para_ia`) e as análises em segundo plano
+  (`garrafeira.produtores_analises`).
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1410,6 +1417,26 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   às garrafeiras pela ligação, e as quatro estão nos `produtores_no_nome`
   (o nome do vinho fica "Quinta de Cidrô Arinto"). Na Sogrape: Casa
   Ferreirinha, Herdade do Peso e Quinta dos Carvalhais.
+- **Uma casa-mãe nova escolhe-se na própria lista** (o dono: "como é que
+  eu acrescento uma casa-mãe que ainda não existe?"): "＋ Nova casa-mãe…"
+  pede o nome (`boProdMaeNova`) e ela nasce ao Guardar, pela
+  `produtor_definir` sem grafias. Na vista Todos não há etiquetas nem
+  explicação de confirmado/por confirmar (o dono não as quis).
+- **A vista ✨ IA** (migração 46, `garrafeira-produtores.ts`, o dono: "IA
+  automática ou manual … duplicados, casas-mãe que fizessem sentido criar.
+  Sempre com ecrã de confirmação"). **Analisar com IA** manda a lista
+  (`produtores_para_ia`: nome, casa-mãe, grafias, vinhos, regiões,
+  exemplos) ao Gemini, sem pesquisa web, em segundo plano — a app sonda
+  `produtores_analises`; **Copiar o pedido** dá o MESMO pedido para outro
+  assistente e a resposta colada passa pela MESMA limpeza (`validar`): só
+  nomes que existem, nada dos pares já marcados "não são o mesmo", nada do
+  que já tem essa casa-mãe, nunca uma casa-mãe com casa-mãe. O ecrã
+  (`boProdIAPintar`) mostra os duplicados (com o nome que fica, à escolha)
+  e as casas-mãe (produtor a produtor), cada um com a certeza e o porquê;
+  vêm marcados só os de certeza alta. **Aplicar os marcados** confirma a
+  lista e aplica: primeiro os duplicados (`produtor_juntar`), depois, com a
+  lista relida, as casas-mãe (criadas pela `produtor_definir` quando não
+  existem, e `produtor_casa_mae`). O que falhar fica no ecrã.
 - **Confirmado / por confirmar e juntar à mão** (migração 45,
   `db/migracao-produtores-juntar.sql`, o dono: "não sei o que significa
   solta ou oficial … como posso juntar dois produtores que possas não estar

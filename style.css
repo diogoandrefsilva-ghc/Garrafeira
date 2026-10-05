@@ -2546,3 +2546,29 @@ body:not(.adm-cat) .itabs .it-backoffice{display:none!important}
 .prod-dica .prod-tag{vertical-align:1px}
 .prod-juntar{margin:2px 0 4px}
 .prod-juntar .btn{margin-top:0;padding:7px 14px}
+
+/* A IA olha para os produtores (migração 46): o mesmo ecrã para a análise
+   automática e para a resposta colada de outro assistente. */
+.pia-topo{margin-top:8px}
+.pia-bts{display:flex;gap:8px;flex-wrap:wrap}
+.pia-bts .btn,.pia-topo>.btn{margin-top:6px}
+.pia-pedido{width:100%;height:110px;margin-top:8px;font-size:11px}
+#s-backoffice label.pia-lbl{display:block;margin:10px 0 0;font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--mu)}
+#s-backoffice .pia-lbl textarea{display:block;width:100%;margin-top:4px;text-transform:none;letter-spacing:0;font-weight:400;font-size:13px}
+.pia-espera{padding:14px 2px}
+.pia-item{padding:10px 12px 8px}
+.pia-item.fora{opacity:.55}
+#s-backoffice label.pia-cab,.pia-cab{display:flex;align-items:center;gap:8px;margin:0;font-size:14px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--tx);cursor:pointer}
+.pia-cab>span:first-of-type{flex:1;min-width:0}
+.pia-cab b{font-family:var(--fd);font-weight:600}
+#s-backoffice .pia-cab input,#s-backoffice .pia-filho input{width:18px;height:18px;margin:0;padding:0;flex:none;accent-color:var(--vh)}
+.pia-cert{flex:none;font-size:10.5px;font-weight:600;color:#1d4a3b}
+.pia-cert.media{color:var(--mu)}
+.pia-nova{font-style:normal;font-size:10.5px;font-weight:700;color:var(--vh);margin-left:4px}
+.pia-nomes{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0 26px}
+#s-backoffice label.pia-filho{display:flex;align-items:center;gap:8px;margin:7px 0 0 2px;font-size:13.5px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--tx);cursor:pointer}
+.pia-filho.fora{opacity:.55}
+.pia-filho small{color:var(--mu)}
+.pia-porque{font-size:12px;color:var(--mu);margin:7px 0 0;line-height:1.4}
+.pia-fim{display:flex;align-items:center;gap:10px;margin-top:14px}
+.pia-fim .btn{margin-top:0}

@@ -10401,13 +10401,12 @@ function boProdPintar(){
   const seg=`<div class="prod-seg segbtns">
       <button type="button" class="segbtn${_boProdVista==='decidir'?' on':''}" onclick="boProdVista('decidir')">Por decidir <span class="prod-segn">${G.length}</span></button>
       <button type="button" class="segbtn${_boProdVista==='todos'?' on':''}" onclick="boProdVista('todos')">Todos <span class="prod-segn">${T.length}</span></button>
+      <button type="button" class="segbtn${_boProdVista==='ia'?' on':''}" onclick="boProdVista('ia')">✨ IA</button>
     </div>`;
+  if(_boProdVista==='ia'){box.innerHTML=seg+'<div id="bo-prod-ia"></div>';return boProdIAPintar();}
   if(_boProdVista==='todos'){
     box.innerHTML=seg+`<div class="prod-procura"><input type="search" id="bo-prod-q" placeholder="Procurar produtor ou grafia…" oninput="boProdTodosPintar()"
         autocomplete="off"><span class="prod-conta" id="bo-prod-conta"></span></div>
-      <p class="prod-dica"><span class="prod-tag">confirmado</span> tem nome oficial: quem o escrever de outra maneira passa a esse nome.
-        <span class="prod-tag solta">por confirmar</span> está escrito assim nalgum vinho e ainda ninguém o confirmou.
-        Toca num para mudar o nome, a casa-mãe ou juntá-lo a outro.</p>
       <div id="bo-prod-todos" class="prod-todos"></div>`;
     return boProdTodosPintar();
   }
@@ -10467,7 +10466,6 @@ function boProdItemHTML(x,k){
     boProdN(x.cat,x.gar),x.grafias.length?`${x.grafias.length} grafia${x.grafias.length>1?'s':''}`:''].filter(Boolean).join(' · ');
   const cab=`<button type="button" class="prod-rh" onclick="boProdAbrir(${k})">
       <span class="prod-rt"><b>${esc(x.nome)}</b><small>${sub}</small></span>
-      ${x.casas.length?'<span class="prod-tag">grupo</span>':x.id?'<span class="prod-tag">confirmado</span>':'<span class="prod-tag solta">por confirmar</span>'}
       <span class="prod-chev">${ab?'▾':'›'}</span></button>`;
   if(!ab)return `<div class="prod-r">${cab}</div>`;
   const vars=x.variantes.filter(v=>!v.oficial);
@@ -10501,12 +10499,26 @@ function boProdMaeHTML(x){
   const ops=_boProd.todos.filter(o=>o.id&&o.id!==x.id&&!o.maeId).sort((a,b)=>(b.casas.length-a.casas.length)||a.nome.localeCompare(b.nome,'pt'));
   const grupos=ops.filter(o=>o.casas.length),outros=ops.filter(o=>!o.casas.length);
   const op=o=>`<option value="${o.id}"${o.id===x.maeId?' selected':''}>${esc(o.nome)}</option>`;
-  return `<label>Casa-mãe<select id="bo-prod-mae">
+  return `<label>Casa-mãe<select id="bo-prod-mae" onchange="boProdMaeNova(this)">
         <option value="">— nenhuma —</option>
+        <option value="__nova">＋ Nova casa-mãe…</option>
         ${grupos.length?`<optgroup label="Grupos">${grupos.map(op).join('')}</optgroup>`:''}
         ${outros.length?`<optgroup label="Outros produtores">${outros.map(op).join('')}</optgroup>`:''}
       </select></label>
-      <p class="prod-ajuda">O grupo a que pertence (ex.: Sogrape). Aparece entre parêntesis ao lado do produtor, na ficha do vinho. Se o grupo não está na lista, cria-o na procura acima.</p>`;
+      <p class="prod-ajuda">O grupo a que pertence (ex.: Sogrape). Aparece entre parêntesis ao lado do produtor, na ficha do vinho.</p>`;
+}
+/* Uma casa-mãe que ainda não existe (05/10/2026, o dono: "como é que eu
+   acrescento uma casa-mãe que ainda não existe na lista?"): escreve-se o
+   nome aqui, e nasce como produtor oficial ao Guardar (`produtor_definir`
+   sem grafias). Se o nome já for de um produtor da lista, escolhe-se esse. */
+function boProdMaeNova(sel){
+  if(sel.value!=='__nova')return;
+  const opNova=sel.querySelector('option[value="__nova"]');
+  const nome=(prompt('Nome da nova casa-mãe (o grupo, ex.: Symington Family Estates):',sel.dataset.nome||'')||'').trim();
+  if(!nome){delete sel.dataset.nome;opNova.textContent='＋ Nova casa-mãe…';sel.value='';return;}
+  const ja=[...sel.options].find(o=>o.value&&o.value!=='__nova'&&boSemAc(o.textContent)===boSemAc(nome));
+  if(ja){sel.value=ja.value;delete sel.dataset.nome;opNova.textContent='＋ Nova casa-mãe…';toast(`“${ja.textContent}” já existe — fica escolhida.`);return;}
+  sel.dataset.nome=nome;opNova.textContent=`＋ Nova: ${nome}`;sel.value='__nova';
 }
 // A casa-mãe lê-se na ficha, na grelha e na procura: relê-se o mapa e
 // repinta-se, sem recarregar a garrafeira.
@@ -10540,6 +10552,150 @@ async function boProdJuntarA(k){
     _boProdAberto=null;await boProdCarregar();boCatMudou();boCasasRecarregar();
   }catch(e){toast('Erro: '+e.message,1);}
 }
+/* ── A IA OLHA PARA OS PRODUTORES (migração 46, `garrafeira-produtores`) ──
+   O dono, 05/10/2026: "IA automática ou IA manual, para analisar todos os
+   produtores … duplicados, casas-mãe que fizessem sentido criar. Sempre com
+   ecrã de confirmação." As duas dão o MESMO ecrã: a automática pede ao
+   Gemini (em segundo plano: a app sonda `produtores_analises`), a manual dá o
+   pedido para copiar e lê a resposta colada. O pedido e a limpeza (só nomes
+   que existem, nada do que já foi decidido) vivem SÓ na Edge Function. Nada
+   muda sem o "Aplicar os marcados": os duplicados juntam-se pela
+   `produtor_juntar`, as casas-mãe pela `produtor_casa_mae` (criada pela
+   `produtor_definir` quando não existe). Vêm marcadas só as de certeza alta. */
+let _boProdIA={estado:'',res:null,erro:'',manual:false};
+async function boProdIAFn(corpo){
+  let r;
+  try{r=await sbFetch(`${SB_URL}/functions/v1/garrafeira-produtores`,{method:'POST',
+    headers:{'Content-Type':'application/json','apikey':SB_KEY},body:JSON.stringify(corpo)});}
+  catch(e){throw new Error('Erro de ligação — tenta outra vez.');}
+  let d={};try{d=await r.json();}catch(_){}
+  if(!r.ok){
+    if(r.status===404&&!d.error)throw new Error('A função `garrafeira-produtores` ainda não está publicada no Supabase.');
+    throw new Error(d.error||('Erro HTTP '+r.status));
+  }
+  return d;
+}
+function boProdIAResultado(res){
+  // Os vistos: tudo o que é de certeza alta vem marcado; o resto, não.
+  (res.duplicados||[]).forEach(d=>{d.marcado=d.certeza==='alta';});
+  (res.casas_mae||[]).forEach(c=>{c.produtores.forEach(p=>{p.marcado=c.certeza==='alta';});});
+  _boProdIA={..._boProdIA,estado:'pronto',res,erro:''};
+  boProdIAPintar();
+}
+async function boProdIAAnalisar(){
+  _boProdIA={estado:'a pensar',res:null,erro:'',manual:false};boProdIAPintar();
+  try{
+    const {id}=await boProdIAFn({acao:'analisar'});
+    const t0=Date.now();
+    while(Date.now()-t0<200000){
+      await new Promise(r=>setTimeout(r,4000));
+      const rows=await sbReq('GET',`produtores_analises?id=eq.${id}&select=estado,resultado,erro`);
+      const a=rows&&rows[0];
+      if(a&&a.estado==='concluida')return boProdIAResultado(a.resultado||{});
+      if(a&&a.estado==='erro')throw new Error(a.erro||'a análise falhou');
+    }
+    throw new Error('A IA está a demorar demasiado — tenta outra vez daqui a pouco.');
+  }catch(e){_boProdIA={estado:'erro',res:null,erro:e.message,manual:false};boProdIAPintar();}
+}
+async function boProdIACopiar(){
+  try{
+    const {pedido}=await boProdIAFn({acao:'pedido'});
+    try{await navigator.clipboard.writeText(pedido);toast('Pedido copiado — cola-o noutro assistente (Claude, ChatGPT…).');}
+    catch(_){const t=document.getElementById('bo-prod-ia-pedido');if(t){t.value=pedido;t.style.display='block';t.select();}
+      toast('Copia o pedido da caixa que apareceu.');}
+    _boProdIA.manual=true;boProdIAPintar();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function boProdIALer(){
+  const t=(document.getElementById('bo-prod-ia-resp')||{}).value||'';
+  if(!t.trim())return toast('Cola primeiro a resposta do outro assistente.',1);
+  try{boProdIAResultado(await boProdIAFn({acao:'validar',resposta:t}));}
+  catch(e){toast('Erro: '+e.message,1);}
+}
+function boProdIAPintar(){
+  const box=document.getElementById('bo-prod-ia');if(!box)return;
+  const I=_boProdIA;
+  const topo=`<div class="pia-topo">
+      <p class="prod-dica">A IA olha para todos os produtores e propõe duplicados e casas-mãe. Nada muda sem confirmares.</p>
+      <div class="pia-bts"><button class="btn prim" onclick="boProdIAAnalisar()"${I.estado==='a pensar'?' disabled':''}>✨ Analisar com IA</button>
+        <button class="btn ghost" onclick="boProdIACopiar()">📋 Copiar o pedido</button></div>
+      <textarea id="bo-prod-ia-pedido" class="pia-pedido" readonly style="display:none"></textarea>
+      ${I.manual?`<label class="pia-lbl">Resposta do outro assistente<textarea id="bo-prod-ia-resp" rows="5" placeholder="Cola aqui o JSON que ele devolveu…"></textarea></label>
+        <button class="btn ghost" onclick="boProdIALer()">Ler a resposta</button>`:''}
+    </div>`;
+  let corpo='';
+  if(I.estado==='a pensar')corpo='<p class="prod-dica pia-espera">A IA está a ler os produtores… pode levar um minuto ou dois.</p>';
+  else if(I.estado==='erro')corpo=`<p class="prod-dica bo-erro">${esc(I.erro)}</p>`;
+  else if(I.estado==='pronto'){
+    const D=I.res.duplicados||[],C=I.res.casas_mae||[];
+    if(!D.length&&!C.length)corpo='<div class="prod-vazio">✓ A IA não encontrou nada a propor.</div>';
+    else{
+      const cert=c=>`<span class="pia-cert${c==='alta'?'':' media'}">${c==='alta'?'certeza alta':'certeza média'}</span>`;
+      const dup=D.map((d,i)=>`<div class="prod-g pia-item${d.marcado?'':' fora'}">
+          <label class="pia-cab"><input type="checkbox"${d.marcado?' checked':''} onchange="boProdIAMarca('d',${i},-1,this.checked)">
+            <span>Juntar em <b>${esc(d.oficial)}</b></span>${cert(d.certeza)}</label>
+          <div class="pia-nomes">${d.nomes.map(n=>`<label class="prod-pin"><input type="radio" name="pia-of-${i}"${n===d.oficial?' checked':''}
+              onchange="boProdIAOficial(${i},'${escJs(n)}')"><span>${esc(n)}</span></label>`).join('')}</div>
+          ${d.porque?`<p class="pia-porque">${esc(d.porque)}</p>`:''}
+        </div>`).join('');
+      const cas=C.map((c,i)=>`<div class="prod-g pia-item">
+          <div class="pia-cab"><span>Casa-mãe <b>${esc(c.casa_mae)}</b>${c.existe?'':' <i class="pia-nova">nova</i>'}</span>${cert(c.certeza)}</div>
+          ${c.produtores.map((p,j)=>`<label class="pia-filho${p.marcado?'':' fora'}"><input type="checkbox"${p.marcado?' checked':''}
+              onchange="boProdIAMarca('c',${i},${j},this.checked)"><span>${esc(p.nome)}${p.atual?` <small>(hoje: ${esc(p.atual)})</small>`:''}</span></label>`).join('')}
+          ${c.porque?`<p class="pia-porque">${esc(c.porque)}</p>`:''}
+        </div>`).join('');
+      const n=D.filter(d=>d.marcado).length+C.reduce((a,c)=>a+c.produtores.filter(p=>p.marcado).length,0);
+      corpo=`${D.length?`<div class="bo-grupo">Duplicados (${D.length})</div>${dup}`:''}
+        ${C.length?`<div class="bo-grupo">Casas-mãe (${C.length})</div>${cas}`:''}
+        <div class="pia-fim"><button class="btn prim" onclick="boProdIAAplicar()"${n?'':' disabled'}>Aplicar os marcados (${n})</button>
+          <span class="prod-conta">${esc(I.res.modelo==='manual'?'resposta colada':(I.res.modelo||''))}</span></div>`;
+    }
+  }
+  box.innerHTML=topo+corpo;
+}
+function boProdIAMarca(t,i,j,on){
+  const R=_boProdIA.res;if(!R)return;
+  if(t==='d')R.duplicados[i].marcado=on;else R.casas_mae[i].produtores[j].marcado=on;
+  boProdIAPintar();
+}
+function boProdIAOficial(i,n){const d=_boProdIA.res.duplicados[i];d.oficial=n;boProdIAPintar();}
+async function boProdIAAplicar(){
+  const R=_boProdIA.res;if(!R)return;
+  const D=R.duplicados.filter(d=>d.marcado);
+  const C=R.casas_mae.map(c=>({...c,produtores:c.produtores.filter(p=>p.marcado)})).filter(c=>c.produtores.length);
+  const linhas=[...D.map(d=>`• Juntar ${d.nomes.filter(n=>n!==d.oficial).join(', ')} em “${d.oficial}”`),
+    ...C.map(c=>`• ${c.produtores.map(p=>p.nome).join(', ')} → casa-mãe “${c.casa_mae}”${c.existe?'':' (nova)'}`)];
+  if(!confirm(`Aplicar isto ao catálogo e a todas as garrafeiras?\n\n${linhas.join('\n')}`))return;
+  const erros=[];let ok=0;
+  // Primeiro os duplicados (mudam nomes); depois, com a lista relida, as casas-mãe.
+  for(const d of D){
+    try{for(const n of d.nomes)if(n!==d.oficial)await boRpc('produtor_juntar',{p_de:n,p_para:d.oficial});ok++;d.feito=true;}
+    catch(e){erros.push(`${d.oficial}: ${e.message}`);}
+  }
+  await boProdCarregar();
+  // Um nome que acabou de ser juntado a outro responde pelo que ficou.
+  const destino={};D.filter(d=>d.feito).forEach(d=>d.nomes.forEach(n=>{destino[boSemAc(n)]=d.oficial;}));
+  const achar=n=>{const k=destino[boSemAc(n)]||n;return _boProd.todos.find(x=>boSemAc(x.nome)===boSemAc(k));};
+  for(const c of C){
+    try{
+      const m=achar(c.casa_mae);
+      const maeId=m&&m.id?m.id:Number((await boRpc('produtor_definir',{p_oficial:m?m.nome:c.casa_mae,p_grafias:[]})).id);
+      for(const p of c.produtores){
+        try{
+          const x=achar(p.nome);
+          const id=x&&x.id?x.id:Number((await boRpc('produtor_definir',{p_oficial:x?x.nome:p.nome,p_grafias:[]})).id);
+          await boRpc('produtor_casa_mae',{p_id:id,p_mae:maeId});ok++;p.feito=true;
+        }catch(e){erros.push(`${p.nome}: ${e.message}`);}
+      }
+    }catch(e){erros.push(`${c.casa_mae}: ${e.message}`);}
+  }
+  // O que se aplicou sai da lista; o que falhou ou não se marcou fica.
+  R.duplicados=R.duplicados.filter(d=>!d.feito);
+  R.casas_mae=R.casas_mae.map(c=>({...c,produtores:c.produtores.filter(p=>!p.feito)})).filter(c=>c.produtores.length);
+  toast(`${ok} aplicado(s) ✓${erros.length?` · ${erros.length} com erro`:''}`,erros.length?1:0);
+  if(erros.length)alert('Não foi possível:\n'+erros.join('\n'));
+  await boProdCarregar();boCatMudou();boCasasRecarregar();
+}
 async function boProdCriar(){
   const nome=((document.getElementById('bo-prod-q')||{}).value||'').trim();if(!nome)return;
   if(!confirm(`Criar “${nome}” como produtor oficial?\n\nServe, por exemplo, para um grupo (casa-mãe) que não tem vinhos com o nome dele.`))return;
@@ -10551,8 +10707,9 @@ async function boProdGuardar(k){
   const x=_boProd.todos[k];
   const nome=(document.getElementById('bo-prod-nome').value||'').trim(),compl=(document.getElementById('bo-prod-compl').value||'').trim();
   if(!nome)return toast('Falta o nome oficial.',1);
-  const sm=document.getElementById('bo-prod-mae'),mae=sm&&sm.value?Number(sm.value):null;
-  const mudaNome=nome!==x.nome,mudaCompl=compl!==x.completo,mudaMae=!!sm&&mae!==x.maeId;
+  const sm=document.getElementById('bo-prod-mae'),maeNova=sm&&sm.value==='__nova'?(sm.dataset.nome||''):'';
+  let mae=sm&&sm.value&&!maeNova?Number(sm.value):null;
+  const mudaNome=nome!==x.nome,mudaCompl=compl!==x.completo,mudaMae=!!sm&&(!!maeNova||mae!==x.maeId);
   if(!mudaNome&&!mudaCompl&&!mudaMae&&x.id)return boProdAbrir(k);
   const tot=x.cat+x.gar;
   if((mudaNome||!x.id)&&!confirm(x.id?`Mudar “${x.nome}” para “${nome}”?\n\n${tot} vinho(s) no catálogo e nas garrafeiras ficam com este nome.`
@@ -10564,6 +10721,7 @@ async function boProdGuardar(k){
       id=Number(r.id)||id;mudou=true;boProdResultado(r);
     }
     if(mudaCompl&&id){await boRpc('produtor_nome_completo',{p_id:id,p_nome_completo:compl});if(!mudou)toast(compl?'Nome completo guardado ✓':'Nome completo retirado');}
+    if(mudaMae&&id&&maeNova)mae=Number((await boRpc('produtor_definir',{p_oficial:maeNova,p_grafias:[]})).id)||null;
     if(mudaMae&&id){const r=await boRpc('produtor_casa_mae',{p_id:id,p_mae:mae});if(!mudou)toast(r.casa_mae?`Casa-mãe: ${r.casa_mae} ✓`:'Casa-mãe retirada');boCasasRecarregar();}
     _boProdAberto=null;await boProdCarregar();if(mudou)boCatMudou();
   }catch(e){toast('Erro: '+e.message,1);}
@@ -13319,7 +13477,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='187';
+const APP_BUILD='188';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
