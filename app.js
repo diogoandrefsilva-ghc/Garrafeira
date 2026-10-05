@@ -4669,16 +4669,115 @@ function verVinho(id){
   // caminho de abrir um vinho. A marca aparece quando a resposta chegar.
   if(id>0)catComparar(id);
   else catNotaPintar();
+  pgExtrasCarregar(v);
 }
 function refrescarVinhoAberto(){
   if(VINHO_ABERTO!=null&&document.getElementById('modal-vinho').classList.contains('on')){
     const v=IDXV[VINHO_ABERTO];
     // Refazer o HTML deita fora o cabeçalho (e com ele as medidas do
     // encolher), mas o scroll fica onde estava — daí o acerto a seguir.
-    if(v){document.getElementById('modal-vinho-in').innerHTML=vinhoDetalheHTML(v);pgMedirEncolhe();if(v.id<0)catNotaPintar();}
+    if(v){document.getElementById('modal-vinho-in').innerHTML=vinhoDetalheHTML(v);pgMedirEncolhe();if(v.id<0)catNotaPintar();pgExtrasCarregar(v,true);}
   }
 }
 
+
+/* ── OS LINKS DAS PESQUISAS E O HISTÓRICO, NA PÁGINA DO VINHO (05/10/2026) ──
+   O dono das apps: "os links dos vinhos que se capturaram nas pesquisas
+   (com opções de poder remover um ou outro que esteja errado) … é uma cena
+   pública, para todos (só não podem remover, só curadores). O histórico
+   seria só para curadores."
+   - LINKS: as `fontes` da linha do catálogo (a do vinho do Catálogo, ou a
+     ligada a um vinho meu — `catalogo_id`), lidas UMA vez por vinho aberto
+     (`garrafeira.catalogo_fontes`, migração 41), mais as `ai_fontes` da
+     minha procura num vinho meu. Os curadores (e o admin do catálogo) têm o
+     ✕ em cada link do catálogo e a lista dos retirados com "Devolver"
+     (`winecatalog.fonte_retirar`/`fonte_devolver`, `db/fontes.sql` da
+     WineCatalog — um link retirado não volta pela pesquisa seguinte: um
+     trigger tira-o de qualquer escrita).
+   - HISTÓRICO: só num vinho do Catálogo e só a quem o corrige
+     (`catPodeCriar`); é a `winecatalog.historico` de um vinho, com o "Repor"
+     das Alterações ao catálogo do Backoffice (`boHistLinhaHTML`). Fechado
+     atrás de um botão: uma corrida do script escreve quinze campos de uma
+     vez, e a lista corrida enchia a página.
+   O que se lê fica em memória (`PG_EXTRAS`) por linha do catálogo: refazer
+   a página (`refrescarVinhoAberto`) não volta a pedir. */
+const PG_EXTRAS={fontes:{},hist:{},histAberto:false};
+function pgCatId(v){return v?(v.id<0?Number(v.cat_id||-v.id):(v.catalogo_id!=null?Number(v.catalogo_id):null)):null;}
+function pgSite(u){try{return new URL(u).hostname.replace(/^www\./,'');}catch(_){return '';}}
+function pgFontesHTML(v){
+  const id=pgCatId(v), r=id?PG_EXTRAS.fontes[id]:null;
+  const cur=catPodeCriar()&&!!id;
+  const cat=(r&&Array.isArray(r.fontes))?r.fontes.filter(f=>f&&f.url):[];
+  // As da minha procura que o catálogo não tem (num vinho meu).
+  const minhas=(v.id>0&&Array.isArray(v.ai_fontes)?v.ai_fontes:[])
+    .filter(f=>f&&f.url&&!cat.some(c=>c.url===f.url));
+  const ret=(r&&Array.isArray(r.retiradas))?r.retiradas:[];
+  if(!cat.length&&!minhas.length&&!(cur&&ret.length))return '';
+  const item=(f,podeTirar)=>`<div class="pf-l">
+      <a href="${esc(f.url)}" target="_blank" rel="noopener"><b>${esc(f.titulo||pgSite(f.url)||f.url)}</b><span>${esc(pgSite(f.url))}</span></a>
+      ${podeTirar?`<button type="button" class="pf-x" title="Retirar este link (está errado)" aria-label="Retirar este link" onclick="pgFonteRetirar('${escJs(f.url)}')">✕</button>`:''}
+    </div>`;
+  return `<div class="msec">Links das pesquisas</div>
+    ${cat.length||minhas.length?`<div class="pf-lista">${cat.map(f=>item(f,cur)).join('')}${minhas.map(f=>item(f,false)).join('')}</div>`
+      :'<p class="note">Nenhum link à vista.</p>'}
+    ${cur&&ret.length?`<details class="pf-ret"><summary>Links retirados (${ret.length})</summary>
+      ${ret.map(x=>`<div class="pf-l off">
+        <a href="${esc(x.url)}" target="_blank" rel="noopener"><b>${esc(x.titulo||pgSite(x.url)||x.url)}</b><span>${esc(pgSite(x.url))}${x.quem?' · retirado por '+esc(x.quem):''}</span></a>
+        <button type="button" class="btn ghost pf-dev" onclick="pgFonteDevolver('${escJs(x.url)}')">Devolver</button>
+      </div>`).join('')}</details>`:''}`;
+}
+function pgHistHTML(v){
+  const id=pgCatId(v), l=id?PG_EXTRAS.hist[id]:null;
+  const tit='<div class="msec">Histórico de alterações</div>';
+  if(l==null)return tit+'<p class="note">A carregar…</p>';
+  if(l.erro)return tit+`<p class="note">${esc(l.erro)}</p>`;
+  if(!l.length)return tit+'<p class="note">Sem alterações registadas (o registo começou a 25/09/2026).</p>';
+  return tit+`<button type="button" class="btn ghost full pf-hbtn" onclick="pgHistAlternar()">${PG_EXTRAS.histAberto
+      ?'Esconder o histórico ▲':`Ver o histórico · ${l.length===1?'1 alteração':l.length+' alterações'} ▼`}</button>
+    ${PG_EXTRAS.histAberto?`<div class="bo-hist pf-hist">${l.map(a=>boHistLinhaHTML(a,false)).join('')}</div>`:''}`;
+}
+function pgHistAlternar(){
+  PG_EXTRAS.histAberto=!PG_EXTRAS.histAberto;
+  const v=IDXV[VINHO_ABERTO],el=document.getElementById('pg-hist');
+  if(v&&el)el.innerHTML=pgHistHTML(v);
+}
+function pgExtrasPintar(v){
+  if(!v||VINHO_ABERTO!==v.id)return;
+  const f=document.getElementById('pg-fontes');if(f)f.innerHTML=pgFontesHTML(v);
+  const h=document.getElementById('pg-hist');if(h)h.innerHTML=pgHistHTML(v);
+}
+async function pgExtrasCarregar(v,deCache){
+  const id=pgCatId(v);if(!id)return;
+  if(!deCache)PG_EXTRAS.histAberto=false;
+  const pedidos=[];
+  if(!deCache||!PG_EXTRAS.fontes[id])pedidos.push(
+    sbRpc('catalogo_fontes',{p_id:id}).then(r=>{PG_EXTRAS.fontes[id]=r||{fontes:[]};}).catch(()=>{}));
+  if(v.id<0&&catPodeCriar()&&(!deCache||!PG_EXTRAS.hist[id]))pedidos.push(
+    boRpc('historico',{p_vinho_id:id,p_limite:200}).then(l=>{PG_EXTRAS.hist[id]=Array.isArray(l)?l:[];})
+      .catch(e=>{PG_EXTRAS.hist[id]={erro:'Não foi possível ler o histórico: '+(e.message||e)};}));
+  if(!pedidos.length)return;
+  await Promise.all(pedidos);
+  pgExtrasPintar(v);
+}
+async function pgFonteRetirar(url){
+  const v=IDXV[VINHO_ABERTO],id=pgCatId(v);if(!id)return;
+  if(!confirm('Retirar este link?\n\n'+url+'\n\nSai do Catálogo para toda a gente, e uma pesquisa futura não o volta a pôr. Dá para devolver.'))return;
+  try{
+    await boRpc('fonte_retirar',{p_id:id,p_url:url});
+    toast('Link retirado ✓');
+    delete PG_EXTRAS.fontes[id];
+    pgExtrasCarregar(v,true);
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function pgFonteDevolver(url){
+  const v=IDXV[VINHO_ABERTO],id=pgCatId(v);if(!id)return;
+  try{
+    await boRpc('fonte_devolver',{p_id:id,p_url:url});
+    toast('Link devolvido ✓');
+    delete PG_EXTRAS.fontes[id];
+    pgExtrasCarregar(v,true);
+  }catch(e){toast('Erro: '+e.message,1);}
+}
 
 /* ══════════════════════════════════════════════════════════════════
    O ESPELHO DO CATÁLOGO
@@ -5531,9 +5630,8 @@ function vinhoDetalheHTML(v){
 
     ${v.ai_resumo?`<div class="msec">O que se sabe</div>
       <div class="note" style="margin-top:8px;font-size:12.5px">${esc(v.ai_resumo)}</div>`:''}
-    ${Array.isArray(v.ai_fontes)&&v.ai_fontes.length?`<div class="ia-fontes">
-      Fontes: ${v.ai_fontes.map(f=>`<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo||f.url)}</a>`).join(' · ')}
-    </div>`:''}
+    <div id="pg-fontes">${pgFontesHTML(v)}</div>
+    ${cat&&catPodeCriar()?`<div id="pg-hist">${pgHistHTML(v)}</div>`:''}
 
     ${cat?(v.vivino_url?`<div class="msec">Links</div><div class="mlinks">${linkItens.join(', ')}</div>`:'')
     :(TEM_LINKS||v.vivino_url)?`<div class="msec">Links</div>
@@ -10988,14 +11086,14 @@ async function boHistorico(){
       :boCaixa('Ainda não há alterações registadas. O registo começou a 25/09/2026.');
   }catch(e){box.innerHTML=boErro(e);}
 }
-function boHistLinhaHTML(a){
+function boHistLinhaHTML(a,comVinho=true){
   const campo=BO_CAMPO_NOME[a.campo]||a.campo;
   const identidade=['nome','produtor','ano','_criado'].includes(a.campo);
   const aindaEste=JSON.stringify(a.agora??null)===JSON.stringify(a.depois??null);
   const val=v=>v==null?'<em>vazio</em>':boValorHTML(a.campo,v);
   return `<div class="hist-l">
     <div class="hist-cab">
-      <a href="#" onclick="boVerFicha(${Number(a.vinhoId)});return false"><b>${esc(a.nome||'(vinho)')}</b>${a.ano?' '+esc(String(a.ano)):''}</a> ·
+      ${comVinho?`<a href="#" onclick="boVerFicha(${Number(a.vinhoId)});return false"><b>${esc(a.nome||'(vinho)')}</b>${a.ano?' '+esc(String(a.ano)):''}</a> ·`:''}
       <b>${esc(campo)}</b>
       <span class="note">${esc(boData(a.quando))} · ${esc(a.quem||'?')}</span>
       ${a.origem?`<span class="og-tag ${boOrigemCls(a.origem)}">${esc(boOrigemTxt(a.origem))}</span>`:''}
@@ -11007,13 +11105,17 @@ function boHistLinhaHTML(a){
   </div>`;
 }
 async function boHistRepor(id){
-  const a=_boHist.find(x=>x.id===id);
+  // Do Backoffice ou da página de um vinho (`PG_EXTRAS.hist`).
+  const a=_boHist.find(x=>x.id===id)||Object.values(PG_EXTRAS.hist).flat().find(x=>x&&x.id===id);
   const campo=a?(BO_CAMPO_NOME[a.campo]||a.campo):'o campo';
   if(!confirm(`Repor ${campo} ao valor de antes?`+(a&&a.antes==null?' (o campo fica vazio)':'')))return;
   try{
     await boRpc('repor_alteracao',{p_id:id});
     toast('Reposto ✓');
-    boHistorico();boCatMudou();
+    if(document.getElementById('bo-hist-lista'))boHistorico();
+    // A página do vinho volta a ler o histórico quando o Catálogo for relido.
+    PG_EXTRAS.hist={};
+    boCatMudou();
   }catch(e){toast('Erro: '+e.message,1);}
 }
 
@@ -13037,7 +13139,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='182';
+const APP_BUILD='183';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
