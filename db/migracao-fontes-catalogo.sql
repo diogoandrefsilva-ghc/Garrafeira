@@ -1,5 +1,5 @@
 -- =====================================================================
--- Migração 41 — os LINKS das pesquisas na página do vinho (05/10/2026, o
+-- Migração 42 — os LINKS das pesquisas na página do vinho (05/10/2026, o
 -- dono das apps: "os links dos vinhos que se capturaram nas pesquisas
 -- (com opções de poder remover um ou outro que esteja errado) … é uma
 -- cena pública, para todos (só não podem remover, só curadores)").

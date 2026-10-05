@@ -4688,7 +4688,7 @@ function refrescarVinhoAberto(){
    seria só para curadores."
    - LINKS: as `fontes` da linha do catálogo (a do vinho do Catálogo, ou a
      ligada a um vinho meu — `catalogo_id`), lidas UMA vez por vinho aberto
-     (`garrafeira.catalogo_fontes`, migração 41), mais as `ai_fontes` da
+     (`garrafeira.catalogo_fontes`, migração 42), mais as `ai_fontes` da
      minha procura num vinho meu. Os curadores (e o admin do catálogo) têm o
      ✕ em cada link do catálogo e a lista dos retirados com "Devolver"
      (`winecatalog.fonte_retirar`/`fonte_devolver`, `db/fontes.sql` da

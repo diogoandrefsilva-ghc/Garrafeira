@@ -132,7 +132,7 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-precos-pagina.sql` é a 41: o preço de cada loja aberta no
   "Procurar informação" vai para o catálogo, loja a loja (ver "O preço de
   um vinho" › "O preço da página da loja").
-  `migracao-fontes-catalogo.sql` é a 41: `catalogo_fontes`, os links das
+  `migracao-fontes-catalogo.sql` é a 42: `catalogo_fontes`, os links das
   pesquisas de uma linha do catálogo para a página do vinho (ver "O
   Catálogo dentro da app" › "Os links das pesquisas e o histórico"); corre
   depois do `db/fontes.sql` da WineCatalog.
@@ -1370,7 +1370,7 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   Garrafeira, para o dono da conta) e o que só corre no PC (o painel, o
   script do Vivino e das lojas).
 
-### Os links das pesquisas e o histórico, na página do vinho (05/10/2026, migração 41)
+### Os links das pesquisas e o histórico, na página do vinho (05/10/2026, migração 42)
 O dono das apps: "os links dos vinhos que se capturaram nas pesquisas (com
 opções de poder remover um ou outro que esteja errado) … é uma cena
 pública, para todos (só não podem remover, só curadores). O histórico seria
