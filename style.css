@@ -2401,17 +2401,69 @@ body:not(.adm-cat) .itabs .it-backoffice{display:none!important}
 .par-acoes{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--bo)}
 .par-acoes .note{margin:0;flex:1;min-width:140px}
 /* Produtores */
-.prod-g{border:1px solid var(--bo);border-radius:10px;padding:8px 10px;margin-top:10px}
-.prod-l{display:flex;align-items:flex-start;gap:8px;margin:6px 0}
-#s-backoffice .prod-l input[type=checkbox],#s-backoffice .prod-l input[type=radio]{width:auto;margin:3px 0 0;padding:0;flex:none;accent-color:var(--vh)}
-#s-backoffice .prod-l label{display:flex;align-items:flex-start;gap:6px;flex:1;min-width:0;font-size:14px;font-weight:400;
-  color:var(--tx);text-transform:none;letter-spacing:0;margin:0}
-.prod-l label>span{min-width:0}
-.prod-l small{display:block;font-size:12px;color:var(--mu)}
-#s-backoffice .prod-l .prod-outro{flex:1;min-width:140px;padding:6px 9px}
-.prod-ofi{margin:8px 0;padding-bottom:8px;border-bottom:1px solid var(--bo)}
-.prod-ofi:last-child{border-bottom:none}
-.prod-ofi a{color:inherit}
+/* Produtores (05/10/2026): "por decidir" e "todos". Cada grupo é um cartão
+   com cabeçalho, as grafias em linhas com o visto à esquerda e a pastilha
+   ★ oficial à direita, e um rodapé com os comandos. Os vistos e os rádios
+   nativos ficam escondidos: a linha e a pastilha é que dizem o estado. */
+#s-backoffice .btn:not(.prim):not(.danger){color:var(--tx)}
+.prod-seg{display:inline-flex;margin:12px 0 4px;background:var(--bg2)}
+.prod-seg .segbtn{padding:7px 14px;font-size:12.5px}
+.prod-segn{display:inline-block;min-width:18px;margin-left:5px;padding:0 5px;border-radius:99px;background:rgba(0,0,0,.07);
+  font-size:10.5px;line-height:17px;text-align:center}
+.prod-seg .segbtn.on .prod-segn{background:rgba(255,255,255,.25)}
+.prod-dica{font-size:12px;color:var(--mu);line-height:1.45;margin:8px 2px 4px}
+.prod-vazio{text-align:center;color:var(--mu);font-size:14px;padding:26px 0 14px}
+.prod-vazio small{font-size:12px}
+.prod-g{border:1px solid var(--bo);border-radius:12px;margin-top:12px;overflow:hidden;background:#fff}
+.prod-gh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:8px 12px;background:var(--bg2);
+  font-size:10.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--mu);border-bottom:1px solid var(--bo)}
+.prod-gh span{font-weight:600;letter-spacing:0;text-transform:none;font-size:11.5px}
+.prod-gl{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--bo);transition:background .15s,opacity .15s}
+.prod-gl.of{background:var(--vhp)}
+.prod-gl.fora{opacity:.45}
+#s-backoffice label.prod-gc{display:flex;align-items:center;gap:10px;flex:1;min-width:0;margin:0;cursor:pointer;
+  font-size:14px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--tx)}
+#s-backoffice .prod-gc input{width:18px;height:18px;margin:0;padding:0;flex:none;accent-color:var(--vh)}
+.prod-gt{min-width:0}
+.prod-gt b{display:block;font-family:var(--fd);font-weight:600;font-size:15px;line-height:1.25;overflow-wrap:anywhere}
+.prod-gt small{display:block;font-size:11.5px;color:var(--mu);margin-top:1px}
+#s-backoffice label.prod-pin{flex:none;margin:0;cursor:pointer;font-size:11px;font-weight:600;letter-spacing:0;text-transform:none}
+#s-backoffice .prod-pin input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.prod-pin span{display:inline-block;padding:5px 10px;border-radius:99px;border:1px dashed var(--bo2);color:var(--mu);white-space:nowrap;background:#fff}
+.prod-pin input:checked+span{border:1px solid var(--vh);background:var(--vh);color:#fff}
+.prod-pin input:focus-visible+span{box-shadow:0 0 0 3px var(--vhp)}
+.prod-gout{border-bottom:none;padding-left:40px}
+#s-backoffice .prod-gout .prod-outro{flex:1;min-width:0;padding:7px 10px;font-size:13.5px}
+.prod-gf{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;border-top:1px solid var(--bo);background:#fcfaf7}
+.prod-gf .btn{margin-top:0;padding:8px 16px}
+.prod-procura{display:flex;align-items:center;gap:8px;margin-top:10px}
+#s-backoffice .prod-procura input{flex:1;min-width:0;border-radius:99px;padding:9px 14px}
+.prod-conta{font-size:12px;color:var(--mu);white-space:nowrap}
+.prod-todos{margin-top:6px;border:1px solid var(--bo);border-radius:12px;overflow:hidden;background:#fff}
+.prod-r{border-bottom:1px solid var(--bo)}
+.prod-r:last-child{border-bottom:none}
+.prod-rh{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:none;border:none;text-align:left;
+  font-family:inherit;color:var(--tx);cursor:pointer}
+.prod-rh:hover{background:#fbf8f4}
+.prod-rt{flex:1;min-width:0}
+.prod-rt b{display:block;font-family:var(--fd);font-weight:600;font-size:15px;line-height:1.25;overflow-wrap:anywhere}
+.prod-rt small{display:block;font-size:11.5px;color:var(--mu);margin-top:2px}
+.prod-rt small i{color:var(--tx)}
+.prod-tag{flex:none;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:#eaf3ee;color:#1d4a3b}
+.prod-tag.solta{background:var(--bg2);color:var(--mu)}
+.prod-chev{flex:none;color:var(--mu);font-size:16px;width:12px;text-align:center}
+.prod-r.aberto{background:#fcfaf7}
+.prod-r.aberto .prod-rh{background:none}
+.prod-ed{padding:2px 12px 0}
+#s-backoffice .prod-ed label{display:block;margin:6px 0 0;font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--mu)}
+#s-backoffice .prod-ed input{display:block;width:100%;margin-top:4px;text-transform:none;letter-spacing:0;font-weight:400}
+.prod-ajuda{font-size:11.5px;color:var(--mu);margin:4px 2px 6px;line-height:1.4}
+.prod-vars{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:8px 0 2px}
+.prod-vars>span:first-child{width:100%;font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--mu)}
+.prod-var{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 4px 3px 10px;border-radius:99px;background:#fff;border:1px solid var(--bo)}
+.prod-var a{color:var(--mu);text-decoration:none;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%}
+.prod-var a:hover{background:var(--dgp);color:var(--dg)}
+.prod-ed .prod-gf{margin:10px -12px 0}
 /* Alertas, comentários, Vivino: os cartões com os valores lado a lado */
 .rep-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .rep-est{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 8px;border-radius:99px;

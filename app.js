@@ -10094,11 +10094,9 @@ const BO_TPL={
       <div class="bo-acoes"><button class="btn ghost" onclick="boDupCarregar()">🔄 Rever</button>
         <button class="btn ghost" onclick="boVerDistintos()">Ver os “não são” gravados</button></div>
     </div><div id="bo-dup-lista"></div>`,
-  produtores:()=>`<div class="fcard">
-      <p class="note">O mesmo produtor escrito de várias maneiras (“Ramos Pinto” e “Adriano Ramos Pinto”).
-        Escolhe o <b>nome oficial</b> e as grafias que são ele: passam a ser esse nome <b>no catálogo e em todas
-        as garrafeiras</b>, agora e em qualquer escrita futura. Parecido não quer dizer igual (“Quinta Nova” não é
-        “Herdade da Malhadinha Nova”) — o que não for, marca “não são o mesmo”, e o par não volta.</p>
+  produtores:()=>`<div class="fcard prod-card">
+      <p class="note">Um produtor, um nome. As grafias de um produtor passam ao <b>nome oficial</b> no catálogo e em
+        todas as garrafeiras, agora e em qualquer escrita futura.</p>
       <div id="bo-prod-lista"></div>
     </div>`,
   nomes:()=>`<div class="fcard bo-arr">
@@ -10337,7 +10335,18 @@ async function boDesmarcar(a,b){
    juntam-se em grupos para se escolher o oficial uma vez. Confirmar corrige
    o catálogo e todas as garrafeiras; um vinho que fique com a chave de
    outro que já existe não se mexe e vai para os Duplicados. */
-let _boProd=null;
+/* Duas vistas (05/10/2026, o dono: "está meio amador … era bom poder depois
+   ver todos e alterar o nome principal e o nome completo"):
+   - POR DECIDIR — os grupos que a `produtores_sugestoes` acha parecidos. Cada
+     grafia é uma linha com o visto "é este produtor" e, à direita, a pastilha
+     ★ do nome oficial; "outro nome" é a última linha, e escrever nela já a
+     escolhe;
+   - TODOS — os oficiais (`produtores_listar`) e as grafias que ainda não são
+     de nenhum (`produtores_grafias_lista`), com procura. Tocar num abre o
+     nome oficial e o nome completo para editar: um oficial muda pela
+     `produtor_renomear` (chega ao catálogo e às garrafeiras), uma grafia solta
+     passa a oficial pela `produtor_definir`. */
+let _boProd=null,_boProdVista=null,_boProdAberto=null;
 function boProdGrupos(pares){
   const pai={},ref=x=>pai[x]===undefined?(pai[x]=x):(pai[x]===x?x:(pai[x]=ref(pai[x])));
   const info={};
@@ -10347,39 +10356,132 @@ function boProdGrupos(pares){
     .map(l=>({grafias:l,pares:pares.filter(p=>l.some(s=>s.produtor===p.a.produtor))}))
     .sort((a,b)=>a.grafias[0].produtor.localeCompare(b.grafias[0].produtor,'pt'));
 }
+// Os oficiais e as grafias soltas numa lista só, por ordem alfabética.
+function boProdTodos(ofi,graf){
+  const L=ofi.map(p=>({id:Number(p.id),nome:p.nome,completo:p.nome_completo||'',cat:+p.catalogo||0,gar:+p.garrafeiras||0,
+    grafias:[...new Set((p.variantes||[]).flatMap(v=>(v.escritos&&v.escritos.length)?v.escritos:[v.escrito]))].filter(x=>x&&x!==p.nome),
+    variantes:p.variantes||[]}));
+  for(const g of graf)if(!g.oficial)L.push({id:null,nome:g.produtor,completo:'',cat:+g.catalogo||0,gar:+g.garrafeiras||0,grafias:[],variantes:[]});
+  return L.sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+}
 async function boProdCarregar(){
   const box=document.getElementById('bo-prod-lista');
   if(!box)return;
   box.innerHTML='<p class="note">A procurar…</p>';
   try{
-    const [sug,ofi]=await Promise.all([boRpc('produtores_sugestoes'),boRpc('produtores_listar')]);
-    _boProd={grupos:boProdGrupos(sug||[]),oficiais:ofi||[]};
+    const [sug,ofi,graf]=await Promise.all([boRpc('produtores_sugestoes'),boRpc('produtores_listar'),
+      boRpc('produtores_grafias_lista').catch(()=>[])]);
+    _boProd={grupos:boProdGrupos(sug||[]),todos:boProdTodos(ofi||[],graf||[])};
+    if(!_boProdVista)_boProdVista=_boProd.grupos.length?'decidir':'todos';
     boProdPintar();
   }catch(e){box.innerHTML=`<p class="note bo-erro">${esc(e.message)}</p>`;}
 }
+const boProdN=(c,g)=>`${c} no catálogo · ${g} nas garrafeiras`;
+function boProdVista(v){_boProdVista=v;_boProdAberto=null;boProdPintar();}
 function boProdPintar(){
-  const G=_boProd.grupos,O=_boProd.oficiais;
-  const grupos=G.length?G.map((g,i)=>{
-    const oficial=(g.grafias.find(s=>s.oficial)||{}).oficial||'';
-    const dif=g.pares.filter(p=>!p.mesmaChave);
-    return `<div class="prod-g" data-i="${i}">
-      ${g.grafias.map((s,j)=>`<div class="prod-l">
-        <input type="checkbox" class="prod-inc" data-p="${esc(s.produtor)}" checked title="Esta grafia é este produtor">
-        <label><input type="radio" name="bo-prod-of-${i}" value="${esc(s.produtor)}"${(oficial?s.produtor===oficial:j===0)?' checked':''}>
-          <span><b>${esc(s.produtor)}</b><small>${s.catalogo} no catálogo · ${s.garrafeiras} nas garrafeiras${s.oficial?` · já é de <b>${esc(s.oficial)}</b>`:''}</small></span></label>
-      </div>`).join('')}
-      <div class="prod-l"><label><input type="radio" name="bo-prod-of-${i}" value="__outro"> outro nome:</label>
-        <input type="text" class="prod-outro" placeholder="nome oficial"></div>
-      <div class="bo-acoes"><button class="btn prim" onclick="boProdJuntar(${i})">Juntar</button>
-        ${dif.map(p=>`<button class="btn ghost" onclick="boProdDiferentes(${i},${g.pares.indexOf(p)})">${g.pares.length>1?`${esc(p.a.produtor)} ≠ ${esc(p.b.produtor)}`:'Não são o mesmo'}</button>`).join('')}</div>
-    </div>`;}).join(''):'<p class="note">Nada por decidir.</p>';
-  const ofi=O.length?`<details class="bo-det"><summary>Produtores oficiais já definidos (${O.length})</summary>
-    ${O.map(p=>`<div class="prod-ofi"><b>${esc(p.nome)}</b>
-      <div class="bo-linha"><input type="text" id="bo-prod-compl-${p.id}" value="${esc(p.nome_completo||'')}" placeholder="nome completo (opcional)">
-        <button class="btn ghost" onclick="boProdCompleto(${Number(p.id)})">Guardar</button></div>
-      <span class="note">${(p.variantes||[]).map(v=>`${((v.escritos&&v.escritos.length)?v.escritos:[v.escrito]).map(esc).join(' = ')}${v.oficial?'':` <a href="#" title="Deixar de trocar esta grafia (o que já foi corrigido fica)" onclick="boProdTirar('${escJs(v.chave)}');return false">✕</a>`}`).join(' · ')}</span></div>`).join('')}
-  </details>`:'';
-  document.getElementById('bo-prod-lista').innerHTML=grupos+ofi;
+  const box=document.getElementById('bo-prod-lista');if(!box||!_boProd)return;
+  const G=_boProd.grupos,T=_boProd.todos,nOf=T.filter(x=>x.id).length;
+  const seg=`<div class="prod-seg segbtns">
+      <button type="button" class="segbtn${_boProdVista==='decidir'?' on':''}" onclick="boProdVista('decidir')">Por decidir <span class="prod-segn">${G.length}</span></button>
+      <button type="button" class="segbtn${_boProdVista==='todos'?' on':''}" onclick="boProdVista('todos')">Todos <span class="prod-segn">${T.length}</span></button>
+    </div>`;
+  if(_boProdVista==='todos'){
+    box.innerHTML=seg+`<div class="prod-procura"><input type="search" id="bo-prod-q" placeholder="Procurar produtor ou grafia…" oninput="boProdTodosPintar()"
+        autocomplete="off"><span class="prod-conta" id="bo-prod-conta"></span></div>
+      <p class="prod-dica">${nOf} com nome oficial · ${T.length-nOf} ${T.length-nOf===1?'grafia ainda solta':'grafias ainda soltas'}. Toca num para mudar o nome oficial ou o nome completo.</p>
+      <div id="bo-prod-todos" class="prod-todos"></div>`;
+    return boProdTodosPintar();
+  }
+  box.innerHTML=seg+(G.length?`<p class="prod-dica">Parecido não quer dizer igual — “Quinta Nova” não é “Herdade da Malhadinha Nova”.
+      Tira o visto à grafia que não for, ou marca o par como diferente.</p>`
+    +G.map((g,i)=>boProdGrupoHTML(g,i)).join(''):'<div class="prod-vazio">✓ Nada por decidir.<br><small>Os produtores parecidos aparecem aqui.</small></div>');
+}
+function boProdGrupoHTML(g,i){
+  const oficial=(g.grafias.find(s=>s.oficial)||{}).oficial||'';
+  const dif=g.pares.filter(p=>!p.mesmaChave);
+  const linhas=g.grafias.map((s,j)=>{const of=oficial?s.produtor===oficial:j===0;
+    return `<div class="prod-gl${of?' of':''}">
+      <label class="prod-gc"><input type="checkbox" class="prod-inc" data-p="${esc(s.produtor)}" checked onchange="boProdMarcas(${i})">
+        <span class="prod-gt"><b>${esc(s.produtor)}</b><small>${boProdN(s.catalogo,s.garrafeiras)}${s.oficial?` · já é de <b>${esc(s.oficial)}</b>`:''}</small></span></label>
+      <label class="prod-pin" title="Nome oficial"><input type="radio" name="bo-prod-of-${i}" value="${esc(s.produtor)}"${of?' checked':''} onchange="boProdMarcas(${i})"><span>★ oficial</span></label>
+    </div>`;}).join('');
+  return `<div class="prod-g" data-i="${i}">
+    <div class="prod-gh">Parecem o mesmo produtor<span>${g.grafias.length} grafias</span></div>
+    ${linhas}
+    <div class="prod-gl prod-gout">
+      <input type="text" class="prod-outro" placeholder="Ou escreve outro nome oficial…" oninput="boProdOutro(${i},this)">
+      <label class="prod-pin" title="Nome oficial"><input type="radio" name="bo-prod-of-${i}" value="__outro" onchange="boProdMarcas(${i})"><span>★ oficial</span></label>
+    </div>
+    <div class="prod-gf"><button class="btn prim" onclick="boProdJuntar(${i})">Juntar</button>
+      ${dif.map(p=>`<button class="btn ghost" onclick="boProdDiferentes(${i},${g.pares.indexOf(p)})">${g.pares.length>1?`${esc(p.a.produtor)} ≠ ${esc(p.b.produtor)}`:'Não são o mesmo'}</button>`).join('')}</div>
+  </div>`;
+}
+// O desenho acompanha as escolhas: a linha oficial acende, a desmarcada apaga.
+function boProdMarcas(i){
+  const el=document.querySelector(`#s-backoffice .prod-g[data-i="${i}"]`);if(!el)return;
+  el.querySelectorAll('.prod-gl').forEach(l=>{
+    const r=l.querySelector('input[type=radio]'),c=l.querySelector('.prod-inc');
+    l.classList.toggle('of',!!(r&&r.checked));l.classList.toggle('fora',!!(c&&!c.checked));
+  });
+}
+function boProdOutro(i,inp){
+  const r=inp.parentNode.querySelector('input[type=radio]');
+  if(inp.value.trim()&&r&&!r.checked){r.checked=true;boProdMarcas(i);}
+}
+function boProdTodosPintar(){
+  const box=document.getElementById('bo-prod-todos');if(!box)return;
+  const q=boSemAc((document.getElementById('bo-prod-q')||{}).value||'').split(/\s+/).filter(Boolean);
+  const L=_boProd.todos.map((x,k)=>({x,k})).filter(({x})=>!q.length||(t=>q.every(p=>t.includes(p)))(boSemAc([x.nome,x.completo,...x.grafias].join(' '))));
+  const c=document.getElementById('bo-prod-conta');if(c)c.textContent=q.length?`${L.length} de ${_boProd.todos.length}`:'';
+  box.innerHTML=L.length?L.slice(0,300).map(({x,k})=>boProdItemHTML(x,k)).join('')
+    +(L.length>300?`<p class="prod-dica">E mais ${L.length-300} — procura para os ver.</p>`:''):'<p class="prod-dica">Nenhum produtor com isso.</p>';
+}
+function boProdItemHTML(x,k){
+  const ab=_boProdAberto===k;
+  const sub=[x.completo?`<i>${esc(x.completo)}</i>`:'',boProdN(x.cat,x.gar),x.grafias.length?`${x.grafias.length} grafia${x.grafias.length>1?'s':''}`:''].filter(Boolean).join(' · ');
+  const cab=`<button type="button" class="prod-rh" onclick="boProdAbrir(${k})">
+      <span class="prod-rt"><b>${esc(x.nome)}</b><small>${sub}</small></span>
+      ${x.id?'<span class="prod-tag">oficial</span>':'<span class="prod-tag solta">solta</span>'}
+      <span class="prod-chev">${ab?'▾':'›'}</span></button>`;
+  if(!ab)return `<div class="prod-r">${cab}</div>`;
+  const vars=x.variantes.filter(v=>!v.oficial);
+  return `<div class="prod-r aberto">${cab}<div class="prod-ed">
+      <label>Nome oficial<input type="text" id="bo-prod-nome" value="${esc(x.nome)}" maxlength="200"></label>
+      <p class="prod-ajuda">${x.id?'Muda o nome no catálogo e em todas as garrafeiras.':'Esta grafia ainda não é de nenhum produtor oficial. Guardar torna-a oficial (com o nome que estiver aqui).'}</p>
+      <label>Nome completo<input type="text" id="bo-prod-compl" value="${esc(x.completo)}" maxlength="200" placeholder="ex.: Quinta Nova de Nossa Senhora do Carmo"></label>
+      <p class="prod-ajuda">Opcional. Aparece por baixo do produtor, na ficha do vinho.</p>
+      ${vars.length?`<div class="prod-vars"><span>Grafias que passam a este nome</span>
+        ${vars.map(v=>`<span class="prod-var">${((v.escritos&&v.escritos.length)?v.escritos:[v.escrito]).map(esc).join(' = ')}
+          <a href="#" title="Deixar de trocar esta grafia (o que já foi corrigido fica)" onclick="boProdTirar('${escJs(v.chave)}');return false">✕</a></span>`).join('')}</div>`:''}
+      <div class="prod-gf"><button class="btn prim" onclick="boProdGuardar(${k})">Guardar</button>
+        <button class="btn ghost" onclick="boProdAbrir(${k})">Cancelar</button></div>
+    </div></div>`;
+}
+function boProdAbrir(k){_boProdAberto=_boProdAberto===k?null:k;boProdTodosPintar();
+  if(_boProdAberto!==null){const n=document.getElementById('bo-prod-nome');if(n)n.closest('.prod-r').scrollIntoView({block:'nearest',behavior:'smooth'});}}
+function boProdResultado(r){
+  const d=r.duplicados||[];
+  toast(`“${r.oficial}” ✓ ${r.catalogo} no catálogo · ${r.garrafeiras} nas garrafeiras`);
+  if(d.length)alert(`Ficaram por mexer ${d.length}, porque já existe o mesmo vinho e colheita com o nome oficial — junta-os nos Duplicados:\n`+d.map(x=>`#${x.id} ${x.nome}${x.ano?' '+x.ano:''} → #${x.com}`).join('\n'));
+}
+async function boProdGuardar(k){
+  const x=_boProd.todos[k];
+  const nome=(document.getElementById('bo-prod-nome').value||'').trim(),compl=(document.getElementById('bo-prod-compl').value||'').trim();
+  if(!nome)return toast('Falta o nome oficial.',1);
+  const mudaNome=nome!==x.nome,mudaCompl=compl!==x.completo;
+  if(!mudaNome&&!mudaCompl&&x.id)return boProdAbrir(k);
+  const tot=x.cat+x.gar;
+  if((mudaNome||!x.id)&&!confirm(x.id?`Mudar “${x.nome}” para “${nome}”?\n\n${tot} vinho(s) no catálogo e nas garrafeiras ficam com este nome.`
+      :`Tornar “${nome}” um produtor oficial${nome!==x.nome?` (a grafia “${x.nome}” passa a este nome)`:''}?\n\n${tot} vinho(s) no catálogo e nas garrafeiras.`))return;
+  try{
+    let id=x.id,mudou=false;
+    if(!id||mudaNome){
+      const r=x.id?await boRpc('produtor_renomear',{p_id:x.id,p_nome:nome}):await boRpc('produtor_definir',{p_oficial:nome,p_grafias:[x.nome]});
+      id=Number(r.id)||id;mudou=true;boProdResultado(r);
+    }
+    if(mudaCompl&&id){await boRpc('produtor_nome_completo',{p_id:id,p_nome_completo:compl});if(!mudou)toast(compl?'Nome completo guardado ✓':'Nome completo retirado');}
+    _boProdAberto=null;await boProdCarregar();if(mudou)boCatMudou();
+  }catch(e){toast('Erro: '+e.message,1);}
 }
 async function boProdJuntar(i){
   const el=document.querySelector(`#s-backoffice .prod-g[data-i="${i}"]`),g=_boProd.grupos[i];
@@ -10391,10 +10493,7 @@ async function boProdJuntar(i){
   const tot=g.grafias.filter(s=>grafias.includes(s.produtor)).reduce((a,s)=>a+s.catalogo+s.garrafeiras,0);
   if(!confirm(`Passar a “${oficial}” as grafias: ${grafias.join(' · ')}?\n\n${tot} vinho(s) no catálogo e nas garrafeiras ficam com este nome.`))return;
   try{
-    const r=await boRpc('produtor_definir',{p_oficial:oficial,p_grafias:grafias});
-    const d=r.duplicados||[];
-    toast(`“${r.oficial}” ✓ ${r.catalogo} no catálogo · ${r.garrafeiras} nas garrafeiras`);
-    if(d.length)alert(`Ficaram por mexer ${d.length}, porque já existe o mesmo vinho e colheita com o nome oficial — junta-os nos Duplicados:\n`+d.map(x=>`#${x.id} ${x.nome}${x.ano?' '+x.ano:''} → #${x.com}`).join('\n'));
+    boProdResultado(await boRpc('produtor_definir',{p_oficial:oficial,p_grafias:grafias}));
     boProdCarregar();boCatMudou();
   }catch(e){toast('Erro: '+e.message,1);}
 }
@@ -10404,17 +10503,9 @@ async function boProdDiferentes(i,k){
   try{await boRpc('produtores_diferentes',{p_a:p.a.produtor,p_b:p.b.produtor});boProdCarregar();}
   catch(e){toast('Erro: '+e.message,1);}
 }
-// O nome por extenso ao lado do oficial: só se lê na ficha do vinho.
-async function boProdCompleto(id){
-  const el=document.getElementById('bo-prod-compl-'+id);if(!el)return;
-  try{
-    await boRpc('produtor_nome_completo',{p_id:id,p_nome_completo:el.value.trim()});
-    toast(el.value.trim()?'Nome completo guardado ✓':'Nome completo retirado');
-  }catch(e){toast('Erro: '+e.message,1);}
-}
 async function boProdTirar(chave){
   if(!confirm('Deixar de trocar esta grafia pelo nome oficial? O que já foi corrigido fica como está.'))return;
-  try{await boRpc('produtor_tirar_variante',{p_chave:chave});boProdCarregar();}
+  try{await boRpc('produtor_tirar_variante',{p_chave:chave});_boProdAberto=null;boProdCarregar();}
   catch(e){toast('Erro: '+e.message,1);}
 }
 
@@ -13139,7 +13230,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='183';
+const APP_BUILD='184';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

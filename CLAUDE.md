@@ -1366,6 +1366,14 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   ainda não veio.
 - O que se grava aqui muda o Catálogo, e ele relê-se em fundo
   (`boCatMudou`).
+- **Os Produtores têm duas vistas** (05/10/2026, o dono: "está meio
+  amador … era bom poder ver todos e alterar o nome principal e o nome
+  completo"): **Por decidir** (os grupos parecidos, cada grafia com o visto
+  e a pastilha ★ oficial, e "outro nome" que se escolhe ao escrever) e
+  **Todos** (`boProdTodos`: os oficiais e as grafias ainda soltas, com
+  procura). Tocar num abre o nome oficial e o nome completo: um oficial
+  muda pela `produtor_renomear`, uma grafia solta passa a oficial pela
+  `produtor_definir`; o nome completo pela `produtor_nome_completo`.
 - **Ficou de fora** a password temporária (já está nas Definições da
   Garrafeira, para o dono da conta) e o que só corre no PC (o painel, o
   script do Vivino e das lojas).
