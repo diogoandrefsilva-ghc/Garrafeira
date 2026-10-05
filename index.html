@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="180">
+<body data-build="181">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone-claro.png" alt="">
@@ -131,6 +131,11 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
     <!-- AS SUGESTÕES (a WineSelection, 30/09/2026): só no catálogo e só com
          IA (`body.sem-sugestoes`). Também antes do ⚙️, pela mesma razão. -->
     <button class="it so-cat it-sugestoes" onclick="tab('sugestoes',this)"><span class="ic">🍽️</span> Sugestões</button>
+    <!-- O BACKOFFICE do Catálogo (05/10/2026): o que vivia na WineCatalog —
+         Duplicados, Produtores, Nomes, Alertas, Comentários, Vivino… Só no
+         catálogo e só ao admin do catálogo (`body.adm-cat`). Antes do ⚙️,
+         pela mesma razão das Sugestões. -->
+    <button class="it so-cat it-backoffice" onclick="tab('backoffice',this)"><span class="ic">🛠️</span> Backoffice<span class="it-n" id="bo-n"></span></button>
     <button class="it so-ic" onclick="tab('cfg',this)" title="Definições" aria-label="Definições">⚙️<span class="it-n" id="cfg-n"></span></button>
   </div>
 
@@ -232,6 +237,12 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       </div>
     </div>
     <div id="desejos"></div>
+  </section>
+
+  <!-- ═══ BACKOFFICE (admin do catálogo) ═══ — o hub e as páginas são
+       desenhados pelo `boHub`/`boPagina` (app.js, secção BACKOFFICE). -->
+  <section class="sec" id="s-backoffice">
+    <div id="bo-corpo"></div>
   </section>
 
   <!-- ═══ SUGESTÕES (que vinho peço?, no catálogo) ═══
