@@ -8243,7 +8243,8 @@ async function pqImagemDoc(P,im){
   const W=c.width,H=c.height,[y0,x0,y1,x1]=im.caixa;
   // Uma zona mais larga do que a caixa: a da IA às vezes corta o gargalo, a
   // base ou um lado da garrafa, e o recorte cresce até à margem branca.
-  const fx=(x1-x0)*0.5,fy=(y1-y0)*0.3;
+  // A caixa achada pela app (`exata`) já vai rente à garrafa: só um respiro.
+  const fx=(x1-x0)*(im.exata?0.15:0.5),fy=(y1-y0)*(im.exata?0.01:0.3);
   let L=Math.max(0,Math.floor((x0-fx)/1000*W)),T=Math.max(0,Math.floor((y0-fy)/1000*H));
   let R=Math.min(W,Math.ceil((x1+fx)/1000*W)),B=Math.min(H,Math.ceil((y1+fy)/1000*H));
   if(R-L<20||B-T<20)return '';
@@ -8252,7 +8253,7 @@ async function pqImagemDoc(P,im){
   // há sempre uma faixa branca. Coluna a coluna e depois linha a linha, com
   // um respiro à volta.
   const px=c.getContext('2d').getImageData(L,T,R-L,B-T).data,w=R-L,h=B-T;
-  const cheio=(x,y)=>{const i=(y*w+x)*4;return px[i]<238||px[i+1]<238||px[i+2]<238;};
+  const cheio=(x,y)=>{const i=(y*w+x)*4;return px[i]<248||px[i+1]<248||px[i+2]<248;};
   // Os blocos de tinta separados por uma faixa branca; fica o que tem mais
   // tinta dentro da caixa da IA ([c0,c1] na zona) — a garrafa, que é quase
   // toda cheia, e não o texto ao lado nem um filete. Pequeno de mais (menos
@@ -8285,6 +8286,54 @@ async function pqImagemDoc(P,im){
   const ctx=o.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,o.width,o.height);
   ctx.drawImage(c,L,T,R-L,B-T,0,0,o.width,o.height);
   return o.toDataURL('image/jpeg',0.86);
+}
+/* Sem a caixa da IA (o modelo barato nem sempre a dá — 05/10/2026, a ficha
+   do Dandy tinto), a app procura a garrafa sozinha: numa ficha técnica ela
+   é um bloco ALTO e CHEIO de tinta — colunas carregadas de alto a baixo e
+   linhas quase todas pintadas de lado a lado —, e o texto nunca é: uma
+   linha de texto tem mais branco do que letra. Devolve a caixa (0 a 1000),
+   que o `pqImagemDoc` afina, ou null. */
+function docAcharGarrafa(c){
+  const W=c.width,H=c.height,px=c.getContext('2d').getImageData(0,0,W,H).data;
+  const tinta=(x,y)=>{const i=(y*W+x)*4;return px[i]<238||px[i+1]<238||px[i+2]<238;};
+  const corridas=(n,ok,gap,min)=>{
+    const out=[];let a=-1,b=-1,v=0;
+    for(let i=0;i<=n;i++){
+      if(i<n&&ok(i)){if(a<0)a=i;b=i;v=0;}
+      else if(a>=0&&(i===n||++v>gap)){if(b-a>=min)out.push([a,b]);a=-1;v=0;}
+    }
+    return out;
+  };
+  const nl=Math.ceil(H/2);
+  const cols=[];for(let x=0;x<W;x++){let n=0;for(let y=0;y<H;y+=2)if(tinta(x,y))n++;cols.push(n);}
+  let melhor=null,area=0;
+  corridas(W,x=>cols[x]>nl*0.3,Math.round(W*0.01),Math.round(W*0.04)).forEach(([a,b])=>{
+    const lw=Math.ceil((b-a+1)/2);
+    corridas(H,y=>{let n=0;for(let x=a;x<=b;x+=2)if(tinta(x,y))n++;return n>lw*0.5;},Math.round(H*0.015),Math.round(H*0.2)).forEach(([y0,y1])=>{
+      const w=b-a,h=y1-y0;
+      if(h<w*1.6||w*h<=area)return;
+      // O corpo é o que é cheio; o gargalo e a cápsula, estreitos, ficam
+      // por cima dele: sobe-se (e desce-se) enquanto houver tinta seguida.
+      const algo=y=>{let n=0;for(let x=a;x<=b;x+=2)if(tinta(x,y))n++;return n>lw*0.03;};
+      const gap=Math.round(H*0.01);
+      let t=y0,v=0;for(let y=y0-1;y>=0;y--){if(algo(y)){t=y;v=0;}else if(++v>gap)break;}
+      let u=y1;v=0;for(let y=y1+1;y<H;y++){if(algo(y)){u=y;v=0;}else if(++v>gap)break;}
+      area=w*h;melhor=[t/H*1000,a/W*1000,u/H*1000,b/W*1000].map(Math.round);
+    });
+  });
+  return melhor;
+}
+// Sem caixa nenhuma: a garrafa nas primeiras páginas dos PDFs enviados.
+async function pqImagemDocSozinha(P){
+  for(let i=0;i<(P.docs||[]).length;i++){
+    if(P.docs[i].mime!=='application/pdf')continue;
+    for(let pg=1;pg<=2;pg++){
+      let c;try{c=await docPaginaCanvas(P.docs[i],pg);}catch(e){break;}
+      const caixa=docAcharGarrafa(c);
+      if(caixa)return {doc:i,pagina:pg,caixa,exata:true};
+    }
+  }
+  return null;
 }
 function imgDoc(x){return typeof x==='string'&&x.startsWith('data:image/');}
 async function dataUrlBlob(u){return (await fetch(u)).blob();}
@@ -8418,8 +8467,13 @@ async function pqIA(repetir){
     // A garrafa do documento (ver "A GARRAFA DE UM DOCUMENTO"): recortada
     // aqui, entra como a proposta da imagem quando não veio um link.
     let docImg='';
-    if(res.imagemDoc&&!res.imagem_url&&P.tipo==='doc'){
-      try{docImg=await pqImagemDoc(P,res.imagemDoc);}catch(e){console.warn('imagem do documento',e);}
+    // Sem a caixa da IA, a app procura-a (`pqImagemDocSozinha`), se a imagem foi pedida.
+    const querImg=!P.pedidoCampos||P.pedidoCampos.includes('imagem_url');
+    if(P.tipo==='doc'&&!res.imagem_url&&querImg){
+      try{
+        if(!res.imagemDoc)res.imagemDoc=await pqImagemDocSozinha(P);
+        if(res.imagemDoc)docImg=await pqImagemDoc(P,res.imagemDoc);
+      }catch(e){console.warn('imagem do documento',e);}
       if(PQ!==P)return;
     }
     const n=pqJuntar(P,'ia',{...sfv,...res,...(docImg?{imagem_url:docImg}:{})});
@@ -13644,7 +13698,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='189';
+const APP_BUILD='190';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

@@ -2272,6 +2272,7 @@ async function produzirFicha(
       // De onde veio cada campo (só na leitura da base de evidência).
       deOnde: comSerper ? parsed?.deOnde : undefined,
       imagemDoc: comSerper && comImagemDoc ? caixaDoDocumento(parsed?.imagemDoc, ev.anexos, documentos) : null,
+      imagemDocBruto: comSerper && comImagemDoc ? (parsed?.imagemDoc ?? null) : undefined,
       pesquisou: pesquisouF, erro, modelo, modo,
       fontes: comSerper ? pesquisa.fontes : (pesquisouF ? fontesG : []),
     };
@@ -2430,6 +2431,9 @@ async function produzirFicha(
     // se vê se isto está a valer a pena (Definições › Diagnóstico).
     catalogo_campos: Object.keys(doCatalogo).length,
     ia_campos: emFalta.length,
+    // A garrafa no documento: o que a IA respondeu, e se serviu (a app, sem
+    // ela, procura a garrafa sozinha na página).
+    ...(comImagemDoc ? { imagem_doc: { resposta: f1.imagemDocBruto ?? null, valida: !!f1.imagemDoc } } : {}),
     // O vinho novo com um nome que o catálogo não conhece: vai quando for gravado.
     ...(catalogoAdiado ? { catalogo: "adiado" } : {}),
     ...(daCarta ? { da_carta: true } : {}),
