@@ -368,8 +368,12 @@ async function carregarGarrafeira(){
     // O nome por extenso dos produtores oficiais ("Quinta Nova" → "Quinta
     // Nova de Nossa Senhora do Carmo"), do catálogo: só se lê na ficha do
     // vinho. Se falhar, a ficha fica sem ele.
-    sbReq('POST','rpc/produtores_completos',{},{'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'}).catch(()=>null)
-  ]).then(r=>{PROD_COMPLETO=(r[6]&&typeof r[6]==='object')?r[6]:{};return r;});
+    sbReq('POST','rpc/produtores_completos',{},{'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'}).catch(()=>null),
+    // E a CASA-MÃE de cada produtor oficial (migração 43: "Casa Ferreirinha"
+    // → "Sogrape"). É do produtor, nunca do vinho. Se falhar, não aparece.
+    sbReq('POST','rpc/produtores_casas',{},{'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'}).catch(()=>null)
+  ]).then(r=>{PROD_COMPLETO=(r[6]&&typeof r[6]==='object')?r[6]:{};
+    CASA_MAE=(r[7]&&typeof r[7]==='object')?r[7]:{};return r;});
   db.locais=locais||[];db.vinhos=vinhos||[];db.garrafas=garrafas||[];
   PRECOS_LOJA=(pl&&typeof pl==='object')?pl:{};
 
@@ -2613,6 +2617,8 @@ function resumoPainel(id,titulo,rows,filtroFn,listaBase,notaTop){
    detalhe mas nunca contam. */
 let PRECOS_LOJA={};   // vinho_id -> [{loja,preco,url,nome,colheita,em}]
 let PROD_COMPLETO={}; // produtor oficial -> nome por extenso (catálogo)
+let CASA_MAE={};      // produtor oficial -> a casa-mãe dele (o grupo: Sogrape…)
+const casaMaeDe=v=>(v&&v.produtor&&CASA_MAE[v.produtor])||'';
 const LOJAS=[
   {k:'garrafeira_nacional',nome:'Garrafeira Nacional',curto:'G. Nacional'},
   {k:'granvine',nome:'Granvine',curto:'Granvine'},
@@ -3511,7 +3517,7 @@ function haFiltros(){
 // "touriga douro" devolver o que interessa em vez de tudo).
 function passaTexto(v,termos){
   if(!termos.length)return true;
-  const alvo=siglas(chave([v.nome,v.produtor,v.regiao,v.sub_regiao,v.tipo,v.estilo,v.mencao,
+  const alvo=siglas(chave([v.nome,v.produtor,casaMaeDe(v),v.regiao,v.sub_regiao,v.tipo,v.estilo,v.mencao,
     v.ano,(v.castas||[]).join(' '),v.notas,v.notas_prova,v.harmonizacao].join(' ')));
   return termos.every(t=>alvo.includes(t));
 }
@@ -3545,6 +3551,7 @@ function termosProcura(){
    vinho com a palavra em todo o lado. */
 const MAX_MATCH=3;
 const CAMPOS_MATCH=[
+  ['Casa-mãe',      v=>casaMaeDe(v)],
   ['Sub-região',    v=>v.sub_regiao],
   // As duas primeiras castas já estão no cartão; as que o "+2" esconde é
   // que precisam de ser ditas, e só as que deram match.
@@ -3856,7 +3863,7 @@ function vinhoGrelhaHTML(v,termos,loteSel,fam){
     ${fam?`<div class="vg-img"><div class="vg-mold">${catColhSetas(fam,v,'vg-seta')}${thumb}</div>${catColhPontos(fam,v)}</div>`:thumb}${loteSel?`<span class="lote-chk">✓</span>`:''}
     <div class="vg-nome">${esc(v.nome)}</div>
     <div class="vg-sub">${vinhoMetaHTML(v,desejado(v)&&!v.ano?'':(v.ano||'s/a'),!!fam)}</div>
-    <div class="vg-prod">${esc(v.produtor||'')}</div>
+    <div class="vg-prod">${esc(v.produtor||'')}${casaMaeDe(v)?`<span class="vg-casa">${esc(casaMaeDe(v))}</span>`:''}</div>
     <div class="vg-foot">${notaVivinoBadge(v)}${v.id<0?catNotaBdgHTML(v,true):''}</div>
     ${trechosMatch(v,termos)}
   </article>`;
@@ -5619,7 +5626,7 @@ function vinhoDetalheHTML(v){
 
     <div class="msec">Ficha</div>
     <div class="mdet">
-      ${linha('Produtor',esc(v.produtor)+(PROD_COMPLETO[v.produtor]?`<small class="mdl-sub">${esc(PROD_COMPLETO[v.produtor])}</small>`:''))}
+      ${linha('Produtor',esc(v.produtor)+(casaMaeDe(v)?` <span class="mdl-casa">(${esc(casaMaeDe(v))})</span>`:'')+(PROD_COMPLETO[v.produtor]?`<small class="mdl-sub">${esc(PROD_COMPLETO[v.produtor])}</small>`:''))}
       ${linha('Ano',v.ano||'')}
       ${linha('Tipo',esc([v.tipo,v.estilo].filter(Boolean).join(' · ')),v.id,['tipo','estilo'])}
       ${linha('Região',esc([v.regiao,v.sub_regiao].filter(Boolean).join(' · ')),v.id,['regiao','sub_regiao'])}
@@ -10370,8 +10377,8 @@ function boProdGrupos(pares){
 function boProdTodos(ofi,graf){
   const L=ofi.map(p=>({id:Number(p.id),nome:p.nome,completo:p.nome_completo||'',cat:+p.catalogo||0,gar:+p.garrafeiras||0,
     grafias:[...new Set((p.variantes||[]).flatMap(v=>(v.escritos&&v.escritos.length)?v.escritos:[v.escrito]))].filter(x=>x&&x!==p.nome),
-    variantes:p.variantes||[]}));
-  for(const g of graf)if(!g.oficial)L.push({id:null,nome:g.produtor,completo:'',cat:+g.catalogo||0,gar:+g.garrafeiras||0,grafias:[],variantes:[]});
+    variantes:p.variantes||[],maeId:p.casa_mae_id!=null?Number(p.casa_mae_id):null,mae:p.casa_mae||'',casas:p.casas||[]}));
+  for(const g of graf)if(!g.oficial)L.push({id:null,nome:g.produtor,completo:'',cat:+g.catalogo||0,gar:+g.garrafeiras||0,grafias:[],variantes:[],maeId:null,mae:'',casas:[]});
   return L.sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
 }
 async function boProdCarregar(){
@@ -10398,7 +10405,7 @@ function boProdPintar(){
   if(_boProdVista==='todos'){
     box.innerHTML=seg+`<div class="prod-procura"><input type="search" id="bo-prod-q" placeholder="Procurar produtor ou grafia…" oninput="boProdTodosPintar()"
         autocomplete="off"><span class="prod-conta" id="bo-prod-conta"></span></div>
-      <p class="prod-dica">${nOf} com nome oficial · ${T.length-nOf} ${T.length-nOf===1?'grafia ainda solta':'grafias ainda soltas'}. Toca num para mudar o nome oficial ou o nome completo.</p>
+      <p class="prod-dica">${nOf} com nome oficial · ${T.length-nOf} ${T.length-nOf===1?'grafia ainda solta':'grafias ainda soltas'}. Toca num para mudar o nome oficial, o nome completo ou a casa-mãe.</p>
       <div id="bo-prod-todos" class="prod-todos"></div>`;
     return boProdTodosPintar();
   }
@@ -10441,17 +10448,24 @@ function boProdOutro(i,inp){
 function boProdTodosPintar(){
   const box=document.getElementById('bo-prod-todos');if(!box)return;
   const q=boSemAc((document.getElementById('bo-prod-q')||{}).value||'').split(/\s+/).filter(Boolean);
-  const L=_boProd.todos.map((x,k)=>({x,k})).filter(({x})=>!q.length||(t=>q.every(p=>t.includes(p)))(boSemAc([x.nome,x.completo,...x.grafias].join(' '))));
+  const L=_boProd.todos.map((x,k)=>({x,k})).filter(({x})=>!q.length||(t=>q.every(p=>t.includes(p)))(boSemAc([x.nome,x.completo,x.mae,...x.grafias].join(' '))));
   const c=document.getElementById('bo-prod-conta');if(c)c.textContent=q.length?`${L.length} de ${_boProd.todos.length}`:'';
-  box.innerHTML=L.length?L.slice(0,300).map(({x,k})=>boProdItemHTML(x,k)).join('')
-    +(L.length>300?`<p class="prod-dica">E mais ${L.length-300} — procura para os ver.</p>`:''):'<p class="prod-dica">Nenhum produtor com isso.</p>';
+  // Uma casa-mãe pode não ter vinho nenhum com o nome dela (a Sogrape): para
+  // a escolher, tem de existir como produtor oficial — cria-se daqui.
+  const txt=((document.getElementById('bo-prod-q')||{}).value||'').trim();
+  const novo=txt&&!_boProd.todos.some(x=>boSemAc(x.nome)===boSemAc(txt))
+    ?`<button type="button" class="prod-novo" onclick="boProdCriar()">＋ Criar “${esc(txt)}” como produtor oficial</button>`:'';
+  box.innerHTML=(L.length?L.slice(0,300).map(({x,k})=>boProdItemHTML(x,k)).join('')
+    +(L.length>300?`<p class="prod-dica">E mais ${L.length-300} — procura para os ver.</p>`:''):'<p class="prod-dica">Nenhum produtor com isso.</p>')+novo;
 }
 function boProdItemHTML(x,k){
   const ab=_boProdAberto===k;
-  const sub=[x.completo?`<i>${esc(x.completo)}</i>`:'',boProdN(x.cat,x.gar),x.grafias.length?`${x.grafias.length} grafia${x.grafias.length>1?'s':''}`:''].filter(Boolean).join(' · ');
+  const sub=[x.completo?`<i>${esc(x.completo)}</i>`:'',x.mae?`<span class="prod-mae">${esc(x.mae)}</span>`:'',
+    x.casas.length?`<span class="prod-mae">casa-mãe de ${x.casas.length}</span>`:'',
+    boProdN(x.cat,x.gar),x.grafias.length?`${x.grafias.length} grafia${x.grafias.length>1?'s':''}`:''].filter(Boolean).join(' · ');
   const cab=`<button type="button" class="prod-rh" onclick="boProdAbrir(${k})">
       <span class="prod-rt"><b>${esc(x.nome)}</b><small>${sub}</small></span>
-      ${x.id?'<span class="prod-tag">oficial</span>':'<span class="prod-tag solta">solta</span>'}
+      ${x.casas.length?'<span class="prod-tag">grupo</span>':x.id?'<span class="prod-tag">oficial</span>':'<span class="prod-tag solta">solta</span>'}
       <span class="prod-chev">${ab?'▾':'›'}</span></button>`;
   if(!ab)return `<div class="prod-r">${cab}</div>`;
   const vars=x.variantes.filter(v=>!v.oficial);
@@ -10460,6 +10474,7 @@ function boProdItemHTML(x,k){
       <p class="prod-ajuda">${x.id?'Muda o nome no catálogo e em todas as garrafeiras.':'Esta grafia ainda não é de nenhum produtor oficial. Guardar torna-a oficial (com o nome que estiver aqui).'}</p>
       <label>Nome completo<input type="text" id="bo-prod-compl" value="${esc(x.completo)}" maxlength="200" placeholder="ex.: Quinta Nova de Nossa Senhora do Carmo"></label>
       <p class="prod-ajuda">Opcional. Aparece por baixo do produtor, na ficha do vinho.</p>
+      ${boProdMaeHTML(x)}
       ${vars.length?`<div class="prod-vars"><span>Grafias que passam a este nome</span>
         ${vars.map(v=>`<span class="prod-var">${((v.escritos&&v.escritos.length)?v.escritos:[v.escrito]).map(esc).join(' = ')}
           <a href="#" title="Deixar de trocar esta grafia (o que já foi corrigido fica)" onclick="boProdTirar('${escJs(v.chave)}');return false">✕</a></span>`).join('')}</div>`:''}
@@ -10474,12 +10489,42 @@ function boProdResultado(r){
   toast(`“${r.oficial}” ✓ ${r.catalogo} no catálogo · ${r.garrafeiras} nas garrafeiras`);
   if(d.length)alert(`Ficaram por mexer ${d.length}, porque já existe o mesmo vinho e colheita com o nome oficial — junta-os nos Duplicados:\n`+d.map(x=>`#${x.id} ${x.nome}${x.ano?' '+x.ano:''} → #${x.com}`).join('\n'));
 }
+/* A CASA-MÃE (migração 43): o grupo a que a casa pertence — Casa Ferreirinha
+   é da Sogrape. Um nível só: quem já é casa-mãe de alguém não escolhe uma
+   (diz-se de quem é), e só se escolhe quem não tem casa-mãe. */
+function boProdMaeHTML(x){
+  if(x.casas.length)return `<div class="prod-vars"><span>Casa-mãe de</span>${x.casas.map(n=>`<span class="prod-var sem-x">${esc(n)}</span>`).join('')}</div>
+      <p class="prod-ajuda">É um grupo: não pode pertencer a outro.</p>`;
+  const ops=_boProd.todos.filter(o=>o.id&&o.id!==x.id&&!o.maeId).sort((a,b)=>(b.casas.length-a.casas.length)||a.nome.localeCompare(b.nome,'pt'));
+  const grupos=ops.filter(o=>o.casas.length),outros=ops.filter(o=>!o.casas.length);
+  const op=o=>`<option value="${o.id}"${o.id===x.maeId?' selected':''}>${esc(o.nome)}</option>`;
+  return `<label>Casa-mãe<select id="bo-prod-mae">
+        <option value="">— nenhuma —</option>
+        ${grupos.length?`<optgroup label="Grupos">${grupos.map(op).join('')}</optgroup>`:''}
+        ${outros.length?`<optgroup label="Outros produtores">${outros.map(op).join('')}</optgroup>`:''}
+      </select></label>
+      <p class="prod-ajuda">O grupo a que pertence (ex.: Sogrape). Aparece entre parêntesis ao lado do produtor, na ficha do vinho. Se o grupo não está na lista, cria-o na procura acima.</p>`;
+}
+// A casa-mãe lê-se na ficha, na grelha e na procura: relê-se o mapa e
+// repinta-se, sem recarregar a garrafeira.
+async function boCasasRecarregar(){
+  try{const m=await sbReq('POST','rpc/produtores_casas',{},{'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
+    CASA_MAE=(m&&typeof m==='object')?m:{};renderLista();}catch(e){}
+}
+async function boProdCriar(){
+  const nome=((document.getElementById('bo-prod-q')||{}).value||'').trim();if(!nome)return;
+  if(!confirm(`Criar “${nome}” como produtor oficial?\n\nServe, por exemplo, para um grupo (casa-mãe) que não tem vinhos com o nome dele.`))return;
+  try{const r=await boRpc('produtor_definir',{p_oficial:nome,p_grafias:[]});toast(`“${r.oficial}” criado ✓`);
+    document.getElementById('bo-prod-q').value='';_boProdAberto=null;await boProdCarregar();}
+  catch(e){toast('Erro: '+e.message,1);}
+}
 async function boProdGuardar(k){
   const x=_boProd.todos[k];
   const nome=(document.getElementById('bo-prod-nome').value||'').trim(),compl=(document.getElementById('bo-prod-compl').value||'').trim();
   if(!nome)return toast('Falta o nome oficial.',1);
-  const mudaNome=nome!==x.nome,mudaCompl=compl!==x.completo;
-  if(!mudaNome&&!mudaCompl&&x.id)return boProdAbrir(k);
+  const sm=document.getElementById('bo-prod-mae'),mae=sm&&sm.value?Number(sm.value):null;
+  const mudaNome=nome!==x.nome,mudaCompl=compl!==x.completo,mudaMae=!!sm&&mae!==x.maeId;
+  if(!mudaNome&&!mudaCompl&&!mudaMae&&x.id)return boProdAbrir(k);
   const tot=x.cat+x.gar;
   if((mudaNome||!x.id)&&!confirm(x.id?`Mudar “${x.nome}” para “${nome}”?\n\n${tot} vinho(s) no catálogo e nas garrafeiras ficam com este nome.`
       :`Tornar “${nome}” um produtor oficial${nome!==x.nome?` (a grafia “${x.nome}” passa a este nome)`:''}?\n\n${tot} vinho(s) no catálogo e nas garrafeiras.`))return;
@@ -10490,6 +10535,7 @@ async function boProdGuardar(k){
       id=Number(r.id)||id;mudou=true;boProdResultado(r);
     }
     if(mudaCompl&&id){await boRpc('produtor_nome_completo',{p_id:id,p_nome_completo:compl});if(!mudou)toast(compl?'Nome completo guardado ✓':'Nome completo retirado');}
+    if(mudaMae&&id){const r=await boRpc('produtor_casa_mae',{p_id:id,p_mae:mae});if(!mudou)toast(r.casa_mae?`Casa-mãe: ${r.casa_mae} ✓`:'Casa-mãe retirada');boCasasRecarregar();}
     _boProdAberto=null;await boProdCarregar();if(mudou)boCatMudou();
   }catch(e){toast('Erro: '+e.message,1);}
 }
@@ -13240,7 +13286,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='185';
+const APP_BUILD='186';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

@@ -2530,3 +2530,16 @@ body:not(.adm-cat) .itabs .it-backoffice{display:none!important}
 .pf-ret summary{font-size:12.5px;color:var(--mu);cursor:pointer}
 .btn.pf-hbtn{margin-top:8px}
 .pf-hist{margin-top:6px}
+
+/* A CASA-MÃE (migração 43): o grupo da casa, ao lado do produtor na ficha
+   ("Casa Ferreirinha (Sogrape)", mais pequeno) e por baixo dele na grelha.
+   Em tom de papel e nunca dourado: diz de quem é a casa, não distingue o
+   vinho. */
+.mdl-casa{font-size:12px;color:var(--mu);font-weight:400;white-space:nowrap}
+.vg-casa{display:block;font-family:var(--ff);font-style:normal;font-size:10px;letter-spacing:.2px;color:var(--mu);opacity:.85;margin-top:1px}
+.prod-mae{color:#1d4a3b;font-weight:600}
+.prod-var.sem-x{padding-right:10px}
+#s-backoffice .prod-ed select{display:block;width:100%;margin-top:4px;text-transform:none;letter-spacing:0;font-weight:400}
+.prod-novo{display:block;width:100%;text-align:left;padding:11px 12px;border:none;border-top:1px dashed var(--bo2);background:#fcfaf7;
+  font-family:inherit;font-size:13px;font-weight:600;color:var(--vh);cursor:pointer}
+.prod-novo:hover{background:var(--vhp)}

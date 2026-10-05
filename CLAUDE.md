@@ -136,6 +136,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   pesquisas de uma linha do catálogo para a página do vinho (ver "O
   Catálogo dentro da app" › "Os links das pesquisas e o histórico"); corre
   depois do `db/fontes.sql` da WineCatalog.
+  `migracao-casa-mae.sql` é a 43: a casa-mãe de um produtor (o grupo: Casa
+  Ferreirinha → Sogrape), no schema `winecatalog` (ver "O Backoffice").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1381,6 +1383,21 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   procura). Tocar num abre o nome oficial e o nome completo: um oficial
   muda pela `produtor_renomear`, uma grafia solta passa a oficial pela
   `produtor_definir`; o nome completo pela `produtor_nome_completo`.
+- **A casa-mãe de um produtor** (migração 43, `db/migracao-casa-mae.sql`,
+  05/10/2026, o dono: "Casa-mãe do Produtor (tipo o Grupo — Sogrape, Real
+  Companhia Velha) … atributo do produtor e não do vinho"):
+  `winecatalog.produtores.casa_mae_id`, escolhida no editor do produtor em
+  Todos (`boProdMaeHTML` → `produtor_casa_mae`). UM nível: uma casa-mãe não
+  tem casa-mãe, e quem é casa-mãe não escolhe uma. Um grupo sem vinhos com o
+  nome dele (a Sogrape) cria-se pela procura da vista Todos ("＋ Criar …",
+  `produtor_definir` sem grafias). A app lê o mapa produtor → casa-mãe
+  (`produtores_casas` → `CASA_MAE`, `casaMaeDe(v)`) e mostra-a na ficha do
+  vinho entre parêntesis a seguir ao produtor (`.mdl-casa`), na grelha por
+  baixo do produtor (`.vg-casa`, dentro da fila do `.vg-prod` — a `subgrid`
+  não ganha fila), e a procura livre encontra-a ("sogrape" → Barca Velha).
+  As quintas da Real Companhia Velha são GRAFIAS dela
+  (`db/marcas-do-produtor.sql` da WineCatalog), não produtores: a RCV é
+  produtor e grupo ao mesmo tempo, e não leva casa-mãe.
 - **Ficou de fora** a password temporária (já está nas Definições da
   Garrafeira, para o dono da conta) e o que só corre no PC (o painel, o
   script do Vivino e das lojas).
