@@ -2328,7 +2328,9 @@ bloco ALTO e CHEIO de tinta (colunas carregadas, linhas quase todas pintadas),
 que o texto nunca é, estendido para cima e para baixo pelo gargalo e pela
 cápsula enquanto houver tinta seguida; essa caixa é `exata` e o recorte quase
 não a alarga (senão apanhava o logótipo por cima). A da IA só se usa quando
-a app não encontra nenhuma. O registo da `vinho-info`
+a app não encontra nenhuma, e mesmo então a app procura a garrafa à volta
+dela (`recortarGarrafa`: no branco veio só meia garrafa). O `iaLog` leva o
+`build` da app, para se saber se quem procurou já tinha a versão nova. O registo da `vinho-info`
 diz o que a IA respondeu (`imagem_doc`). A proposta é um `data:` revisto como as outras e só sobe ao GUARDAR
 (`pqImagemGravar`): a quem corrige o catálogo vai para o bucket público
 (`cat/`, migração 36) e fica o `imagem_url`; aos outros fica a SUA imagem do

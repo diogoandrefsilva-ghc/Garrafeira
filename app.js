@@ -6987,7 +6987,8 @@ const IA_INTERVALO_MS=2500;
 // tabela não existir, engole e segue.
 async function iaLog(estado,detalhe){
   try{
-    await sbReq('POST','sync_log',[{origem:'app',acao:'vinho-info',estado,quem:EU.email,detalhe}],
+    // A versão da app vai junto: diz se quem procurou já tinha a última.
+    await sbReq('POST','sync_log',[{origem:'app',acao:'vinho-info',estado,quem:EU.email,detalhe:{...detalhe,build:APP_BUILD}}],
       {'Prefer':'return=minimal'});
   }catch(e){}
 }
@@ -8239,12 +8240,27 @@ async function docPaginaCanvas(d,pagina){
 }
 async function pqImagemDoc(P,im){
   const d=P.docs&&P.docs[im.doc];if(!d||!Array.isArray(im.caixa))return '';
-  const c=await docPaginaCanvas(d,im.pagina);
-  const W=c.width,H=c.height,[y0,x0,y1,x1]=im.caixa;
+  return recortarGarrafa(await docPaginaCanvas(d,im.pagina),im.caixa,!!im.exata);
+}
+function recortarGarrafa(c,caixa,exata){
+  const W=c.width,H=c.height,[y0,x0,y1,x1]=caixa;
+  // Uma caixa da IA (mal medida, 05/10/2026: só meia garrafa no branco do
+  // Dandy) procura-se primeiro a garrafa à volta dela, com a conta da app.
+  if(!exata){
+    const zx0=Math.max(0,Math.floor((x0-(x1-x0))/1000*W)),zy0=Math.max(0,Math.floor((y0-(y1-y0)*0.3)/1000*H));
+    const zx1=Math.min(W,Math.ceil((x1+(x1-x0))/1000*W)),zy1=Math.min(H,Math.ceil((y1+(y1-y0)*0.3)/1000*H));
+    if(zx1-zx0>20&&zy1-zy0>20){
+      const z=document.createElement('canvas');z.width=zx1-zx0;z.height=zy1-zy0;
+      z.getContext('2d').drawImage(c,zx0,zy0,z.width,z.height,0,0,z.width,z.height);
+      const b=docAcharGarrafa(z);
+      if(b)return recortarGarrafa(c,[(zy0+b[0]/1000*z.height)/H*1000,(zx0+b[1]/1000*z.width)/W*1000,
+        (zy0+b[2]/1000*z.height)/H*1000,(zx0+b[3]/1000*z.width)/W*1000],true);
+    }
+  }
   // Uma zona mais larga do que a caixa: a da IA às vezes corta o gargalo, a
   // base ou um lado da garrafa, e o recorte cresce até à margem branca.
   // A caixa achada pela app (`exata`) já vai rente à garrafa: só um respiro.
-  const fx=(x1-x0)*(im.exata?0.15:0.5),fy=(y1-y0)*(im.exata?0.01:0.3);
+  const fx=(x1-x0)*(exata?0.15:0.5),fy=(y1-y0)*(exata?0.01:0.3);
   let L=Math.max(0,Math.floor((x0-fx)/1000*W)),T=Math.max(0,Math.floor((y0-fy)/1000*H));
   let R=Math.min(W,Math.ceil((x1+fx)/1000*W)),B=Math.min(H,Math.ceil((y1+fy)/1000*H));
   if(R-L<20||B-T<20)return '';
@@ -13702,7 +13718,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='191';
+const APP_BUILD='192';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
