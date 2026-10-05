@@ -138,6 +138,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   depois do `db/fontes.sql` da WineCatalog.
   `migracao-casa-mae.sql` é a 43: a casa-mãe de um produtor (o grupo: Casa
   Ferreirinha → Sogrape), no schema `winecatalog` (ver "O Backoffice").
+  `migracao-rcv-casas.sql` é a 44: a Real Companhia Velha passa a grupo —
+  as quintas dela e o Evel passam a produtores, e os vinhos com eles.
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -259,9 +261,10 @@ a mesma conta): "Qt.ª de Cidrô Arinto" grava-se "Quinta de Cidrô Arinto".
 E as castas abreviadas também, no nome, na chave e na lista das castas
 (`db/castas-abreviadas.sql` da WineCatalog): "T. Nacional" é Touriga
 Nacional, "Tª Roriz" é Tinta Roriz, "Cab. Sauvignon" é Cabernet Sauvignon.
-E "Quinta de Cidrô", "Quinta das Carvalhas" e "Quinta dos Aciprestes" no
-produtor gravam "Real Companhia Velha" (grafias da oficial), sem sair da
-frente do nome do vinho (`db/marcas-do-produtor.sql` de lá). A procura no
+"Quinta de Cidrô", "Quinta das Carvalhas" e "Quinta dos Aciprestes" foram
+grafias da "Real Companhia Velha" (`db/marcas-do-produtor.sql` de lá); desde
+a migração 44 (05/10/2026) são produtores oficiais com casa-mãe RCV (ver "O
+Backoffice" › "A casa-mãe"), e nunca saem da frente do nome do vinho. A procura no
 browser não faz as castas: os nomes já chegam arrumados da BD.
 
 ### O painel abre numa FITA de campos, não numa pilha de grupos
@@ -1395,9 +1398,16 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   vinho entre parêntesis a seguir ao produtor (`.mdl-casa`), na grelha por
   baixo do produtor (`.vg-casa`, dentro da fila do `.vg-prod` — a `subgrid`
   não ganha fila), e a procura livre encontra-a ("sogrape" → Barca Velha).
-  As quintas da Real Companhia Velha são GRAFIAS dela
-  (`db/marcas-do-produtor.sql` da WineCatalog), não produtores: a RCV é
-  produtor e grupo ao mesmo tempo, e não leva casa-mãe.
+  **A Real Companhia Velha é só grupo** (migração 44,
+  `db/migracao-rcv-casas.sql`, o dono: "quero que a RCV seja o grupo e que
+  os vinhos … passem a ter uma das quintas/marcas"): Quinta das Carvalhas,
+  Quinta de Cidrô (com o Dandy de Cidrô), Quinta dos Aciprestes e a marca
+  Evel são produtores oficiais com casa-mãe RCV. As três quintas deixaram de
+  ser grafias da RCV (o `marcas-do-produtor.sql` da WineCatalog, nessa
+  parte, já não vale), os vinhos mudaram de produtor no catálogo e chegaram
+  às garrafeiras pela ligação, e as quatro estão nos `produtores_no_nome`
+  (o nome do vinho fica "Quinta de Cidrô Arinto"). Na Sogrape: Casa
+  Ferreirinha, Herdade do Peso e Quinta dos Carvalhais.
 - **Ficou de fora** a password temporária (já está nas Definições da
   Garrafeira, para o dono da conta) e o que só corre no PC (o painel, o
   script do Vivino e das lojas).
