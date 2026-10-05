@@ -60,7 +60,11 @@ async function autorizar(auth: string, signal: AbortSignal): Promise<{ ok: boole
 // A lista vai buscar-se com o JWT de quem pediu (a função da BD confere-o).
 async function lerLista(auth: string, signal: AbortSignal): Promise<any> {
   const r = await sb("rpc/produtores_para_ia", { method: "POST", body: "{}", signal }, "winecatalog", auth);
-  if (!r.ok) throw new Error("não consegui ler os produtores (" + r.status + ")");
+  if (!r.ok) {
+    let msg = "";
+    try { const j = await r.json(); msg = j?.message || ""; } catch { /* sem corpo */ }
+    throw new Error("não consegui ler os produtores (" + r.status + (msg ? ": " + msg : "") + ")");
+  }
   return await r.json();
 }
 
