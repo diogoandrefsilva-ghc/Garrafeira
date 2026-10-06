@@ -1159,9 +1159,9 @@ ou catálogo, e Resumo, Detalhe ou onde se ficou — `abrirEcraInicial`, no
   que se marcar corrige a LINHA pela `winecatalog.editar` (`pqGuardarCat`,
   origem `catalogo-curador`/`catalogo-admin`); o produtor vai à parte, com o
   interruptor da identidade — se a linha passar a ser outra, a `editar`
-  recusa e o resto fica. Como em qualquer procura da Garrafeira, a
-  `vinho-info` já enche sozinha, com força 2, os campos vazios de um nome que
-  o catálogo conhece: o Guardar é o que decide por cima.
+  recusa e o resto fica. A `vinho-info` não escreve nada na linha antes do
+  Guardar (06/10/2026 — ver "O catálogo partilhado" › a escrever): o que se
+  desmarca não fica.
 - **E o Editar** (30/09/2026, o dono: "incluir as operações de procurar
   informação e editar, no catálogo, para quem tem acesso") — aos mesmos
   (`catPodeCriar`), com ou sem IA. É o formulário do Editar de sempre
@@ -2902,8 +2902,15 @@ Como funciona, dos dois lados:
   Gemini nem à pesquisa externa. Se sobrar, a IA é chamada **só por esses
   campos**: um pedido mais estreito é mais barato e melhor respondido, que
   é a mesma razão por que a app já deixa escolher os campos ("O que pedir");
-- **a escrever**: o que a IA acabou de descobrir volta ao catálogo, e o
-  trigger `vinhos_catalogo` leva para lá cada vinho que alguém guarda —
+- **a escrever**: o trigger `vinhos_catalogo` leva para lá cada vinho que
+  alguém guarda, e a `winecatalog.editar` o que se guarda num vinho do
+  Catálogo. **A `vinho-info` (e o lote) já não escreve a ficha da IA no
+  catálogo** (06/10/2026, o dono: "rejeito informação que vem da IA — o link
+  do Vivino — e depois ficou guardado"; foi o EA Trincadeira, #485, com o
+  link de outro vinho EA gravado antes da revisão): há sempre um ecrã de
+  revisão a seguir, e só o que lá se aceita chega ao catálogo, pelo Guardar.
+  Ficam de fora desta regra a carta (`daCarta`, sem revisão) e os preços das
+  páginas das lojas. O resto deste ponto conta como era antes —
   **mas a IA só escreve com um nome confirmado** (27/09/2026): um vinho já
   gravado (`vinhoId`), ou a LINHA desta colheita e cor que o catálogo já
   tem (`exato` da `procurar` — 02/10/2026: um vinho parecido noutra

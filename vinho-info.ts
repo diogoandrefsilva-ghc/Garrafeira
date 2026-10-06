@@ -2398,13 +2398,20 @@ async function produzirFicha(
     const { aviso: _aviso, ...factos } = ficha as Record<string, unknown>;
     if (!Object.keys(factos).some((k) => k !== "ano")) {
       // Nada a levar (o "só estes sites" deixou tudo de fora).
-    } else if (nomeConfirmado) {
-      if (daCarta && tipo && !factos.tipo) factos.tipo = tipo;
+    } else if (daCarta) {
+      /* SÓ A CARTA ESCREVE A FICHA SEM CONFIRMAÇÃO (06/10/2026, o dono: "rejeito
+         informação que vem da IA — o link do Vivino — e depois ficou guardado";
+         foi o EA Trincadeira). Nas outras procuras há sempre um ecrã de revisão
+         a seguir, e o que se escrevesse aqui ficava no catálogo mesmo
+         desmarcado — num vinho do Catálogo, na própria linha que se estava a
+         rever. O que se aceita chega lá ao Guardar: a `editar` num vinho do
+         Catálogo, o trigger `vinhos_catalogo` num da garrafeira. */
+      if (tipo && !factos.tipo) factos.tipo = tipo;
       await catalogoJuntar(
         nome, produtor, ano, factos, `vinho-info-${modoIA}`,
         fontesIA, signal,
       );
-    } else catalogoAdiado = true;
+    } else if (!nomeConfirmado) catalogoAdiado = true;
     // Depois da `juntar`: a linha pode ter nascido nela.
     if (nomeConfirmado && Object.keys(precosLoja).length) {
       precosGravados = await precosPagina(nome, produtor, ano, tipo, precosLoja, signal);
@@ -2697,13 +2704,9 @@ async function produzirFichaLote(
       resultados.push({ id: it.v.id, encontrado: true, ...it.doCatalogo, origem: "catalogo", catalogoCampos: doCat, catalogoEm: it.conhecido?.atualizadoEm ?? "" });
       continue;
     }
+    // Não vai ao catálogo daqui: o lote passa pelo ecrã de revisão, e o que
+    // se aceitar chega lá ao Guardar (ver a `daCarta` no `produzirFicha`).
     const fichaIA = it.ficha && Object.keys(it.ficha).length ? it.ficha : null;
-    if (fichaIA) {
-      await catalogoJuntar(
-        it.v.nome, it.v.produtor, it.v.ano, fichaIA, `vinho-info-${modoIA}-lote`,
-        [...(it.ev?.fontes ?? []), ...fontesGround].slice(0, 8), signal,
-      );
-    }
     const origemCampos = Object.fromEntries(Object.entries(it.origem).filter(([k]) => !!fichaIA && k in fichaIA));
     comFonte += Object.values(origemCampos).filter((o) => o.url).length;
     resultados.push({
