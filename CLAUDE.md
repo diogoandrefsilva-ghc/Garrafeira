@@ -1387,7 +1387,7 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   ainda não veio.
 - O que se grava aqui muda o Catálogo, e ele relê-se em fundo
   (`boCatMudou`).
-- **Os Produtores têm duas vistas** (05/10/2026, o dono: "está meio
+- **Os Produtores tinham duas vistas** (05/10/2026, o dono: "está meio
   amador … era bom poder ver todos e alterar o nome principal e o nome
   completo"): **Por decidir** (os grupos parecidos, cada grafia com o visto
   e a pastilha ★ oficial, e "outro nome" que se escolhe ao escrever) e
@@ -1423,10 +1423,19 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   (`boCasasPintar`). Cada casa-mãe é um cartão que abre; por baixo, num fio,
   os vinhos com o nome dela e os produtores dela, e de cada um os vinhos do
   Catálogo da app (`CAT_VINHOS`, pelo nome oficial e pelas grafias) — o
-  nome, a cor num ponto com o vidro dela, e as colheitas do mesmo vinho
-  numa linha só (`boCasasFamilias`): o nome abre a mais recente, cada ano a
-  sua página. Só se lê: a casa-mãe muda-se no Todos. A procura acha a
-  casa-mãe, um produtor ou um vinho, e abre o caminho até ele.
+  nome sem o produtor à frente ("Arinto" debaixo da Quinta de Cidrô,
+  `boCasasTitulo`; fica inteiro se não sobrar nada) e a cor num ponto com o
+  vidro dela. Sem o ano: as colheitas do mesmo vinho são uma linha só
+  (`boCasasFamilias`), que abre a mais recente. Só se lê: a casa-mãe
+  muda-se no Todos. A procura acha a casa-mãe, um produtor ou um vinho, e
+  abre o caminho até ele.
+- **As vistas dos Produtores são Todos · Casas-mãe · Sem casa-mãe**
+  (06/10/2026, o dono: quatro pastilhas não cabiam no telemóvel sem scroll
+  de lado). **Por decidir** é um bloco à parte por cima delas, fechado e com
+  o número (`boProdDecidir`); o **✨ IA** vive na barra do título
+  (`barra` na entrada do `BO_PAGINAS`). Sem casa-mãe são os que não
+  pertencem a um grupo nem o são (`boProdSemMae`), com o mesmo editor do
+  Todos.
 - **Uma casa-mãe nova escolhe-se na própria lista** (o dono: "como é que
   eu acrescento uma casa-mãe que ainda não existe?"): "＋ Nova casa-mãe…"
   pede o nome (`boProdMaeNova`) e ela nasce ao Guardar, pela

@@ -10269,7 +10269,8 @@ const boErro=e=>boCaixa(esc(e&&e.message||e),'bo-erro');
 const BO_PAGINAS=[
   {grupo:'Arrumar o catálogo'},
   {id:'duplicados',ic:'🧬',t:'Duplicados',d:'Pares parecidos: fundir ou marcar que não são',abrir:()=>boDupCarregar()},
-  {id:'produtores',ic:'🏷️',t:'Produtores',d:'Nome oficial e as grafias que são ele',abrir:()=>boProdCarregar()},
+  {id:'produtores',ic:'🏷️',t:'Produtores',d:'Nome oficial e as grafias que são ele',abrir:()=>boProdCarregar(),
+    barra:()=>`<button type="button" id="bo-prod-ia-bt" class="bo-barra-bt${_boProdVista==='ia'?' on':''}" onclick="boProdVista(_boProdVista==='ia'?'todos':'ia')">✨ IA</button>`},
   {id:'nomes',ic:'✍️',t:'Nomes dos vinhos',d:'Sem produtor, cor nem colheita no nome',abrir:()=>{}},
   {grupo:'O que chega das garrafeiras'},
   {id:'alertas',ic:'⚠️',t:'Alertas',d:'Um campo que não bate certo com o catálogo',n:'rep',abrir:()=>boRepCarregar('aberto')},
@@ -10316,7 +10317,7 @@ function boPagina(id,refrescar){
   const el=document.getElementById('bo-corpo');
   el.innerHTML=`<div class="bo-barra">
       <button type="button" class="bo-volta" onclick="boHub()">‹ Backoffice</button>
-      <span class="bo-titulo">${p.ic} ${esc(p.t)}</span>
+      <span class="bo-titulo">${p.ic} ${esc(p.t)}</span>${p.barra?p.barra():''}
     </div>`+(BO_TPL[id]?BO_TPL[id]():'');
   if(!refrescar)window.scrollTo({top:0,behavior:'instant'});
   p.abrir();
@@ -10630,20 +10631,36 @@ async function boProdCarregar(){
     const [sug,ofi,graf]=await Promise.all([boRpc('produtores_sugestoes'),boRpc('produtores_listar'),
       boRpc('produtores_grafias_lista').catch(()=>[])]);
     _boProd={grupos:boProdGrupos(sug||[]),todos:boProdTodos(ofi||[],graf||[])};
-    if(!_boProdVista)_boProdVista=_boProd.grupos.length?'decidir':'todos';
+    if(!_boProdVista)_boProdVista='todos';
     boProdPintar();
   }catch(e){box.innerHTML=`<p class="note bo-erro">${esc(e.message)}</p>`;}
 }
 const boProdN=(c,g)=>`${c} no catálogo · ${g} nas garrafeiras`;
 function boProdVista(v){_boProdVista=v;_boProdAberto=null;boProdPintar();}
+// Os produtores sem casa-mãe: nem pertencem a um grupo, nem o são.
+const boProdSemMae=(x,T)=>!x.maeId&&!x.casas.length&&!(x.id&&T.some(o=>o.maeId===x.id));
+/* "Por decidir" é um bloco à parte, por cima das vistas (06/10/2026, o dono:
+   a fita de quatro pastilhas não cabia no telemóvel). Fechado por omissão,
+   com o número à vista; o ✨ IA passou para a barra do título. */
+let _boProdDecidir=false;
+function boProdDecidir(){_boProdDecidir=!_boProdDecidir;boProdPintar();}
 function boProdPintar(){
   const box=document.getElementById('bo-prod-lista');if(!box||!_boProd)return;
-  const G=_boProd.grupos,T=_boProd.todos,nOf=T.filter(x=>x.id).length;
-  const seg=`<div class="prod-seg segbtns">
-      <button type="button" class="segbtn${_boProdVista==='decidir'?' on':''}" onclick="boProdVista('decidir')">Por decidir <span class="prod-segn">${G.length}</span></button>
-      <button type="button" class="segbtn${_boProdVista==='todos'?' on':''}" onclick="boProdVista('todos')">Todos <span class="prod-segn">${T.length}</span></button>
-      <button type="button" class="segbtn${_boProdVista==='casas'?' on':''}" onclick="boProdVista('casas')">Casas-mãe <span class="prod-segn">${T.filter(x=>x.id&&T.some(o=>o.maeId===x.id)).length}</span></button>
-      <button type="button" class="segbtn${_boProdVista==='ia'?' on':''}" onclick="boProdVista('ia')">✨ IA</button>
+  const G=_boProd.grupos,T=_boProd.todos;
+  const ia=document.getElementById('bo-prod-ia-bt');if(ia)ia.classList.toggle('on',_boProdVista==='ia');
+  const dec=`<div class="prod-dec${G.length?' tem':''}${_boProdDecidir&&G.length?' aberto':''}">
+      ${G.length?`<button type="button" class="prod-dec-h" onclick="boProdDecidir()">
+        <span class="prod-dec-t"><b>Por decidir</b><small>Grafias parecidas: juntar, ou marcar que não são o mesmo</small></span>
+        <span class="prod-dec-n">${G.length}</span><span class="prod-chev">${_boProdDecidir?'▾':'›'}</span></button>`
+      :'<div class="prod-dec-h"><span class="prod-dec-t"><b>✓ Nada por decidir</b><small>Os produtores parecidos aparecem aqui.</small></span></div>'}
+      ${_boProdDecidir&&G.length?`<div class="prod-dec-c"><p class="prod-dica">Parecido não quer dizer igual — “Quinta Nova” não é “Herdade da Malhadinha Nova”.
+        Tira o visto à grafia que não for, ou marca o par como diferente.</p>${G.map((g,i)=>boProdGrupoHTML(g,i)).join('')}</div>`:''}
+    </div>`;
+  const vb=(v,t,n)=>`<button type="button" class="segbtn${_boProdVista===v?' on':''}" onclick="boProdVista('${v}')">${t} <span class="prod-segn">${n}</span></button>`;
+  const seg=dec+`<div class="prod-seg segbtns">
+      ${vb('todos','Todos',T.length)}
+      ${vb('casas','Casas-mãe',T.filter(x=>x.id&&T.some(o=>o.maeId===x.id)).length)}
+      ${vb('sem','Sem casa-mãe',T.filter(x=>boProdSemMae(x,T)).length)}
     </div>`;
   if(_boProdVista==='ia'){box.innerHTML=seg+'<div id="bo-prod-ia"></div>';return boProdIAPintar();}
   if(_boProdVista==='casas'){
@@ -10652,15 +10669,11 @@ function boProdPintar(){
       <div id="bo-prod-casas" class="pc-arvore"></div>`;
     return boCasasPintar();
   }
-  if(_boProdVista==='todos'){
-    box.innerHTML=seg+`<div class="prod-procura"><input type="search" id="bo-prod-q" placeholder="Procurar produtor ou grafia…" oninput="boProdTodosPintar()"
-        autocomplete="off"><span class="prod-conta" id="bo-prod-conta"></span></div>
-      <div id="bo-prod-todos" class="prod-todos"></div>`;
-    return boProdTodosPintar();
-  }
-  box.innerHTML=seg+(G.length?`<p class="prod-dica">Parecido não quer dizer igual — “Quinta Nova” não é “Herdade da Malhadinha Nova”.
-      Tira o visto à grafia que não for, ou marca o par como diferente.</p>`
-    +G.map((g,i)=>boProdGrupoHTML(g,i)).join(''):'<div class="prod-vazio">✓ Nada por decidir.<br><small>Os produtores parecidos aparecem aqui.</small></div>');
+  box.innerHTML=seg+`<div class="prod-procura"><input type="search" id="bo-prod-q" placeholder="Procurar produtor ou grafia…" oninput="boProdTodosPintar()"
+      autocomplete="off"><span class="prod-conta" id="bo-prod-conta"></span></div>
+    ${_boProdVista==='sem'?'<p class="prod-dica">Os que não pertencem a um grupo nem o são. Toca num para lhe escolher a casa-mãe.</p>':''}
+    <div id="bo-prod-todos" class="prod-todos"></div>`;
+  return boProdTodosPintar();
 }
 function boProdGrupoHTML(g,i){
   const oficial=(g.grafias.find(s=>s.oficial)||{}).oficial||'';
@@ -10697,8 +10710,9 @@ function boProdOutro(i,inp){
 function boProdTodosPintar(){
   const box=document.getElementById('bo-prod-todos');if(!box)return;
   const q=boSemAc((document.getElementById('bo-prod-q')||{}).value||'').split(/\s+/).filter(Boolean);
-  const L=_boProd.todos.map((x,k)=>({x,k})).filter(({x})=>!q.length||(t=>q.every(p=>t.includes(p)))(boSemAc([x.nome,x.completo,x.mae,...x.grafias].join(' '))));
-  const c=document.getElementById('bo-prod-conta');if(c)c.textContent=q.length?`${L.length} de ${_boProd.todos.length}`:'';
+  const T=_boProd.todos,B=T.map((x,k)=>({x,k})).filter(({x})=>_boProdVista!=='sem'||boProdSemMae(x,T));
+  const L=B.filter(({x})=>!q.length||(t=>q.every(p=>t.includes(p)))(boSemAc([x.nome,x.completo,x.mae,...x.grafias].join(' '))));
+  const c=document.getElementById('bo-prod-conta');if(c)c.textContent=q.length?`${L.length} de ${B.length}`:'';
   // Uma casa-mãe pode não ter vinho nenhum com o nome dela (a Sogrape): para
   // a escolher, tem de existir como produtor oficial — cria-se daqui.
   const txt=((document.getElementById('bo-prod-q')||{}).value||'').trim();
@@ -10743,13 +10757,25 @@ function boProdResultado(r){
    vinhos (e cor) debaixo quer da casa-mãe, quer do produtor, com link para o
    Catálogo"). Só se lê: a casa-mãe muda-se no Todos. Os vinhos são os do
    Catálogo da app (`CAT_VINHOS`), pelo produtor — o oficial e as grafias
-   dele —, e as colheitas do mesmo vinho e cor numa linha só: o nome abre a
-   mais recente, cada ano abre a sua (a página do vinho, com o Editar). */
+   dele —, sem o produtor à frente do nome nem o ano (o dono, 06/10/2026:
+   "estamos a ver em hierarquia"): as colheitas do mesmo vinho e cor são uma
+   linha só, que abre a mais recente — as outras estão nas setas da página. */
+// Na árvore o produtor já está escrito por cima: "Quinta de Cidrô Arinto"
+// lê-se "Arinto" debaixo da Quinta de Cidrô. Só da frente, e só se sobrar
+// alguma coisa ("Cartuxa", debaixo da Cartuxa, fica Cartuxa).
+function boCasasTitulo(nome,x){
+  nome=String(nome||'');
+  for(const n of [x.nome,...x.grafias].filter(Boolean).sort((a,b)=>b.length-a.length)){
+    if(boSemAc(nome.slice(0,n.length))!==boSemAc(n)||!/^[\s\-–—·,:]+\S/.test(nome.slice(n.length)))continue;
+    return nome.slice(n.length).replace(/^[\s\-–—·,:]+/,'');
+  }
+  return nome;
+}
 function boCasasFamilias(idx,x){
   const fam=new Map();
   for(const n of new Set([x.nome,...x.grafias].map(boSemAc)))for(const v of idx.get(n)||[]){
-    const k=chave(v.nome)+'|'+chave(v.tipo);
-    if(!fam.has(k))fam.set(k,{nome:v.nome||'',tipo:v.tipo||'',l:[]});
+    const t=boCasasTitulo(v.nome,x),k=chave(t)+'|'+chave(v.tipo);
+    if(!fam.has(k))fam.set(k,{nome:t,tipo:v.tipo||'',l:[]});
     fam.get(k).l.push(v);
   }
   return [...fam.values()].map(f=>(f.l.sort((a,b)=>(b.ano||0)-(a.ano||0)),f))
@@ -10760,7 +10786,6 @@ function boCasasVinhosHTML(F){
   return `<ul class="pc-vinhos">${F.map(f=>`<li>
       <span class="pc-cor" style="background:${VIDRO[f.tipo]||'var(--bo2)'}"></span>
       <span class="pc-vt"><a href="#" class="pc-vn" onclick="verVinho(${f.l[0].id});return false">${esc(f.nome)}</a>${f.tipo?` <i class="pc-tipo">${esc(f.tipo)}</i>`:''}</span>
-      ${f.l.length>1||f.l[0].ano?`<span class="pc-anos">${f.l.map(v=>`<a href="#" onclick="verVinho(${v.id});return false">${v.ano||'s/ ano'}</a>`).join('')}</span>`:''}
     </li>`).join('')}</ul>`;
 }
 const boCasasN=n=>`${n} vinho${n===1?'':'s'}`;
@@ -10803,7 +10828,8 @@ function boCasasPintar(){
           ${boCasasVinhosHTML(x.F)}</details>`).join('')}
       </div></details>`).join('')
     :`<div class="prod-vazio">${q.length?'Nenhuma casa-mãe com isso.':'Ainda não há casas-mãe.'}<br><small>Escolhe a casa-mãe de um produtor no Todos.</small></div>`)
-    +(sem&&!q.length?`<p class="prod-dica">${sem} produtor${sem===1?'':'es'} confirmado${sem===1?'':'s'} sem casa-mãe — escolhe-a no Todos.</p>`:'');
+    +(sem&&!q.length?`<p class="prod-dica">${sem} produtor${sem===1?'':'es'} confirmado${sem===1?'':'s'} sem casa-mãe —
+      <a href="#" onclick="boProdVista('sem');return false">ver os sem casa-mãe</a>.</p>`:'');
 }
 /* A CASA-MÃE (migração 43): o grupo a que a casa pertence — Casa Ferreirinha
    é da Sogrape. Um nível só: quem já é casa-mãe de alguém não escolhe uma
@@ -13792,7 +13818,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='193';
+const APP_BUILD='194';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
