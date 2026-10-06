@@ -188,7 +188,8 @@ vinhos, monocasta, regiões, castas, os dois **dourados** de preferência
 (região e casta preferida — ver abaixo), a **casa-mãe preferida** e o
 **produtor preferido** (dourados também, por esta ordem), o **valor
 estimado** depois dos preferidos todos, e **a completar**. O cartão do produtor diz a pequenino a casa-mãe dele, se a
-tiver (`.sc-fav-casa`). A contagem (`.sc-s`) vai sempre ao RODAPÉ do cartão
+tiver (`.sc-fav-casa`, em dourado, para não se confundir com a contagem),
+e a lista "Vinhos por produtor" também, por baixo de cada um (`.rdet-sub`). A contagem (`.sc-s`) vai sempre ao RODAPÉ do cartão
 (o `.sc` é uma coluna flex), para alinhar com a do vizinho mais alto; e um
 nome dourado que quebre para três linhas encolhe até caber em duas
 (`resumoAjustarNomes`, medido no ecrã, mínimo 15px).

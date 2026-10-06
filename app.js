@@ -2591,7 +2591,7 @@ function resumoPainel(id,titulo,rows,filtroFn,listaBase,notaTop){
     ${notaTop?`<div class="rdet-nota">${notaTop}</div>`:''}
     <div class="rdet-rows">${rows.length
       ?rows.map(r=>`<div class="rdet-row" onclick="resumoDrill('${id}','${escJs(r.nome)}')">
-        <span>${esc(r.nome)}</span><span class="rdet-n">${esc(r.txt!=null?r.txt:String(r.n))}</span></div>`).join('')
+        <span>${esc(r.nome)}${r.sub?`<small class="rdet-sub">${esc(r.sub)}</small>`:''}</span><span class="rdet-n">${esc(r.txt!=null?r.txt:String(r.n))}</span></div>`).join('')
       :'<div class="note" style="padding:8px 0">Sem dados ainda.</div>'}</div>
   </div>`;
 }
@@ -2926,6 +2926,8 @@ function renderResumo(){
   // 05/10/2026); abre a contagem produtor a produtor já na linha do topo.
   const prodDe=v=>String(v.produtor||'').trim();
   const prodRows=contarPor(comStock,v=>[prodDe(v)]);
+  // Na lista dos produtores, a casa-mãe de cada um a pequenino por baixo.
+  prodRows.forEach(r=>{const m=String(CASA_MAE[r.nome]||'').trim();if(m&&m!==r.nome)r.sub=m;});
   const topProd=prodRows.length?prodRows[0]:null;
   // A CASA-MÃE (o grupo: Sogrape…) com mais vinhos, ao lado do produtor (o
   // dono, 06/10/2026). Um produtor sem casa-mãe conta como a sua própria.
@@ -13921,7 +13923,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='201';
+const APP_BUILD='202';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

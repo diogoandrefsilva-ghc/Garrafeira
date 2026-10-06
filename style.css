@@ -128,7 +128,7 @@ html,body{overflow-x:clip}
 .sc.sc-fav:hover{box-shadow:var(--sh2)}
 .sc.sc-fav:active{transform:scale(.985)}
 .sc-fav-nome{font-family:var(--fd);font-weight:600;font-size:22px;line-height:1.15;color:var(--ou2)}
-.sc-fav-casa{font-size:11px;color:var(--mu);margin-top:2px;line-height:1.2}
+.sc-fav-casa{font-size:11px;color:var(--ou2);opacity:.8;margin-top:2px;line-height:1.2}
 
 /* ── RESUMO: cards que abrem ──────────────────────────────────────
    O que mudou: o "voltar" deixou de ser um link solto no meio do painel.
@@ -164,6 +164,7 @@ html,body{overflow-x:clip}
 .rdet-row:last-child{border-bottom:none}
 .rdet-row:hover{background:var(--vhp);padding-left:8px}
 .rdet-row>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rdet-sub{display:block;font-size:11px;color:var(--mu);margin-top:1px;overflow:hidden;text-overflow:ellipsis}
 .rdet-n{font-family:var(--fd);font-weight:600;font-size:13px;color:var(--vh);background:var(--vhp);padding:1px 10px;
   border-radius:99px;flex-shrink:0;border:1px solid #f0dbe2}
 .rdet-tit{display:none}
