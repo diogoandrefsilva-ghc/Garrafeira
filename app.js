@@ -3881,10 +3881,10 @@ function vinhoCardHTML(v,termos,loteSel,fam){
         ${(()=>{
           // No catálogo o rodapé pode não ter nada (nem garrafas, nem janela):
           // sem isto ficava o filete sozinho a separar coisa nenhuma.
-          // O PREÇO abre o rodapé, no canto de baixo à esquerda, sem a loja
-          // (06/10/2026, o dono das apps).
-          const pe=precoBadge(v,true)+sitios.map(x=>`<span class="vc-l"><span class="vc-pip" style="background:${esc(x.cor)}"></span><b>${esc(x.txt)}</b></span>`).join('')
-            +(v.id<0?catTensHTML(v,false,fam):'')+janelaBadge(v,jan);
+          // O PREÇO fecha o rodapé, no canto de baixo à direita, sem a loja
+          // (06/10/2026, o dono das apps; o `margin-left:auto` é do CSS).
+          const pe=sitios.map(x=>`<span class="vc-l"><span class="vc-pip" style="background:${esc(x.cor)}"></span><b>${esc(x.txt)}</b></span>`).join('')
+            +(v.id<0?catTensHTML(v,false,fam):'')+janelaBadge(v,jan)+precoBadge(v,true);
           return pe.trim()||v.id>0?`<div class="vc-foot">${pe}</div>`:'';
         })()}
       </div>
@@ -3940,7 +3940,7 @@ function vinhoGrelhaHTML(v,termos,loteSel,fam){
     <div class="vg-nome">${esc(v.nome)}</div>
     <div class="vg-sub">${vinhoMetaHTML(v,desejado(v)&&!v.ano?'':(v.ano||'s/a'),!!fam)}</div>
     <div class="vg-prod">${esc(v.produtor||'')}${casaMaeDe(v)?`<span class="vg-casa">${esc(casaMaeDe(v))}</span>`:''}</div>
-    <div class="vg-foot">${notaVivinoBadge(v)}${v.id<0?catNotaBdgHTML(v,true):''}${precoBadge(v,true)}</div>
+    <div class="vg-foot">${v.id<0?catNotaBdgHTML(v,true):''}${notaVivinoBadge(v)}${precoBadge(v,true)}</div>
     ${trechosMatch(v,termos)}
   </article>`;
 }
@@ -13968,7 +13968,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='204';
+const APP_BUILD='205';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

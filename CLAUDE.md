@@ -1729,8 +1729,8 @@ famílias de cor lado a lado no mesmo cartão e nenhuma queria dizer nada.
    `.vc-anofloat`), produtor/tipo/região, castas, menção. A
    classificação (DOC/Vinho Regional) não vem aqui — já está na ficha do
    vinho, e cabia pouco para repetir nos dois sítios;
-3. depois de um filete, o **rodapé** — o preço (no canto de baixo à
-   esquerda, sem a loja), onde está a garrafa e se está no ponto de beber.
+3. depois de um filete, o **rodapé** — onde está a garrafa, se está no
+   ponto de beber e o preço (no canto de baixo à direita, sem a loja).
 Um crachá novo entra numa destas zonas; não há uma quarta.
 
 Isto é do cartão da LISTA. O cartão da **grelha** (`.vgcard`) é outro
@@ -2205,8 +2205,9 @@ sítios. A ordem, decidida pelo dono da app:
 Uma loja vende a colheita que tem AGORA, raramente a minha — por isso a
 colheita pesa antes da loja. Num vinho sem ano qualquer colheita é a
 minha. Os cartões mostram só o NÚMERO (06/10/2026, o dono das apps: na
-lista no canto de baixo à esquerda, a abrir o rodapé; na grelha ao lado
-das notas) — de onde veio fica no `title` ("G. Nacional · 2016"; o Vivino
+lista no canto de baixo à direita, a fechar o rodapé; na grelha ao lado
+das notas, numa linha que nunca quebra — com as três, o Vivino ao meio:
+G · Vivino · preço) — de onde veio fica no `title` ("G. Nacional · 2016"; o Vivino
 sem colheita é "Vivino · média", nunca "colheita ?"), e a página do vinho
 lista **todas** as lojas (`precosLojaHTML`); a que conta leva à frente
 do nome uma nota pequena, "(preço de referência)" — sem pastilha nem
