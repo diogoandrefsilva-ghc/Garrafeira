@@ -1417,6 +1417,16 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   às garrafeiras pela ligação, e as quatro estão nos `produtores_no_nome`
   (o nome do vinho fica "Quinta de Cidrô Arinto"). Na Sogrape: Casa
   Ferreirinha, Herdade do Peso e Quinta dos Carvalhais.
+- **A vista Casas-mãe** (06/10/2026, o dono: "uma visão das casas-mãe,
+  com uma árvore para os produtores debaixo de cada uma, e com o título dos
+  vinhos (e cor) debaixo"): a quarta pastilha dos Produtores
+  (`boCasasPintar`). Cada casa-mãe é um cartão que abre; por baixo, num fio,
+  os vinhos com o nome dela e os produtores dela, e de cada um os vinhos do
+  Catálogo da app (`CAT_VINHOS`, pelo nome oficial e pelas grafias) — o
+  nome, a cor num ponto com o vidro dela, e as colheitas do mesmo vinho
+  numa linha só (`boCasasFamilias`): o nome abre a mais recente, cada ano a
+  sua página. Só se lê: a casa-mãe muda-se no Todos. A procura acha a
+  casa-mãe, um produtor ou um vinho, e abre o caminho até ele.
 - **Uma casa-mãe nova escolhe-se na própria lista** (o dono: "como é que
   eu acrescento uma casa-mãe que ainda não existe?"): "＋ Nova casa-mãe…"
   pede o nome (`boProdMaeNova`) e ela nasce ao Guardar, pela
