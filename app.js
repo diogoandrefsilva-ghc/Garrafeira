@@ -2548,10 +2548,12 @@ function scCard(cor,label,valor,sub,id){
 // e a casta com mais vinhos na garrafeira agora. Tocam no mesmo painel de
 // sempre (resumoDrill), já aberto na linha certa: são um atalho para a
 // pergunta mais óbvia, não uma contagem nova.
-function scCardFav(rotulo,nome,sub,qual){
+// `casa` (opcional): a casa-mãe do produtor, a pequenino por baixo do nome.
+function scCardFav(rotulo,nome,sub,qual,casa){
   return `<div class="sc sc-fav" onclick="resumoDrill('${qual}','${escJs(nome)}')">
     <div class="sc-l">${esc(rotulo)}</div>
-    <div class="sc-fav-nome">${esc(nome)}</div>
+    <div class="sc-fav-nome">${esc(nome)}</div>${casa?`
+    <div class="sc-fav-casa">${esc(casa)}</div>`:''}
     <div class="sc-s">${esc(sub)}</div>
   </div>`;
 }
@@ -2965,10 +2967,11 @@ function renderResumo(){
     (cat?'':scCard('co','Valor estimado',`<span class="sc-eur">${esc(eur0(valorTotal))}</span>`,
       comPreco.length===ativas.length?`${ativas.length} garrafa${ativas.length===1?'':'s'}`
         :`${comPreco.length} de ${ativas.length} garrafas com preço`,'valor'))+
-    (topProd?scCardFav(cat?'Top Produtor':'Produtor preferido',topProd.nome,
-      `${topProd.n} vinho${topProd.n===1?'':'s'}`,'produtor'):'')+
     (topMae?scCardFav(cat?'Top Casa-mãe':'Casa-mãe preferida',topMae.nome,
       `${topMae.n} vinho${topMae.n===1?'':'s'}`,'casa_mae'):'')+
+    (topProd?scCardFav(cat?'Top Produtor':'Produtor preferido',topProd.nome,
+      `${topProd.n} vinho${topProd.n===1?'':'s'}`,'produtor',
+      String(CASA_MAE[topProd.nome]||'').trim()):'')+
     scCard('cb','A completar',faltosos.length,
       faltosos.length?'vinhos com dados em falta':'está tudo preenchido','falta');
 
@@ -13899,7 +13902,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='198';
+const APP_BUILD='199';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
