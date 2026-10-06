@@ -10770,10 +10770,15 @@ function boProdResultado(r){
    linha só, que abre a mais recente — as outras estão nas setas da página. */
 // Na árvore o produtor já está escrito por cima: "Quinta de Cidrô Arinto"
 // lê-se "Arinto" debaixo da Quinta de Cidrô. Só da frente, e só se sobrar
-// alguma coisa ("Cartuxa", debaixo da Cartuxa, fica Cartuxa).
+// alguma coisa ("Cartuxa", debaixo da Cartuxa, fica Cartuxa). Só o NOME do
+// produtor e as maneiras de o escrever (a variante `oficial`, a da mesma
+// chave: "Quinta do Cidrô"), nunca uma grafia com outra chave — essa é uma
+// marca que passa ao produtor, e é o que distingue o vinho: o "Evel Reserva"
+// debaixo da Real Companhia Velha não é "Reserva".
 function boCasasTitulo(nome,x){
   nome=String(nome||'');
-  for(const n of [x.nome,...x.grafias].filter(Boolean).sort((a,b)=>b.length-a.length)){
+  const ns=[x.nome,...x.variantes.filter(v=>v.oficial).flatMap(v=>(v.escritos&&v.escritos.length)?v.escritos:[v.escrito])];
+  for(const n of [...new Set(ns)].filter(Boolean).sort((a,b)=>b.length-a.length)){
     if(boSemAc(nome.slice(0,n.length))!==boSemAc(n)||!/^[\s\-–—·,:]+\S/.test(nome.slice(n.length)))continue;
     return nome.slice(n.length).replace(/^[\s\-–—·,:]+/,'');
   }

@@ -1424,7 +1424,10 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   os vinhos com o nome dela e os produtores dela, e de cada um os vinhos do
   Catálogo da app (`CAT_VINHOS`, pelo nome oficial e pelas grafias) — o
   nome sem o produtor à frente ("Arinto" debaixo da Quinta de Cidrô,
-  `boCasasTitulo`; fica inteiro se não sobrar nada) e a cor num ponto com o
+  `boCasasTitulo`; fica inteiro se não sobrar nada). Só sai o nome do
+  produtor e as maneiras de o escrever (a variante `oficial`, a da mesma
+  chave); uma grafia com outra chave é uma MARCA que passa ao produtor e
+  fica — o "Evel Reserva" debaixo da Real Companhia Velha não é "Reserva" e a cor num ponto com o
   vidro dela. Sem o ano: as colheitas do mesmo vinho são uma linha só
   (`boCasasFamilias`), que abre a mais recente. Só se lê: a casa-mãe
   muda-se no Todos. A procura acha a casa-mãe, um produtor ou um vinho, e
