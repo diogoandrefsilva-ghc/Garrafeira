@@ -2805,12 +2805,13 @@ function precoFonteTxt(p,curto){
   return (curto?l.curto:l.nome)+(p.outra?(p.colheita?' · '+p.colheita:(curto?' · média':' · média das colheitas')):'');
 }
 
-// O crachá do cartão: o preço e, em pequeno, de onde veio — só quando não
-// é o preço médio, que é o que o cartão sempre mostrou.
-function precoBadge(v){
+// O crachá do preço. Nos cartões vai SEM a loja (`semLoja`, 06/10/2026, o
+// dono das apps: o número basta; de onde veio fica no `title` e na página
+// do vinho). Com a loja, ela vai em pequeno quando não é o preço médio.
+function precoBadge(v,semLoja){
   const p=precoPrincipal(v);
   if(!p)return '';
-  const f=p.loja?precoFonteTxt(p,true):'';
+  const f=p.loja&&!semLoja?precoFonteTxt(p,true):'';
   return `<span class="bdg preco"${p.loja?` title="${esc(precoFonteTxt(p))}"`:''}>${esc(eur0(p.preco))}${f?`<small>· ${esc(f)}</small>`:''}</span>`;
 }
 function precoPDF(v){
@@ -3876,12 +3877,13 @@ function vinhoCardHTML(v,termos,loteSel,fam){
           ${castasTxt?`<span class="bdg cas">🍇 ${esc(castasTxt)}</span>`:''}
           ${cl?`<span class="bdg mono">${esc(cl)}</span>`:''}
           ${v.mencao?`<span class="bdg men">${esc(v.mencao)}</span>`:''}
-          ${precoBadge(v)}
         </div>
         ${(()=>{
           // No catálogo o rodapé pode não ter nada (nem garrafas, nem janela):
           // sem isto ficava o filete sozinho a separar coisa nenhuma.
-          const pe=sitios.map(x=>`<span class="vc-l"><span class="vc-pip" style="background:${esc(x.cor)}"></span><b>${esc(x.txt)}</b></span>`).join('')
+          // O PREÇO abre o rodapé, no canto de baixo à esquerda, sem a loja
+          // (06/10/2026, o dono das apps).
+          const pe=precoBadge(v,true)+sitios.map(x=>`<span class="vc-l"><span class="vc-pip" style="background:${esc(x.cor)}"></span><b>${esc(x.txt)}</b></span>`).join('')
             +(v.id<0?catTensHTML(v,false,fam):'')+janelaBadge(v,jan);
           return pe.trim()||v.id>0?`<div class="vc-foot">${pe}</div>`:'';
         })()}
@@ -3911,7 +3913,8 @@ function vinhoCardHTML(v,termos,loteSel,fam){
 /* O cartão da grelha NÃO é o da lista encolhido — é outra pergunta: na
    lista lê-se o que um vinho É, na grelha procura-se um RÓTULO que já se
    viu. Por isso a garrafa cresce e o resto encolhe até ao que identifica.
-   O rodapé ficou só com a NOTA, numa linha só dela: o "onde está" saiu
+   O rodapé é a NOTA e o PREÇO (sem a loja — 06/10/2026, o dono das
+   apps), numa linha só deles: o "onde está" saiu
    daqui porque numa coluna de 150px ele e a nota disputavam a mesma linha
    e a nota — que é o que faz escolher entre dois rótulos — ficava a
    competir com um "Sala +1" que se lê na lista e na ficha do vinho.
@@ -3937,7 +3940,7 @@ function vinhoGrelhaHTML(v,termos,loteSel,fam){
     <div class="vg-nome">${esc(v.nome)}</div>
     <div class="vg-sub">${vinhoMetaHTML(v,desejado(v)&&!v.ano?'':(v.ano||'s/a'),!!fam)}</div>
     <div class="vg-prod">${esc(v.produtor||'')}${casaMaeDe(v)?`<span class="vg-casa">${esc(casaMaeDe(v))}</span>`:''}</div>
-    <div class="vg-foot">${notaVivinoBadge(v)}${v.id<0?catNotaBdgHTML(v,true):''}</div>
+    <div class="vg-foot">${notaVivinoBadge(v)}${v.id<0?catNotaBdgHTML(v,true):''}${precoBadge(v,true)}</div>
     ${trechosMatch(v,termos)}
   </article>`;
 }
@@ -13965,7 +13968,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='203';
+const APP_BUILD='204';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
