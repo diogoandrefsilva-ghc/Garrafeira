@@ -3073,6 +3073,14 @@ os parecidos nunca. A semelhança sugere, nunca decide.
   vinho errado), as garrafas e o formato na garrafeira, e por baixo o que se
   leu. Na garrafeira entra por arrumar; no Catálogo nasce pela
   `winecatalog.criar`.
+- **A garrafa de um PDF vem como imagem** (06/10/2026, o dono das apps: as
+  fichas do Pedro & Inês entraram "sem imagem"): a leitura só traz texto, e
+  a app procura a garrafa no PDF com a mesma conta do "Num documento"
+  (`importarGarrafas` → `docAcharGarrafa`/`recortarGarrafa`), só num PDF de
+  onde se leu UM vinho. No vinho novo aparece com um visto (marcado); num
+  que já existe é a proposta da "Imagem do rótulo" (nunca por cima de uma
+  fotografia minha, `imagem_path`). Sobe só ao gravar: o bucket público a
+  quem corrige o catálogo, senão a imagem própria (`importarImagemGravar`).
 - **Saltar** e **Parar aqui** em todos; fechar por qualquer lado passa pelo
   `importarAoFecharModalIA` (o resumo, o catálogo relido uma vez, o
   `oferecerRetirarDesejos` dos criados). Uma lista comprida são muitos ecrãs

@@ -7402,6 +7402,8 @@ function iaFonteHTML(k,res){
     return '<span class="rv-de">↳ da pesquisa Google <i>(a IA não diz a página)</i></span>';
   return '<span class="rv-de">↳ da IA <i>(sem dizer de onde)</i></span>';
 }
+// A garrafa recortada de um PDF importado é um `data:` — vê-se, não se lê.
+function iaValHTML(t){return imgDoc(t)?`<img class="rv-img" src="${t}" alt="">`:escLink(t);}
 function iaMostrarResultado(res,vinhoId){
   IA_RES=res||{};IA_VINHO=vinhoId;
   const v=IDXV[vinhoId]||{};
@@ -7430,7 +7432,7 @@ function iaMostrarResultado(res,vinhoId){
       <input type="checkbox" id="ia-${c.k}"${vazio?' checked':''}>
       <label for="ia-${c.k}" class="ia-campo" style="margin:0;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)">
         <b>${esc(c.rot)}${nota||''}</b>
-        ${ant?`<span class="ia-antes">${escLink(ant)}</span> → `:''}${escLink(txt)}
+        ${ant?`<span class="ia-antes">${iaValHTML(ant)}</span> → `:''}${iaValHTML(txt)}
         ${cmp?'':iaFonteHTML(c.k,IA_RES)}
       </label></div>`;
 
@@ -7449,7 +7451,7 @@ function iaMostrarResultado(res,vinhoId){
     const def=!vazio?'atual':(tPrem?rPrem:(tOutra?rOutra:'atual'));
     const op=(val,rot,txt,cls)=>`<label class="ia-op${cls||''}">
       <input type="radio" name="iap-${c.k}" value="${val}"${def===val?' checked':''}>
-      <span><i>${esc(rot)}</i>${escLink(txt)}</span></label>`;
+      <span><i>${esc(rot)}</i>${iaValHTML(txt)}</span></label>`;
     return `<div class="ia-cmp"><b class="ia-cmp-t">${esc(c.rot)}</b>
       ${op('atual','manter',ant||'(vazio)',' at')}
       ${g?op('r1',rot1,g,cls1):''}
@@ -7582,9 +7584,14 @@ async function iaAplicar(){
   usados.forEach(r=>(r.fontes||[]).forEach(f=>{if(!fontes.some(x=>x.url===f.url))fontes.push(f);}));
   if(fontes.length)patch.ai_fontes=fontes.slice(0,8);
 
+  // A garrafa de um PDF importado: um link público, ou a minha imagem.
+  const docImg=imgDoc(patch.imagem_url)?patch.imagem_url:'';
+  if(docImg)delete patch.imagem_url;
+
   const btn=document.getElementById('ia-btn');
   if(btn){btn.disabled=true;btn.textContent='A guardar…';}
   try{
+    if(docImg)await importarImagemGravar(v,docImg);
     // O produtor que a IA trouxer passa pelo mesmo arrumo da BD (ver guardarVinho).
     const r=await sbReq('PATCH',`vinhos?id=eq.${IA_VINHO}`,patch,{'Prefer':'return=representation'});
     Object.assign(v,patch,(r&&r[0])||{});
@@ -7633,6 +7640,7 @@ async function iaAplicarCat(v){
   const btn=document.getElementById('ia-btn');
   if(btn){btn.disabled=true;btn.textContent='A guardar…';}
   try{
+    if(imgDoc(campos.imagem_url))campos.imagem_url=await imagemPublicaSubir(await dataUrlBlob(campos.imagem_url),v.cat_id);
     const r=await sbReq('POST','rpc/editar',{p_id:v.cat_id,p_campos:campos},
       {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
     Object.assign(v,campos);
@@ -13455,7 +13463,11 @@ async function importarEspera(id){
     try{
       const rows=await sbReq('GET','importacoes?id=eq.'+id+'&select=estado,resultado,erro');
       const job=(rows||[])[0];if(!job)continue;
-      if(job.estado==='concluido'){importarMostrarResultado(job.resultado||{});return;}
+      if(job.estado==='concluido'){
+        estado.textContent='A procurar a garrafa nos PDFs…';
+        await importarGarrafas(job.resultado||{});
+        importarMostrarResultado(job.resultado||{});return;
+      }
       if(job.estado==='erro')throw new Error(job.erro||'a leitura falhou');
     }catch(e){
       estado.style.color='var(--dg)';estado.textContent='Não deu: '+e.message;
@@ -13470,6 +13482,40 @@ async function importarEspera(id){
 function importarOutroModeloHTML(){
   return (temPremium()&&IMPORT_IMAGENS.length&&/lite/.test(IMPORT_MODELO))
     ?"<div class='note' style='margin-top:8px'>Não ficaste satisfeito com a leitura? <a href='#' onclick='importarTentarOutroModelo();return false'>Experimenta um modelo de IA diferente</a>.</div>":"";
+}
+/* A GARRAFA DE UM PDF IMPORTADO (06/10/2026, o dono das apps: as fichas
+   técnicas do Pedro & Inês "ambos sem imagem"). A leitura só traz texto; a
+   garrafa desenhada na ficha procura-a a app, com a MESMA conta do "Num
+   documento" (`docAcharGarrafa` nas duas primeiras páginas, `recortarGarrafa`
+   rente a ela). Só num PDF de onde se leu UM vinho: com vários, não se sabe
+   de quem é a garrafa. Fica em `IMPORT_IMG` (por vinho lido, um `data:`) e só
+   sobe ao Storage ao gravar — como no "Num documento". Uma falha cala-se: a
+   imagem é um extra, não pode travar a importação. */
+let IMPORT_IMG={};
+async function importarGarrafas(resultado){
+  IMPORT_IMG={};
+  const vs=Array.isArray(resultado.vinhos)?resultado.vinhos:[];
+  const deQue=l=>l&&l.ficheiro?l.ficheiro-1:(IMPORT_IMAGENS.length===1?0:-1);
+  for(let fi=0;fi<IMPORT_IMAGENS.length;fi++){
+    const f=IMPORT_IMAGENS[fi];
+    if(f.mime!=='application/pdf')continue;
+    const dele=vs.map((l,i)=>deQue(l)===fi?i:-1).filter(i=>i>=0);
+    if(dele.length!==1||vs[dele[0]].imagem_url)continue;
+    try{
+      for(let pg=1;pg<=2;pg++){
+        const c=await docPaginaCanvas({mime:f.mime,dados:f.data},pg);
+        const caixa=docAcharGarrafa(c);
+        if(caixa){const u=recortarGarrafa(c,caixa,true);if(u)IMPORT_IMG[dele[0]]=u;break;}
+      }
+    }catch(e){console.warn('garrafa do PDF importado',e);}
+  }
+}
+// Sobe a garrafa recortada para um vinho da garrafeira já gravado: um link
+// público a quem corrige o catálogo, senão a imagem própria do vinho.
+async function importarImagemGravar(v,dataUrl){
+  const url=await pqImagemGravar(dataUrl,`doc-v${v.id}`);
+  if(url){await sbReq('PATCH',`vinhos?id=eq.${v.id}`,{imagem_url:url});v.imagem_url=url;}
+  else if(TEM_IMAGEM_PATH)await fotoPropriaGravar(v,await dataUrlBlob(dataUrl));
 }
 function importarMostrarResultado(resultado){
   IMPORT_RESULTADO=Array.isArray(resultado.vinhos)?resultado.vinhos:[];
@@ -13515,7 +13561,10 @@ function importarCandidatos(l){
   const mesmos=U.filter(v=>{
     if(cor&&v.tipo&&v.tipo!==cor)return false;
     const vn=importarNorm(v.nome),vp=importarNorm(v.produtor);
-    const nomeOk=vn===n||(!!vp&&n===vp+' '+vn);
+    // O produtor à frente de um dos dois nomes: o lido ("Casa Ferreirinha
+    // Quinta da Leda") ou o gravado (os `produtores_no_nome` do catálogo:
+    // "Ribeiro Santo Pedro & Inês", lido na ficha como "Pedro & Inês").
+    const nomeOk=vn===n||(!!vp&&(n===vp+' '+vn||vn===vp+' '+n));
     const prodOk=!p||!vp||vp===p||vp.includes(p)||p.includes(vp);
     return nomeOk&&prodOk;
   });
@@ -13573,6 +13622,10 @@ function importarFicha(l,v){
   Object.keys(l).forEach(k=>{if(!fora.includes(k))res[k]=l[k];});
   if(v.ano&&l.ano&&v.ano!==l.ano)CAT_DA_COLHEITA.forEach(k=>delete res[k]);
   if(!v.ano)IA_JANELA.forEach(k=>delete res[k]);
+  // A garrafa do PDF, como proposta da imagem — nunca por cima da minha
+  // fotografia (`imagem_path` ganha sempre, e era ela que se trocava).
+  const img=IMPORT_IMG[IMPORT_RESULTADO.indexOf(l)];
+  if(img&&!res.imagem_url&&!v.imagem_path)res.imagem_url=img;
   // Não começa por "gemini" de propósito: o `iaUltimaProcura` não toma uma
   // leitura de ficheiros por uma pesquisa na net.
   res.modelo='leitura de ficheiros'+(IMPORT_MODELO?' ('+IMPORT_MODELO+')':'');
@@ -13607,6 +13660,9 @@ function importarNovoHTML(i,l){
     <div class="mrow"><div><label>Ano</label><input id="imp-ano" inputmode="numeric" value="${esc(l.ano||'')}"></div><div><label>Cor</label>${corSel}</div></div>
     ${IMPORT_CAT?'':`<div class="mrow"><div><label>Garrafas</label><input id="imp-qtd" type="number" min="1" max="60" value="${esc(l.quantidade||1)}"></div>
       <div><label>Formato</label><select id="imp-formato">${FORMATOS.map(x=>`<option value="${esc(x)}"${x==='0,75 L'?' selected':''}>${esc(x)}</option>`).join('')}</select></div></div>`}
+    ${IMPORT_IMG[i]?`<div class="ia-linha" style="margin-top:10px"><input type="checkbox" id="imp-img" checked>
+      <label for="imp-img" class="ia-campo" style="margin:0;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)">
+        <b>Imagem</b> <img class="rv-img" src="${IMPORT_IMG[i]}" alt=""> <span class="rv-de">↳ a garrafa de ${esc(de||'o PDF')}</span></label></div>`:''}
     ${det?`<div class="imp-dets"><div class="note">O que se leu${de?` <span class="rv-de">↳ de ${esc(de)}</span>`:''}</div>${det}</div>`
       :'<div class="note" style="margin-top:10px">Além do nome, não se leu mais nada deste vinho.</div>'}
     <div id="imp-falhas"></div>
@@ -13627,11 +13683,13 @@ async function importarCriar(){
   const btn=document.getElementById('imp-guardar'),txt=btn.textContent;btn.disabled=true;btn.textContent='A gravar…';
   const fora=['nome','produtor','ano','tipo','castas','quantidade','ficheiro','aviso'];
   const castas=Array.isArray(l.castas)?l.castas.filter(Boolean):[];
+  const img=IMPORT_IMG[i]&&document.getElementById('imp-img')?.checked?IMPORT_IMG[i]:'';
   try{
     if(IMPORT_CAT){
       const campos={};
       CAT_FICHA_FORM.forEach(k=>{if(!fora.includes(k)&&l[k]!=null&&l[k]!=='')campos[k]=l[k];});
       campos.tipo=tipo;
+      if(img)campos.imagem_url=await imagemPublicaSubir(await dataUrlBlob(img),'doc-novo');
       if(ano==null)IA_JANELA.forEach(k=>delete campos[k]);
       if(castas.length)campos.castas=castas.slice().sort((a,b)=>String(a).localeCompare(String(b),'pt'));
       const r=await sbReq('POST','rpc/criar',{p_nome:nome,p_produtor:produtor,p_ano:ano,p_campos:campos},
@@ -13650,6 +13708,11 @@ async function importarCriar(){
       const qtd=Math.max(1,Math.min(60,inteiro(importarCampo('imp-qtd'))||1));
       const formato=importarCampo('imp-formato')||'0,75 L';
       await sbReq('POST','garrafas',Array.from({length:qtd},()=>({vinho_id:id,formato})),{'Prefer':'return=minimal'});
+      // O vinho já está gravado: uma imagem que falhe não o desfaz.
+      if(img){
+        try{await importarImagemGravar(criados[0],img);}
+        catch(e){toast('O vinho entrou, mas a imagem não: '+e.message,1);}
+      }
     }
     importarAvancar();
   }catch(e){
@@ -13818,7 +13881,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='194';
+const APP_BUILD='195';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
