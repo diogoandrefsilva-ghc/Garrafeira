@@ -3004,7 +3004,26 @@ function renderResumo(){
       v=>faltasDe(v).includes(RESUMO_DRILL),comStock);
 
   box.innerHTML=html;
+  resumoAjustarNomes();
 }
+/* Um nome dourado (produtor, casa-mãe, casta…) que quebre para TRÊS linhas
+   encolhe a letra até caber em duas (o dono, 06/10/2026: "Real Companhia
+   Velha" ocupava três). Mede-se, não se adivinha pelo número de letras: a
+   quebra depende da largura do cartão. Abaixo de 15px desiste. */
+function resumoAjustarNomes(){
+  document.querySelectorAll('#resumo-cards .sc-fav-nome').forEach(el=>{
+    el.style.fontSize='';
+    if(!el.offsetParent)return;
+    const cs=getComputedStyle(el);
+    let fs=parseFloat(cs.fontSize)||22;
+    const k=(parseFloat(cs.lineHeight)||fs*1.15)/fs;   // a altura de uma linha, em fs
+    while(el.offsetHeight>fs*k*2.5&&fs>15){
+      fs-=1;el.style.fontSize=fs+'px';
+    }
+  });
+}
+let RESUMO_RSZ=0;
+window.addEventListener('resize',()=>{clearTimeout(RESUMO_RSZ);RESUMO_RSZ=setTimeout(resumoAjustarNomes,150);});
 
 /* ── PESQUISA (Detalhe + Locais) ────────────────────────────────────
    A mesma procura — texto, local, tipo, região, casta, produtor, monocasta,
@@ -13902,7 +13921,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='200';
+const APP_BUILD='201';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

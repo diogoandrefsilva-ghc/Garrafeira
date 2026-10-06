@@ -113,6 +113,10 @@ html,body{overflow-x:clip}
 /* O valor da garrafeira pode ir aos milhares — aos 34px rebentava o card. */
 .sc-eur{font-size:27px;overflow-wrap:anywhere}
 .sc-s{font-size:11px;color:var(--mu);margin-top:4px;line-height:1.4}
+/* O subtítulo (a contagem) vai sempre ao rodapé: um cartão mais baixo do que o
+   vizinho da mesma linha estica (o `stretch` da grelha) e deixava-a a meio. */
+.sc{display:flex;flex-direction:column}
+.sc>.sc-s{margin-top:auto;padding-top:4px}
 
 /* Os dois cards DOURADOS — "Região preferida" / "Casta preferida". Dourado
    é a cor da distinção nesta app (menção, nota do Vivino); aqui marca o
