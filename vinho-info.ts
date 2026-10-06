@@ -744,6 +744,11 @@ function extrairJson(txt: string): any | null {
    quem vai olhar para a ficha. */
 const texto = (v: unknown, max: number) =>
   String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+/* Chega para procurar? Três letras no nome, ou um nome curto com o
+   produtor (06/10/2026: o "EA" da Cartuxa, o "MR" — nomes de duas letras
+   que só se distinguem com o produtor ao lado). Um nome vazio, nunca. */
+const nomeChega = (nome: string, produtor: string) =>
+  nome.length >= 3 || (nome.length >= 1 && produtor.length >= 3);
 function numero(v: unknown, min: number, max: number, casas = 2): number | null {
   const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(",", "."));
   if (!isFinite(n) || n < min || n > max) return null;
@@ -2786,7 +2791,7 @@ Deno.serve(async (req) => {
        Serper, sem modelo nenhum. */
     if (body?.links === true) {
       const lnome = String(body?.nome ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
-      if (lnome.length < 3) return json({ error: "falta o nome do vinho" }, 400);
+      if (!nomeChega(lnome, texto(body?.produtor, 90))) return json({ error: "falta o nome do vinho" }, 400);
       if (auth.plano !== "premium") {
         await registar("erro", { passo: "links_sem_premium" }, quem);
         return json({ error: "procurar links é do pacote completo (usa a pesquisa Serper)" }, 403);
@@ -2874,7 +2879,7 @@ Deno.serve(async (req) => {
         const r = rawV as Record<string, unknown>;
         const id = typeof r?.id === "number" ? r.id : null;
         const vnome = String(r?.nome ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
-        if (id == null || vnome.length < 3) {
+        if (id == null || !nomeChega(vnome, texto(r?.produtor, 90))) {
           await registar("erro", { passo: "lote-vinho" }, quem);
           return json({ error: "cada vinho do lote precisa de id e nome" }, 400);
         }
@@ -2926,7 +2931,7 @@ Deno.serve(async (req) => {
     }
 
     const nome = String(body?.nome ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
-    if (nome.length < 3) {
+    if (!nomeChega(nome, texto(body?.produtor, 90))) {
       await registar("erro", { passo: "nome", recebido: String(body?.nome ?? "").slice(0, 60) }, quem);
       return json({ error: "falta o nome do vinho" }, 400);
     }
