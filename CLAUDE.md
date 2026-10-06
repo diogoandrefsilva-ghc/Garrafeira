@@ -183,16 +183,19 @@ conjunto. De propósito: a primeira versão copiou demasiado do Goals
 carregada para o que é.
 
 Os cards são os `.sc` de sempre, na grelha (2 colunas no telemóvel) — não
-mudes isso para uma lista vertical, já se tentou e ficou pobre. São **nove**:
+mudes isso para uma lista vertical, já se tentou e ficou pobre. São **dez**:
 vinhos, monocasta, regiões, castas, os dois **dourados** de preferência
 (região e casta preferida — ver abaixo), **valor estimado**, o **produtor
-preferido** (dourado também) e **a completar**.
+preferido** e a **casa-mãe preferida** (dourados também) e **a completar**.
 
 **O produtor preferido** (05/10/2026, o dono: "Produtor Preferido" na
 garrafeira, "Top Produtor" no catálogo) é o topo da contagem produtor a
 produtor (`prodRows`), no fim e antes do "A completar". Tocar nele abre o
 painel `produtor` ("Vinhos por produtor") já na linha do topo; os vinhos
 sem produtor não contam.
+Ao lado, a **casa-mãe preferida** ("Top Casa-mãe" no catálogo; 06/10/2026,
+o dono): a mesma conta pela casa-mãe (`casaMaeDe`, migração 43), e um
+produtor sem casa-mãe conta como a sua própria. Painel `casa_mae`.
 
 O **valor** é uma estimativa e diz-se isso no subtítulo: vale o que se pagou
 (`preco_compra`) quando se sabe, e o **preço que conta** do vinho

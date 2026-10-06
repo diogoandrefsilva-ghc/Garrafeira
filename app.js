@@ -2570,7 +2570,7 @@ function scCardFav(rotulo,nome,sub,qual){
    os monocasta para o card do meio, todos os com stock para os outros. */
 const RESUMO_NOME={mono:'Monocasta',regiao:'Regiões',casta:'Castas',valor:'Valor',falta:'A completar',
   cor:'Cores',regiao_tinto:'Tintos por região',regiao_branco:'Brancos por região',
-  casta_tinto:'Tintos por casta',casta_branco:'Brancos por casta',produtor:'Produtores'};
+  casta_tinto:'Tintos por casta',casta_branco:'Brancos por casta',produtor:'Produtores',casa_mae:'Casas-mãe'};
 function resumoPainel(id,titulo,rows,filtroFn,listaBase,notaTop){
   const fechar=`<button class="rdet-x" onclick="resumoFechar()" title="Fechar">✕</button>`;
   if(RESUMO_DRILL){
@@ -2925,6 +2925,11 @@ function renderResumo(){
   const prodDe=v=>String(v.produtor||'').trim();
   const prodRows=contarPor(comStock,v=>[prodDe(v)]);
   const topProd=prodRows.length?prodRows[0]:null;
+  // A CASA-MÃE (o grupo: Sogrape…) com mais vinhos, ao lado do produtor (o
+  // dono, 06/10/2026). Um produtor sem casa-mãe conta como a sua própria.
+  const maeDe=v=>String(casaMaeDe(v)||'').trim()||prodDe(v);
+  const maeRows=contarPor(comStock,v=>[maeDe(v)]);
+  const topMae=maeRows.length?maeRows[0]:null;
   let favHtml='';
   // No catálogo: os tintos e os brancos, e o topo de cada um.
   const daCor=c=>comStock.filter(v=>chave(v.tipo||'')===c);
@@ -2962,6 +2967,8 @@ function renderResumo(){
         :`${comPreco.length} de ${ativas.length} garrafas com preço`,'valor'))+
     (topProd?scCardFav(cat?'Top Produtor':'Produtor preferido',topProd.nome,
       `${topProd.n} vinho${topProd.n===1?'':'s'}`,'produtor'):'')+
+    (topMae?scCardFav(cat?'Top Casa-mãe':'Casa-mãe preferida',topMae.nome,
+      `${topMae.n} vinho${topMae.n===1?'':'s'}`,'casa_mae'):'')+
     scCard('cb','A completar',faltosos.length,
       faltosos.length?'vinhos com dados em falta':'está tudo preenchido','falta');
 
@@ -2987,6 +2994,8 @@ function renderResumo(){
   }
   if(RESUMO_ABERTO==='produtor')
     html+=resumoPainel('produtor','Vinhos por produtor',prodRows,v=>prodDe(v)===RESUMO_DRILL,comStock);
+  if(RESUMO_ABERTO==='casa_mae')
+    html+=resumoPainel('casa_mae','Vinhos por casa-mãe',maeRows,v=>maeDe(v)===RESUMO_DRILL,comStock);
   if(RESUMO_ABERTO==='falta')
     html+=resumoPainel('falta','O que falta preencher',falRows,
       v=>faltasDe(v).includes(RESUMO_DRILL),comStock);
@@ -13890,7 +13899,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='197';
+const APP_BUILD='198';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
