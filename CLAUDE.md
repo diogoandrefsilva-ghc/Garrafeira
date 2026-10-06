@@ -214,7 +214,9 @@ o **valor médio por garrafa** (só ali, não no card fechado — o card fechado
 já tem o total).
 
 **A completar** são os vinhos a quem falta alguma coisa que a app usa —
-imagem, castas, preço médio ou classificação (`FALTAS`/`faltasDe`). A
+imagem, castas, preço médio, nota do Vivino, harmonização ou janela
+(`FALTAS`/`faltasDe`). A classificação não conta (06/10/2026, o dono das
+apps): muitos vinhos não a têm; fica só no filtro. A
 MESMA lista é o filtro **Em falta** da fita (ver a seguir), com mais umas
 faltas que só lá aparecem (`resumo:false`).
 
@@ -1112,7 +1114,10 @@ ser o back-office. **Tocar no título do cabeçalho ("Garrafeira ⇄") troca
 para o Catálogo** (`modoAlternar`, `MODO`): o cabeçalho fica verde-garrafa,
 o título passa a "Catálogo", e só ficam o Resumo, o Detalhe, as **Sugestões**
 (ver abaixo) e as Definições (abre no Detalhe). Não se
-grava: a app abre sempre na garrafeira. Decisões do dono:
+grava ao trocar: a app abre na garrafeira, a não ser que se escolha outra coisa
+em **Definições › Ao abrir a app** (06/10/2026, o dono das apps: garrafeira
+ou catálogo, e Resumo, Detalhe ou onde se ficou — `abrirEcraInicial`, no
+`localStorage` por email e por aparelho; sem escolha é o de sempre). Decisões do dono:
 - **É o MESMO Detalhe e a MESMA página do vinho**, com outra fonte. Os
   filtros varrem `vinhosUniverso()`/`vinhosBase()` (o catálogo ou a
   garrafeira), e o campo Local não aparece no catálogo (`camposVisiveis`).

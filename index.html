@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="202">
+<body data-build="203">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone-claro.png" alt="">
@@ -309,6 +309,22 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
         <div class="note" id="adm-pass-status"></div>
       </div>
       <button class="btn ghost" onclick="sbLogout()" style="margin-top:10px">Terminar sessão</button>
+    </div>
+
+    <div class="fcard" id="fcard-abertura">
+      <h3>Ao abrir a app</h3>
+      <div class="note">O ecrã onde a app abre neste aparelho.</div>
+      <label for="cfg-ab-modo">Abrir em</label>
+      <select id="cfg-ab-modo" onchange="aberturaMudar()">
+        <option value="garrafeira">Garrafeira</option>
+        <option value="catalogo">Catálogo</option>
+      </select>
+      <label for="cfg-ab-tab">No separador</label>
+      <select id="cfg-ab-tab" onchange="aberturaMudar()">
+        <option value="">Onde fiquei da última vez</option>
+        <option value="garrafeira">Resumo</option>
+        <option value="detalhe">Detalhe</option>
+      </select>
     </div>
 
     <!-- SEM `ro-hide`: numa garrafeira emprestada o modo de leitura liga-se,

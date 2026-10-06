@@ -1173,7 +1173,8 @@ document.addEventListener('click',e=>{
    - Levam o id NEGATIVO (`-id` do catálogo). É a marca "isto é do catálogo"
      em todo o lado (`v.id<0`), e nunca colide com um vinho da garrafeira no
      `IDXV`, nos `onclick` e nos preços (`CAT_PRECOS`).
-   - Não se grava: o modo começa sempre na garrafeira. */
+   - Não se grava: o modo começa na garrafeira, a não ser que se tenha
+     escolhido o Catálogo em Definições › Ao abrir a app (`abrirEcraInicial`). */
 let MODO='garrafeira';
 let CAT_VINHOS=null, CAT_PRECOS={}, CAT_A_CARREGAR=null;
 let TAB_GARRAFEIRA='garrafeira';   // o separador da garrafeira de onde se saiu
@@ -2472,6 +2473,43 @@ function tab(nome,btn){
   fabSincronizar();
   window.scrollTo({top:0,behavior:'instant'});
 }
+/* O ECRÃ DE ABERTURA (06/10/2026, o dono das apps: "nas definições de cada
+   user, o ecrã predefinido de abertura — catálogo ou garrafeira, resumo ou
+   detalhe"). Definições › Ao abrir a app. É uma preferência de quem usa,
+   como a vista da lista: fica no `localStorage`, com o email na chave para
+   duas contas no mesmo browser não se pisarem. Sem escolha nenhuma é o de
+   sempre — a garrafeira, no separador onde se ficou (`restaurarTab`). */
+function aberturaChave(){return 'gf_abertura_'+String(EU.email||'').toLowerCase();}
+function aberturaLer(){
+  let o=null;try{o=JSON.parse(localStorage.getItem(aberturaChave())||'null');}catch(e){}
+  o=o||{};
+  return {modo:o.modo==='catalogo'?'catalogo':'garrafeira',
+          tab:['garrafeira','detalhe'].includes(o.tab)?o.tab:''};
+}
+function aberturaMudar(){
+  const m=document.getElementById('cfg-ab-modo'),t=document.getElementById('cfg-ab-tab');
+  if(!m||!t)return;
+  try{localStorage.setItem(aberturaChave(),JSON.stringify({modo:m.value,tab:t.value}));}catch(e){}
+  toast('Guardado — é assim que a app abre neste aparelho');
+}
+function aberturaPintar(){
+  const m=document.getElementById('cfg-ab-modo'),t=document.getElementById('cfg-ab-tab');
+  if(!m||!t)return;
+  const a=aberturaLer();m.value=a.modo;t.value=a.tab;
+}
+function tabBotao(nome){return document.querySelector(`.itabs .it[onclick^="tab('${nome}'"]`);}
+async function abrirEcraInicial(){
+  const a=aberturaLer();
+  if(a.modo==='catalogo'){
+    await modoAlternar();   // abre no Detalhe; se falhar, fica na garrafeira
+    if(modoCat()){
+      if(a.tab==='garrafeira')tab('garrafeira',tabBotao('garrafeira'));
+      return;
+    }
+  }
+  if(a.tab)tab(a.tab,tabBotao(a.tab));
+  else restaurarTab();
+}
 function restaurarTab(){
   let t=null;try{t=localStorage.getItem('gf_tab');}catch(e){}
   // As Sugestões e o Backoffice são do catálogo, e a app abre sempre na garrafeira.
@@ -2855,7 +2893,9 @@ const FALTAS=[
   {k:'Imagem ainda por link (fora da BD)',tem:v=>!modoCat()||!!v.imagem_path||!v.imagem_url||imagemNaBD(v.imagem_url)},
   {k:'Sem castas',          f:'castas',ia:['castas'],tem:v=>(v.castas||[]).length>0},
   {k:'Sem preço',           f:'preco',ia:['preco_medio'],tem:v=>precoVinho(v)!=null},
-  {k:'Sem classificação',   f:'classificacao',ia:['classificacao'],tem:v=>!!v.classificacao},
+  // Só no filtro (06/10/2026, o dono das apps): um vinho sem classificação
+  // não está "a completar" — muitos não a têm, e não é uma falta da ficha.
+  {k:'Sem classificação',   f:'classificacao',ia:['classificacao'],resumo:false,tem:v=>!!v.classificacao},
   {k:'Sem nota Vivino',     f:'vivino',ia:['vivino_nota'],tem:v=>notaVivinoNum(v)!=null},
   // Um link fora do formato do Vivino (sem `/w/<nº>`) não abre o vinho: é o
   // mesmo que não o ter (`vivinoLink`).
@@ -12085,7 +12125,8 @@ async function sbAposLogin(){
     if(window.glEsconderSplash)window.glEsconderSplash();
     return;
   }
-  renderLista();renderCfg();restaurarTab();
+  renderLista();renderCfg();
+  await abrirEcraInicial();
   comentariosIrPara();
   comentariosAvisos(true);
   if(window.glEsconderSplash)window.glEsconderSplash();
@@ -12275,6 +12316,7 @@ function renderCfg(){
       ?`A ver a garrafeira de ${donoGarrafeira()} (só leitura).`:'');
   const sobre=document.getElementById('sobre-box');
   if(sobre)sobre.innerHTML=`${nomeGarrafeira()?'<b>'+esc(nomeGarrafeira())+'</b>: ':''}${db.vinhos.length} vinhos · ${db.garrafas.length} garrafas (${db.garrafas.filter(naGarrafeira).length} na garrafeira) · ${db.locais.length} locais. ${db.castas.length} castas.<br>Admin: <b>${esc(ADMIN_EMAIL)}</b>.`;
+  aberturaPintar();
   renderCfgGarrafeira();
   renderCfgLocais();
   if(tabAtiva==='cfg')renderMeusComentarios();
@@ -13923,7 +13965,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='202';
+const APP_BUILD='203';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
