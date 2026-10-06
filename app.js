@@ -2964,14 +2964,14 @@ function renderResumo(){
     scCard('cv','Regiões',nRegioes,'diferentes','regiao')+
     scCard('cb','Castas',casRows.length,'diferentes','casta')+
     favHtml+
-    (cat?'':scCard('co','Valor estimado',`<span class="sc-eur">${esc(eur0(valorTotal))}</span>`,
-      comPreco.length===ativas.length?`${ativas.length} garrafa${ativas.length===1?'':'s'}`
-        :`${comPreco.length} de ${ativas.length} garrafas com preço`,'valor'))+
     (topMae?scCardFav(cat?'Top Casa-mãe':'Casa-mãe preferida',topMae.nome,
       `${topMae.n} vinho${topMae.n===1?'':'s'}`,'casa_mae'):'')+
     (topProd?scCardFav(cat?'Top Produtor':'Produtor preferido',topProd.nome,
       `${topProd.n} vinho${topProd.n===1?'':'s'}`,'produtor',
       String(CASA_MAE[topProd.nome]||'').trim()):'')+
+    (cat?'':scCard('co','Valor estimado',`<span class="sc-eur">${esc(eur0(valorTotal))}</span>`,
+      comPreco.length===ativas.length?`${ativas.length} garrafa${ativas.length===1?'':'s'}`
+        :`${comPreco.length} de ${ativas.length} garrafas com preço`,'valor'))+
     scCard('cb','A completar',faltosos.length,
       faltosos.length?'vinhos com dados em falta':'está tudo preenchido','falta');
 
@@ -13902,7 +13902,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='199';
+const APP_BUILD='200';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

@@ -185,9 +185,9 @@ carregada para o que é.
 Os cards são os `.sc` de sempre, na grelha (2 colunas no telemóvel) — não
 mudes isso para uma lista vertical, já se tentou e ficou pobre. São **dez**:
 vinhos, monocasta, regiões, castas, os dois **dourados** de preferência
-(região e casta preferida — ver abaixo), **valor estimado**, a **casa-mãe
-preferida** e o **produtor preferido** (dourados também, por esta ordem) e
-**a completar**. O cartão do produtor diz a pequenino a casa-mãe dele, se a
+(região e casta preferida — ver abaixo), a **casa-mãe preferida** e o
+**produtor preferido** (dourados também, por esta ordem), o **valor
+estimado** depois dos preferidos todos, e **a completar**. O cartão do produtor diz a pequenino a casa-mãe dele, se a
 tiver (`.sc-fav-casa`).
 
 **O produtor preferido** (05/10/2026, o dono: "Produtor Preferido" na
