@@ -13570,7 +13570,11 @@ function importarCandidatos(l){
     // Quinta da Leda") ou o gravado (os `produtores_no_nome` do catálogo:
     // "Ribeiro Santo Pedro & Inês", lido na ficha como "Pedro & Inês").
     const nomeOk=vn===n||(!!vp&&(n===vp+' '+vn||vn===vp+' '+n));
-    const prodOk=!p||!vp||vp===p||vp.includes(p)||p.includes(vp);
+    // O produtor lido pode ser a CASA-MÃE do gravado: uma ficha técnica
+    // assina pela empresa ("Magnum – Carlos Lucas Vinhos") e o vinho é da
+    // quinta dela ("Ribeiro Santo"; 06/10/2026, o Pedro & Inês).
+    const pareceProd=x=>!!x&&(x===p||x.includes(p)||p.includes(x));
+    const prodOk=!p||!vp||pareceProd(vp)||pareceProd(importarNorm(CASA_MAE[v.produtor]));
     return nomeOk&&prodOk;
   });
   mesmos.filter(v=>(v.ano??null)===ano).forEach(v=>por(v,'exato'));
@@ -13886,7 +13890,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='196';
+const APP_BUILD='197';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
