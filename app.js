@@ -8548,21 +8548,21 @@ async function docPaginaCanvas(d,pagina){
       const pg=await pdf.getPage(Math.min(Math.max(1,pagina||1),pdf.numPages));
       const v1=pg.getViewport({scale:1});
       const vp=pg.getViewport({scale:Math.min(4,2400/Math.max(v1.width,v1.height))});
-      c.width=Math.round(vp.width);c.height=Math.round(vp.height);
+      c.width=Math.round(vp.width);c.height=Math.round(vp.height);c.paginas=pdf.numPages;
       const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
       await pg.render({canvasContext:ctx,viewport:vp}).promise;
     }finally{try{pdf.destroy();}catch(_){}}
     return c;
   }
   const bmp=await createImageBitmap(new Blob([b64Bytes(d.dados)],{type:d.mime}));
-  c.width=bmp.width;c.height=bmp.height;
+  c.width=bmp.width;c.height=bmp.height;c.paginas=1;
   const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
   ctx.drawImage(bmp,0,0);bmp.close&&bmp.close();
   return c;
 }
 async function pqImagemDoc(P,im){
   const d=P.docs&&P.docs[im.doc];if(!d||!Array.isArray(im.caixa))return '';
-  return recortarGarrafa(await docPaginaCanvas(d,im.pagina),im.caixa,!!im.exata);
+  return recortarGarrafa(rodarCanvas(await docPaginaCanvas(d,im.pagina),im.roda),im.caixa,!!im.exata);
 }
 function recortarGarrafa(c,caixa,exata){
   const W=c.width,H=c.height,[y0,x0,y1,x1]=caixa;
@@ -8577,6 +8577,8 @@ function recortarGarrafa(c,caixa,exata){
       const b=docAcharGarrafa(z);
       if(b)return recortarGarrafa(c,[(zy0+b[0]/1000*z.height)/H*1000,(zx0+b[1]/1000*z.width)/W*1000,
         (zy0+b[2]/1000*z.height)/H*1000,(zx0+b[3]/1000*z.width)/W*1000],true);
+      const d=docGarrafaDeitada(z);
+      if(d)return recortarGarrafa(d.c,d.caixa,true);
     }
   }
   // Uma zona mais larga do que a caixa: a da IA às vezes corta o gargalo, a
@@ -8661,15 +8663,70 @@ function docAcharGarrafa(c){
   });
   return melhor;
 }
+/* A GARRAFA DEITADA (07/10/2026, o dono das apps: a ficha do Druida Tinto
+   2018 da Mira do Ó traz a garrafa de lado, a atravessar o cimo da página,
+   e a conta de cima só procura um bloco ALTO). Sem garrafa de pé, roda-se a
+   página um quarto de volta e procura-se outra vez com a MESMA conta. Uma
+   fotografia larga (as vinhas a toda a largura) também fica alta ao rodar,
+   por isso pede-se ainda a forma de uma garrafa: uma ponta bem mais estreita
+   do que a outra (`docGargalo`) — e é essa, o gargalo, que fica para cima.
+   Devolve a caixa na página RODADA, o `roda` (90: a direita sobe; -90: a
+   esquerda sobe) e essa página (`c`), ou null. */
+function rodarCanvas(c,roda){
+  if(roda!==90&&roda!==-90)return c;
+  const r=document.createElement('canvas');r.width=c.height;r.height=c.width;
+  const x=r.getContext('2d');
+  if(roda>0){x.translate(0,r.height);x.rotate(-Math.PI/2);}
+  else{x.translate(r.width,0);x.rotate(Math.PI/2);}
+  x.drawImage(c,0,0);
+  return r;
+}
+// Onde está o gargalo de uma garrafa de pé ('cima'/'baixo'): a ponta com
+// menos tinta, num sexto da altura de cada lado. Pontas parecidas (menos de
+// 40% de diferença) não são uma garrafa: null.
+function docGargalo(c,caixa){
+  const W=c.width,H=c.height;
+  const t=Math.round(caixa[0]/1000*H),a=Math.round(caixa[1]/1000*W);
+  const w=Math.min(W,Math.round(caixa[3]/1000*W)+1)-a,h=Math.min(H,Math.round(caixa[2]/1000*H)+1)-t;
+  if(w<4||h<12)return null;
+  const px=c.getContext('2d').getImageData(a,t,w,h).data;
+  const ponta=(y0,y1)=>{let n=0;for(let y=y0;y<y1;y++)for(let x=0;x<w;x++){const i=(y*w+x)*4;
+    if(px[i]<238||px[i+1]<238||px[i+2]<238)n++;}return n;};
+  const k=Math.max(2,Math.round(h/6)),cima=ponta(0,k),baixo=ponta(h-k,h);
+  if(Math.min(cima,baixo)>Math.max(cima,baixo)*0.6)return null;
+  return cima<baixo?'cima':'baixo';
+}
+function docGarrafaDeitada(c){
+  const r=rodarCanvas(c,90),caixa=docAcharGarrafa(r);
+  if(!caixa)return null;
+  const g=docGargalo(r,caixa);
+  if(g==='cima')return {caixa,roda:90,c:r};
+  if(g!=='baixo')return null;
+  // O gargalo ficou em baixo: roda-se para o outro lado, e a caixa dá meia volta.
+  return {caixa:[1000-caixa[2],1000-caixa[3],1000-caixa[0],1000-caixa[1]],roda:-90,c:rodarCanvas(c,-90)};
+}
+// A garrafa nas duas primeiras páginas de um PDF: de pé primeiro em todas,
+// e só depois deitada — uma de pé na 2.ª página ganha a uma "deitada" na
+// 1.ª, que é a conta mais arriscada. `c` é a página onde está a caixa (a
+// rodada, se a garrafa estava deitada).
+async function docGarrafaNasPaginas(d){
+  const cs=[];
+  for(let pg=1;pg<=2;pg++){
+    let c;try{c=await docPaginaCanvas(d,pg);}catch(e){break;}
+    const caixa=docAcharGarrafa(c);
+    if(caixa)return {pagina:pg,caixa,roda:0,c};
+    cs.push(c);
+    if(pg>=(c.paginas||2))break;
+  }
+  for(let i=0;i<cs.length;i++){const g=docGarrafaDeitada(cs[i]);if(g)return {pagina:i+1,...g};}
+  return null;
+}
 // Sem caixa nenhuma: a garrafa nas primeiras páginas dos PDFs enviados.
 async function pqImagemDocSozinha(P){
   for(let i=0;i<(P.docs||[]).length;i++){
     if(P.docs[i].mime!=='application/pdf')continue;
-    for(let pg=1;pg<=2;pg++){
-      let c;try{c=await docPaginaCanvas(P.docs[i],pg);}catch(e){break;}
-      const caixa=docAcharGarrafa(c);
-      if(caixa)return {doc:i,pagina:pg,caixa,exata:true};
-    }
+    const g=await docGarrafaNasPaginas(P.docs[i]);
+    if(g)return {doc:i,pagina:g.pagina,caixa:g.caixa,roda:g.roda,exata:true};
   }
   return null;
 }
@@ -13807,7 +13864,8 @@ function importarOutroModeloHTML(){
 /* A GARRAFA DE UM PDF IMPORTADO (06/10/2026, o dono das apps: as fichas
    técnicas do Pedro & Inês "ambos sem imagem"). A leitura só traz texto; a
    garrafa desenhada na ficha procura-a a app, com a MESMA conta do "Num
-   documento" (`docAcharGarrafa` nas duas primeiras páginas, `recortarGarrafa`
+   documento" (`docGarrafaNasPaginas`: as duas primeiras páginas, de pé ou
+   deitada; `recortarGarrafa`
    rente a ela). Só num PDF de onde se leu UM vinho: com vários, não se sabe
    de quem é a garrafa. Fica em `IMPORT_IMG` (por vinho lido, um `data:`) e só
    sobe ao Storage ao gravar — como no "Num documento". Uma falha cala-se: a
@@ -13823,11 +13881,8 @@ async function importarGarrafas(resultado){
     const dele=vs.map((l,i)=>deQue(l)===fi?i:-1).filter(i=>i>=0);
     if(dele.length!==1||vs[dele[0]].imagem_url)continue;
     try{
-      for(let pg=1;pg<=2;pg++){
-        const c=await docPaginaCanvas({mime:f.mime,dados:f.data},pg);
-        const caixa=docAcharGarrafa(c);
-        if(caixa){const u=recortarGarrafa(c,caixa,true);if(u)IMPORT_IMG[dele[0]]=u;break;}
-      }
+      const g=await docGarrafaNasPaginas({mime:f.mime,dados:f.data});
+      if(g){const u=recortarGarrafa(g.c,g.caixa,true);if(u)IMPORT_IMG[dele[0]]=u;}
     }catch(e){console.warn('garrafa do PDF importado',e);}
   }
 }
@@ -14206,7 +14261,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='206';
+const APP_BUILD='207';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

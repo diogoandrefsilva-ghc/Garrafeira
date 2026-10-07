@@ -2398,9 +2398,17 @@ primeiras páginas de cada PDF (`docAcharGarrafa`, `pqImagemDocSozinha`) — um
 bloco ALTO e CHEIO de tinta (colunas carregadas, linhas quase todas pintadas),
 que o texto nunca é, estendido para cima e para baixo pelo gargalo e pela
 cápsula enquanto houver tinta seguida; essa caixa é `exata` e o recorte quase
-não a alarga (senão apanhava o logótipo por cima). A da IA só se usa quando
+não a alarga (senão apanhava o logótipo por cima). **E deitada também**
+(07/10/2026, o dono das apps: a ficha do Druida Tinto 2018 da Mira do Ó traz
+a garrafa de lado, a atravessar o cimo da página): sem garrafa de pé em
+nenhuma das duas páginas (`docGarrafaNasPaginas` — de pé primeiro em todas,
+porque a deitada é a conta mais arriscada), roda-se a página um quarto de
+volta e procura-se com a MESMA conta (`docGarrafaDeitada`, `rodarCanvas`).
+Uma ponta tem de ser bem mais estreita do que a outra (`docGargalo`) — senão
+uma fotografia larga das vinhas passava por garrafa —, e é essa, o gargalo,
+que fica para cima no recorte. A da IA só se usa quando
 a app não encontra nenhuma, e mesmo então a app procura a garrafa à volta
-dela (`recortarGarrafa`: no branco veio só meia garrafa). O `iaLog` leva o
+dela (`recortarGarrafa`: no branco veio só meia garrafa; de pé ou deitada). O `iaLog` leva o
 `build` da app, para se saber se quem procurou já tinha a versão nova. O registo da `vinho-info`
 diz o que a IA respondeu (`imagem_doc`). A proposta é um `data:` revisto como as outras e só sobe ao GUARDAR
 (`pqImagemGravar`): a quem corrige o catálogo vai para o bucket público
@@ -3135,7 +3143,8 @@ os parecidos nunca. A semelhança sugere, nunca decide.
 - **A garrafa de um PDF vem como imagem** (06/10/2026, o dono das apps: as
   fichas do Pedro & Inês entraram "sem imagem"): a leitura só traz texto, e
   a app procura a garrafa no PDF com a mesma conta do "Num documento"
-  (`importarGarrafas` → `docAcharGarrafa`/`recortarGarrafa`), só num PDF de
+  (`importarGarrafas` → `docGarrafaNasPaginas`/`recortarGarrafa`, de pé ou
+  deitada), só num PDF de
   onde se leu UM vinho. No vinho novo aparece com um visto (marcado); num
   que já existe é a proposta da "Imagem do rótulo" (nunca por cima de uma
   fotografia minha, `imagem_path`). Sobe só ao gravar: o bucket público a
