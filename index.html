@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="205">
+<body data-build="206">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone-claro.png" alt="">
@@ -249,45 +249,62 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
        As fotos da carta, o prato e o orçamento vão à Edge Function
        `garrafeira-carta`, que só LÊ a carta; a lista, o "Procurar
        informação" e a sugestão vêm a seguir. Ver "SUGESTÕES" no app.js. -->
-  <section class="sec" id="s-sugestoes">
-    <div class="ws-card">
-      <div class="ws-card-label">1. Fotos da carta de vinhos <em>(mais do que uma, se o menu não couber numa só)</em></div>
-      <div id="ws-img-grid" class="img-grid"></div>
-      <div id="ws-img-meta" class="img-meta" style="display:none"></div>
-      <input type="file" id="ws-img-input" accept="image/*" multiple style="display:none" onchange="wsImagensEscolhidas(event)">
-      <div id="ws-img-status" class="ws-note" style="display:none"></div>
+  <section class="sec" id="s-sugestoes" data-modo="carta">
+    <div class="ws-modos" role="tablist" aria-label="Sugerir a partir de">
+      <button type="button" class="ws-modo on" data-modo="carta" role="tab" aria-selected="true" onclick="wsModo('carta')"><span class="ws-modo-ic">📖</span>Uma carta de vinhos</button>
+      <button type="button" class="ws-modo" data-modo="garrafeira" role="tab" aria-selected="false" onclick="wsModo('garrafeira')"><span class="ws-modo-ic">🍾</span>A minha garrafeira</button>
+      <button type="button" class="ws-modo" data-modo="catalogo" role="tab" aria-selected="false" onclick="wsModo('catalogo')"><span class="ws-modo-ic">📚</span>O Catálogo</button>
+    </div>
+    <div class="ws-card ws-form">
+      <div class="ws-so-carta">
+        <div class="ws-card-label"><span class="ws-num"></span>Fotos da carta de vinhos <em>(mais do que uma, se o menu não couber numa só)</em></div>
+        <div id="ws-img-grid" class="img-grid"></div>
+        <div id="ws-img-meta" class="img-meta" style="display:none"></div>
+        <input type="file" id="ws-img-input" accept="image/*" multiple style="display:none" onchange="wsImagensEscolhidas(event)">
+        <div id="ws-img-status" class="ws-note" style="display:none"></div>
+      </div>
 
-      <div class="ws-card-label" style="margin-top:18px">2. O que vais comer? <em>(opcional, mas ajuda)</em></div>
+      <div class="ws-card-label ws-passo ws-passo-prato"><span class="ws-num"></span>O que vais comer? <em>(opcional, mas ajuda)</em></div>
       <input type="text" id="ws-prato" placeholder="ex: bacalhau à Brás, bife grelhado, sushi…">
 
-      <div class="ws-card-label" style="margin-top:18px">3. Orçamento máximo por garrafa <em>(opcional — desliza)</em></div>
-      <div class="orc-picker">
-        <button type="button" class="orc-arrow" onclick="wsOrcamentoMover(-1)" aria-label="Valor anterior">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <div class="orc-track" id="ws-orc-track">
-          <div class="orc-item">Sem limite</div>
-          <div class="orc-item">10 €</div>
-          <div class="orc-item">15 €</div>
-          <div class="orc-item">20 €</div>
-          <div class="orc-item">25 €</div>
-          <div class="orc-item">30 €</div>
-          <div class="orc-item">40 €</div>
-          <div class="orc-item">50 €</div>
+      <div class="ws-sem-garrafeira">
+        <div class="ws-card-label ws-passo"><span class="ws-num"></span>Orçamento máximo por garrafa <em>(opcional — desliza)</em></div>
+        <div class="orc-picker">
+          <button type="button" class="orc-arrow" onclick="wsOrcamentoMover(-1)" aria-label="Valor anterior">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div class="orc-track" id="ws-orc-track">
+            <div class="orc-item">Sem limite</div>
+            <div class="orc-item">10 €</div>
+            <div class="orc-item">15 €</div>
+            <div class="orc-item">20 €</div>
+            <div class="orc-item">25 €</div>
+            <div class="orc-item">30 €</div>
+            <div class="orc-item">40 €</div>
+            <div class="orc-item">50 €</div>
+            <div class="orc-item">60 €</div>
+            <div class="orc-item">70 €</div>
+          </div>
+          <button type="button" class="orc-arrow" onclick="wsOrcamentoMover(1)" aria-label="Valor seguinte">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
         </div>
-        <button type="button" class="orc-arrow" onclick="wsOrcamentoMover(1)" aria-label="Valor seguinte">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
+        <div class="orc-dots" id="ws-orc-dots"></div>
       </div>
-      <div class="orc-dots" id="ws-orc-dots"></div>
 
-      <button class="btn prim full" id="ws-btn-ler" onclick="wsLer()" style="margin-top:18px" disabled>📖 Ler a carta</button>
-      <div id="ws-sugerir-status" class="ws-note" style="display:none"></div>
+      <div class="ws-so-carta">
+        <button class="btn prim full" id="ws-btn-ler" onclick="wsLer()" style="margin-top:18px" disabled>📖 Ler a carta</button>
+        <div id="ws-sugerir-status" class="ws-note" style="display:none"></div>
+      </div>
+      <div class="ws-sem-carta">
+        <p class="ws-note" id="ws-lista-nota" style="margin-top:14px"></p>
+        <button class="btn prim full" id="ws-btn-sugerir" onclick="wsSugerirLista()" style="margin-top:6px">🍷 Sugerir</button>
+      </div>
     </div>
 
     <div id="ws-resultado"></div>
 
-    <details class="ws-hist" id="ws-hist" ontoggle="if(this.open)wsCarregarHistorico()">
+    <details class="ws-hist ws-so-carta" id="ws-hist" ontoggle="if(this.open)wsCarregarHistorico()">
       <summary>Cartas anteriores</summary>
       <div id="ws-historico"></div>
     </details>

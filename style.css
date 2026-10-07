@@ -2178,6 +2178,25 @@ body.cat .fab-op.so-gar{display:none!important}
 body:not(.cat) .itabs .so-cat{display:none!important}
 body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
 #s-sugestoes .ws-card{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:16px 18px;margin-bottom:14px;box-shadow:var(--sh)}
+/* Os três modos (07/10/2026): de onde vêm os vinhos — uma carta, a minha
+   garrafeira, o Catálogo. O que cada um mostra decide-o o `data-modo` da
+   secção; os números dos passos são um contador, e um passo escondido
+   (`display:none`) não conta — "2. O que vais comer?" na carta, "1." no
+   Catálogo. Na garrafeira há um passo só, e um "1." sozinho cala-se. */
+#s-sugestoes .ws-modos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:12px}
+#s-sugestoes .ws-modo{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:9px 6px;
+  border:1px solid var(--bo);border-radius:12px;background:var(--card);color:var(--mu);font-family:inherit;font-size:12px;
+  font-weight:600;line-height:1.25;text-align:center;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+#s-sugestoes .ws-modo-ic{font-size:18px;line-height:1}
+#s-sugestoes .ws-modo.on{background:var(--vh);border-color:var(--vh);color:#fff}
+#s-sugestoes:not([data-modo=carta]) .ws-so-carta,
+#s-sugestoes[data-modo=carta] .ws-sem-carta,
+#s-sugestoes[data-modo=garrafeira] .ws-sem-garrafeira,
+#s-sugestoes[data-modo=garrafeira] .ws-num{display:none}
+#s-sugestoes .ws-form{counter-reset:wsn}
+#s-sugestoes .ws-num::before{counter-increment:wsn;content:counter(wsn) ". "}
+#s-sugestoes .ws-passo{margin-top:18px}
+#s-sugestoes:not([data-modo=carta]) .ws-passo-prato{margin-top:0}
 #s-sugestoes .ws-card-label{font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-bottom:9px;line-height:1.45}
 #s-sugestoes .ws-card-label em{font-weight:500;text-transform:none;letter-spacing:0;font-style:italic}
 #s-sugestoes .ws-note{font-size:12.5px;color:var(--mu);line-height:1.55;margin:6px 0}
@@ -2276,6 +2295,12 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
 #s-sugestoes .sug-marca.topo{color:#fff;background:var(--ou)}
 #s-sugestoes .sug-corpo{margin-top:6px;padding-left:34px}
 #s-sugestoes .sug-det:not([open]) .sug-dir .vinho-preco{font-size:14px}
+/* nos modos sem carta: quantas garrafas (na garrafeira), o produtor, e por
+   baixo a maturação e onde estão — ou, no Catálogo, se já o tenho */
+#s-sugestoes .sug-garr{font-size:12.5px;font-weight:600;color:var(--mu);white-space:nowrap}
+#s-sugestoes .sug-prod{font-style:italic}
+#s-sugestoes .sug-entre{margin:-4px 4px 10px;font-size:11.5px}
+#s-sugestoes .sug-extra{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:2px}
 #s-sugestoes .sug-links{display:flex;gap:6px;margin-top:10px}
 #s-sugestoes .sug-links a.mini{text-decoration:none;color:inherit}
 /* as cartas anteriores: fechadas, como as garrafas por posicionar */

@@ -1750,7 +1750,14 @@ async function modoAlternar(){
         o Catálogo sabe alguma coisa.
    - Quem vê o separador: quem tem IA na Garrafeira (`podeUsarIA()`); a
      `garrafeira-carta` pergunta o mesmo à BD (`plano_ia()`).
-   - Só no catálogo: é "que vinho peço?", não "o que tenho em casa".
+   - Só no catálogo (o separador vive lá).
+   TRÊS MODOS (07/10/2026, o dono das apps), escolhidos no topo do separador
+   (`WS_MODO`, `wsModo`): a CARTA (o de cima, tal e qual); a minha
+   GARRAFEIRA — "que garrafa abro?", sem preço; e o CATÁLOGO — "que vinho
+   compro?", com o orçamento. Nos dois últimos não há nada a ler nem a
+   procurar: a app junta os vinhos com o que sabe deles e a mesma
+   `garrafeira-carta` (`acao:'sugerir'`) ordena-os (ver "OS MODOS SEM CARTA").
+   O prato e o orçamento são os mesmos campos nos três.
    Os nomes levam `ws`/`WS_` à frente (vieram da WineSelection), e as
    classes do CSS vivem debaixo de `#s-sugestoes`: nada disto pode pisar o
    resto da app. */
@@ -1761,12 +1768,44 @@ function wsAbrir(){
     wsRenderImgGrid();
     wsOrcamentoInit();
     wsRetomarPendente();
-  }else{
-    const t=document.getElementById('ws-orc-track');
-    if(t)wsOrcamentoScrollParaIndice(t,_wsOrcamentoIdx,false);
   }
+  wsModoAplicar();
   const h=document.getElementById('ws-hist');
-  if(h&&h.open)wsCarregarHistorico();
+  if(h&&h.open&&WS_MODO==='carta')wsCarregarHistorico();
+}
+
+/* ── O modo: de onde vêm os vinhos ──
+   Fica o último escolhido, neste aparelho (é como a pessoa costuma usar,
+   não um estado do ecrã). O que cada modo mostra é o CSS que decide, pelo
+   `data-modo` da secção (`.ws-so-carta`, `.ws-sem-carta`…), e a numeração
+   dos passos é um contador do CSS: um passo escondido não conta. */
+const WS_MODOS=['carta','garrafeira','catalogo'];
+const WS_MODO_KEY='gf_ws_modo';
+let WS_MODO='carta';
+try{const m=localStorage.getItem(WS_MODO_KEY);if(WS_MODOS.includes(m))WS_MODO=m;}catch(e){}
+function wsModo(m){
+  if(!WS_MODOS.includes(m)||m===WS_MODO)return;
+  WS_MODO=m;
+  try{localStorage.setItem(WS_MODO_KEY,m);}catch(e){}
+  wsModoAplicar();
+  if(m==='carta'){const h=document.getElementById('ws-hist');if(h&&h.open)wsCarregarHistorico();}
+}
+function wsModoAplicar(){
+  const sec=document.getElementById('s-sugestoes');
+  if(!sec)return;
+  sec.dataset.modo=WS_MODO;
+  sec.querySelectorAll('.ws-modo').forEach(b=>{
+    const on=b.dataset.modo===WS_MODO;
+    b.classList.toggle('on',on);
+    b.setAttribute('aria-selected',on?'true':'false');
+  });
+  // A roda do orçamento esteve escondida (na garrafeira): sem tamanho, o
+  // scroll dela perdeu-se — volta a centrar-se no valor escolhido.
+  const t=document.getElementById('ws-orc-track');
+  if(t&&WS_MODO!=='garrafeira')requestAnimationFrame(()=>wsOrcamentoScrollParaIndice(t,_wsOrcamentoIdx,false));
+  wsListaNota();
+  wsListaBotao();
+  wsDesenhar();
 }
 
 // ── As fotos da carta (mais do que uma, se o menu não couber numa só) ──
@@ -1800,7 +1839,7 @@ function wsLimparImagens(){_wsImagens=[];wsRenderImgGrid();}
 
 /* ── O orçamento máximo (uma roda que desliza, não uma lista) ──
    Sem valor = "sem limite" (o primeiro). Fica o último escolhido. */
-const WS_ORCAMENTO_OPCOES=['','10','15','20','25','30','40','50'];
+const WS_ORCAMENTO_OPCOES=['','10','15','20','25','30','40','50','60','70'];
 const WS_ORCAMENTO_KEY='gf_ws_orcamento';
 let _wsOrcamentoIdx=0;
 function wsOrcamentoValor(){
@@ -1846,6 +1885,9 @@ function wsOrcamentoInit(){
   track.addEventListener('scroll',()=>{
     clearTimeout(scrollTimer);
     scrollTimer=setTimeout(()=>{
+      // escondida (o modo da garrafeira não pede preço) não tem medidas, e
+      // "o mais perto do centro" dava sempre o primeiro: apagava a escolha
+      if(!track.clientWidth)return;
       const tr=track.getBoundingClientRect(),centro=tr.left+tr.width/2;
       let melhor=0,menorDist=Infinity;
       Array.from(track.children).forEach((el,i)=>{
@@ -1932,8 +1974,8 @@ function wsStatus(txt,erro){
   s.style.color=erro?'var(--dg)':'var(--mu)';
   s.textContent=txt||'';
 }
-// As duas acções da `garrafeira-carta` respondem com o `id` da carta.
-async function wsFuncao(corpo){
+// Uma chamada à `garrafeira-carta`: devolve o corpo da resposta.
+async function wsChamar(corpo){
   let r;
   try{
     r=await sbFetch(`${SB_URL}/functions/v1/garrafeira-carta`,{
@@ -1943,10 +1985,16 @@ async function wsFuncao(corpo){
     });
   }catch(e){throw new Error('Erro de ligação — tenta outra vez.');}
   let d={};try{d=await r.json();}catch(_){}
-  if(!r.ok||!d.id){
+  if(!r.ok){
     if(r.status===404&&!d.error)throw new Error('A função `garrafeira-carta` ainda não está publicada no Supabase.');
     throw new Error(d.error||('Erro HTTP '+r.status+' — tenta outra vez.'));
   }
+  return d;
+}
+// As duas acções da carta respondem com o `id` dela.
+async function wsFuncao(corpo){
+  const d=await wsChamar(corpo);
+  if(!d.id)throw new Error(d.error||'Resposta inesperada — tenta outra vez.');
   return d.id;
 }
 async function wsLer(){
@@ -2172,6 +2220,8 @@ function wsNotaHTML(cat,v,cls){
 function wsDesenhar(){
   const box=document.getElementById('ws-resultado');
   if(!box)return;
+  // o resultado é do modo que está à vista; a carta continua em `WS`
+  if(WS_MODO!=='carta'){box.innerHTML=wsListaHTML(WS_MODO);return;}
   const c=WS;
   if(!c){box.innerHTML='';return;}
   box.innerHTML=wsRecHTML(c)+wsCartaHTML(c);
@@ -2347,7 +2397,7 @@ function wsRecIniciarPolling(c){
         c.recErro=r.rec_estado==='erro'?(r.rec_erro||'Não consegui fazer a sugestão — tenta outra vez.'):'';
         wsDesenhar();
         const el=document.getElementById('ws-resultado');
-        if(el&&c.rec)el.scrollIntoView({behavior:'smooth',block:'start'});
+        if(el&&c.rec&&WS_MODO==='carta')el.scrollIntoView({behavior:'smooth',block:'start'});
         const h=document.getElementById('ws-hist');if(h&&h.open)wsCarregarHistorico();
         return;
       }
@@ -2448,6 +2498,194 @@ async function wsAbrirHist(id){
     wsAbrirCarta(rows[0]);
     if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
   }catch(e){toast('Não foi possível abrir esta carta',1);}
+}
+
+/* ── OS MODOS SEM CARTA: a minha garrafeira e o Catálogo (07/10/2026) ──
+   O dono das apps: "sugestão de vinhos a partir da garrafeira pessoal — não
+   pedir o preço; a partir dos vinhos em Catálogo — pedir o preço". Não há
+   nada a ler nem a procurar: os vinhos são os que a app já tem à frente, e
+   vão à `garrafeira-carta` (`acao:'sugerir'`) com o que se sabe de cada um
+   (`wsFactos`) para os ordenar como a sugestão da carta — a mesma resposta,
+   a mesma regra de "sem nota não passa à frente de com nota". Responde no
+   próprio pedido (é só texto, e não há linha a guardar), por isso também
+   não há "anteriores": o resultado fica no ecrã até se pedir outro.
+   - GARRAFEIRA: os vinhos com garrafas na garrafeira aberta (a de outra
+     pessoa também, se ma emprestaram — ver é tudo o que isto faz). Sem
+     preço, mas com a janela de consumo: no ponto, e a fechar, primeiro.
+   - CATÁLOGO: os vinhos de que o Catálogo sabe alguma coisa (nota, castas,
+     harmonização ou prova) e que cabem no orçamento pelo preço que conta
+     (`precoVinho`), com a margem de sempre (`wsCabe`); sem limite, também
+     os sem preço. UMA colheita por vinho (`catFamChave`) — a de melhor
+     nota, e em empate a mais recente —, senão a sugestão eram três
+     colheitas do mesmo vinho.
+   Até `WS_LISTA_MAX` vinhos por pedido: passando disso, vão os que têm mais
+   informação (a harmonização primeiro), e o ecrã di-lo. */
+const WS_LISTA_MAX=200;
+const WS_LISTA={garrafeira:null,catalogo:null};
+function wsGarrafeiraVinhos(){return db.vinhos.filter(v=>stockDe(v.id)>0);}
+function wsSabeAlgo(v){return !!(notaVivino(v)||(v.castas&&v.castas.length)||v.harmonizacao||v.notas_prova);}
+function wsInfo(v){return (v.harmonizacao?2:0)+(notaVivino(v)?1:0)+((v.castas||[]).length?1:0)+(v.notas_prova?1:0);}
+function wsCandidatos(modo,orc){
+  let vs;
+  if(modo==='garrafeira')vs=wsGarrafeiraVinhos();
+  else{
+    const fam=new Map();
+    (CAT_VINHOS||[]).forEach(v=>{
+      if(!wsSabeAlgo(v)||!wsCabe({preco:precoVinho(v)},orc))return;
+      const k=catFamChave(v), o=fam.get(k);
+      const nv=notaVivinoNum(v)||0, no=o?(notaVivinoNum(o)||0):-1;
+      if(!o||nv>no||(nv===no&&(Number(v.ano)||0)>(Number(o.ano)||0)))fam.set(k,v);
+    });
+    vs=[...fam.values()];
+  }
+  const total=vs.length;
+  if(total>WS_LISTA_MAX){
+    vs=vs.slice().sort((a,b)=>wsInfo(b)-wsInfo(a)||(notaVivinoNum(b)||0)-(notaVivinoNum(a)||0)).slice(0,WS_LISTA_MAX);
+  }
+  return {vinhos:vs,total,cortados:total>vs.length};
+}
+// O que vai ao modelo de cada vinho: os factos e mais nada (nunca as minhas
+// notas, o preço de compra ou o lugar). Na garrafeira a janela, no Catálogo
+// o preço — é a diferença entre "que garrafa abro?" e "que vinho compro?".
+function wsFactos(v,modo){
+  const x=notaVivino(v);
+  const o={
+    nome:v.nome||'', produtor:v.produtor||'', ano:v.ano||null, tipo:v.tipo||'', regiao:v.regiao||'',
+    castas:(v.castas||[]).slice(0,6), estilo:v.estilo||'', mencao:v.mencao||'',
+    vivino:x?{nota:x.nota,de:x.de}:null,
+    harmonizacao:String(v.harmonizacao||'').slice(0,200), prova:String(v.notas_prova||'').slice(0,160)
+  };
+  if(modo==='catalogo')o.preco=precoVinho(v);
+  else{
+    const jan=janelaBeber(v), f=jan==='ponto'?janelaFase(v):null;
+    if(jan)o.janela={de:v.beber_de||null,ate:v.beber_ate||null,fase:jan,terco:f?f[2]:''};
+  }
+  return o;
+}
+function wsListaNota(){
+  const el=document.getElementById('ws-lista-nota');
+  if(!el)return;
+  if(WS_MODO==='garrafeira'){
+    const n=wsGarrafeiraVinhos().length, nome=nomeGarrafeira();
+    el.textContent=n?`Entre os ${n} vinho${n===1?'':'s'} com garrafas ${nome?`em «${nome}»`:'na garrafeira'}.`
+      :'A garrafeira aberta não tem vinhos com garrafas.';
+  }else el.textContent=WS_MODO==='catalogo'?'Entre os vinhos do Catálogo até ao orçamento, pelo preço de referência das lojas.':'';
+}
+function wsListaBotao(){
+  const b=document.getElementById('ws-btn-sugerir');
+  if(!b)return;
+  const st=wsListaAtual(WS_MODO);
+  const pend=!!(st&&st.estado==='pendente');
+  b.disabled=pend||(WS_MODO==='garrafeira'&&!wsGarrafeiraVinhos().length);
+  b.textContent=pend?'🍷 A escolher…':st&&st.estado==='ok'?'🍷 Sugerir outra vez':'🍷 Sugerir';
+}
+// O resultado deste modo — o da garrafeira só enquanto for a mesma aberta.
+function wsListaAtual(modo){
+  const st=WS_LISTA[modo];
+  return st&&(modo!=='garrafeira'||st.ga===GA_ID)?st:null;
+}
+async function wsSugerirLista(){
+  const modo=WS_MODO;
+  if(modo==='carta')return;
+  const ant=wsListaAtual(modo);
+  if(ant&&ant.estado==='pendente')return;
+  if(!podeUsarIA()){toast('As sugestões usam IA, e a IA não está incluída no teu acesso',1);return;}
+  if(modo==='catalogo'){
+    try{await catCarregar();}
+    catch(e){toast('Não foi possível abrir o catálogo: '+(e.message||e),1);return;}
+  }
+  const prato=document.getElementById('ws-prato').value.trim();
+  const orc=modo==='catalogo'?wsOrcamentoValor():null;
+  const c=wsCandidatos(modo,orc);
+  const st={modo,ga:GA_ID,prato,orcamento:orc,vinhos:c.vinhos,total:c.total,cortados:c.cortados,estado:'pendente',erro:'',rec:null};
+  WS_LISTA[modo]=st;
+  if(!st.vinhos.length){st.estado='ok';st.rec={estado:'vazio',sugestoes:[]};}
+  wsListaBotao();
+  if(WS_MODO===modo)wsDesenhar();
+  if(st.estado==='ok')return;
+  try{
+    const d=await wsChamar({acao:'sugerir',modo,prato,orcamento:orc,vinhos:st.vinhos.map(v=>wsFactos(v,modo))});
+    st.rec={estado:d.estado||'ok',sugestoes:Array.isArray(d.sugestoes)?d.sugestoes:[]};
+    st.estado='ok';
+  }catch(e){
+    st.estado='erro';
+    // a função publicada ainda é a de antes destes modos
+    st.erro=/acção desconhecida/.test(e.message)?'A função `garrafeira-carta` publicada no Supabase ainda não sabe sugerir a partir da garrafeira nem do Catálogo.':e.message;
+  }
+  if(WS_LISTA[modo]!==st)return;
+  wsListaBotao();
+  if(WS_MODO===modo){
+    wsDesenhar();
+    const el=document.getElementById('ws-resultado');
+    if(el&&st.estado==='ok'&&tabAtiva==='sugestoes')el.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+}
+function wsListaHTML(modo){
+  const st=wsListaAtual(modo);
+  if(!st)return '';
+  const n=st.vinhos.length, cat=modo==='catalogo';
+  if(st.estado==='pendente'){
+    return `<div class="ws-card"><p class="ws-note">🍷 A escolher entre ${n} vinho${n===1?'':'s'} ${cat?'do Catálogo':'da garrafeira'}${st.prato?` para ${esc(st.prato)}`:''}…</p></div>`;
+  }
+  if(st.estado==='erro')return `<div class="ws-card"><p class="ws-note" style="color:var(--dg)">${esc(st.erro)}</p></div>`;
+  const rec=st.rec||{};
+  const sug=(Array.isArray(rec.sugestoes)?rec.sugestoes:[]).filter(s=>st.vinhos[s.i]);
+  if(!sug.length){
+    const txt=rec.estado==='vazio'
+      ?(cat?(st.orcamento!=null?`Nenhum vinho do Catálogo de que se saiba alguma coisa cabe em ${wsEur(st.orcamento)} (com ${WS_MARGEM} € de margem).`
+          :'O Catálogo ainda não sabe nada de nenhum vinho.')
+        :'A garrafeira aberta não tem vinhos com garrafas.')
+      :'Nenhum destes vinhos combina bem com este pedido.';
+    return `<div class="ws-card"><p class="ws-note">${txt}</p></div>`;
+  }
+  const entre=`Entre ${n} vinho${n===1?'':'s'} ${cat?`do Catálogo${st.orcamento!=null?` até ${wsEur(st.orcamento)}`:''}`:'com garrafas na garrafeira'}`
+    +(st.cortados?` — os que têm mais informação, de ${st.total}`:'')+'.';
+  return `<div class="ws-card-label sug-titulo">A sugestão${st.prato?` · ${esc(st.prato)}`:''}${sug.length>1?' <em>— toca num vinho para ver porquê</em>':''}</div>
+    <p class="ws-note sug-entre">${entre}</p>`
+    +sug.map((s,k)=>wsListaSugHTML(st,s,k)).join('');
+}
+// Como a da carta (`wsSugHTML`), com o que cada modo tem a mais: na
+// garrafeira quantas garrafas, onde estão e a maturação; no Catálogo o preço
+// que conta e se já o tenho.
+function wsListaSugHTML(st,s,k){
+  const v0=st.vinhos[s.i], v=IDXV[v0.id]||v0, cat=st.modo==='catalogo';
+  const sub=[v.tipo,v.regiao,v.ano,(v.castas||[]).join(', ')].filter(Boolean).map(x=>esc(String(x))).join(' · ');
+  const marca=k===0&&s.recomendado?'<span class="sug-marca topo">🏆 Melhor escolha</span>':s.recomendado?'<span class="sug-marca">Recomendado</span>':'';
+  const nota=wsNotaHTML(v,v,'sug-nota')||'<span class="sug-nota"><span class="sem-dados">sem nota</span></span>';
+  let dir;
+  if(cat){
+    const p=precoPrincipal(v);
+    dir=`<span class="vinho-preco"${p&&p.loja?` title="${esc(precoFonteTxt(p))}"`:''}>${wsEur(p?p.preco:null)}</span>`;
+  }else{
+    const g=stockDe(v.id);
+    dir=`<span class="sug-garr">${g} garrafa${g===1?'':'s'}</span>`;
+  }
+  const extra=[];
+  if(cat){const t=catTensHTML(v);if(t)extra.push(t);}
+  else{
+    const jan=janelaBadge(v,janelaBeber(v),true);
+    if(jan)extra.push(jan);
+    if(temLocaisDesenhados())sitiosDe(garrafasDe(v.id,true)).forEach(x=>
+      extra.push(`<span class="vc-l"><span class="vc-pip" style="background:${esc(x.cor)}"></span><b>${esc(x.txt)}</b></span>`));
+  }
+  const viv=vivinoLink(v.vivino_url||'');
+  return `<details class="vinho-card sug-det${s.recomendado?' destaque':''}"${k===0?' open':''}>
+    <summary class="sug-sum">
+      <span class="sug-pos">${k+1}</span>
+      <span class="sug-cab">
+        ${marca}
+        <span class="vinho-nome">${esc(v.nome||'Vinho')}</span>
+        ${sub?`<span class="vinho-sub">${sub}</span>`:''}
+        ${v.produtor?`<span class="vinho-sub sug-prod">${esc(v.produtor)}</span>`:''}
+      </span>
+      <span class="sug-dir">${dir}${nota}</span>
+    </summary>
+    <div class="sug-corpo">
+      ${extra.length?`<div class="sug-extra">${extra.join('')}</div>`:''}
+      ${s.razao?`<p class="vinho-txt"><strong>Porquê:</strong> ${esc(s.razao)}</p>`:''}
+      <div class="sug-links"><button type="button" class="mini" onclick="verVinho(${v.id})">Ver a ficha</button>${viv?`<a class="mini" href="${esc(viv)}" target="_blank" rel="noopener">Vivino ↗</a>`:''}</div>
+    </div>
+  </details>`;
 }
 
 /* ── NAVEGAÇÃO ─────────────────────────────────────────────────────── */
@@ -13968,7 +14206,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='205';
+const APP_BUILD='206';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

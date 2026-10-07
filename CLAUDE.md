@@ -37,7 +37,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   para o bucket `garrafeira-imagens` (migração 34). Deploy:
   `supabase functions deploy garrafeira-imagens`.
 - `garrafeira-carta.ts` — a Edge Function das Sugestões: lê a carta e faz
-  a sugestão (migração 40; ver "As Sugestões"). Deploy:
+  a sugestão — da carta, da garrafeira ou do Catálogo (migração 40; ver "As
+  Sugestões"). Deploy:
   `supabase functions deploy garrafeira-carta`.
 - `garrafeira-push.ts` — a Edge Function das notificações push (a chave
   pública VAPID para a app, e o envio da caixa de saída `push_avisos`; ver
@@ -1353,12 +1354,44 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
    do modelo. Um vinho sem nota não passa à frente de um com nota nos
    recomendados — no prompt e em código. Pode pedir-se outra vez depois de
    procurar mais.
+- **Três modos, no topo do separador** (07/10/2026, o dono das apps:
+  "sugestão de vinhos a partir de uma carta de vinhos (já existe) — manter
+  como está; a partir da garrafeira pessoal — não pedir o preço; a partir
+  dos vinhos em Catálogo — pedir o preço"). `WS_MODO`/`wsModo`, guardado
+  por aparelho (`gf_ws_modo`); o que cada um mostra decide-o o CSS pelo
+  `data-modo` da secção (`.ws-so-carta`, `.ws-sem-carta`,
+  `.ws-sem-garrafeira`), e os números dos passos são um contador do CSS — um
+  passo escondido não conta. O prato e o orçamento são os MESMOS campos nos
+  três. **Uma carta de vinhos** são os quatro passos de cima, sem mudar
+  nada. Os outros dois (`wsSugerirLista`, secção "OS MODOS SEM CARTA" do
+  app.js) não têm nada a ler nem a procurar: a app junta os vinhos com os
+  factos que já tem (`wsFactos` — nunca as minhas notas, o preço de compra
+  nem o lugar) e a `garrafeira-carta` (`acao:'sugerir'`) ordena-os com a
+  mesma resposta e a mesma limpeza da carta (`rankingDe`: sem nota não passa
+  à frente de com nota). Responde no próprio pedido (é só texto e não há
+  linha a guardar), por isso não há "anteriores" nestes dois:
+  - **A minha garrafeira** — "que garrafa abro?": os vinhos com garrafas na
+    garrafeira aberta, sem orçamento; vai a janela de consumo (no ponto, e a
+    fechar, antes de ainda cedo), e cada sugestão diz quantas garrafas há,
+    a maturação e onde estão.
+  - **O Catálogo** — "que vinho compro?": os vinhos de que o Catálogo sabe
+    alguma coisa (nota, castas, harmonização ou prova) que cabem no
+    orçamento pelo preço que conta (`precoVinho`, com a margem do `wsCabe`;
+    sem limite entram também os sem preço), UMA colheita por vinho
+    (`catFamChave`: a de melhor nota, em empate a mais recente).
+  Até 200 vinhos por pedido (`WS_LISTA_MAX`/`MAX_LISTA`); passando disso
+  vão os que têm mais informação, e o ecrã di-lo.
+- **O orçamento vai até 70 €** (07/10/2026, o dono: "só estamos a permitir
+  ir até 50 €"): Sem limite · 10 · 15 · 20 · 25 · 30 · 40 · 50 · 60 · 70 —
+  `WS_ORCAMENTO_OPCOES` no app.js e as `.orc-item` do `index.html`, os dois
+  de mão dada.
 - **Uma carta no ecrã de cada vez** (`WS`): as "Cartas anteriores" são as
   linhas de `garrafeira.cartas` (as minhas — a policy é por `quem`, mesmo ao
   admin), e abrir uma põe-na no lugar da de agora, com o que o Catálogo sabe
   HOJE. As cartas de antes de 03/10/2026 ficaram no schema `wineselection`
   e já não aparecem.
-- **Só no catálogo** (`.so-cat`): é "que vinho peço?", não "o que tenho".
+- **Só no catálogo** (`.so-cat`): o separador vive lá — também o modo da
+  garrafeira, que lê os vinhos da garrafeira aberta.
 - **Só com IA** (`body.sem-sugestoes`, no `sincronizarTabs`): quem é `sem_ia`
   não vê o separador, e a `garrafeira-carta` pergunta o mesmo à BD
   (`plano_ia()`). O "Procurar informação" é a `vinho-info`, que só atende

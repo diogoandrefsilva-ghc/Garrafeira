@@ -26,6 +26,16 @@
 // (`EdgeRuntime.waitUntil`): ler seis fotos passa facilmente do que um pedido
 // HTTP aguenta num telemóvel que bloqueia o ecrã. A app sonda a linha.
 //
+// E há mais dois modos, sem carta (07/10/2026, o dono das apps: "sugestão
+// de vinhos a partir da garrafeira pessoal — não pedir o preço; a partir dos
+// vinhos em Catálogo — pedir o preço"): SUGERIR (`acao: "sugerir"`, `modo`
+// "garrafeira" ou "catalogo"). A APP manda a lista dos vinhos com os factos
+// que já tem à frente (os da garrafeira aberta, que a RLS já lhe deu; ou os
+// do Catálogo, uma colheita por vinho, até ao orçamento) e o modelo ordena-os
+// como no passo 4 — a mesma resposta, a mesma limpeza (`rankingDe`). É uma
+// chamada só de texto e responde no próprio pedido: não há nada a ler nem a
+// guardar, e por isso não nasce linha nenhuma em `garrafeira.cartas`.
+//
 // Quem pode: quem tem IA na Garrafeira (`garrafeira.plano_ia()` 'gratis' ou
 // 'premium', perguntado com o JWT de quem chamou) — o mesmo que vê o
 // separador. A linha escreve-se com a service role, sempre com `quem=eq.` no
@@ -249,6 +259,31 @@ function sabeAlgo(f: any): boolean {
     (Array.isArray(f.castas) && f.castas.length > 0) || !!f.harmonizacao || !!f.notas_prova);
 }
 
+/* A resposta do modelo → as sugestões, pela ordem. Só índices da lista que
+   lhe foi dada (`validos`), sem repetir, até `MAX_RANKING`; os 2 ou 3
+   recomendados à frente, e dentro deles os que têm nota primeiro. A MESMA
+   limpeza para a carta e para os modos sem carta. */
+function rankingDe(j: any, validos: Set<number>, comNota: Set<number>) {
+  const ranking: { i: number; razao: string }[] = [];
+  for (const x of Array.isArray(j?.ranking) ? j.ranking : []) {
+    const i = Number(x?.i);
+    if (!validos.has(i) || ranking.some((r) => r.i === i)) continue;
+    ranking.push({ i, razao: s(x?.razao, 400) });
+    if (ranking.length >= MAX_RANKING) break;
+  }
+  const recs: number[] = [];
+  for (const x of Array.isArray(j?.recomendados) ? j.recomendados : []) {
+    const i = Number(x);
+    if (ranking.some((r) => r.i === i) && !recs.includes(i)) recs.push(i);
+    if (recs.length >= 3) break;
+  }
+  if (!recs.length && ranking.length) recs.push(ranking[0].i);
+  // A trave em código: dentro dos recomendados, os que têm nota primeiro.
+  recs.sort((a, b) => Number(comNota.has(b)) - Number(comNota.has(a)));
+  const ordem = [...recs, ...ranking.map((r) => r.i).filter((i) => !recs.includes(i))];
+  return ordem.map((i) => ({ i, razao: ranking.find((r) => r.i === i)?.razao ?? "", recomendado: recs.includes(i) }));
+}
+
 function promptRecomendacao(linhas: string[], prato: string, orcamento: number | null) {
   return `És um escanção num restaurante em Portugal. Estes são os vinhos desta
 carta${orcamento ? ` que cabem no orçamento (${orcamento} € por garrafa, com uma folga de ${MARGEM_ORCAMENTO} €)` : ""}
@@ -380,6 +415,157 @@ async function ordenarCarta(vinhos: any[], prato: string, orcamento: number | nu
     clearTimeout(timer);
     parent.removeEventListener("abort", onAbort);
   }
+}
+
+/* ── OS MODOS SEM CARTA: a garrafeira e o Catálogo (07/10/2026) ──
+   A app manda os vinhos com os factos que tem (`normFactos` limpa-os — vêm
+   do browser), e o modelo ordena-os como no passo 4. Na GARRAFEIRA não há
+   preço (são garrafas que já se têm), mas há o MOMENTO de cada uma — a
+   janela de consumo: um vinho no ponto, sobretudo a fechar a janela, vem
+   antes de um ainda cedo. No CATÁLOGO há o preço de referência (o das lojas,
+   o `precoPrincipal` da app) e a relação preço/qualidade. */
+const MAX_LISTA = 200;
+const MODOS_LISTA = ["garrafeira", "catalogo"];
+const LISTA_TIMEOUT_MS = 55_000;
+const CUSTO_LISTA_EUR = 0.003;
+function anoJanela(v: unknown): number | null {
+  const n = typeof v === "number" ? v : parseInt(String(v ?? ""), 10);
+  return Number.isInteger(n) && n >= 1900 && n <= 2100 ? n : null;
+}
+function normFactos(raw: unknown): Record<string, any> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as any;
+  const nome = s(o.nome, 100);
+  if (!nome) return null;
+  const nv = o.vivino && typeof o.vivino === "object" ? numOuNull(o.vivino.nota, 0, 5) : null;
+  const j = o.janela && typeof o.janela === "object" ? o.janela : null;
+  return {
+    nome,
+    produtor: s(o.produtor, 80),
+    ano: anoOuNull(o.ano),
+    tipo: TIPOS.includes(o.tipo) ? o.tipo : "",
+    regiao: s(o.regiao, 60),
+    castas: Array.isArray(o.castas) ? o.castas.map((c: unknown) => s(c, 40)).filter(Boolean).slice(0, 6) : [],
+    estilo: s(o.estilo, 40),
+    mencao: s(o.mencao, 40),
+    vivino: nv != null ? { nota: nv, de: o.vivino.de === "global" ? "global" : "colheita" } : null,
+    preco: numOuNull(o.preco, 0, 5000),
+    harmonizacao: s(o.harmonizacao, 200),
+    prova: s(o.prova, 160),
+    janela: j ? {
+      de: anoJanela(j.de), ate: anoJanela(j.ate),
+      fase: ["cedo", "ponto", "passou"].includes(j.fase) ? j.fase : "",
+      terco: ["a abrir", "a meio", "a fechar"].includes(j.terco) ? j.terco : "",
+    } : null,
+  };
+}
+function linhaDaLista(f: any, i: number, modo: string): string {
+  const jan = modo === "garrafeira" ? f.janela : null;
+  const janTxt = jan && (jan.de || jan.ate)
+    ? `janela de consumo: ${jan.de ?? "?"}–${jan.ate ?? "?"}` +
+      (jan.fase === "ponto" ? `, no ponto${jan.terco ? ` (${jan.terco})` : ""}` : jan.fase === "cedo" ? ", ainda cedo" : jan.fase === "passou" ? ", já passou" : "")
+    : "";
+  return [
+    `[${i}] ${f.nome}`,
+    f.produtor ? `produtor: ${f.produtor}` : "",
+    f.ano ? `colheita: ${f.ano}` : "",
+    f.tipo ? `cor: ${f.tipo}` : "",
+    f.regiao ? `região: ${f.regiao}` : "",
+    f.mencao ? `menção: ${f.mencao}` : "",
+    f.estilo ? `estilo: ${f.estilo}` : "",
+    f.castas.length ? `castas: ${f.castas.join(", ")}` : "",
+    f.vivino ? `Vivino ${f.vivino.nota}/5${f.vivino.de === "global" ? " (todas as colheitas)" : ""}` : "SEM NOTA",
+    modo === "catalogo" && f.preco != null ? `preço de referência ~${f.preco}€` : "",
+    janTxt,
+    f.harmonizacao ? `harmoniza com: ${f.harmonizacao}` : "",
+    f.prova ? `prova: ${f.prova}` : "",
+  ].filter(Boolean).join(" | ");
+}
+function promptLista(modo: string, linhas: string[], prato: string, orcamento: number | null) {
+  const casa = modo === "garrafeira";
+  const regraNota = `a NOTA do Vivino: um vinho com nota alta fica à frente de um com nota
+     baixa, e um vinho "SEM NOTA" NUNCA fica à frente de um que combine e
+     tenha nota de 3.8 ou mais`;
+  return `És um escanção em Portugal. ${casa
+    ? "Estes são os vinhos que esta pessoa tem em casa, na sua garrafeira"
+    : `Estes são vinhos de um catálogo, para comprar${orcamento ? ` (até ${orcamento} € por garrafa pelo preço de referência das lojas, com uma folga de ${MARGEM_ORCAMENTO} €)` : ""}`},
+com os factos que se sabem de cada um:
+
+${linhas.join("\n")}
+
+${prato ? `O prato a acompanhar é: "${prato}".` : casa
+    ? "Não foi indicado nenhum prato — escolhe vinhos para abrir agora: no ponto, versáteis e bem avaliados."
+    : "Não foi indicado nenhum prato — escolhe vinhos versáteis e bem avaliados."}
+
+Devolve APENAS um objeto JSON com esta forma exata:
+{"ranking": [{"i": number, "razao": string}], "recomendados": [number]}
+
+Regras:
+- "ranking": até ${MAX_RANKING} vinhos da lista, do melhor para o pior para este
+  prato, pelo número entre [ ].
+- Critérios, por esta ordem:
+  1. harmonização com o prato (cor, corpo, acidez, taninos, castas, o que o
+     vinho diz harmonizar) — um vinho que não combina fica sempre atrás;
+${casa
+    ? `  2. o momento do vinho: um vinho no ponto vem à frente de um "ainda cedo",
+     e entre os que estão no ponto, os que estão "a fechar" a janela primeiro
+     (são os que se devem beber antes); um que "já passou" só se combinar
+     muito bem;
+  3. ${regraNota};`
+    : `  2. ${regraNota};
+  3. a relação preço/qualidade (a nota face ao preço de referência);`}
+  4. em igualdade, dá prioridade aos PORTUGUESES.
+- "recomendados": os 2 ou 3 primeiros do ranking que recomendarias mesmo
+  (só 1 se só um combinar; [] se nenhum combinar).
+- "razao": uma a duas frases concretas, em português, sobre porque está
+  nessa posição para este prato, apoiadas nos factos dados. Não cites notas
+  nem preços que não estejam na lista, e não inventes castas nem
+  características.
+Responde só com o JSON.`;
+}
+async function sugerirLista(body: any, quem: string): Promise<{ status: number; corpo: Record<string, unknown> }> {
+  const t0 = Date.now();
+  const modo = String(body.modo);
+  const prato = s(body.prato, 200);
+  const orc = modo === "catalogo" ? numOuNull(body.orcamento, 1, 10000) : null;
+  const factos = (body.vinhos as unknown[]).slice(0, MAX_LISTA).map(normFactos);
+  const linhas: string[] = [];
+  const validos = new Set<number>(), comNota = new Set<number>();
+  factos.forEach((f, i) => {
+    if (!f) return;
+    validos.add(i);
+    if (f.vivino) comNota.add(i);
+    linhas.push(linhaDaLista(f, i, modo));
+  });
+  if (!linhas.length) {
+    await registar("ok", { passo: "sugerir", modo, candidatos: 0, ms: Date.now() - t0 }, quem);
+    return { status: 200, corpo: { estado: "vazio", sugestoes: [] } };
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LISTA_TIMEOUT_MS);
+  try {
+    const modelos = await candidatosModelo(ctrl.signal);
+    const g = await gerar([[modelos[0], 1024], [MODELO_LEVE, 0]], [{ text: promptLista(modo, linhas, prato, orc) }], ctrl.signal);
+    const j = g.texto ? extrairJson(g.texto) : null;
+    if (!j || typeof j !== "object") {
+      await registar("erro", { passo: "sugerir", modo, erro: g.erro || "ilegível", modelo: g.modelo || null, candidatos: linhas.length,
+        ms: Date.now() - t0, ...(g.usage ? { usageMetadata: g.usage } : {}) }, quem);
+      return { status: 502, corpo: { error: g.status === 429 || g.status === 503
+        ? "o serviço está com muita procura agora — espera um minuto e tenta outra vez"
+        : "não consegui fazer a sugestão agora — tenta outra vez" } };
+    }
+    const sugestoes = rankingDe(j, validos, comNota);
+    await registar("ok", {
+      passo: "sugerir", modo, modelo: g.modelo, candidatos: linhas.length, sugestoes: sugestoes.length,
+      prato, orcamento: orc, chamadas_gemini: g.chamadas,
+      ...(g.usage ? { usageMetadata: g.usage } : {}), custo_estimado_eur: CUSTO_LISTA_EUR, ms: Date.now() - t0,
+    }, quem);
+    return { status: 200, corpo: { estado: sugestoes.length ? "ok" : "nenhum-combina", sugestoes, modelo: g.modelo } };
+  } catch (e) {
+    const err = e as Error, timeout = err.name === "AbortError";
+    await registar("erro", { passo: "sugerir", modo, erro: String(err.message).slice(0, 300), ms: Date.now() - t0 }, quem);
+    return { status: timeout ? 504 : 500, corpo: { error: timeout ? "a sugestão demorou demasiado — tenta outra vez" : (err.message || "erro inesperado") } };
+  } finally { clearTimeout(timer); }
 }
 
 /* ── A base de dados ── */
@@ -549,24 +735,7 @@ async function recomendarCarta(row: any, quem: string) {
       return;
     }
 
-    const ranking: { i: number; razao: string }[] = [];
-    for (const x of Array.isArray(j.ranking) ? j.ranking : []) {
-      const i = Number(x?.i);
-      if (!conhecidos.has(i) || ranking.some((r) => r.i === i)) continue;
-      ranking.push({ i, razao: s(x?.razao, 400) });
-      if (ranking.length >= MAX_RANKING) break;
-    }
-    const recs: number[] = [];
-    for (const x of Array.isArray(j.recomendados) ? j.recomendados : []) {
-      const i = Number(x);
-      if (ranking.some((r) => r.i === i) && !recs.includes(i)) recs.push(i);
-      if (recs.length >= 3) break;
-    }
-    if (!recs.length && ranking.length) recs.push(ranking[0].i);
-    // A trave em código: dentro dos recomendados, os que têm nota primeiro.
-    recs.sort((a, b) => Number(comNota.has(b)) - Number(comNota.has(a)));
-    const ordem = [...recs, ...ranking.map((r) => r.i).filter((i) => !recs.includes(i))];
-    const sugestoes = ordem.map((i) => ({ i, razao: ranking.find((r) => r.i === i)?.razao ?? "", recomendado: recs.includes(i) }));
+    const sugestoes = rankingDe(j, conhecidos, comNota);
 
     await registar("ok", {
       passo: "recomendar", modelo: g.modelo, conhecidos: conhecidos.size, sugestoes: sugestoes.length,
@@ -643,6 +812,13 @@ Deno.serve(async (req) => {
       await atualizarCarta(id, quem!, { rec_estado: "pendente", rec_erro: null, pesquisados: pesq });
       EdgeRuntime.waitUntil(recomendarCarta(row, quem!));
       return json({ id, estado: "pendente" }, 202);
+    }
+
+    if (body?.acao === "sugerir") {
+      if (!MODOS_LISTA.includes(body.modo)) return json({ error: "modo desconhecido" }, 400);
+      if (!Array.isArray(body.vinhos)) return json({ error: "faltam os vinhos" }, 400);
+      const r = await sugerirLista(body, quem!);
+      return json(r.corpo, r.status);
     }
 
     return json({ error: "acção desconhecida" }, 400);
