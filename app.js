@@ -3061,13 +3061,19 @@ function precoPDF(v){
    data da recolha — as de outra colheita também, que é informação, só não
    é o preço deste vinho. A que conta leva, à frente do nome, uma nota
    pequena "(preço de referência)" — e mais nada: a regra de qual conta
-   (`precoPrincipal`) não se explica aqui, ninguém precisa de a ler. */
+   (`precoPrincipal`) não se explica aqui, ninguém precisa de a ler.
+   Num vinho do Catálogo, quem o corrige tem o ✕ em cada preço e, por
+   baixo, os retirados com "Devolver" — como os links das pesquisas (ver
+   `pgPrecoRetirar`, migração 47). */
 function precosLojaHTML(v){
   const ps=precosLojaDe(v);
-  if(!ps.length)return '';
+  const cur=v.id<0&&catPodeCriar();
+  const id=cur?pgCatId(v):null, r=id?PG_EXTRAS.fontes[id]:null;
+  const ret=cur&&r&&Array.isArray(r.precos_retirados)?r.precos_retirados:[];
+  if(!ps.length&&!ret.length)return '';
   const pp=precoPrincipal(v);
   return `<div class="msec">Preços nas lojas</div>
-    <div class="mprecos">${ps.map(p=>{
+    ${ps.length?`<div class="mprecos">${ps.map(p=>{
       const conta=pp&&pp.loja===p.loja&&pp.preco===p.preco&&pp.colheita===p.colheita&&pp.url===p.url;
       const outra=v.ano!=null&&p.colheita!=null&&p.colheita!==Number(v.ano);
       const meta=p.duvidoso?'muito diferente dos outros — provavelmente não é deste vinho'
@@ -3079,8 +3085,18 @@ function precosLojaHTML(v){
         <div class="mp-l">${p.url?`<a href="${esc(p.url)}" target="_blank" rel="noopener">${nome}</a>`:nome}${conta?' <span class="mp-ref">(preço de referência)</span>':''}
           <i>${esc(meta)}</i></div>
         <div class="mp-v">${esc(eur(p.preco))}</div>
+        ${cur?`<button type="button" class="pf-x" title="Retirar este preço (está errado)" aria-label="Retirar o preço de ${nome}" onclick="pgPrecoRetirar('${escJs(p.loja)}','${escJs(p.url||'')}')">✕</button>`:''}
       </div>`;}).join('')}
-    </div>`;
+    </div>`:'<p class="note">Nenhum preço à vista.</p>'}
+    ${ret.length?`<details class="pf-ret"><summary>Preços retirados (${ret.length})</summary>
+      ${ret.map(x=>{
+        const t=[lojaInfo(x.loja).nome,x.preco!=null?eur(x.preco):''].filter(Boolean).join(' · ');
+        const sub=[x.colheita?'colheita '+x.colheita:'',
+          'retirado'+(x.quando?' a '+dataPT(x.quando):'')+(x.quem?' por '+x.quem:'')].filter(Boolean).join(' · ');
+        return `<div class="pf-l off">
+        <a${x.url?` href="${esc(x.url)}" target="_blank" rel="noopener"`:''}><b>${esc(t)}</b><span>${esc(sub)}</span></a>
+        <button type="button" class="btn ghost pf-dev" onclick="pgPrecoDevolver('${escJs(x.loja)}')">Devolver</button>
+      </div>`;}).join('')}</details>`:''}`;
 }
 
 /* O VALOR da garrafeira é uma ESTIMATIVA e diz-se isso: vale o que se
@@ -5076,6 +5092,8 @@ function pgExtrasPintar(v){
   if(!v||VINHO_ABERTO!==v.id)return;
   const f=document.getElementById('pg-fontes');if(f)f.innerHTML=pgFontesHTML(v);
   const h=document.getElementById('pg-hist');if(h)h.innerHTML=pgHistHTML(v);
+  // Os preços retirados vêm na mesma resposta (`precos_retirados`).
+  const p=document.getElementById('pg-precos');if(p&&v.id<0&&catPodeCriar())p.innerHTML=precosLojaHTML(v);
 }
 async function pgExtrasCarregar(v,deCache){
   const id=pgCatId(v);if(!id)return;
@@ -5107,6 +5125,54 @@ async function pgFonteDevolver(url){
     toast('Link devolvido ✓');
     delete PG_EXTRAS.fontes[id];
     pgExtrasCarregar(v,true);
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+
+/* OS PREÇOS RETIRADOS (08/10/2026, migração 47). O dono das apps: "no
+   detalhe de um vinho, no Catálogo, quero poder apagar preços de
+   referência (de lojas ou do Vivino), conforme posso fazer com os sites".
+   O ✕ de cada preço (`precosLojaHTML`) é dos mesmos que retiram links —
+   curadores e o admin do catálogo — e só num vinho do Catálogo: na
+   garrafeira, o preço pode vir de uma linha irmã (`precos_lojas` junta
+   todas as que casam), não da ligada.
+   Retirar não apaga: marca a loja `retirado` na ficha do catálogo, a mesma
+   marca do painel do PC, e a recolha de preços (lojas e Vivino) deixa de a
+   ler — apagada, a corrida seguinte punha lá o mesmo número. O preço de
+   referência que vinha dela passa à loja seguinte, ou sai; quem decide é a
+   BD (`winecatalog.preco_retirar`), que diz o que ficou. Aqui acerta-se o
+   que está em memória (`CAT_PRECOS`, `preco_medio`) em vez de reler o
+   catálogo inteiro. */
+function pgPrecosMudou(v,id){
+  delete PG_EXTRAS.fontes[id];delete PG_EXTRAS.hist[id];
+  renderLista();refrescarVinhoAberto();
+  // Os vinhos da minha garrafeira ligados a esta linha também os mostram.
+  recarregarPrecosLoja();
+}
+async function pgPrecoRetirar(loja,url){
+  const v=IDXV[VINHO_ABERTO],id=pgCatId(v);if(!v||v.id>=0||!id)return;
+  const p=precosLojaDe(v).find(x=>x.loja===loja);
+  const nome=lojaInfo(loja).nome+(p?' · '+eur(p.preco):'');
+  if(!confirm('Retirar este preço?\n\n'+nome+'\n\nSai do Catálogo para toda a gente, e a recolha de preços deixa de o ler. Dá para devolver.'))return;
+  try{
+    const r=await boRpc('preco_retirar',{p_id:id,p_loja:loja,p_url:url||''});
+    CAT_PRECOS[v.id]=(CAT_PRECOS[v.id]||[]).filter(x=>x.loja!==loja);
+    if(r&&r.preco_medio_mudou)v.preco_medio=r.preco_medio!=null?Number(r.preco_medio):null;
+    toast('Preço retirado ✓'+(r&&r.preco_medio_mudou
+      ?(r.preco_medio!=null?' · o preço de referência passa a '+eur(r.preco_medio):' · o vinho fica sem preço de referência'):''));
+    pgPrecosMudou(v,id);
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function pgPrecoDevolver(loja){
+  const v=IDXV[VINHO_ABERTO],id=pgCatId(v);if(!v||v.id>=0||!id)return;
+  const x=((PG_EXTRAS.fontes[id]||{}).precos_retirados||[]).find(y=>y.loja===loja);
+  try{
+    const r=await boRpc('preco_devolver',{p_id:id,p_loja:loja});
+    if(x&&Number(x.preco)>0)
+      CAT_PRECOS[v.id]=(CAT_PRECOS[v.id]||[]).filter(y=>y.loja!==loja)
+        .concat([{loja,preco:Number(x.preco),url:x.url,nome:x.nome,colheita:x.colheita,em:x.em}]);
+    if(r&&r.preco_medio_mudou&&r.preco_medio!=null)v.preco_medio=Number(r.preco_medio);
+    toast('Preço devolvido ✓');
+    pgPrecosMudou(v,id);
   }catch(e){toast('Erro: '+e.message,1);}
 }
 
@@ -5957,7 +6023,7 @@ function vinhoDetalheHTML(v){
       ${linha('As minhas notas',esc(v.notas))}
     </div>
 
-    ${precosLojaHTML(v)}
+    <div id="pg-precos">${precosLojaHTML(v)}</div>
 
     ${v.ai_resumo?`<div class="msec">O que se sabe</div>
       <div class="note" style="margin-top:8px;font-size:12.5px">${esc(v.ai_resumo)}</div>`:''}
@@ -14261,7 +14327,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='207';
+const APP_BUILD='208';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

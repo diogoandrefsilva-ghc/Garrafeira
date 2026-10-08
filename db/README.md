@@ -653,6 +653,24 @@ um preço inválido foram recusados, e o histórico (`alteracoes`) registou a
 origem `vinho-info-pagina`. Publica-se com a `vinho-info` nova (sem a
 migração, a função responde 0 e a procura segue igual).
 
+### Migração 47 — retirar um preço na página do vinho do Catálogo (já aplicada)
+
+`db/migracao-precos-retirar.sql`, depois da 42. Cria a
+`winecatalog.preco_retirar` e a `preco_devolver` (curadores e o admin do
+catálogo; gravam pela `winecatalog.editar`), duas ajudantes sem `GRANT`
+(`preco_ref_fonte`, `preco_ref_seguinte`) e uma nova versão da
+`garrafeira.catalogo_fontes` (a da 42, mais os `precos_retirados`). Retirar
+é a marca `retirado` do painel do PC, e o preço de referência que vinha
+dessa loja passa à seguinte. Ver o `CLAUDE.md`, "O preço de um vinho" ›
+"Retirar um preço na página do vinho". Só cria e substitui funções.
+Aplicada a 08/10/2026 pelo MCP e ensaiada a seguir num bloco desfeito no
+fim, contra a linha #9 (Quinta da Leda 2019) como admin: o link errado foi
+recusado, retirar a Garrafeira Nacional passou o preço de referência de
+48,95 € para os 48,49 € da Granvine, retirar o Vivino não lhe mexeu, a
+`catalogo_fontes` deu os dois retirados e a `catalogo_vinhos` deixou-os de
+fora, devolver tirou a marca, e ficaram três linhas `editar` no `sync_log`.
+Um email que não é curador foi recusado.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -709,6 +727,9 @@ Numa base de dados limpa:
    (migração 40). Só depois do `winecatalog` e do `anniversarygifts`.
 13. **`migracao-precos-pagina.sql`** — o preço de cada loja aberta no
    "Procurar informação" (migração 41). Depois da 28.
+14. **`migracao-precos-retirar.sql`** — retirar e devolver um preço na
+   página do vinho do Catálogo (migração 47). Depois da 42 (e do
+   `db/fontes.sql` da WineCatalog).
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)

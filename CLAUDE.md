@@ -150,6 +150,10 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-produtores-ia.sql` é a 46: a lista dos produtores para a IA
   (`winecatalog.produtores_para_ia`) e as análises em segundo plano
   (`garrafeira.produtores_analises`).
+  `migracao-precos-retirar.sql` é a 47: o ✕ dos preços (lojas e Vivino) na
+  página de um vinho do Catálogo — `winecatalog.preco_retirar`/
+  `preco_devolver`, e a `catalogo_fontes` passa a dar os retirados (ver "O
+  preço de um vinho" › "Retirar um preço na página do vinho").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -2277,6 +2281,32 @@ isso não entra.
 Um preço que o admin **retirou** na WineCatalog (Editar › Fontes de preço,
 `retirado:true` na entrada) não sai da `precos_lojas` — nem riscado: para
 esta app, essa loja não o tem.
+
+**Retirar um preço na página do vinho** (migração 47, 08/10/2026, o dono
+das apps: "no detalhe de um vinho, no Catálogo, quero poder apagar preços de
+referência (de lojas ou do Vivino), conforme posso fazer com os sites").
+Num vinho do Catálogo, os curadores e o admin do catálogo (`catPodeCriar`)
+têm um ✕ em cada linha de "Preços nas lojas" (`pgPrecoRetirar` →
+`winecatalog.preco_retirar`) e, por baixo, "Preços retirados" com
+**Devolver** (`pgPrecoDevolver` → `preco_devolver`; a lista vem na
+`catalogo_fontes`, só a eles) — o mesmo desenho dos links das pesquisas.
+- **Retirar não apaga**: é a marca do painel do PC (`retirado`,
+  `retirado_em` e aqui também `retirado_por`). Apagada, a corrida seguinte
+  do script punha lá o mesmo número; marcada, o script das lojas e o do
+  Vivino saltam essa loja (`retirada()` no `batch/vivino-verificar.mjs` da
+  WineCatalog) e a `catalogo_precos_por` não a reescreve com a mesma página.
+- **O preço de referência vai atrás** quando vinha dessa loja — a regra do
+  `fonteDoPrecoRef` do painel do PC (`winecatalog.preco_ref_fonte`): pela
+  origem `loja-…`/`vivino-…` ou pelo número igual. Passa à primeira loja que
+  sobra (GN → Granvine → Vinha → Vivino), ou sai; devolver enche-o só se
+  ficou vazio. Sem isto, o número retirado continuava na ficha.
+- Grava pela `winecatalog.editar`, por isso fica no histórico do vinho (e o
+  "Repor" desfaz). Recusa se o script trocou a página da loja entretanto
+  (vai o `url` que se viu).
+- **Só no Catálogo**: na garrafeira, a `precos_lojas` junta os preços de
+  todas as linhas que casam pelo nome, e o que se vê pode ser de uma linha
+  irmã, não da ligada. A app acerta o `CAT_PRECOS` e o `preco_medio` em
+  memória (não relê o catálogo) e relê a `precos_lojas` da garrafeira.
 
 `ano`, `produtor` e `precos` também existem na ficha do catálogo e **não**
 entram na comparação do "≠ catálogo" (`catCampos` filtra por `CAT_NOMES`):
