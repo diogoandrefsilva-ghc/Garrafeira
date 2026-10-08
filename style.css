@@ -1570,6 +1570,25 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .toast.on{transform:translate(-50%,0);opacity:1}
 .toast.err{background:var(--dg)}
 
+/* ── PUXAR PARA ATUALIZAR ───────────────────────────────────────────
+   O círculo nasce por trás da barra dos separadores (z-index logo abaixo
+   do dela, 80, cuja moldura de papel o tapa até sair) e desce com o dedo;
+   o `top` é o fundo da barra, medido no `ptrMover`. Bordô quando já chega
+   para atualizar, e a rodar enquanto atualiza. Quem o mexe é o JS
+   (`ptrPintar`): aqui só a pele. O `contain` no html desliga o puxar do
+   Chrome no Android, que recarregava a página inteira por cima deste. */
+html{overscroll-behavior-y:contain}
+.ptr{position:fixed;left:50%;top:110px;z-index:79;width:38px;height:38px;margin:-44px 0 0 -19px;border-radius:50%;
+  background:var(--card);border:1px solid var(--bo);box-shadow:var(--sh2);color:var(--vh);pointer-events:none;
+  display:none;align-items:center;justify-content:center;opacity:0}
+.ptr.on{display:flex}
+.ptr svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}
+.ptr.pronto,.ptr.a-correr{background:var(--vh);border-color:var(--vh);color:#fff}
+.ptr.a-correr svg{animation:sp .8s linear infinite}
+.ptr.a-voltar{transition:transform .22s ease,opacity .22s ease}
+body.cat .ptr{color:#1d4a3b}
+body.cat .ptr.pronto,body.cat .ptr.a-correr{background:#1d4a3b;border-color:#1d4a3b;color:#fff}
+
 /* ── PERMISSÕES ─────────────────────────────────────────────────────
    Quatro classes, quatro fronteiras diferentes:
      .ro-hide    esconde-se de quem NÃO pode editar (body.readonly)
