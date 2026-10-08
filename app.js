@@ -12491,6 +12491,7 @@ async function sbAposLogin(){
   }
   renderLista();renderCfg();
   await abrirEcraInicial();
+  PTR_PRONTO=true;ptrLigar();
   comentariosIrPara();
   comentariosAvisos(true);
   if(window.glEsconderSplash)window.glEsconderSplash();
@@ -14309,6 +14310,144 @@ async function imagensCopiar(){
   await renderImagens();
 }
 
+/* ── PUXAR PARA ATUALIZAR (08/10/2026) ─────────────────────────────────
+   O dono das apps: "falta ali qualquer coisa para refrescar … aquela opção
+   de descer o ecrã para refrescar". Com a app no ecrã principal do iPhone
+   não há botão de recarregar nem o puxar do Safari: o que mudou noutro
+   aparelho (uma garrafa bebida, o Catálogo corrigido pelo admin) só
+   aparecia ao fechar a app e voltar a abri-la.
+   - Só pega no TOPO da página, sem nada aberto por cima (a página do vinho
+     e os modais rolam por dentro), num gesto para BAIXO — de lado é dos
+     Locais (`mapaSwipe`) e da fita dos filtros — e nunca a começar num
+     campo ou dentro de uma caixa que já rolou.
+   - Atualiza os DADOS, não a página (`ptrDados`): o `carregar()` de sempre
+     (quem sou, as garrafeiras, o conteúdo da aberta), o Catálogo se já
+     tinha sido lido, e o separador à vista. A procura, os filtros e o
+     separador ficam; o splash e o login não voltam.
+   - Se entretanto saiu uma versão nova da app (o `data-build` do
+     `index.html` do servidor é maior), recarrega a página: com a app no
+     ecrã principal é a única maneira de a apanhar.
+   - O `touchmove` que trava o scroll só está ligado com a página no topo
+     (`ptrLigar`): um ouvinte não passivo no documento faz o browser esperar
+     pelo JS antes de rolar, e no resto da página não há nada a travar.
+   - O `overscroll-behavior-y:contain` do style.css desliga o puxar do
+     Chrome no Android, que recarregava a página inteira por cima disto. */
+const PTR_LIMIAR=72, PTR_MAX=112;
+let _ptr=null, _ptrLigado=false, PTR_A_CORRER=false, PTR_PRONTO=false;
+function ptrEl(){
+  let el=document.getElementById('ptr');
+  if(el)return el;
+  el=document.createElement('div');
+  el.id='ptr';el.className='ptr';el.setAttribute('aria-hidden','true');
+  el.innerHTML='<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>';
+  document.body.appendChild(el);
+  return el;
+}
+function ptrPintar(d){
+  const el=ptrEl();
+  el.classList.add('on');el.classList.remove('a-voltar');
+  el.classList.toggle('pronto',d>=PTR_LIMIAR);
+  el.style.transform=`translateY(${d.toFixed(1)}px)`;
+  el.style.opacity=String(Math.min(1,d/(PTR_LIMIAR*.6)));
+  el.firstChild.style.transform=`rotate(${Math.round(d/PTR_LIMIAR*300)}deg)`;
+}
+function ptrEsconder(){
+  const el=document.getElementById('ptr');
+  if(!el)return;
+  el.classList.add('a-voltar');el.classList.remove('a-correr');
+  el.style.transform='translateY(0)';el.style.opacity='0';
+  setTimeout(()=>{if(!_ptr&&!PTR_A_CORRER)el.classList.remove('on','pronto','a-voltar');},240);
+}
+function ptrPodeComecar(e){
+  if(!PTR_PRONTO||PTR_A_CORRER||e.touches.length!==1)return false;
+  if((window.scrollY||document.documentElement.scrollTop||0)>0)return false;
+  if(document.querySelector('.modal.on,#pdf-pre,.fab-wrap.open'))return false;
+  const t=e.target;
+  if(!t||!t.closest||t.closest('input,textarea,select,[contenteditable]'))return false;
+  for(let el=t;el&&el!==document.body;el=el.parentElement)if(el.scrollTop>0)return false;
+  return true;
+}
+function ptrMover(e){
+  if(!_ptr||e.touches.length!==1)return;
+  const dy=e.touches[0].clientY-_ptr.y, dx=e.touches[0].clientX-_ptr.x;
+  if(!_ptr.pegou){
+    // O primeiro movimento decide: de lado ou para cima não é connosco.
+    if(dy<=0||Math.abs(dx)>=dy){_ptr=null;return;}
+    _ptr.pegou=true;
+    // Nasce por baixo da barra dos separadores (e não do cabeçalho): por
+    // cima dela, o círculo bordô a rodar colava-se ao separador aceso.
+    const h=document.querySelector('.itabs')||document.querySelector('body>header');
+    ptrEl().style.top=(h?h.getBoundingClientRect().bottom:0)+'px';
+  }
+  // Amortecido: o indicador anda a metade do dedo, e pára no máximo.
+  _ptr.d=Math.min(PTR_MAX,Math.max(0,dy)*.5);
+  ptrPintar(_ptr.d);
+  if(e.cancelable)e.preventDefault();
+}
+function ptrLargar(){
+  if(!_ptr)return;
+  const {d,pegou}=_ptr;_ptr=null;
+  if(!pegou)return;
+  if(d>=PTR_LIMIAR)ptrAtualizar();else ptrEsconder();
+}
+function ptrLigar(){
+  const ligar=PTR_PRONTO&&(window.scrollY||0)<=0;
+  if(ligar===_ptrLigado)return;
+  _ptrLigado=ligar;
+  if(ligar)document.addEventListener('touchmove',ptrMover,{passive:false});
+  else document.removeEventListener('touchmove',ptrMover,{passive:false});
+}
+document.addEventListener('touchstart',e=>{
+  _ptr=ptrPodeComecar(e)?{x:e.touches[0].clientX,y:e.touches[0].clientY,d:0,pegou:false}:null;
+  if(_ptr)ptrLigar();
+},{passive:true});
+document.addEventListener('touchend',ptrLargar,{passive:true});
+document.addEventListener('touchcancel',ptrLargar,{passive:true});
+window.addEventListener('scroll',ptrLigar,{passive:true});
+
+async function ptrAtualizar(){
+  if(PTR_A_CORRER)return;
+  PTR_A_CORRER=true;
+  const el=ptrEl();
+  ptrPintar(PTR_LIMIAR);el.classList.remove('pronto');el.classList.add('a-correr');
+  try{
+    const [ver,dados]=await Promise.allSettled([ptrVersaoNova(),ptrDados()]);
+    if(ver.status==='fulfilled'&&ver.value){toast('Há uma versão nova da app — a abrir…');location.reload();return;}
+    if(dados.status==='rejected')throw dados.reason;
+    toast('Atualizado ✓');
+  }catch(e){toast('Não foi possível atualizar: '+((e&&e.message)||e),1);}
+  finally{PTR_A_CORRER=false;ptrEsconder();}
+}
+// O mesmo `carregar()` do arranque, e depois o que está à vista. A
+// garrafeira aberta só muda se tiver deixado de estar na lista (deixaram de
+// a partilhar): aí os filtros apontavam para locais que já não existem, e
+// esquecem-se como no `trocarGarrafeira`.
+async function ptrDados(){
+  const ga=GA_ID, comCat=!!CAT_VINHOS||modoCat();
+  await carregar();
+  if(GA_ID!==ga){esquecerFiltros();RESUMO_ABERTO=null;RESUMO_DRILL=null;}
+  if(comCat){
+    const antes=CAT_VINHOS;CAT_VINHOS=null;
+    try{await catCarregar();}
+    catch(e){CAT_VINHOS=antes;reindexar();throw e;}
+  }
+  renderLista();renderCfg();
+  if(tabAtiva==='consumidos')renderConsumidos();
+  if(tabAtiva==='backoffice')boAbrir();
+  comentariosAvisos(false);
+}
+// O `index.html` do servidor diz que versão lá está. Sem `?` no endereço:
+// o `sw.js` guarda cada endereço que passa, e um número novo de cada vez
+// ia enchendo a cache. Falhar aqui não é erro nenhum — só não se sabe.
+async function ptrVersaoNova(){
+  try{
+    const r=await fetch(location.pathname,{cache:'no-store'});
+    if(!r.ok)return false;
+    const m=/data-build="(\d+)"/.exec(await r.text());
+    return !!m&&Number(m[1])>Number(APP_BUILD);
+  }catch(e){return false;}
+}
+
 /* ── INIT ──────────────────────────────────────────────────────────── */
 
 /* O HTML E O JS TÊM DE SER DA MESMA VERSÃO — e quando não são, não pode ser
@@ -14327,7 +14466,7 @@ async function imagensCopiar(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='208';
+const APP_BUILD='209';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

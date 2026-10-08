@@ -27,7 +27,7 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   Modal editar/novo · Consumir garrafa · Modal da garrafa · **IA** ·
   Auth (Supabase) · Definições · Locais · **Garrafeiras** ·
   **Utilizadores (admin)** · Exportar · Diagnóstico · **Backoffice do
-  catálogo** · Init.
+  catálogo** · Puxar para atualizar · Init.
 - `style.css` — todo o CSS. Ver **"A linguagem visual"** mais abaixo antes
   de lhe mexer: as cores e os tipos de letra são um sistema, não gosto.
 - `sw.js` — service worker (cache PWA).
@@ -3245,6 +3245,40 @@ o que é preciso saber para não partir nada:
 - **Não há migração a correr deste lado** e nada aqui depende disto: se o
   schema `ia_uso` não existir, estas funções comportam-se exatamente como
   antes.
+
+## Puxar para atualizar (08/10/2026)
+O dono das apps: "falta ali qualquer coisa para refrescar … aquela opção de
+descer o ecrã para refrescar". Com a app no ecrã principal do iPhone não há
+botão de recarregar nem o puxar do Safari, e o que mudou noutro aparelho só
+aparecia ao fechar e abrir a app. Secção "PUXAR PARA ATUALIZAR" no app.js
+(`ptr*`) e no style.css (`.ptr`).
+- **Só pega no topo da página**, sem nada aberto por cima (a página do vinho
+  e os modais rolam por dentro, e não entram), num gesto para BAIXO — de
+  lado é dos Locais (`mapaSwipe`) e da fita dos filtros —, nunca a começar
+  num campo nem dentro de uma caixa que já rolou. O primeiro movimento
+  decide (`ptrMover`).
+- **Atualiza os DADOS, não a página** (`ptrDados`): o `carregar()` do
+  arranque, o Catálogo se já tinha sido lido (relê-se; se falhar fica o de
+  antes), e o separador à vista (Consumidos, Backoffice, os avisos do ⚙️). A
+  procura, os filtros e o separador ficam; o splash e o login não voltam. Se
+  a garrafeira aberta deixou de estar na lista, os filtros esquecem-se, como
+  no `trocarGarrafeira`.
+- **Se saiu uma versão nova, recarrega** (`ptrVersaoNova`: o `data-build` do
+  `index.html` do servidor maior do que o `APP_BUILD`). Com a app no ecrã
+  principal é a única maneira de a apanhar. O pedido vai SEM `?` — o
+  `sw.js` guarda cada endereço que passa, e um número novo de cada vez
+  enchia a cache.
+- **O `touchmove` não passivo só está ligado com a página no topo**
+  (`ptrLigar`, no `scroll`): um ouvinte destes no documento faz o browser
+  esperar pelo JS antes de rolar, e no resto da página não há nada a travar.
+- **O círculo nasce por baixo da barra dos separadores** (z-index 79, logo
+  abaixo do dela, cuja moldura de papel o tapa até sair). Nasceu por baixo do
+  cabeçalho e, a rodar, ficava em cima do separador aceso — bordô sobre
+  bordô, colava-se a ele.
+- O `overscroll-behavior-y:contain` no `html` desliga o puxar do Chrome no
+  Android, que recarregava a página inteira por cima deste.
+O painel do PC (WineCatalog, `batch/painel.mjs`) tem o mesmo num botão,
+**🔄 Atualizar**, na barra dos separadores.
 
 ## Regras técnicas (não partir a app)
 - `app.js` carrega como `<script src>` **normal, NÃO module** — há
