@@ -671,6 +671,22 @@ recusado, retirar a Garrafeira Nacional passou o preço de referência de
 fora, devolver tirou a marca, e ficaram três linhas `editar` no `sync_log`.
 Um email que não é curador foi recusado.
 
+### Migração 48 — as colheitas que não batem (já aplicada)
+
+`db/migracao-colheitas.sql`, depois do `winecatalog`. Cria a
+`winecatalog.colheitas_aceites` (RLS ligada, sem policies, sem `GRANT` a
+ninguém) e três funções só do admin do catálogo (`sou_admin()`):
+`colheitas_aceites()`, `colheitas_aceitar(chave, campo, assinatura,
+valores)` e `colheitas_desaceitar(chave, campo, assinatura)` — esta marca
+`desfeito_em`, não apaga. A deteção das diferenças vive na app; aqui fica só
+o "está certo" do admin. Ver o `CLAUDE.md`, "O Backoffice" › "As colheitas
+que não batem". Só cria (sem `DROP` nem `DELETE`), por isso corre pelo MCP.
+Aplicada a 09/10/2026 pelo MCP e ensaiada a seguir num bloco desfeito no
+fim, como admin: aceitar, ler, desfazer (a lista ficou vazia) e voltar a
+aceitar (a mesma linha, com os valores novos); com outro email, a função
+recusou ("Só o admin do catálogo.") e a tabela deu "permission denied".
+Publicada no mesmo dia a Edge Function `garrafeira-colheitas` (nova).
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -730,6 +746,8 @@ Numa base de dados limpa:
 14. **`migracao-precos-retirar.sql`** — retirar e devolver um preço na
    página do vinho do Catálogo (migração 47). Depois da 42 (e do
    `db/fontes.sql` da WineCatalog).
+15. **`migracao-colheitas.sql`** — as diferenças entre colheitas dadas por
+   certas no Backoffice (migração 48). Só depois do `winecatalog`.
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)

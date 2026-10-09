@@ -2683,3 +2683,47 @@ button.prod-dec-h:hover{background:#fbf8f4}
 .pia-porque{font-size:12px;color:var(--mu);margin:7px 0 0;line-height:1.4}
 .pia-fim{display:flex;align-items:center;gap:10px;margin-top:14px}
 .pia-fim .btn{margin-top:0}
+
+/* As colheitas que não batem (migração 48): um cartão por vinho, uma faixa
+   por diferença com o rebordo do nível — vermelho no alarmante, bordô no
+   provável erro, papel no "a analisar". Nada de dourado: uma diferença não
+   distingue vinho nenhum. Cada colheita é uma linha: o ano (abre a ficha),
+   o valor e, nos campos do vinho, "Usar em todas" no primeiro de cada valor. */
+.bcl{padding:14px 14px 10px}
+.bcl-cab{display:flex;align-items:flex-start;gap:10px}
+.bcl-tt{flex:1;min-width:0}
+.bcl-nome{cursor:pointer;color:var(--vhd)}
+.bcl-iabt{flex:none}
+.bcl-iabt:disabled{opacity:.5;cursor:default}
+.bcl-dif{margin-top:12px;padding:10px 0 2px 12px;border-left:3px solid var(--bo2)}
+.bcl-dif.n-alta{border-left-color:var(--dg)}
+.bcl-dif.n-erro{border-left-color:var(--vh)}
+.bcl-dif.aceite{border-left-color:var(--bo);opacity:.7}
+.bcl-dcab{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px}
+.bcl-dcab b{font-weight:600}
+.bcl-niv{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--bg2);color:var(--mu);white-space:nowrap}
+.bcl-niv.n-alta{background:var(--dgp);color:var(--dg)}
+.bcl-niv.n-erro{background:var(--vhp);color:var(--vh)}
+.bcl-delta{font-size:11.5px;color:var(--mu);font-variant-numeric:tabular-nums}
+.bcl-vals{margin-top:6px}
+.bcl-val{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding:5px 0;border-top:1px dashed var(--bo);font-size:13px;line-height:1.4}
+.bcl-val:first-child{border-top:none}
+.bcl-val.vazio .bcl-txt{color:var(--mu)}
+.bcl-val.susp{background:var(--dgp);margin:0 0 0 -12px;padding-left:12px;border-radius:0 8px 8px 0}
+.bcl-ano{flex:none;min-width:44px;padding:2px 8px;border-radius:99px;border:1px solid var(--bo2);background:#fff;
+  font-family:var(--fd);font-size:12.5px;font-weight:600;color:var(--vh);cursor:pointer;font-variant-numeric:lining-nums}
+.bcl-ano:hover{background:var(--vhp);border-color:var(--vh)}
+.bcl-txt{flex:1 1 180px;min-width:0;overflow-wrap:anywhere}
+.bcl-usar{flex:none;margin-left:auto;padding:3px 10px;border-radius:99px;border:1px solid var(--bo2);background:#fff;
+  font-family:inherit;font-size:11.5px;font-weight:600;color:var(--tx);cursor:pointer;white-space:nowrap}
+.bcl-usar:hover{background:var(--vhp);border-color:var(--vh);color:var(--vh)}
+.bcl-prop{margin:8px 0 0;padding:9px 11px;border-radius:10px;background:#f3f8f5;border:1px solid #d5e7dc}
+.bcl-prop.rever{background:var(--bg);border-color:var(--bo)}
+#s-backoffice .bcl-prop .pia-cab{font-size:13px;align-items:flex-start}
+.bcl-prop .pia-cert{margin-top:2px}
+.bcl-prop .pia-porque{margin-top:5px}
+.bcl-pval{display:block;margin-top:3px;font-weight:600}
+.bcl-acoes{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px}
+.bcl-acoes .btn{margin-top:0;padding:6px 13px;font-size:12.5px}
+.bcl-acoes .note{margin:0}
+.bcl-iacard .bo-acoes{margin-top:4px}
