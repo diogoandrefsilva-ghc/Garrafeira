@@ -10811,6 +10811,7 @@ const boErro=e=>boCaixa(esc(e&&e.message||e),'bo-erro');
 const BO_PAGINAS=[
   {grupo:'Arrumar o catálogo'},
   {id:'duplicados',ic:'🧬',t:'Duplicados',d:'Pares parecidos: fundir ou marcar que não são',abrir:()=>boDupCarregar()},
+  {id:'colheitas',ic:'⚖️',t:'Colheitas que não batem',d:'O mesmo vinho com fichas diferentes de colheita para colheita',n:'colh',abrir:()=>boColhCarregar()},
   {id:'produtores',ic:'🏷️',t:'Produtores',d:'Nome oficial e as grafias que são ele',abrir:()=>boProdCarregar(),
     barra:()=>`<button type="button" id="bo-prod-ia-bt" class="bo-barra-bt${_boProdVista==='ia'?' on':''}" onclick="boProdVista(_boProdVista==='ia'?'todos':'ia')">✨ IA</button>`},
   {id:'nomes',ic:'✍️',t:'Nomes dos vinhos',d:'Sem produtor, cor nem colheita no nome',abrir:()=>{}},
@@ -10829,7 +10830,7 @@ const BO_PAGINAS=[
   {id:'vivcfg',ic:'⚙️',t:'O script do Vivino',d:'Quantos vinhos de cada vez',abrir:()=>boVivConfig()}
 ];
 let BO_PAG=null;
-const BO_CONTA={rep:0,viv:0,vinho:0,sugestao:0};
+const BO_CONTA={rep:0,viv:0,vinho:0,sugestao:0,colh:0};
 
 function boAbrir(){
   if(!EU.admin_catalogo){
@@ -10865,15 +10866,17 @@ function boPagina(id,refrescar){
   p.abrir();
 }
 /* O que está à espera de uma decisão do admin: os alertas, os links do
-   Vivino por validar e os comentários e sugestões por tratar (a vez dele —
-   os que esperam por quem escreveu não contam). No separador vai a soma. */
+   Vivino por validar, os comentários e sugestões por tratar (a vez dele —
+   os que esperam por quem escreveu não contam) e os vinhos com colheitas
+   que não batem (só com o Catálogo já lido). No separador vai a soma. */
 async function boContar(){
   if(!EU.admin_catalogo)return;
-  const [n1,n2,c]=await Promise.all([
+  const [n1,n2,c,n3]=await Promise.all([
     boRpc('contar_reportes',{}).catch(()=>0),
     boRpc('vivino_contar',{}).catch(()=>0),
-    boRpc('contar_comentarios',{}).catch(()=>null)]);
-  BO_CONTA.rep=Number(n1||0);BO_CONTA.viv=Number(n2||0);
+    boRpc('contar_comentarios',{}).catch(()=>null),
+    boColhContar()]);
+  BO_CONTA.rep=Number(n1||0);BO_CONTA.viv=Number(n2||0);BO_CONTA.colh=Number(n3||0);
   BO_CONTA.vinho=Number((c&&c.vinho)||0);BO_CONTA.sugestao=Number((c&&c.sugestao)||0);
   boPintarContas();
 }
@@ -10895,6 +10898,25 @@ const BO_TPL={
       <div class="bo-acoes"><button class="btn ghost" onclick="boDupCarregar()">🔄 Rever</button>
         <button class="btn ghost" onclick="boVerDistintos()">Ver os “não são” gravados</button></div>
     </div><div id="bo-dup-lista"></div>`,
+  colheitas:()=>{
+    const F=BO_COLH.filtro, op=(v,t,a)=>`<option value="${v}"${a===v?' selected':''}>${t}</option>`;
+    return `<div class="fcard bo-arr">
+      <p class="note">As colheitas do mesmo vinho, campo a campo. <b>Alarmante</b>: região, classificação, álcool, castas ou
+        harmonização diferentes. <b>Provável erro</b>: a nota do Vivino de todas as colheitas diferente. <b>A analisar</b>:
+        a nota da colheita a 0,3 ou mais, o preço mais de 20 % acima.</p>
+      <p class="note">Um valor em falta não conta. <b>Está certo</b> arruma a diferença até os valores mudarem;
+        <b>Usar em todas</b> corrige o catálogo. O ano abre a ficha.</p>
+      <div class="bo-filtros">
+        <select id="bo-colh-nivel" onchange="boColhFiltro()">${op('','todos os níveis',F.nivel)}${
+          Object.keys(BO_COLH_NIVEIS).map(k=>op(k,BO_COLH_NIVEIS[k].t.toLowerCase(),F.nivel)).join('')}</select>
+        <select id="bo-colh-campo" onchange="boColhFiltro()">${op('','todos os campos',F.campo)}${
+          BO_COLH_REGRAS.map(r=>op(r.k,r.t.toLowerCase(),F.campo)).join('')}</select>
+      </div>
+      <label class="bo-chk"><input type="checkbox" id="bo-colh-aceites"${F.aceites?' checked':''} onchange="boColhFiltro()"> mostrar também as aceites</label>
+      <div class="bo-acoes"><button class="btn ghost" onclick="boColhCarregar(true)">🔄 Rever</button>
+        <span class="note" id="bo-colh-n"></span></div>
+    </div><div id="bo-colh-ia"></div><div id="bo-colh-lista"></div><div id="bo-colh-fim"></div>`;
+  },
   produtores:()=>`<div class="fcard prod-card">
       <p class="note">Um produtor, um nome. As grafias de um produtor passam ao <b>nome oficial</b> no catálogo e em
         todas as garrafeiras, agora e em qualquer escrita futura.</p>
@@ -11129,6 +11151,409 @@ async function boDesmarcar(a,b){
     toast('Desfeito ✓');
     boVerDistintos();
   }catch(e){toast('Erro: '+e.message,1);}
+}
+
+/* ── AS COLHEITAS QUE NÃO BATEM (09/10/2026, migração 49, `garrafeira-colheitas`) ──
+   O dono das apps: "alertas como duplicados e assim, que é quando tenho o
+   mesmo vinho, diferentes anos/colheitas e diferenças na caracterização".
+   As colheitas do mesmo vinho são as linhas com o mesmo nome, produtor e cor
+   (`catFamChave` — as que o Detalhe do Catálogo junta num cartão), e a
+   comparação corre AQUI, sobre o Catálogo que a app já tem (`CAT_VINHOS`):
+   uma regra só, sem segunda cópia em SQL. As regras são as do dono
+   (`BO_COLH_REGRAS`):
+   - região, classificação, álcool, castas e harmonização diferentes são
+     sempre ALARMANTES;
+   - a nota do Vivino de todas as colheitas diferente é PROVÁVEL ERRO (é uma
+     nota só, do vinho todo);
+   - a nota da colheita com 0,3 ou mais de diferença, e o preço que conta
+     (`precoPrincipal`) com mais de 20 % sobre o mais barato, ficam A ANALISAR.
+   Uma colheita sem o valor não é uma diferença — vê-se na tabela como "—",
+   e compara-se só o que está escrito. O texto sem acentos, maiúsculas nem
+   pontuação (`boColhTxt`); as castas como conjunto.
+   - "Está certo" grava a diferença como vista (`colheitas_aceitar`), com a
+     ASSINATURA dos valores: se mudarem, ou chegar outra colheita, o alerta
+     volta. No preço e na nota da colheita a assinatura são só as linhas —
+     esses números mudam a cada corrida do script, e uma diferença aceite não
+     pode voltar por causa de um cêntimo.
+   - "Usar em todas" (só nos campos que são do VINHO, `vinho:true`) põe esse
+     valor em todas as colheitas pela `winecatalog.editar` — a origem do
+     admin, no histórico, com "Repor". Na nota global vão as avaliações com ela.
+   - ✨ IA: a `garrafeira-colheitas` lê as linhas da BD (os valores não vão
+     daqui) e propõe uma ação por diferença: manter, uniformizar (com o valor)
+     ou rever (com as linhas suspeitas). Vêm marcadas as de certeza alta e
+     nada muda sem "Aplicar as marcadas" — só o marcado E à vista. As
+     propostas ficam neste aparelho (`gf_bo_colh_ia`) enquanto a diferença
+     for a mesma (a assinatura). */
+const BO_COLH_NIVEIS={alta:{t:'Alarmante',o:0},erro:{t:'Provável erro',o:1},analisar:{t:'A analisar',o:2}};
+const BO_COLH_REGRAS=[
+  {k:'regiao',t:'Região',nivel:'alta',vinho:true},
+  {k:'classificacao',t:'Classificação',nivel:'alta',vinho:true},
+  {k:'teor',t:'Álcool',nivel:'alta'},
+  {k:'castas',t:'Castas',nivel:'alta',vinho:true},
+  {k:'harmonizacao',t:'Harmonização',nivel:'alta',vinho:true},
+  {k:'vivino_nota_global',t:'Vivino · todas as colheitas',nivel:'erro',vinho:true},
+  {k:'vivino_nota',t:'Vivino · da colheita',nivel:'analisar',limiar:.3,soLinhas:true},
+  {k:'preco',t:'Preço',nivel:'analisar',limiar:.2,soLinhas:true}
+];
+const BO_COLH_SEP='\u0001';
+let BO_COLH={aceites:new Map(),lidos:false,ia:null,vista:[],filtro:{nivel:'',campo:'',aceites:false},iaEstado:null,iaErro:''};
+const boColhTxt=t=>chave(t).replace(/[^a-z0-9]+/g,' ').trim();
+const boColhNum=x=>String(x).replace('.',',');
+// O valor de uma colheita num campo: `n` compara, `txt` mostra, `raw` grava.
+function boColhValor(k,v){
+  switch(k){
+    case 'regiao':case 'classificacao':case 'harmonizacao':{
+      const t=String(v[k]==null?'':v[k]).trim();
+      return t?{n:boColhTxt(t),txt:t,raw:t}:null;
+    }
+    case 'castas':{
+      const c=(Array.isArray(v.castas)?v.castas:[]).filter(Boolean);
+      return c.length?{n:c.map(boColhTxt).sort().join('|'),txt:c.join(', '),raw:c}:null;
+    }
+    case 'teor':{const x=num(v.teor);return x==null?null:{n:x,txt:boColhNum(x)+' %',raw:x};}
+    case 'vivino_nota_global':case 'vivino_nota':{
+      const x=num(v[k]);if(x==null)return null;
+      const a=num(v[k==='vivino_nota'?'vivino_avaliacoes':'vivino_avaliacoes_global']);
+      return {n:x,txt:boColhNum(x)+(a!=null?` · ${boN(a)} avaliações`:''),raw:x};
+    }
+    case 'preco':{
+      const p=precoPrincipal(v);
+      if(!p||!(p.preco>0))return null;
+      const de=p.loja?lojaInfo(p.loja).nome+(p.outra&&p.colheita?` · colheita ${p.colheita}`:''):'preço de referência';
+      return {n:p.preco,txt:`${boEur(p.preco)} · ${de}`,raw:p.preco};
+    }
+  }
+  return null;
+}
+// A diferença, se a houver, entre os valores ESCRITOS (dois ou mais).
+function boColhDif(r,cheios){
+  if(cheios.length<2)return null;
+  const ns=cheios.map(x=>x.val.n);
+  if(typeof ns[0]!=='number')return new Set(ns).size>1?{}:null;
+  const mn=Math.min(...ns),mx=Math.max(...ns);
+  if(r.k==='preco'){const d=mx/mn-1;return d>r.limiar+1e-9?{txt:`+${boColhNum(d<1?Math.round(d*1000)/10:Math.round(d*100))} %`}:null;}
+  const d=mx-mn;
+  if(r.k==='vivino_nota')return d>=r.limiar-1e-9?{txt:`Δ ${boColhNum(+d.toFixed(2))}`}:null;
+  return d>.001?{txt:`Δ ${boColhNum(+d.toFixed(2))}${r.k==='teor'?' %':''}`}:null;
+}
+function boColhHash(s){
+  let h=0x811c9dc5;
+  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193);}
+  return (h>>>0).toString(36)+'.'+s.length.toString(36);
+}
+const boColhChaveDif=(k,campo,ass)=>k+BO_COLH_SEP+campo+BO_COLH_SEP+ass;
+// Todos os vinhos do catálogo com duas ou mais colheitas e alguma diferença.
+function boColhFamilias(){
+  const m=new Map();
+  (CAT_VINHOS||[]).forEach(v=>{const k=catFamChave(v);if(!m.has(k))m.set(k,[]);m.get(k).push(v);});
+  const out=[];
+  m.forEach((linhas,k)=>{
+    if(linhas.length<2)return;
+    linhas=[...linhas].sort(catColhOrdem);
+    const difs=[];
+    BO_COLH_REGRAS.forEach(r=>{
+      const vals=linhas.map(v=>({v,val:boColhValor(r.k,v)}));
+      const cheios=vals.filter(x=>x.val);
+      const d=boColhDif(r,cheios);
+      if(!d)return;
+      const ass=r.soLinhas
+        ?'L'+boColhHash(cheios.map(x=>x.v.cat_id).sort((a,b)=>a-b).join(','))
+        :'V'+boColhHash(cheios.map(x=>x.v.cat_id+'='+x.val.n).sort().join(';'));
+      const aceite=BO_COLH.aceites.get(boColhChaveDif(k,r.k,ass))||null;
+      difs.push({r,vals,d,ass,aceite});
+    });
+    if(difs.length)out.push({k,linhas,difs});
+  });
+  return out;
+}
+const boColhNivel=f=>Math.min(...f.difs.filter(d=>!d.aceite).map(d=>BO_COLH_NIVEIS[d.r.nivel].o),9);
+async function boColhLerAceites(){
+  const l=await boRpc('colheitas_aceites',{});
+  BO_COLH.aceites=new Map((Array.isArray(l)?l:[]).map(a=>[boColhChaveDif(a.chave,a.campo,a.assinatura),a]));
+  BO_COLH.lidos=true;
+}
+async function boColhReler(){
+  CAT_VINHOS=null;
+  await catCarregar();
+  renderLista();refrescarVinhoAberto();
+}
+async function boColhCarregar(reler){
+  const box=document.getElementById('bo-colh-lista');
+  if(!box)return;
+  box.innerHTML=boCaixa(reler?'A reler o catálogo…':'A comparar as colheitas…');
+  try{
+    await Promise.all([reler?boColhReler():catCarregar(),boColhLerAceites()]);
+    boColhPintar();boPintarContas();
+  }catch(e){box.innerHTML=boErro(e);}
+}
+// O número do hub: vinhos com alguma diferença por ver. Não obriga a ler o
+// catálogo só para isto — no modo Catálogo ele já cá está.
+async function boColhContar(){
+  if(!CAT_VINHOS)return BO_CONTA.colh;
+  try{
+    if(!BO_COLH.lidos)await boColhLerAceites();
+    return boColhFamilias().filter(f=>f.difs.some(d=>!d.aceite)).length;
+  }catch(e){return BO_CONTA.colh;}
+}
+function boColhFiltro(){
+  const g=id=>document.getElementById(id);
+  BO_COLH.filtro={nivel:(g('bo-colh-nivel')||{}).value||'',campo:(g('bo-colh-campo')||{}).value||'',
+    aceites:!!(g('bo-colh-aceites')||{}).checked};
+  boColhPintar();
+}
+/* As propostas da IA, por diferença (vinho + campo), com a assinatura que
+   tinham: uma diferença que mudou deixa de ter proposta. */
+function boColhIALer(){
+  if(BO_COLH.ia)return;
+  try{BO_COLH.ia=JSON.parse(localStorage.getItem('gf_bo_colh_ia')||'{}')||{};}catch(e){BO_COLH.ia={};}
+}
+function boColhIAGuardar(){try{localStorage.setItem('gf_bo_colh_ia',JSON.stringify(BO_COLH.ia||{}));}catch(e){}}
+function boColhProp(f,d){
+  boColhIALer();
+  const p=BO_COLH.ia[f.k+BO_COLH_SEP+d.r.k];
+  return p&&p.ass===d.ass?p:null;
+}
+function boColhValorTxt(k,val){
+  if(val==null)return '—';
+  if(Array.isArray(val))return val.join(', ');
+  if(k==='vivino_nota_global')return boColhNum(val);
+  return String(val);
+}
+function boColhPintar(){
+  const box=document.getElementById('bo-colh-lista');
+  if(!box)return;
+  boColhIALer();
+  const todas=boColhFamilias(), F=BO_COLH.filtro;
+  // As propostas de diferenças que já não existem saem do aparelho.
+  const vivas=new Set();todas.forEach(f=>f.difs.forEach(d=>vivas.add(f.k+BO_COLH_SEP+d.r.k)));
+  Object.keys(BO_COLH.ia).forEach(k=>{if(!vivas.has(k))delete BO_COLH.ia[k];});
+  boColhIAGuardar();
+  const pend=todas.filter(f=>f.difs.some(d=>!d.aceite));
+  BO_CONTA.colh=pend.length;
+  const conta={alta:0,erro:0,analisar:0};let aceites=0;
+  todas.forEach(f=>f.difs.forEach(d=>{if(d.aceite)aceites++;else conta[d.r.nivel]++;}));
+  const PL={alta:['alarmante','alarmantes'],erro:['provável erro','prováveis erros'],analisar:['a analisar','a analisar']};
+  const n=document.getElementById('bo-colh-n');
+  if(n)n.innerHTML=pend.length
+    ?`<b>${pend.length}</b> ${pend.length===1?'vinho':'vinhos'} com diferenças por ver: ${
+      Object.keys(conta).filter(x=>conta[x]).map(x=>`${conta[x]} ${PL[x][conta[x]>1?1:0]}`).join(' · ')}${
+      aceites?` · ${aceites} já ${aceites===1?'aceite':'aceites'}`:''}.`
+    :`Nenhuma diferença por ver${aceites?` (${aceites} ${aceites===1?'aceite':'aceites'})`:''}.`;
+  BO_COLH.vista=todas.map(f=>({...f,todas:f.difs,difs:f.difs.filter(d=>(F.aceites||!d.aceite)
+      &&(!F.nivel||d.r.nivel===F.nivel)&&(!F.campo||d.r.k===F.campo))}))
+    .filter(f=>f.difs.length)
+    .sort((a,b)=>boColhNivel(a)-boColhNivel(b)
+      ||b.difs.filter(d=>!d.aceite).length-a.difs.filter(d=>!d.aceite).length
+      ||String(a.linhas[0].nome).localeCompare(String(b.linhas[0].nome),'pt'));
+  const ia=document.getElementById('bo-colh-ia');
+  if(ia)ia.innerHTML=BO_COLH.vista.some(f=>f.difs.some(d=>!d.aceite))?boColhIAHTML():'';
+  box.innerHTML=BO_COLH.vista.length?BO_COLH.vista.map(boColhFamHTML).join('')
+    :boCaixa(todas.length?'Nada com estes filtros.':'As colheitas de cada vinho batem certo — ou o que difere já foi aceite.');
+  const fim=document.getElementById('bo-colh-fim');
+  if(fim){
+    const m=boColhMarcadas().length;
+    fim.innerHTML=m?`<div class="pia-fim"><button class="btn prim" onclick="boColhIAAplicar()">Aplicar as marcadas (${m})</button></div>`:'';
+  }
+}
+function boColhFamHTML(f,fi){
+  const v0=f.linhas[0];
+  const anos=f.linhas.map(v=>v.ano?String(v.ano):'s/a').join(', ');
+  const ult=f.linhas[f.linhas.length-1];
+  return `<div class="fcard bcl">
+    <div class="bcl-cab">
+      <div class="bcl-tt"><span class="bo-nome bcl-nome" onclick="boVerFicha(${Number(ult.cat_id)})">${esc(v0.nome||'(sem nome)')}</span>
+        <span class="bo-sub">${esc([v0.produtor,v0.tipo].filter(Boolean).join(' · '))} · ${f.linhas.length} colheitas: ${esc(anos)}</span></div>
+      ${f.difs.some(d=>!d.aceite)?`<button type="button" class="bo-barra-bt bcl-iabt" onclick="boColhIA([${fi}])"${BO_COLH.iaEstado?' disabled':''} title="Analisar as diferenças deste vinho com IA">✨ IA</button>`:''}
+    </div>
+    ${f.difs.map((d,di)=>boColhDifHTML(f,fi,d,di)).join('')}
+  </div>`;
+}
+function boColhDifHTML(f,fi,d,di){
+  const r=d.r, p=d.aceite?null:boColhProp(f,d);
+  const susp=new Set(p&&p.acao==='rever'?p.linhas||[]:[]);
+  const vistos=new Set();
+  const vals=d.vals.map((x,li)=>{
+    // "Usar em todas" no primeiro de cada valor diferente, só nos campos do vinho.
+    const usar=r.vinho&&!d.aceite&&x.val&&!vistos.has(x.val.n)&&(vistos.add(x.val.n),true);
+    return `<div class="bcl-val${x.val?'':' vazio'}${susp.has(x.v.cat_id)?' susp':''}">
+      <button type="button" class="bcl-ano" onclick="boVerFicha(${Number(x.v.cat_id)})" title="Abrir a ficha desta colheita">${x.v.ano?esc(String(x.v.ano)):'s/a'}</button>
+      <span class="bcl-txt">${x.val?esc(x.val.txt):'—'}</span>
+      ${usar?`<button type="button" class="bcl-usar" onclick="boColhUsarTodas(${fi},${di},${li})">Usar em todas</button>`:''}
+    </div>`;
+  }).join('');
+  let ia='';
+  if(p){
+    const cert=`<span class="pia-cert${p.certeza==='alta'?'':' media'}">${p.certeza==='alta'?'certeza alta':'certeza média'}</span>`;
+    const que=p.acao==='manter'?'Está certo — é normal entre colheitas'
+      :p.acao==='uniformizar'?`Usar em todas as colheitas:<span class="bcl-pval">${esc(boColhValorTxt(r.k,p.valor))}</span>`
+      :`Rever à mão${(p.linhas||[]).length?' — '+esc(f.linhas.filter(v=>susp.has(v.cat_id)).map(v=>v.ano||'s/a').join(', ')):''}`;
+    ia=`<div class="bcl-prop${p.acao==='rever'?' rever':''}">
+      ${p.acao==='rever'?`<div class="pia-cab"><span>✨ ${que}</span>${cert}</div>`
+        :`<label class="pia-cab"><input type="checkbox"${p.marcado?' checked':''} onchange="boColhMarca(${fi},${di},this.checked)">
+          <span>✨ ${que}</span>${cert}</label>`}
+      ${p.porque?`<p class="pia-porque">${esc(p.porque)}</p>`:''}
+    </div>`;
+  }
+  const ac=d.aceite;
+  return `<div class="bcl-dif n-${r.nivel}${ac?' aceite':''}">
+    <div class="bcl-dcab"><b>${esc(r.t)}</b><span class="bcl-niv n-${r.nivel}">${BO_COLH_NIVEIS[r.nivel].t}</span>${d.d.txt?`<span class="bcl-delta">${esc(d.d.txt)}</span>`:''}</div>
+    <div class="bcl-vals">${vals}</div>
+    ${ia}
+    <div class="bcl-acoes">${ac
+      ?`<span class="note">✓ Aceite${ac.em?' a '+esc(boData(ac.em)):''}</span><button type="button" class="btn ghost" onclick="boColhDesaceitar(${fi},${di})">Desfazer</button>`
+      :`<button type="button" class="btn ghost" onclick="boColhAceitar(${fi},${di})">✓ Está certo</button>`}</div>
+  </div>`;
+}
+async function boColhGravarAceite(f,d){
+  const valores={};
+  d.vals.forEach(x=>{if(x.val)valores[(x.v.ano?String(x.v.ano):'s/a')+' #'+x.v.cat_id]=x.val.txt;});
+  await boRpc('colheitas_aceitar',{p_chave:f.k,p_campo:d.r.k,p_assinatura:d.ass,p_valores:valores});
+}
+async function boColhAceitar(fi,di){
+  const f=BO_COLH.vista[fi], d=f&&f.difs[di];if(!d)return;
+  try{
+    await boColhGravarAceite(f,d);
+    await boColhLerAceites();
+    toast('Aceite — volta só se os valores mudarem');
+    boColhPintar();boPintarContas();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function boColhDesaceitar(fi,di){
+  const f=BO_COLH.vista[fi], d=f&&f.difs[di];if(!d)return;
+  try{
+    await boRpc('colheitas_desaceitar',{p_chave:f.k,p_campo:d.r.k,p_assinatura:d.ass});
+    await boColhLerAceites();
+    toast('Desfeito ✓');
+    boColhPintar();boPintarContas();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+/* Pôr o mesmo valor em TODAS as colheitas (também nas que o têm vazio), pela
+   `winecatalog.editar`. Na nota global vão as avaliações da colheita de onde
+   ela veio (`deCat`): as duas são do mesmo sítio do Vivino. */
+async function boColhUsar(f,d,valor,deCat){
+  const k=d.r.k, alvo=boColhValor(k,k==='castas'?{castas:valor}:{[k]:valor});
+  if(!alvo)throw new Error('valor vazio');
+  const fonte=deCat?f.linhas.find(v=>v.cat_id===Number(deCat)):null;
+  let n=0;
+  for(const x of d.vals){
+    if(x.val&&x.val.n===alvo.n)continue;
+    const campos={[k]:alvo.raw};
+    if(k==='vivino_nota_global'&&fonte&&num(fonte.vivino_avaliacoes_global)!=null)
+      campos.vivino_avaliacoes_global=num(fonte.vivino_avaliacoes_global);
+    await boRpc('editar',{p_id:x.v.cat_id,p_campos:campos});
+    n++;
+  }
+  return n;
+}
+async function boColhUsarTodas(fi,di,li){
+  const f=BO_COLH.vista[fi], d=f&&f.difs[di], x=d&&d.vals[li];
+  if(!x||!x.val)return;
+  const muda=d.vals.filter(y=>!y.val||y.val.n!==x.val.n).length;
+  if(!confirm(`${d.r.t} de “${f.linhas[0].nome}”: pôr\n\n${x.val.txt}\n\nnas outras ${muda} ${muda===1?'colheita':'colheitas'}? Corrige o catálogo (fica no histórico, com “Repor”).`))return;
+  try{
+    const n=await boColhUsar(f,d,x.val.raw,x.v.cat_id);
+    toast(`Corrigido em ${n} ${n===1?'colheita':'colheitas'} ✓`);
+    await boColhReler();
+    boColhPintar();boPintarContas();
+  }catch(e){toast('Erro: '+e.message,1);await boColhReler().catch(()=>{});boColhPintar();}
+}
+/* ── A IA (a Edge Function `garrafeira-colheitas`) ── */
+async function boColhIAFn(corpo){
+  let r;
+  try{r=await sbFetch(`${SB_URL}/functions/v1/garrafeira-colheitas`,{method:'POST',
+    headers:{'Content-Type':'application/json','apikey':SB_KEY},body:JSON.stringify(corpo)});}
+  catch(e){throw new Error('Erro de ligação — tenta outra vez.');}
+  let d={};try{d=await r.json();}catch(_){}
+  if(!r.ok){
+    if(r.status===404&&!d.error)throw new Error('A função `garrafeira-colheitas` ainda não está publicada no Supabase.');
+    throw new Error(d.error||('Erro HTTP '+r.status));
+  }
+  return d;
+}
+function boColhIAHTML(){
+  const I=BO_COLH.iaEstado;
+  const semProp=BO_COLH.vista.filter(f=>f.difs.some(d=>!d.aceite&&!boColhProp(f,d))).length;
+  const m=boColhMarcadas().length;
+  return `<div class="fcard bcl-iacard">
+    <p class="note">✨ A IA olha para cada diferença e propõe o que fazer: <b>manter</b>, pôr o mesmo valor em <b>todas</b> as
+      colheitas, ou <b>rever</b> à mão. Responde do que sabe, sem pesquisar na net — nada muda sem confirmares.</p>
+    <div class="bo-acoes">
+      <button type="button" class="btn prim" onclick="boColhIA()"${I?' disabled':''}>${I
+        ?`A analisar… ${I.feitos} de ${I.total}`
+        :semProp?`✨ Analisar com IA (${semProp} ${semProp===1?'vinho':'vinhos'})`:'✨ Analisar outra vez'}</button>
+      ${m&&!I?`<button type="button" class="btn ghost" onclick="boColhIAAplicar()">Aplicar as marcadas (${m})</button>`:''}
+    </div>
+    ${BO_COLH.iaErro?`<p class="note bo-erro">${esc(BO_COLH.iaErro)}</p>`:''}
+  </div>`;
+}
+// `fis`: os vinhos (índices da vista) a analisar; sem ele, os que se veem e
+// ainda não têm proposta (ou todos os que se veem, se já tiverem).
+async function boColhIA(fis){
+  if(BO_COLH.iaEstado)return;
+  const vis=BO_COLH.vista.filter(f=>f.difs.some(d=>!d.aceite));
+  let alvo=fis?fis.map(i=>BO_COLH.vista[i]).filter(Boolean)
+    :vis.filter(f=>f.difs.some(d=>!d.aceite&&!boColhProp(f,d)));
+  if(!fis&&!alvo.length)alvo=vis;
+  if(!alvo.length)return;
+  const LOTE=4;
+  BO_COLH.iaEstado={feitos:0,total:alvo.length};BO_COLH.iaErro='';
+  boColhPintar();
+  let props=0;
+  try{
+    for(let i=0;i<alvo.length;i+=LOTE){
+      const lote=alvo.slice(i,i+LOTE);
+      // Vão todas as diferenças por ver do vinho, não só as que o filtro mostra.
+      const r=await boColhIAFn({acao:'analisar',familias:lote.map(f=>({chave:f.k,
+        ids:f.linhas.map(v=>v.cat_id),campos:f.todas.filter(d=>!d.aceite).map(d=>d.r.k)}))});
+      (r.propostas||[]).forEach(p=>{
+        const f=lote.find(x=>x.k===p.chave), d=f&&f.todas.find(x=>x.r.k===p.campo);
+        if(!d)return;
+        BO_COLH.ia[f.k+BO_COLH_SEP+d.r.k]={acao:p.acao,valor:p.valor,de:p.de,linhas:p.linhas||[],certeza:p.certeza,
+          porque:p.porque||'',ass:d.ass,modelo:r.modelo||'',marcado:p.certeza==='alta'&&p.acao!=='rever'};
+        props++;
+      });
+      boColhIAGuardar();
+      BO_COLH.iaEstado.feitos=Math.min(alvo.length,i+LOTE);
+      boColhPintar();
+    }
+  }catch(e){BO_COLH.iaErro=e.message;}
+  BO_COLH.iaEstado=null;
+  boColhPintar();
+  if(!BO_COLH.iaErro)toast(props?`A IA propôs ${props} ${props===1?'ação':'ações'} — confirma antes de aplicar`:'A IA não propôs nada');
+}
+function boColhMarca(fi,di,on){
+  const f=BO_COLH.vista[fi], d=f&&f.difs[di], p=d&&boColhProp(f,d);
+  if(!p)return;
+  p.marcado=on;boColhIAGuardar();boColhPintar();
+}
+// Só o marcado E à vista se aplica (a regra do Backoffice).
+function boColhMarcadas(){
+  const L=[];
+  BO_COLH.vista.forEach(f=>f.difs.forEach(d=>{
+    if(d.aceite)return;
+    const p=boColhProp(f,d);
+    if(p&&p.marcado&&(p.acao==='manter'||p.acao==='uniformizar'))L.push({f,d,p});
+  }));
+  return L;
+}
+async function boColhIAAplicar(){
+  const L=boColhMarcadas();if(!L.length)return;
+  const linhas=L.map(({f,d,p})=>`• ${f.linhas[0].nome} — ${d.r.t}: ${p.acao==='manter'?'está certo'
+    :`“${boColhValorTxt(d.r.k,p.valor).slice(0,90)}” em todas`}`);
+  if(!confirm(`Aplicar ${L.length} ${L.length===1?'proposta':'propostas'}?\n\n${linhas.join('\n')}\n\nO que põe um valor em todas corrige o catálogo (fica no histórico, com “Repor”).`))return;
+  let ok=0,mudou=false;const erros=[];
+  for(const {f,d,p} of L){
+    try{
+      if(p.acao==='manter')await boColhGravarAceite(f,d);
+      else{await boColhUsar(f,d,p.valor,p.de);mudou=true;}
+      ok++;
+    }catch(e){erros.push(`${f.linhas[0].nome} (${d.r.t}): ${e.message}`);}
+  }
+  try{await boColhLerAceites();}catch(e){}
+  if(mudou)try{await boColhReler();}catch(e){}
+  boColhPintar();boPintarContas();
+  toast(`${ok} ${ok===1?'aplicada':'aplicadas'} ✓${erros.length?` · ${erros.length} com erro`:''}`,erros.length?1:0);
+  if(erros.length)alert('Não foi possível:\n'+erros.join('\n'));
 }
 
 /* ── PRODUTORES OFICIAIS (db/produtores.sql da WineCatalog) ──
@@ -14563,7 +14988,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='209';
+const APP_BUILD='210';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

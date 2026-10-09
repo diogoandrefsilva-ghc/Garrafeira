@@ -47,6 +47,10 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   Backoffice: o pedido (para a IA manual), a limpeza de uma resposta colada e
   a análise com o Gemini em segundo plano (migração 46; ver "O Backoffice").
   Deploy: `supabase functions deploy garrafeira-produtores`.
+- `garrafeira-colheitas.ts` — a Edge Function da IA das Colheitas que não
+  batem (Backoffice): lê as linhas da BD e propõe uma ação por diferença
+  (migração 49; ver "O Backoffice" › "As colheitas que não batem").
+  Deploy: `supabase functions deploy garrafeira-colheitas`.
 - `db/` — `schema.sql` → `functions.sql` → `policies.sql` → `seed.sql`
   (+ `README.md` com os passos manuais no painel do Supabase). Fonte de
   verdade do schema. `migracao-garrafeiras.sql` é a migração 07 (uma
@@ -157,6 +161,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-precos-manual.sql` é a 48: acrescentar um preço à mão, pelo
   link, na mesma lista — `winecatalog.preco_definir`/`loja_do_link` (ver
   "O preço de um vinho" › "Acrescentar um preço à mão").
+  `migracao-colheitas.sql` é a 49: as diferenças entre colheitas que o
+  admin do catálogo deu por certas (`winecatalog.colheitas_aceites`, ver
+  "O Backoffice" › "As colheitas que não batem").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1423,7 +1430,7 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   (`boPagina`, com "‹ Backoffice"). Sem passo na história do browser. O
   número no separador e nas pastilhas é o que espera uma decisão do admin
   (`boContar`: alertas, links do Vivino por validar, comentários e
-  sugestões na vez dele).
+  sugestões na vez dele, e os vinhos com colheitas que não batem).
 - **É a WineCatalog tal e qual** — Duplicados (com os "não são"),
   Produtores, Nomes dos vinhos, Alertas, Comentários, Sugestões, Links do
   Vivino por validar, Links do Vivino nas garrafeiras, Fichas das
@@ -1526,6 +1533,47 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   Monte Branco" dão as duas `branco`): ficam em
   `produtores_distintos_grafias` e deixam de ser sugeridas, mas a chave não
   muda — se uma passar a oficial, a outra vai atrás, e o confirm di-lo.
+- **As colheitas que não batem** (migração 49, `garrafeira-colheitas.ts`,
+  09/10/2026, o dono: "alertas como duplicados e assim, que é quando tenho o
+  mesmo vinho, diferentes anos/colheitas e diferenças na caracterização").
+  A segunda pastilha de "Arrumar o catálogo" (`boColh*`, secção "AS
+  COLHEITAS QUE NÃO BATEM" no app.js, o CSS `.bcl-*`). As colheitas do mesmo
+  vinho são as do `catFamChave` (nome, produtor e cor — as que o Detalhe do
+  Catálogo junta num cartão), e **a comparação corre na app**, sobre o
+  `CAT_VINHOS`: não há uma segunda cópia da regra em SQL. As regras do dono
+  (`BO_COLH_REGRAS`):
+  - **Alarmante**: região, classificação, álcool, castas ou harmonização
+    diferentes — qualquer diferença;
+  - **Provável erro**: a nota do Vivino de TODAS as colheitas diferente (é
+    uma nota só, do vinho todo);
+  - **A analisar**: a nota da colheita com 0,3 ou mais de diferença, e o
+    preço que conta (`precoPrincipal`) mais de 20 % acima do mais barato.
+  Uma colheita sem o valor não é uma diferença (aparece como "—");
+  compara-se o texto sem acentos, maiúsculas nem pontuação, e as castas como
+  conjunto. Na harmonização isto apanha quase todos os vinhos (cada procura
+  escreveu-a por outras palavras) — é o pedido do dono, e é para isso que
+  servem o "Está certo" e a IA.
+  - **Está certo** grava a diferença como vista (`colheitas_aceitar`) com a
+    ASSINATURA dos valores: se mudarem, ou chegar outra colheita, volta. No
+    preço e na nota da colheita a assinatura são só as linhas (esses números
+    mudam a cada corrida do script). Desfazer marca a linha, não a apaga.
+  - **Usar em todas** (só nos campos do VINHO: região, classificação,
+    castas, harmonização, nota global) põe esse valor em todas as colheitas,
+    também nas vazias, pela `winecatalog.editar` (no histórico, com "Repor");
+    a nota global leva as avaliações dela.
+  - **✨ IA** (por vinho, ou "Analisar com IA" para os que se veem, de 4 em 4
+    e síncrona): a `garrafeira-colheitas` recebe só as linhas e os campos,
+    LÊ OS VALORES DA BD e propõe por diferença **manter**, **uniformizar**
+    (com o valor) ou **rever** (com as colheitas suspeitas, que ficam a
+    vermelho). A limpeza é dela: "uniformizar" só nos campos do vinho e,
+    tirando a harmonização (pode juntar os textos), só com um valor que já
+    está numa colheita — nas castas, só castas que já lá estão. Sem pesquisa
+    web, e o ecrã di-lo. Vêm marcadas as de certeza alta; "Aplicar as
+    marcadas" aplica só o marcado E à vista (manter → Está certo, uniformizar
+    → Usar em todas). As propostas ficam no aparelho (`gf_bo_colh_ia`)
+    enquanto a assinatura da diferença for a mesma.
+  O número da pastilha (`BO_CONTA.colh`) são os vinhos com diferenças por
+  ver, e só se conta com o Catálogo já lido (`boColhContar`).
 - **Ficou de fora** a password temporária (já está nas Definições da
   Garrafeira, para o dono da conta) e o que só corre no PC (o painel, o
   script do Vivino e das lojas).
