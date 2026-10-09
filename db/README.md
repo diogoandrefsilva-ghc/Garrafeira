@@ -671,6 +671,21 @@ recusado, retirar a Garrafeira Nacional passou o preço de referência de
 fora, devolver tirou a marca, e ficaram três linhas `editar` no `sync_log`.
 Um email que não é curador foi recusado.
 
+### Migração 48 — acrescentar um preço à mão, pelo link (já aplicada)
+
+`db/migracao-precos-manual.sql`, depois da 47. Cria a
+`winecatalog.loja_do_link` (a loja de um link: Garrafeira Nacional,
+Granvine, Vinha, Vivino) e a `winecatalog.preco_definir` (curadores e o
+admin do catálogo; grava pela `winecatalog.editar`). Só cria funções. Ver o
+`CLAUDE.md`, "O preço de um vinho" › "Acrescentar um preço à mão".
+Aplicada a 09/10/2026 pelo MCP e ensaiada num bloco desfeito no fim, como
+admin: um preço novo da Garrafeira Nacional na #9 substituiu o antigo e
+levou o preço de referência atrás (48,95 € → 51,50 €), e a
+`catalogo_vinhos` deu-o; numa linha sem preço nenhum (#247), um do Vivino
+encheu o preço de referência; um link de outro site, um preço a zero e um
+email que não é curador foram recusados; o `outlet.` da Garrafeira Nacional
+conta, um domínio a imitá-la ou um link sem `https://` não.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -730,6 +745,8 @@ Numa base de dados limpa:
 14. **`migracao-precos-retirar.sql`** — retirar e devolver um preço na
    página do vinho do Catálogo (migração 47). Depois da 42 (e do
    `db/fontes.sql` da WineCatalog).
+15. **`migracao-precos-manual.sql`** — acrescentar um preço à mão, pelo
+   link (migração 48). Depois da 47.
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)
