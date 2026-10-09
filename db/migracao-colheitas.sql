@@ -1,5 +1,5 @@
 -- =====================================================================
--- Migração 48 — as colheitas que não batem certo (09/10/2026)
+-- Migração 49 — as colheitas que não batem certo (09/10/2026)
 --
 -- O dono das apps: "um menu no backoffice que me desse alertas como
 -- duplicados e assim, que é quando tenho o mesmo vinho, diferentes

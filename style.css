@@ -1089,6 +1089,10 @@ body:not(.readonly) .msdot.vazia:hover{background:#fff;border-color:var(--vh);co
   cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s}
 .mx:hover{background:var(--vh);color:#fff}
 .mbox label{display:block;font-size:10.5px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--mu);margin:13px 0 5px}
+/* O que vai entre parêntesis num rótulo ("Nota Vivino (todas as colheitas)")
+   vai mais pequeno e sem versalete: em maiúsculas espacejadas quebrava a
+   linha e desalinhava o campo do vizinho na mesma fila (09/10/2026). */
+.mbox label .lbl-p{font-size:9px;font-weight:500;letter-spacing:.1px;text-transform:none}
 .mbox input,.mbox select,.mbox textarea{width:100%;min-width:0;max-width:100%;padding:11px 13px;border:1px solid var(--bo);
   border-radius:10px;font-size:15px;font-family:inherit;background:var(--bg)}
 .mbox input:focus,.mbox select:focus,.mbox textarea:focus{outline:none;border-color:var(--vh);background:#fff;box-shadow:0 0 0 3px var(--vhp)}
@@ -1149,6 +1153,13 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .mpreco.outra:not(.conta) .mp-v{color:var(--mu)}
 .mpreco.duvidoso .mp-v{color:var(--mu);text-decoration:line-through;font-weight:400}
 .mpreco.duvidoso .mp-l i{color:var(--dg)}
+/* Acrescentar um preço à mão (migração 48): o botão e o formulário, por
+   baixo da lista, só a quem corrige o catálogo. */
+.btn.mp-mais{margin-top:10px}
+.mp-novo{margin-top:10px;padding:4px 12px 12px;border:1px solid var(--bo);border-radius:12px;background:var(--card)}
+.mp-novo .note{margin-top:5px}
+.mp-novo .mp-erro{color:var(--dg)}
+.mp-novo-bts{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
 .mp-de{color:var(--mu);font-size:12px}
 /* Links do vinho: pequenos, seguidos por vírgula, numa linha só (em vez
    de uma caixa `.mgar` por link) — o ✕ de remover cola-se ao nome, não
@@ -2684,7 +2695,7 @@ button.prod-dec-h:hover{background:#fbf8f4}
 .pia-fim{display:flex;align-items:center;gap:10px;margin-top:14px}
 .pia-fim .btn{margin-top:0}
 
-/* As colheitas que não batem (migração 48): um cartão por vinho, uma faixa
+/* As colheitas que não batem (migração 49): um cartão por vinho, uma faixa
    por diferença com o rebordo do nível — vermelho no alarmante, bordô no
    provável erro, papel no "a analisar". Nada de dourado: uma diferença não
    distingue vinho nenhum. Cada colheita é uma linha: o ano (abre a ficha),

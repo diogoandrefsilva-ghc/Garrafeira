@@ -2898,12 +2898,19 @@ let PROD_COMPLETO={}; // produtor oficial -> nome por extenso (catálogo)
 let CASA_MAE={};      // produtor oficial -> a casa-mãe dele (o grupo: Sogrape…)
 const casaMaeDe=v=>(v&&v.produtor&&CASA_MAE[v.produtor])||'';
 const LOJAS=[
-  {k:'garrafeira_nacional',nome:'Garrafeira Nacional',curto:'G. Nacional'},
-  {k:'granvine',nome:'Granvine',curto:'Granvine'},
-  {k:'vinha',nome:'Vinha',curto:'Vinha'},
-  {k:'vivino',nome:'Vivino',curto:'Vivino'}
+  {k:'garrafeira_nacional',nome:'Garrafeira Nacional',curto:'G. Nacional',dom:'garrafeiranacional.com'},
+  {k:'granvine',nome:'Granvine',curto:'Granvine',dom:'granvine.com'},
+  {k:'vinha',nome:'Vinha',curto:'Vinha',dom:'vinha.pt'},
+  {k:'vivino',nome:'Vivino',curto:'Vivino',dom:'vivino.com'}
 ];
 function lojaInfo(k){return LOJAS.find(l=>l.k===k)||{k,nome:k,curto:k};}
+// A loja de um link, pelo domínio (`dom`) — a mesma conta da
+// `winecatalog.loja_do_link` (migração 48), que é quem decide ao gravar.
+function lojaDoLink(u){
+  let h='';try{h=new URL(String(u||'').trim()).hostname.toLowerCase();}catch(_){return null;}
+  const l=LOJAS.find(x=>h===x.dom||h.endsWith('.'+x.dom));
+  return l?l.k:null;
+}
 function lojaOrdem(k){const i=LOJAS.findIndex(l=>l.k===k);return i<0?99:i;}
 /* Os preços acham-se pelo NOME e pelo PRODUTOR (a chave do catálogo) e só
    se liam no `carregarGarrafeira`. Um vinho acabado de gravar — ou com o
@@ -3070,7 +3077,7 @@ function precosLojaHTML(v){
   const cur=v.id<0&&catPodeCriar();
   const id=cur?pgCatId(v):null, r=id?PG_EXTRAS.fontes[id]:null;
   const ret=cur&&r&&Array.isArray(r.precos_retirados)?r.precos_retirados:[];
-  if(!ps.length&&!ret.length)return '';
+  if(!ps.length&&!ret.length&&!cur)return '';
   const pp=precoPrincipal(v);
   return `<div class="msec">Preços nas lojas</div>
     ${ps.length?`<div class="mprecos">${ps.map(p=>{
@@ -3088,6 +3095,7 @@ function precosLojaHTML(v){
         ${cur?`<button type="button" class="pf-x" title="Retirar este preço (está errado)" aria-label="Retirar o preço de ${nome}" onclick="pgPrecoRetirar('${escJs(p.loja)}','${escJs(p.url||'')}')">✕</button>`:''}
       </div>`;}).join('')}
     </div>`:'<p class="note">Nenhum preço à vista.</p>'}
+    ${cur?pgPrecoNovoHTML(v):''}
     ${ret.length?`<details class="pf-ret"><summary>Preços retirados (${ret.length})</summary>
       ${ret.map(x=>{
         const t=[lojaInfo(x.loja).nome,x.preco!=null?eur(x.preco):''].filter(Boolean).join(' · ');
@@ -5176,6 +5184,95 @@ async function pgPrecoDevolver(loja){
   }catch(e){toast('Erro: '+e.message,1);}
 }
 
+/* ACRESCENTAR UM PREÇO À MÃO (09/10/2026, migração 48). O dono das apps:
+   "inserir os preços de referência apontando a links. Hoje só consigo com
+   IA mas nem sempre funciona (e estou a gastar à toa)". Cola-se o link da
+   página e escreve-se o preço que lá se vê; a loja sai do link
+   (`lojaDoLink`; na BD, a `winecatalog.loja_do_link` é que decide) e
+   substitui o que essa loja tinha — também um preço retirado. A colheita
+   começa na desta linha (a de um link do Vivino vem do `?year=`, e sem ele
+   fica vazia: é a média das colheitas). O formulário vive em
+   `PG_PRECO_NOVO`, e não no DOM: a lista volta a desenhar-se quando os
+   retirados chegam (`pgExtrasPintar`), e o que se escreveu não se perde. */
+let PG_PRECO_NOVO=null;   // {v, url, preco, colheita, colMexida}
+function pgPrecoNovoHTML(v){
+  const pn=PG_PRECO_NOVO&&PG_PRECO_NOVO.v===v.id?PG_PRECO_NOVO:null;
+  if(!pn)return `<button type="button" class="btn ghost full mp-mais" onclick="pgPrecoNovoAbrir()">＋ Acrescentar um preço</button>`;
+  return `<div class="mp-novo">
+    <label>Link da página <small class=lbl-p>(loja ou Vivino)</small></label>
+    <input type="url" id="mpn-url" value="${esc(pn.url)}" placeholder="https://www.garrafeiranacional.com/…" oninput="pgPrecoNovoMudou()">
+    <div class="note" id="mpn-loja">${pgPrecoNovoLojaHTML(v,pn)}</div>
+    <div class="mrow">
+      <div><label>Preço <small class=lbl-p>(€)</small></label><input type="text" id="mpn-preco" inputmode="decimal" value="${esc(pn.preco)}" placeholder="18.50" oninput="pgPrecoNovoMudou()"></div>
+      <div><label>Colheita</label><input type="text" id="mpn-col" inputmode="numeric" maxlength="4" value="${esc(pn.colheita)}" placeholder="média" oninput="PG_PRECO_NOVO.colMexida=true;pgPrecoNovoMudou()"></div>
+    </div>
+    <div class="mp-novo-bts">
+      <button type="button" class="btn ghost" onclick="pgPrecoNovoFechar()">Cancelar</button>
+      <button type="button" class="btn prim" id="mpn-ok" onclick="pgPrecoNovoGuardar()">Guardar o preço</button>
+    </div>
+  </div>`;
+}
+// O que o link diz: a loja e, se ela já tem preço, o que vai substituir.
+function pgPrecoNovoLojaHTML(v,pn){
+  const u=String(pn.url||'').trim();
+  if(!u)return 'Cola o link da página do vinho na Garrafeira Nacional, na Granvine, na Vinha ou no Vivino.';
+  const k=lojaDoLink(u);
+  if(!k)return '<span class="mp-erro">Só se guardam preços da Garrafeira Nacional, da Granvine, da Vinha ou do Vivino.</span>';
+  const ant=precosLojaDe(v).find(p=>p.loja===k);
+  const ret=!ant&&(((PG_EXTRAS.fontes[pgCatId(v)]||{}).precos_retirados)||[]).find(p=>p.loja===k);
+  return `<b>${esc(lojaInfo(k).nome)}</b>`+(ant?` — substitui os ${esc(eur(ant.preco))} de agora`
+    :ret?' — substitui o preço retirado':'');
+}
+function pgPrecoNovoAbrir(){
+  const v=IDXV[VINHO_ABERTO];if(!v)return;
+  PG_PRECO_NOVO={v:v.id,url:'',preco:'',colheita:v.ano!=null?String(v.ano):'',colMexida:false};
+  const el=document.getElementById('pg-precos');if(el)el.innerHTML=precosLojaHTML(v);
+  const i=document.getElementById('mpn-url');if(i)i.focus();
+}
+function pgPrecoNovoFechar(){
+  PG_PRECO_NOVO=null;
+  const v=IDXV[VINHO_ABERTO],el=document.getElementById('pg-precos');if(v&&el)el.innerHTML=precosLojaHTML(v);
+}
+function pgPrecoNovoMudou(){
+  const pn=PG_PRECO_NOVO,v=IDXV[VINHO_ABERTO];if(!pn||!v)return;
+  const val=id=>{const e=document.getElementById(id);return e?e.value:'';};
+  const urlAntes=pn.url;
+  pn.url=val('mpn-url');pn.preco=val('mpn-preco');pn.colheita=val('mpn-col');
+  // A colheita acompanha o link enquanto ninguém lhe tocar: num do Vivino é
+  // a do `?year=` (ou nenhuma, a média); numa loja, a desta linha.
+  if(pn.url!==urlAntes&&!pn.colMexida){
+    const k=lojaDoLink(pn.url),m=/[?&]year=(\d{4})\b/.exec(pn.url);
+    pn.colheita=k==='vivino'?(m?m[1]:''):(v.ano!=null?String(v.ano):'');
+    const c=document.getElementById('mpn-col');if(c)c.value=pn.colheita;
+  }
+  const n=document.getElementById('mpn-loja');if(n)n.innerHTML=pgPrecoNovoLojaHTML(v,pn);
+}
+async function pgPrecoNovoGuardar(){
+  const v=IDXV[VINHO_ABERTO],id=pgCatId(v),pn=PG_PRECO_NOVO;if(!v||v.id>=0||!id||!pn)return;
+  let url=String(pn.url||'').trim();
+  if(/^www\./i.test(url))url='https://'+url;
+  const k=lojaDoLink(url);
+  if(!k){toast('O link tem de ser de uma página da Garrafeira Nacional, da Granvine, da Vinha ou do Vivino.',1);return;}
+  const preco=Number(String(pn.preco||'').replace(/[^\d,.]/g,'').replace(',','.'));
+  if(!(preco>0)){toast('Escreve o preço que a página mostra.',1);return;}
+  const cs=String(pn.colheita||'').trim();
+  if(cs&&!/^\d{4}$/.test(cs)){toast('A colheita é um ano (ou fica vazia).',1);return;}
+  const col=cs?Number(cs):null;
+  const b=document.getElementById('mpn-ok');if(b){b.disabled=true;b.textContent='A guardar…';}
+  try{
+    const r=await boRpc('preco_definir',{p_id:id,p_url:url,p_preco:preco,p_colheita:col});
+    CAT_PRECOS[v.id]=(CAT_PRECOS[v.id]||[]).filter(y=>y.loja!==k)
+      .concat([{loja:k,preco:Math.round(preco*100)/100,url,colheita:col,em:new Date().toISOString().slice(0,10)}]);
+    if(r&&r.preco_medio_mudou&&r.preco_medio!=null)v.preco_medio=Number(r.preco_medio);
+    PG_PRECO_NOVO=null;
+    toast('Preço guardado ✓ · '+lojaInfo(k).nome+(r&&r.preco_medio_mudou&&r.preco_medio!=null?' · o preço de referência passa a '+eur(r.preco_medio):''));
+    pgPrecosMudou(v,id);
+  }catch(e){
+    toast('Erro: '+e.message,1);
+    if(b){b.disabled=false;b.textContent='Guardar o preço';}
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════
    O ESPELHO DO CATÁLOGO
 
@@ -5480,7 +5577,7 @@ function abrirComentario(vinhoId){
       aparece em Definições › Sugestões e comentários.</p>
     <label>O que se passa</label>
     <select id="cm-motivo" onchange="comMotivo()">${COM_MOTIVOS_VINHO.map(([k,t])=>`<option value="${k}">${esc(t)}</option>`).join('')}</select>
-    <div id="cm-campos-box"><label>Que atributos (opcional)</label>
+    <div id="cm-campos-box"><label>Que atributos <small class=lbl-p>(opcional)</small></label>
       <div class="cm-campos">${COM_CAMPOS.map(([t],i)=>`<label class="ll-enc"><input type="checkbox" class="cm-campo" data-i="${i}"><span>${esc(t)}</span></label>`).join('')}</div></div>
     <label id="cm-link-l">Link (opcional)</label>
     <input type="url" id="cm-link" inputmode="url" autocomplete="off" placeholder="https://… a página do vinho numa loja ou no produtor">
@@ -6681,10 +6778,10 @@ function abrirEditarVinho(id,modo){
     <div class="note">Uma só casta fica marcada como <b>monocasta</b>; duas ou mais, <b>várias castas</b>. Não é preciso escolher — sai da contagem.</div>
 
     <div class="mrow">
-      <div><label>Estágio (meses)</label><input type="number" id="e-estagio" inputmode="numeric" value="${esc(o('estagio_meses'))}" placeholder="18"></div>
-      <div><label>Álcool (%)</label><input type="text" id="e-teor" inputmode="decimal" value="${esc(o('teor'))}" placeholder="14.5"></div>
+      <div><label>Estágio <small class=lbl-p>(meses)</small></label><input type="number" id="e-estagio" inputmode="numeric" value="${esc(o('estagio_meses'))}" placeholder="18"></div>
+      <div><label>Álcool <small class=lbl-p>(%)</small></label><input type="text" id="e-teor" inputmode="decimal" value="${esc(o('teor'))}" placeholder="14.5"></div>
     </div>
-    <label>Estágio (descrição)</label>
+    <label>Estágio <small class=lbl-p>(descrição)</small></label>
     <input type="text" id="e-estagio-txt" value="${esc(o('estagio_texto'))}" placeholder="18 meses em barrica de carvalho francês">
 
     <div class="note" id="e-jan-nota" style="display:none">Sem ano não há <b>janela de consumo</b>:
@@ -6694,16 +6791,16 @@ function abrirEditarVinho(id,modo){
       <div><label>Beber até</label><input type="number" id="e-beber-ate" inputmode="numeric" value="${esc(o('beber_ate'))}" placeholder="2034"></div>
     </div>
     <div class="mrow">
-      <div><label>Preço de referência (€)</label><input type="text" id="e-preco" inputmode="decimal" value="${esc(o('preco_medio'))}" placeholder="18.50"></div>
+      <div><label>Preço de referência <small class=lbl-p>(€)</small></label><input type="text" id="e-preco" inputmode="decimal" value="${esc(o('preco_medio'))}" placeholder="18.50"></div>
       <div><label>País</label><input type="text" id="e-pais" value="${esc(o('pais',noCat?'':'Portugal'))}" placeholder="Portugal"></div>
     </div>
     <div class="mrow">
-      <div><label>Nota Vivino (colheita)</label><input type="text" id="e-vivino" inputmode="decimal" value="${esc(o('vivino_nota'))}" placeholder="4.1"></div>
-      <div><label>Avaliações (colheita)</label><input type="number" id="e-vivino-av" inputmode="numeric" value="${esc(o('vivino_avaliacoes'))}" placeholder="250"></div>
+      <div><label>Nota Vivino <small class=lbl-p>(colheita)</small></label><input type="text" id="e-vivino" inputmode="decimal" value="${esc(o('vivino_nota'))}" placeholder="4.1"></div>
+      <div><label>Avaliações <small class=lbl-p>(colheita)</small></label><input type="number" id="e-vivino-av" inputmode="numeric" value="${esc(o('vivino_avaliacoes'))}" placeholder="250"></div>
     </div>
     <div class="mrow">
-      <div><label>Nota Vivino (todas as colheitas)</label><input type="text" id="e-vivino-g" inputmode="decimal" value="${esc(o('vivino_nota_global'))}" placeholder="4.0"></div>
-      <div><label>Avaliações (todas)</label><input type="number" id="e-vivino-av-g" inputmode="numeric" value="${esc(o('vivino_avaliacoes_global'))}" placeholder="5000"></div>
+      <div><label>Nota Vivino <small class=lbl-p>(todas as colheitas)</small></label><input type="text" id="e-vivino-g" inputmode="decimal" value="${esc(o('vivino_nota_global'))}" placeholder="4.0"></div>
+      <div><label>Avaliações <small class=lbl-p>(todas)</small></label><input type="number" id="e-vivino-av-g" inputmode="numeric" value="${esc(o('vivino_avaliacoes_global'))}" placeholder="5000"></div>
     </div>
     <label>Link do Vivino</label>
     <input type="url" id="e-vivino-url" value="${esc(o('vivino_url'))}" placeholder="https://www.vivino.com/…">
@@ -6735,7 +6832,7 @@ function abrirEditarVinho(id,modo){
       </div>
       <div class="mrow">
         <div><label>Formato</label><select id="e-formato">${FORMATOS.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}</select></div>
-        <div><label>Preço de compra (€)</label><input type="text" id="e-preco-compra" inputmode="decimal" placeholder="15.90"></div>
+        <div><label>Preço de compra <small class=lbl-p>(€)</small></label><input type="text" id="e-preco-compra" inputmode="decimal" placeholder="15.90"></div>
       </div>
       <label>Comprada em</label>
       <input type="date" id="e-comprado">`}
@@ -7217,7 +7314,7 @@ function abrirGarrafa(gid,vinhoId){
     <div class="mrow">
       <div><label>Formato</label><select id="g-formato">${FORMATOS.map(x=>
         `<option value="${esc(x)}"${(g?g.formato:'0,75 L')===x?' selected':''}>${esc(x)}</option>`).join('')}</select></div>
-      <div><label>Preço de compra (€)</label><input type="text" id="g-preco" inputmode="decimal" value="${esc(g&&g.preco_compra!=null?g.preco_compra:'')}"></div>
+      <div><label>Preço de compra <small class=lbl-p>(€)</small></label><input type="text" id="g-preco" inputmode="decimal" value="${esc(g&&g.preco_compra!=null?g.preco_compra:'')}"></div>
     </div>
     <label>Comprada em</label>
     <input type="date" id="g-comprado" value="${esc(g&&g.comprado_em?g.comprado_em:'')}">
@@ -11056,7 +11153,7 @@ async function boDesmarcar(a,b){
   }catch(e){toast('Erro: '+e.message,1);}
 }
 
-/* ── AS COLHEITAS QUE NÃO BATEM (09/10/2026, migração 48, `garrafeira-colheitas`) ──
+/* ── AS COLHEITAS QUE NÃO BATEM (09/10/2026, migração 49, `garrafeira-colheitas`) ──
    O dono das apps: "alertas como duplicados e assim, que é quando tenho o
    mesmo vinho, diferentes anos/colheitas e diferenças na caracterização".
    As colheitas do mesmo vinho são as linhas com o mesmo nome, produtor e cor
@@ -13356,7 +13453,7 @@ function abrirLocalModal(l){
       <button class="mx" onclick="fecharModal('modal-local')">✕</button></div>
     <label>Nome</label>
     <input type="text" id="loc-nome" value="${esc(l?l.nome:'')}" placeholder="Frigorífico da cozinha">
-    <label>Descrição (opcional)</label>
+    <label>Descrição <small class=lbl-p>(opcional)</small></label>
     <input type="text" id="loc-desc" value="${esc(l?l.descricao:'')}" placeholder="Níveis 1 a 14">
     ${TEM_LOCAL_LAYOUT?`<label class="chk ll-toggle"><input type="checkbox" id="loc-tem-layout" ${temLayoutLocal(l)?'checked':''} onchange="renderLocalLayoutEditor()">Desenhar este local como estante</label>
     <div id="loc-layout-box"></div>`:`<div class="note" style="margin-top:12px">O desenho das prateleiras fica disponível depois de correres a migração 10 da base de dados.</div>`}
@@ -14230,7 +14327,7 @@ function importarAbrir(){
   document.getElementById('modal-ia-in').innerHTML=
     "<div class='mtop'><div><h3>📷 Importar de imagens ou documentos</h3><div class='note' style='margin-top:3px'>Até 3 ficheiros: fotografias de rótulos ou prateleiras, prints, a ficha técnica em PDF, um ficheiro de texto.</div></div><button class='mx' onclick=\"fecharModal('modal-ia')\">✕</button></div>"+
     "<div class='aviso'>Serve para criar vinhos novos ou completar a ficha dos que já "+(IMPORT_CAT?"estão no catálogo":"tens")+". Os ficheiros são lidos pela IA e descartados no fim — a leitura não pesquisa na internet. <b>Nada entra "+(IMPORT_CAT?"no catálogo":"na garrafeira")+" sem confirmares, vinho a vinho.</b></div>"+
-    "<label>Ficheiros (máximo 3)</label><input id='imp-ficheiros' type='file' accept='image/*,application/pdf,.pdf,text/plain,.txt' multiple onchange='importarEscolha(this)'>"+
+    "<label>Ficheiros <small class=lbl-p>(máximo 3)</small></label><input id='imp-ficheiros' type='file' accept='image/*,application/pdf,.pdf,text/plain,.txt' multiple onchange='importarEscolha(this)'>"+
     // As indicações vão à IA com os ficheiros (o dono, 04/10/2026): "atualiza
     // só a harmonização", "só os tintos", "o segundo é branco".
     "<label>Indicações para a IA <i style='text-transform:none;letter-spacing:0;font-weight:400'>(opcional)</i></label><textarea id='imp-indicacoes' rows='3' maxlength='800' placeholder='Ex.: lê só as notas de prova e a harmonização · só os vinhos da página 2 · o Arinto é branco'></textarea>"+
