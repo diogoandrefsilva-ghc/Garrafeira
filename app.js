@@ -1420,9 +1420,11 @@ function catColhCapaHTML(v){
 // A tabela da página: uma linha por colheita, da mais recente para a mais
 // antiga — o ano, a janela, a menção, a nota e o preço que contam, e o que
 // cada uma é para mim. Tocar numa linha passa a página para essa colheita.
+// Aparece SEMPRE, também com uma colheita só (09/10/2026, o dono das apps),
+// e é por baixo dela que quem corrige o catálogo tem o "+ Nova colheita"
+// (`catNovaColheita`).
 function catColheitasHTML(v){
   const l=catColheitas(v);
-  if(l.length<2)return '';
   // O que cada colheita é para mim vai À FRENTE do ano (o dono, 04/10/2026),
   // numa coluna própria — só quando alguma o é, senão era uma coluna vazia.
   const que=new Map(l.map(x=>[x,catEstado(x).que]));
@@ -1440,7 +1442,8 @@ function catColheitasHTML(v){
       <span class="cp">${p?esc(eur0(p.preco)):''}</span>
     </button>`;
   }).join('');
-  return `<div class="msec">Colheitas no Catálogo</div><div class="colh-tab">${linhas}</div>`;
+  return `<div class="msec">Colheitas no Catálogo</div><div class="colh-tab">${linhas}</div>
+    ${catPodeCriar()?`<button class="btn ghost colh-nova" onclick="catNovaColheita(${v.id})">+ Nova colheita</button>`:''}`;
 }
 // Passar a página para outra colheita: a mesma página (sem passo novo na
 // história — sai-se dela de uma vez), e o cartão do Detalhe por trás passa
@@ -1561,6 +1564,34 @@ function catNovoVinho(){
   if(!catPodeCriar())return;
   abrirEditarVinho(0,'catalogo');
 }
+/* Uma colheita NOVA de um vinho do Catálogo (09/10/2026, o dono das apps:
+   "um atalho para criar uma nova colheita desse vinho", por baixo da tabela
+   "Colheitas no Catálogo"). É o mesmo vinho novo no Catálogo, com o nome, o
+   produtor e a cor deste fixos (`FORM_COLH`) — só falta o ano, e é
+   obrigatório. O Procurar informação e o Preencher à mão não mostram os
+   parecidos (já se sabe qual é o vinho): trazem a ficha DESTA linha
+   (`pqCatalogoUsar`), e de outra colheita vêm só os factos do vinho — a
+   nota, o preço, a janela e a imagem ficam de fora (`CAT_DA_COLHEITA`). */
+let FORM_COLH=null;   // a linha de onde nasce a colheita nova
+function catNovaColheita(id){
+  const v=IDXV[id];
+  if(!v||!(v.id<0)||!catPodeCriar())return;
+  abrirEditarVinho(0,'catalogo',id);
+}
+// A colheita escrita já está no Catálogo? Diz-se, e abre-se essa — antes de
+// gastar uma procura que a `criar` ia recusar no fim.
+function catColhJaExiste(ano){
+  const fc=FORM_COLH;if(!fc)return false;
+  const x=catColheitas(fc).find(c=>(c.ano??null)===ano);
+  if(!x)return false;
+  if(confirm(`A colheita ${ano} deste vinho já está no Catálogo.\n\nAbri-la?`)){
+    FORM_CAT=false;FORM_COLH=null;
+    fecharModal('modal-edit');
+    if(document.getElementById('modal-vinho').classList.contains('on'))catColhPagina(x.id);
+    else verVinho(x.id);
+  }
+  return true;
+}
 // Os campos do formulário que são FICHA (o que o catálogo guarda) — nunca
 // as minhas notas.
 const CAT_FICHA_FORM=['tipo','estilo','mencao','classificacao','regiao','sub_regiao','teor','estagio_meses',
@@ -1572,6 +1603,9 @@ async function catGuardarNovo(){
   const elCor=document.getElementById('e-tipo');
   if(elCor&&!elCor.value){toast('Escolhe a cor do vinho',1);elCor.focus();return;}
   if(f.ano!=null&&(f.ano<1900||f.ano>2100)){toast('Ano fora do razoável',1);return;}
+  const colh=FORM_COLH;
+  if(colh&&f.ano==null){toast('Escreve o ano da nova colheita',1);document.getElementById('e-ano').focus();return;}
+  if(colh&&catColhJaExiste(f.ano))return;
   const campos={};
   CAT_FICHA_FORM.forEach(k=>{if(f[k]!=null&&f[k]!=='')campos[k]=f[k];});
   if(f._castas&&f._castas.length)campos.castas=f._castas.slice().sort((a,b)=>a.localeCompare(b,'pt'));
@@ -1581,12 +1615,17 @@ async function catGuardarNovo(){
   try{
     const r=await sbReq('POST','rpc/criar',{p_nome:f.nome,p_produtor:f.produtor||'',p_ano:f.ano,p_campos:campos},
       {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
-    _iaExtraNovo=null;FORM_CAT=false;
+    _iaExtraNovo=null;FORM_CAT=false;FORM_COLH=null;
     fecharModal('modal-edit');
     if(r&&r.id)await precosDaProcuraLevar(-r.id);
-    CAT_VINHOS=null;await catCarregar();renderLista();
-    toast('No catálogo ✓');
-    if(r&&r.id&&IDXV[-r.id])verVinho(-r.id);
+    CAT_VINHOS=null;await catCarregar();
+    const nv=r&&r.id?IDXV[-r.id]:null;
+    // A colheita nova passa a ser a que o cartão do Detalhe mostra; a página
+    // (que estava na colheita de onde ela nasceu) passa para ela.
+    if(nv&&colh)CAT_COLH[catFamChave(nv)]=nv.cat_id;
+    renderLista();
+    toast(nv&&colh?`Colheita ${nv.ano} no catálogo ✓`:'No catálogo ✓');
+    if(nv)verVinho(-r.id);
   }catch(e){
     btn.disabled=false;btn.textContent='Criar no catálogo';
     // A `criar` recusa um vinho e colheita que já lá estão e diz qual é a
@@ -1601,7 +1640,7 @@ async function catGuardarNovo(){
       if(c){
         const qual=`«${c.nome}»${c.ano?' '+c.ano:' (sem colheita)'}${c.produtor?' · '+c.produtor:''}`;
         if(confirm(`O Catálogo já tem este vinho: ${qual}.\n\nAbrir esse em vez de criar outro?`)){
-          _iaExtraNovo=null;FORM_CAT=false;
+          _iaExtraNovo=null;FORM_CAT=false;FORM_COLH=null;
           fecharModal('modal-edit');verVinho(id);
         }
         return;
@@ -6691,10 +6730,14 @@ function abrirNovoVinho(){
      que já lá está, editável (o ano, o preço…), MAIS a "Primeira garrafa"
      (onde fica, quantas, o preço de compra). Gravar desliga a marca e
      cria as garrafas — a ficha não se copia para lado nenhum. */
-function abrirEditarVinho(id,modo){
+function abrirEditarVinho(id,modo,colheitaDe){
   // 'catalogo' (os curadores, migração 32): um vinho novo NO CATÁLOGO, sem
   // garrafa nem notas minhas — a garrafeira aberta não conta para nada.
   const noCat=!id&&modo==='catalogo';
+  // `colheitaDe` (`catNovaColheita`): uma colheita nova desse vinho do
+  // Catálogo — o nome, o produtor e a cor são os dele, só se escreve o ano.
+  FORM_COLH=noCat&&colheitaDe?IDXV[colheitaDe]||null:null;
+  const fc=FORM_COLH, corFixa=!!fc&&TIPOS.includes(fc.tipo);
   // Um vinho DO catálogo (id negativo): corrige-se a linha para toda a gente
   // (`catGuardarEditar`), e só quem o admin fez curador.
   const catEd=id<0;
@@ -6709,7 +6752,7 @@ function abrirEditarVinho(id,modo){
   // na garrafeira não se mudam — a BD também os deixa como estavam
   // (`vinhos_identidade_fixa`). No Catálogo, quem o corrige é o curador.
   const idFixa=id>0;
-  const titulo=noCat?'Novo vinho no catálogo':catEd?'Corrigir no catálogo':conv?'Passar para a garrafeira':id?'Editar vinho':paraDesejo?'Novo vinho na wishlist':'Novo vinho';
+  const titulo=fc?'Nova colheita no catálogo':noCat?'Novo vinho no catálogo':catEd?'Corrigir no catálogo':conv?'Passar para a garrafeira':id?'Editar vinho':paraDesejo?'Novo vinho na wishlist':'Novo vinho';
   const rotulo=noCat?'Criar no catálogo':catEd?'Guardar no catálogo':conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
   _catBaseNovo=null;
   _iaExtraNovo=null;   // o que a procura trouxe é de UM formulário, não fica de um para o outro
@@ -6731,19 +6774,22 @@ function abrirEditarVinho(id,modo){
       <button class="mx" onclick="fecharModal('modal-edit')">✕</button></div>
 
     <label>Nome</label>
-    <input type="text" id="e-nome" value="${esc(o('nome'))}" placeholder="Quinta do Vallado Touriga Nacional"${idFixa?' readonly':''}>
+    <input type="text" id="e-nome" value="${esc(fc?fc.nome:o('nome'))}" placeholder="Quinta do Vallado Touriga Nacional"${idFixa||fc?' readonly':''}>
     <div class="mrow">
       <div><label>Ano</label><input type="number" id="e-ano" inputmode="numeric" value="${esc(o('ano'))}" placeholder="${paraDesejo?'opcional':'2021'}" oninput="janelaSincronizarForm()"></div>
       <div>${id
         ?`<label>Produtor</label><input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado"${idFixa?' readonly':''}>`
         // A cor tem de vir de quem procura: fica em cima,
         // no formulário compacto, com o que só a PESSOA sabe.
-        :'<label>Cor</label><select id="e-tipo"><option value="">— escolhe a cor —</option>'+opts(TIPOS,o('tipo',''))+'</select>'
+        :`<label>Cor</label><select id="e-tipo"${corFixa?' disabled':''}><option value="">— escolhe a cor —</option>${opts(TIPOS,corFixa?fc.tipo:o('tipo',''))}</select>`
       }</div>
     </div>
-    ${id?'':`<label>Produtor <span style="text-transform:none;font-weight:400">— opcional, ajuda a acertar</span></label>
+    ${id?'':fc?`<label>Produtor</label>
+      <input type="text" id="e-produtor" value="${esc(fc.produtor||'')}" readonly>`
+      :`<label>Produtor <span style="text-transform:none;font-weight:400">— opcional, ajuda a acertar</span></label>
       <input type="text" id="e-produtor" value="${esc(o('produtor'))}" placeholder="Quinta do Vallado">`}
     ${idFixa?`<div class="note">O nome e o produtor vêm do Catálogo. Se estiverem errados, avisa em <b>Algo não está bem?</b>, no fim da página do vinho.</div>`:''}
+    ${fc?`<div class="note">Uma colheita nova deste vinho: o nome, o produtor e a cor são os dele — escreve o ano. Da ${esc(String(fc.ano||'colheita sem ano'))} vêm só os factos do vinho, sem nota, preço, janela nem imagem.</div>`:''}
 
     ${conv?`<div class="aviso">Revê a ficha (o ano, sobretudo — o que se quer e o que se comprou nem sempre são a mesma colheita) e diz onde fica a garrafa. Sai da wishlist e entra na garrafeira.</div>`:''}
     ${id&&!conv&&!catEd?`<div class="mrow">
@@ -6852,7 +6898,7 @@ function abrirEditarVinho(id,modo){
     if(loc)loc.onchange=()=>renderPickerPosicoes('e',0);
     renderPickerPosicoes('e',0);
   }
-  setTimeout(()=>{const n=document.getElementById('e-nome');if(!id&&n)n.focus();},60);
+  setTimeout(()=>{const n=document.getElementById(fc?'e-ano':'e-nome');if(!id&&n)n.focus();},60);
 }
 
 function lerFormVinho(){
@@ -8327,10 +8373,24 @@ function pqAbrirNovo(soVer){
   if(elTipo&&!elTipo.value){toast('Escolhe primeiro a cor do vinho',1);elTipo.focus();return;}
   const id={vid:null,nome,ano:inteiro(document.getElementById('e-ano').value),
     produtor:document.getElementById('e-produtor').value.trim(),regiao:'',tipo:elTipo?elTipo.value:''};
-  if(!soVer&&PQ&&PQ.novo&&!PQ.soVer&&(PQ.corre||PQ.fase==='fim')&&PQ.id.nome===nome){abrirModal('modal-ia');pqPintar();return;}
+  // Uma colheita nova (`catNovaColheita`): o ano é o que falta, e não pode
+  // ser um que o Catálogo já tem.
+  const fc=FORM_CAT&&FORM_COLH;
+  if(fc){
+    if(id.ano==null){toast('Escreve o ano da nova colheita',1);document.getElementById('e-ano').focus();return;}
+    if(catColhJaExiste(id.ano))return;
+  }
+  if(!soVer&&PQ&&PQ.novo&&!PQ.soVer&&(PQ.corre||PQ.fase==='fim')&&PQ.id.nome===nome&&PQ.id.ano===id.ano){abrirModal('modal-ia');pqPintar();return;}
   PQ=pqNovoEstado(true,id,pqAtualForm());
   PQ.naCat=FORM_CAT;PQ.soVer=!!soVer&&FORM_CAT;
   abrirModal('modal-ia');
+  // Já se sabe qual é o vinho: sem a lista dos parecidos, a ficha vem desta
+  // linha — e, sendo outra colheita, só os factos do vinho.
+  if(fc){
+    PQ.novaColh=true;
+    pqCatalogoUsar({id:fc.cat_id,nome:fc.nome,produtor:fc.produtor||'',ano:fc.ano??null,tipo:fc.tipo||''});
+    return;
+  }
   pqCatalogo();
 }
 
@@ -9066,7 +9126,7 @@ async function pqIA(repetir){
 /* ── O ecrã ── */
 function pqPassoHTML(k,P){
   const e=P.et[k]||{};
-  const par=k==='cat'&&P.naCat;
+  const par=k==='cat'&&P.naCat&&!P.novaColh;
   const st=k==='cat'&&P.escolher?(par?'vê a lista':'escolhe o vinho')
     :P.corre===k?'a procurar…'
     :e.estado==='feito'?(k==='cat'?`✓ ${e.n} ${e.n===1?'campo':'campos'}`:`✓ +${e.n}`)
@@ -9361,7 +9421,7 @@ function pqTipoHTML(P,aMao){
 /* A pergunta da etapa em que se está, com os botões dela. */
 function pqPerguntaHTML(P){
   if(P.corre){
-    const t=P.corre==='cat'?(P.naCat?'A procurar vinhos parecidos no Catálogo…':'A ver o que o Catálogo já sabe…'):P.corre==='links'?'A procurar links nas lojas…':P.corre==='links+'?'A procurar mais links…':'A pesquisar com IA. Pode levar até dois minutos.';
+    const t=P.corre==='cat'?(P.naCat&&!P.novaColh?'A procurar vinhos parecidos no Catálogo…':'A ver o que o Catálogo já sabe…'):P.corre==='links'?'A procurar links nas lojas…':P.corre==='links+'?'A procurar mais links…':'A pesquisar com IA. Pode levar até dois minutos.';
     return `<div class="pq-espera"><div class="gl-spin"></div><div>${t}${P.corre==='ia'
       ?'<div class="note">Podes fechar esta janela: a pesquisa continua, e ao voltares a “Procurar informação” está aqui à tua espera.</div>':''}</div></div>`;
   }
@@ -9790,13 +9850,18 @@ function pqFimNovo(){
   const c=P&&P.et.cat||{};
   const semNada=P&&P.soVer
     ?(c.estado==='erro'?`Não consegui ver o Catálogo (${esc(c.msg)}).`
+      :c.estado==='feito'?'O Catálogo não tinha mais nada para esta ficha — escreve à mão o que souberes.'
       :c.estado==='recusado'?'Nenhum dos parecidos é este: é um vinho novo.'
       :'Não há no Catálogo nenhum vinho parecido: é mesmo novo.')
     :'A procura não preencheu nenhum campo — escreve à mão o que souberes.';
+  // A criar no Catálogo a partir de OUTRA colheita: diz-se o que não veio
+  // (numa colheita nova já o diz o formulário).
+  const outra=P&&P.naCat&&!P.novaColh&&c.estado==='feito'&&c.outraColheita
+    ?`<div class="note">Da ${esc(String(c.ano||'colheita sem ano'))} vieram só os factos do vinho, sem nota, preço, janela nem imagem.</div>`:'';
   const est=document.getElementById('e-ia-estado');
-  if(est)est.innerHTML=tot
+  if(est)est.innerHTML=(tot
     ?`<div class="note" style="margin-top:8px;color:var(--vd)">✓ ${tot} ${tot===1?'campo preenchido':'campos preenchidos'} (${esc(por)}). Confere antes de gravar.</div>${deOnde}`
-    :`<div class="note" style="margin-top:8px">${semNada}</div>`;
+    :`<div class="note" style="margin-top:8px">${semNada}</div>`)+outra;
   PQ=null;
   fecharModal('modal-ia');
   formMostrarResto();
@@ -14988,7 +15053,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='210';
+const APP_BUILD='211';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

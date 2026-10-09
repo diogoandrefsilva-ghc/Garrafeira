@@ -1271,6 +1271,19 @@ COLHEITAS NO CATÁLOGO" no app.js e no style.css.
   passo novo na história) e o cartão do Detalhe por trás acompanha. O "Na
   tua garrafeira" junta os meus vinhos de todas as colheitas (com o ano), e
   o botão diz "Pôr a 2021 na garrafeira".
+- **A tabela aparece sempre, também com uma colheita só, e tem o "+ Nova
+  colheita"** (09/10/2026, o dono das apps: "um atalho para criar uma nova
+  colheita desse vinho"), a quem corrige o catálogo (`catPodeCriar`):
+  `catNovaColheita` abre o vinho novo no Catálogo (`abrirEditarVinho(0,
+  'catalogo',id)`, `FORM_COLH`) com o nome, o produtor e a cor deste vinho
+  fixos — só se escreve o ano, que é obrigatório e não pode ser um que já lá
+  esteja (`catColhJaExiste`: diz-o e abre essa, antes de gastar uma
+  procura). O Procurar informação e o Preencher à mão não mostram os
+  parecidos (`P.novaColh`): trazem a ficha DESTA linha pela `comparar`
+  (`pqCatalogoUsar`), e de outra colheita só os factos do vinho, sem
+  `CAT_DA_COLHEITA` — o mesmo caminho de escolher, nos parecidos, um vinho
+  de outra colheita. Grava-se pela `criar` de sempre, e a página e o cartão
+  do Detalhe passam para a colheita nova.
 - **Só junta o que se escreve igual.** "Quinta de Cidrô Touriga Nacional" e
   "Quinta de Cidrô Touriga Nacional Douro" continuam dois cartões — isso é
   dos Duplicados da WineCatalog, não daqui.
