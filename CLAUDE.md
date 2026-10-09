@@ -154,6 +154,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   página de um vinho do Catálogo — `winecatalog.preco_retirar`/
   `preco_devolver`, e a `catalogo_fontes` passa a dar os retirados (ver "O
   preço de um vinho" › "Retirar um preço na página do vinho").
+  `migracao-precos-manual.sql` é a 48: acrescentar um preço à mão, pelo
+  link, na mesma lista — `winecatalog.preco_definir`/`loja_do_link` (ver
+  "O preço de um vinho" › "Acrescentar um preço à mão").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -2307,6 +2310,34 @@ têm um ✕ em cada linha de "Preços nas lojas" (`pgPrecoRetirar` →
   todas as linhas que casam pelo nome, e o que se vê pode ser de uma linha
   irmã, não da ligada. A app acerta o `CAT_PRECOS` e o `preco_medio` em
   memória (não relê o catálogo) e relê a `precos_lojas` da garrafeira.
+
+**Acrescentar um preço à mão** (migração 48, 09/10/2026, o dono das apps:
+"inserir os preços de referência apontando a links. Hoje só consigo com IA
+mas nem sempre funciona (e estou a gastar à toa)"). Por baixo da mesma
+lista, aos mesmos (`catPodeCriar`, só no Catálogo), **＋ Acrescentar um
+preço** (`pgPrecoNovoHTML`): o link da página e o preço que lá se vê, mais
+a colheita — começa na desta linha; num link do Vivino é a do `?year=`, e
+sem ele fica vazia (a média das colheitas) — sem IA nenhuma.
+- **A loja sai do link** (`lojaDoLink`, o `dom` de cada uma em `LOJAS`; na
+  BD quem decide é a `winecatalog.loja_do_link`): Garrafeira Nacional
+  (também o `outlet.`), Granvine, Vinha, Vivino. Outro site recusa-se — a
+  app só conhece estas quatro, e um preço de outra loja nunca contava.
+- **Substitui o que a loja lá tinha**, também um preço retirado (o
+  formulário di-lo antes de gravar): é quem corrige o catálogo a dizer que
+  este é o certo. Fica com `de: "manual"` e `por`. O script das lojas pode
+  voltar a escrevê-lo na corrida seguinte, se encontrar a página.
+- **O preço de referência** acompanha a loja se vinha dela
+  (`preco_ref_fonte`), e enche-se se estava vazio. Grava pela
+  `winecatalog.editar` (fica no histórico).
+- O formulário vive em `PG_PRECO_NOVO`, não no DOM: a lista volta a
+  desenhar-se quando os retirados chegam (`pgExtrasPintar`), e o que se
+  escreveu não se perde.
+
+**O que vai entre parêntesis num rótulo vai mais pequeno** (`.lbl-p`,
+09/10/2026, o dono): "NOTA VIVINO (TODAS AS COLHEITAS)" quebrava a linha e
+desalinhava o campo do lado. Em todos os `<label>X (y)</label>` da app,
+`<small class=lbl-p>`; sem aspas na classe porque um deles vive dentro de
+uma cadeia JS entre aspas.
 
 `ano`, `produtor` e `precos` também existem na ficha do catálogo e **não**
 entram na comparação do "≠ catálogo" (`catCampos` filtra por `CAT_NOMES`):
