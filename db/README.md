@@ -702,6 +702,40 @@ aceitar (a mesma linha, com os valores novos); com outro email, a função
 recusou ("Só o admin do catálogo.") e a tabela deu "permission denied".
 Publicada no mesmo dia a Edge Function `garrafeira-colheitas` (nova).
 
+### Migração 50 — a linha sem colheita ao lado das colheitas (já aplicada)
+
+`db/migracao-sem-colheita.sql`, depois da 28 (`ligar_catalogo`), da 39
+(`vinhos_catalogo`) e da 49 (`colheitas_aceites`). Cria a
+`garrafeira.colheita_absorver(de, para)` (sem `GRANT` a ninguém): junta a
+linha sem colheita a uma colheita do mesmo vinho — só o que é do vinho e
+está vazio (nunca o que é `winecatalog.da_colheita`), os preços das lojas
+que faltam, as fontes —, estaciona-a no `alias` (o `separar` da
+WineCatalog desfaz) e religa os vinhos das garrafeiras. Duas portas do admin
+do catálogo (`sou_admin()`): `winecatalog.sem_colheita_juntar(de, para)` e
+`winecatalog.sem_colheita_ligados(ids)` (quantos vinhos ligados, e quantos
+desejos). E o trigger `vinhos_colheita_nasceu` (AFTER UPDATE OF ano,
+desejado em `garrafeira.vinhos`): um vinho sem ano que o ganha (ou um desejo
+com a colheita já escolhida que passa para a garrafeira) junta a sua linha
+sem colheita à colheita que nasce nessa gravação. Ver o `CLAUDE.md`, "O
+Backoffice" › "A linha sem colheita".
+
+**Sem `DROP` nem `DELETE` em lado nenhum, nem dentro das funções**: o MCP
+do Supabase pede confirmação a qualquer um e, nesta sessão, ficou preso até
+dar timeout (a primeira tentativa tinha um `DROP TRIGGER` e um `DELETE FROM
+winecatalog.distintos` dentro da função — saíram: o trigger nasce com
+`CREATE OR REPLACE TRIGGER`, e um "não são o mesmo" entre as duas linhas
+fica onde está, que a estacionada já não aparece nos Duplicados).
+Aplicada a 09/10/2026 pelo MCP e ensaiada em blocos desfeitos no fim:
+juntar o Quinta do Cidrô Marquis à 2014 (passaram as três lojas e a nota da
+2014 ficou a dela; uma pergunta sem ano passou a dar a 2014); o Quinta dos
+Sentidos à 2018 (a chave já era de uma fusão antiga, entrou como
+`sentidos||tinto#185`); a Tapada de Coelheiros à 2020 (as avaliações de
+todas as colheitas não foram sozinhas, e o "Coelheiros" 2019 — a mesma
+`chave_base` — não foi tocado); e o gatilho, com um vinho sem ano a ganhar
+2003 (nasceu a linha 2003 e a sem colheita juntou-se a ela). A porta, sem
+sessão de admin, recusou ("Só o admin do catálogo."). Os cinco casos reais
+ficaram por juntar — são do admin, no Backoffice.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -765,6 +799,9 @@ Numa base de dados limpa:
    link (migração 48). Depois da 47.
 16. **`migracao-colheitas.sql`** — as diferenças entre colheitas dadas por
    certas no Backoffice (migração 49). Só depois do `winecatalog`.
+17. **`migracao-sem-colheita.sql`** — a linha sem colheita junta-se a uma
+   colheita, e um vinho que ganha o ano já não a deixa órfã (migração 50).
+   Depois da 28, da 39 e da 49.
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)

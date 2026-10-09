@@ -164,6 +164,11 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-colheitas.sql` é a 49: as diferenças entre colheitas que o
   admin do catálogo deu por certas (`winecatalog.colheitas_aceites`, ver
   "O Backoffice" › "As colheitas que não batem").
+  `migracao-sem-colheita.sql` é a 50: a linha sem colheita ao lado das
+  colheitas do mesmo vinho junta-se a uma delas, e os vinhos das
+  garrafeiras ligados a ela vão atrás (`garrafeira.colheita_absorver`, ver
+  "O Backoffice" › "A linha sem colheita"); e um vinho que ganha o ano já
+  não a deixa órfã (o trigger `vinhos_colheita_nasceu`).
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1443,7 +1448,8 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   (`boPagina`, com "‹ Backoffice"). Sem passo na história do browser. O
   número no separador e nas pastilhas é o que espera uma decisão do admin
   (`boContar`: alertas, links do Vivino por validar, comentários e
-  sugestões na vez dele, e os vinhos com colheitas que não batem).
+  sugestões na vez dele, os vinhos com colheitas que não batem e os com
+  uma linha sem colheita ao lado das colheitas).
 - **É a WineCatalog tal e qual** — Duplicados (com os "não são"),
   Produtores, Nomes dos vinhos, Alertas, Comentários, Sugestões, Links do
   Vivino por validar, Links do Vivino nas garrafeiras, Fichas das
@@ -1587,6 +1593,61 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
     enquanto a assinatura da diferença for a mesma.
   O número da pastilha (`BO_CONTA.colh`) são os vinhos com diferenças por
   ver, e só se conta com o Catálogo já lido (`boColhContar`).
+- **A linha sem colheita** (migração 50, 09/10/2026, o dono: "faz-me
+  confusão ter vinhos que têm uma colheita preenchida e depois têm outro
+  registo com colheita vazia … um alerta no backoffice … e as wishlists
+  ajustadas para apontar à colheita que permanece"). A terceira pastilha de
+  "Arrumar o catálogo", **Sem colheita** (`boSemc*`, secção "A LINHA SEM
+  COLHEITA AO LADO DAS COLHEITAS" no app.js; o CSS reusa o `.bcl-*`). A
+  9/10 eram cinco (Quinta do Cidrô Marquis, Quinta Dona Sancha Touriga
+  Nacional, Sidónio de Sousa Garrafeira, Quinta dos Sentidos, Tapada de
+  Coelheiros), e três tinham nascido da mesma maneira: o vinho gravado sem
+  ano numa garrafeira, e um dia depois o ano posto — a colheita nasceu como
+  outra linha, e a sem colheita ficou órfã, com os preços das lojas e o
+  Vivino que a nova não tinha.
+  - **O mesmo vinho é o do `catFamChave`** (o das colheitas que não batem),
+    e a deteção corre na app sobre o `CAT_VINHOS`; o número da pastilha é
+    `BO_CONTA.semc` (`boSemcContar`, só com o Catálogo lido).
+  - **Não se apaga: junta-se** à colheita que se escolher ("Juntar à 2021",
+    `winecatalog.sem_colheita_juntar` → `garrafeira.colheita_absorver`).
+    Passa só o que é do VINHO e falta à que fica — e às outras colheitas
+    do mesmo NOME (a `chave_base` sozinha juntava o "Coelheiros" e o
+    "Tapada de Coelheiros", que são dois vinhos) —, e os preços das lojas
+    que ela não tem, loja a loja (cada um diz a sua colheita; um retirado
+    não passa). Nunca a nota da colheita, o preço de referência, a janela,
+    o link do Vivino nem a imagem (`winecatalog.da_colheita`): na linha sem
+    colheita são de uma colheita qualquer. A nota de todas as colheitas e
+    as avaliações dela vão juntas, ou nenhuma. O ecrã diz, colheita a
+    colheita, o que ela recebe (`boSemcPassa`).
+  - **A linha sem colheita fica estacionada no `alias`**, como uma fusão
+    dos Duplicados: qualquer pergunta sem ano (uma carta, uma wishlist sem
+    ano) cai na colheita que fica, e o "Desfazer" da WineCatalog
+    (`separar`) devolve o que passou para ela; o que passou para as outras
+    colheitas fica no histórico de cada uma, com "Repor". Se a chave dela
+    já é de outra fusão (o Quinta dos Sentidos tinha uma linha antiga
+    fundida nela com a mesma chave), entra com a chave marcada pelo id
+    (`chave#id`) — a `chave_de` é única.
+  - **Os vinhos das garrafeiras ligados a ela** (também pelas linhas já
+    fundidas nela) passam a apontar à que fica (`ligar_catalogo`). O ANO
+    deles não muda: sem ano continua a querer dizer "qualquer colheita".
+    O ecrã diz quantos são, e quantos na wishlist
+    (`winecatalog.sem_colheita_ligados`: só os números, nunca de quem).
+  - **"Está certo"** é para um vinho sem colheita a sério (um bruto, um
+    tawny) ao lado de um que a tem: uma `colheitas_aceites` (a tabela da
+    migração 49) com o campo `sem_colheita` e as linhas como assinatura —
+    se chegar outra colheita, o alerta volta.
+  - **A causa fica tapada na BD** (`vinhos_colheita_nasceu`, AFTER UPDATE
+    OF ano, desejado em `garrafeira.vinhos`): um vinho que estava sem ano,
+    ligado a uma linha sem colheita, ganha o ano — ou um desejo que já
+    tinha a colheita escolhida passa para a garrafeira; se a linha dessa
+    colheita NASCEU
+    nessa gravação (`criado_em = now()`) e tem o mesmo nome, a sem colheita
+    junta-se logo a ela (`sync_log`, acao `colheita_nasceu`). Se a colheita
+    já existia, não mexe: é este alerta que decide. Corre depois do
+    `vinhos_catalogo` por ser a seguinte na ordem alfabética (é ele que
+    liga o vinho à linha nova) — um trigger novo nesta tabela com um nome
+    entre os dois muda isso. Relê a ligação, porque o NEW não a vê (foi
+    escrita por outro UPDATE, o da `ligar_catalogo`).
 - **Ficou de fora** a password temporária (já está nas Definições da
   Garrafeira, para o dono da conta) e o que só corre no PC (o painel, o
   script do Vivino e das lojas).
@@ -2261,6 +2322,22 @@ lado para o outro, e duas cópias divergem no dia em que se edita uma.
   sua colheita. A 1.ª corrida (25 desejos, quase todos já no catálogo pelas
   procuras com IA de antes do "adiado") encheu 23 campos vazios e não fez
   nascer linha nenhuma.
+- **A colheita que se quer muda-se na página** (09/10/2026, o dono das
+  apps: "ao abrir um vinho da wishlist, no detalhe, o utilizador pudesse
+  mudar a colheita que deseja"). Na faixa da wishlist, um seletor
+  (`desejoColhHTML`, `desejoMudarColheita`): **Qualquer colheita**, as
+  colheitas que o Catálogo tem deste vinho (as da linha ligada,
+  `catColheitas`) e **Outra…** (escreve-se o ano). Muda o ANO do desejo, e
+  a BD religa-o à linha dessa colheita — ou a uma qualquer do mesmo vinho,
+  que um desejo nunca faz nascer outra linha. O que é DA COLHEITA vai com
+  ele: a nota do Vivino da colheita, as avaliações e a janela passam a ser
+  as da escolhida (vazias, se o Catálogo não a tiver — as de antes eram de
+  outra); o preço de referência e o link do Vivino só se trocam quando ela
+  os tem. O Catálogo lê-se só se ainda não estiver na app
+  (`desejoColhCarregar`, chamada pelo `verVinho` e pelo
+  `refrescarVinhoAberto`); numa garrafeira emprestada lê-se só o ano. Um
+  `<div>` e não um `<label>`, pela mesma razão do `ll-enc` (o `.mbox
+  label`).
 - **É visível numa garrafeira emprestada** (é aí que um amigo vai ver o que
   oferecer), e o **PDF** também (`exportarWishlistPDF`, a mesma folha do
   Exportar PDF). Mexer é só de quem pode editar. O PDF não leva as minhas

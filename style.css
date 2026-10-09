@@ -2038,6 +2038,14 @@ body.sem-desejo .desejo-only{display:none!important}
    Tracejada de propósito: é o sítio de uma garrafa que ainda não chegou. */
 .desejo-faixa{background:var(--bg);border:1px dashed var(--bo2);border-radius:11px;padding:10px 12px;margin-top:8px}
 .desejo-faixa .macoes{margin-top:10px}
+/* A colheita que se quer (`desejoColhHTML`): uma linha baixa, o seletor a
+   ocupar o que sobra. Um <div> e não um <label>: o `.mbox label` punha o
+   texto em versalete a 10px, em bloco. */
+.dj-colh{display:flex;align-items:center;gap:10px;margin-top:10px}
+.dj-colh-t{flex:none;font-size:12.5px;color:var(--mu)}
+.dj-colh b{font-family:var(--fd);font-size:15px;font-weight:600}
+.mbox .dj-colh select{flex:1 1 auto;width:auto;padding:8px 11px;font-size:14px}
+.dj-colh-nota{margin-top:6px}
 
 /* A foto carregou: a garrafa desenhada sai de trás. As fotos das lojas são
    PNG com fundo transparente e o desenho via-se pelos buracos. */
@@ -2741,3 +2749,7 @@ button.prod-dec-h:hover{background:#fbf8f4}
 .bcl-acoes .btn{margin-top:0;padding:6px 13px;font-size:12.5px}
 .bcl-acoes .note{margin:0}
 .bcl-iacard .bo-acoes{margin-top:4px}
+/* Sem colheita (Backoffice): quantos vinhos das garrafeiras estão ligados a
+   cada linha — informação, numa linha pequena por baixo. */
+.bsc-lig{display:block;font-size:11.5px;color:var(--mu);margin-top:2px}
+.bcl-dif>.bsc-lig{margin:4px 0 0}

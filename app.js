@@ -5064,13 +5064,14 @@ function verVinho(id){
   if(id>0)catComparar(id);
   else catNotaPintar();
   pgExtrasCarregar(v);
+  desejoColhCarregar(id);
 }
 function refrescarVinhoAberto(){
   if(VINHO_ABERTO!=null&&document.getElementById('modal-vinho').classList.contains('on')){
     const v=IDXV[VINHO_ABERTO];
     // Refazer o HTML deita fora o cabeçalho (e com ele as medidas do
     // encolher), mas o scroll fica onde estava — daí o acerto a seguir.
-    if(v){document.getElementById('modal-vinho-in').innerHTML=vinhoDetalheHTML(v);pgMedirEncolhe();if(v.id<0)catNotaPintar();pgExtrasCarregar(v,true);}
+    if(v){document.getElementById('modal-vinho-in').innerHTML=vinhoDetalheHTML(v);pgMedirEncolhe();if(v.id<0)catNotaPintar();pgExtrasCarregar(v,true);desejoColhCarregar(v.id);}
   }
 }
 
@@ -6117,6 +6118,7 @@ function vinhoDetalheHTML(v){
     <div class="desejo-faixa">
       <div class="note">${bebidas.length?'⭐ Já foi bebido e quer-se voltar a ter.'
         :`⭐ Ainda não está na garrafeira — é um vinho que se quer ter.${v.criado_em?` Na wishlist desde ${dataPT(String(v.criado_em).slice(0,10))}.`:''}`}</div>
+      <div id="dj-colh">${desejoColhHTML(v)}</div>
       <div class="macoes ro-hide" style="margin-top:10px">
         <button class="btn prim" onclick="abrirEditarVinho(${v.id},'converter')">🍷 Passar para a garrafeira</button>
         <button class="btn ghost" onclick="retirarDesejo(${v.id})">Retirar da wishlist</button>
@@ -6505,6 +6507,100 @@ async function quererDeNovo(id){
     renderLista();refrescarVinhoAberto();
     toast('Na wishlist ⭐');
   }catch(e){toast('Não foi possível pôr na wishlist: '+e.message,1);}
+}
+
+/* ── A COLHEITA DE UM DESEJO (09/10/2026, o dono das apps) ──
+   "Era giro que ao abrir um vinho da wishlist, no detalhe, o utilizador
+   pudesse mudar a colheita que deseja." Na faixa da wishlist, um seletor:
+   "Qualquer colheita", as colheitas que o Catálogo tem deste vinho (as da
+   linha ligada, `catColheitas`), e "Outra…" para escrever o ano.
+   - Muda o ANO do desejo, e a BD religa-o à linha dessa colheita (ou a uma
+     qualquer do mesmo vinho: um desejo nunca faz nascer uma linha de um
+     vinho que o catálogo já tem — migração 29).
+   - E o que é DA COLHEITA vai com ele: a nota do Vivino da colheita, as
+     avaliações e a janela passam a ser as da escolhida — vazias se o
+     Catálogo não a tiver, que as de antes eram de outra; o preço de
+     referência e o link do Vivino só se trocam quando ela os tem (um preço
+     de outra colheita ainda é uma referência). O resto da ficha é do vinho
+     e fica. Sem ano, a BD apaga a janela (`vinhos_sem_colheita`).
+   - O Catálogo lê-se só se ainda não estiver na app (`catCarregar`, uma vez);
+     até lá o seletor tem "Qualquer colheita", a de agora e "Outra…". */
+const DJ_DA_COLHEITA=['vivino_nota','vivino_avaliacoes','beber_de','beber_ate'];
+function desejoColheitas(v){
+  if(!CAT_VINHOS)return null;
+  const lig=v.catalogo_id!=null&&CAT_VINHOS.find(x=>(x.cat_ids||[]).includes(Number(v.catalogo_id)));
+  return (lig?catColheitas(lig):catColheitas(v)).filter(x=>x.id<0&&x.ano);
+}
+function desejoColhHTML(v){
+  const ano=v.ano?String(v.ano):'';
+  if(isReadOnly)return `<div class="dj-colh"><span class="dj-colh-t">Colheita</span><b>${ano?esc(ano):'Qualquer colheita'}</b></div>`;
+  const l=desejoColheitas(v);
+  const anos=l?[...new Set(l.map(x=>Number(x.ano)))].sort((a,b)=>b-a):[];
+  const op=(val,t)=>`<option value="${val}"${String(val)===ano?' selected':''}>${esc(t)}</option>`;
+  let ops=op('','Qualquer colheita')+anos.map(y=>op(y,String(y))).join('');
+  const fora=!!(l&&ano&&!anos.includes(Number(ano)));
+  if(ano&&!anos.includes(Number(ano)))ops+=op(ano,ano);
+  ops+='<option value="outra">Outra…</option>';
+  return `<div class="dj-colh"><span class="dj-colh-t">Colheita que queres</span>
+    <select onchange="desejoMudarColheita(${v.id},this)" aria-label="Colheita que queres">${ops}</select></div>
+    ${!l?'<div class="note dj-colh-nota">A ler as colheitas do Catálogo…</div>'
+      :fora?`<div class="note dj-colh-nota">O Catálogo ainda não tem a ${esc(ano)}.</div>`:''}`;
+}
+// Depois de a página estar no ecrã: sem o Catálogo na app, lê-se e o
+// seletor volta a desenhar-se com as colheitas dele.
+function desejoColhCarregar(id){
+  const v=IDXV[id];
+  if(!v||!desejado(v)||CAT_VINHOS||isReadOnly)return;
+  const pintar=()=>{
+    const el=document.getElementById('dj-colh');
+    if(el&&VINHO_ABERTO===id&&IDXV[id])el.innerHTML=desejoColhHTML(IDXV[id]);
+  };
+  catCarregar().then(pintar).catch(()=>{
+    const n=document.querySelector('#dj-colh .dj-colh-nota');
+    if(n&&VINHO_ABERTO===id)n.textContent='O Catálogo não respondeu — podes escrever a colheita em “Outra…”.';
+  });
+}
+async function desejoMudarColheita(id,sel){
+  const v=IDXV[id];
+  const repor=()=>{sel.disabled=false;sel.value=v&&v.ano?String(v.ano):'';};
+  if(!v||!desejado(v)||roGuard()){repor();return;}
+  let val=sel.value;
+  if(val==='outra'){
+    const max=new Date().getFullYear()+1;
+    const r=prompt(`Que colheita queres? (o ano, de 1900 a ${max})`,v.ano||'');
+    if(r==null){repor();return;}
+    val=String(r).trim();
+    if(val&&(!/^\d{4}$/.test(val)||Number(val)<1900||Number(val)>max)){
+      toast(`Escreve um ano entre 1900 e ${max}`,1);repor();return;
+    }
+  }
+  const ano=val?Number(val):null;
+  if((v.ano?Number(v.ano):null)===ano){repor();return;}
+  // A linha do Catálogo dessa colheita — havendo duas, a mais completa.
+  const c=ano?(desejoColheitas(v)||[]).filter(x=>Number(x.ano)===ano)
+    .sort((a,b)=>Object.keys(b).length-Object.keys(a).length)[0]:null;
+  const tem=k=>!!c&&c[k]!=null&&String(c[k]).trim()!=='';
+  const patch={ano};
+  DJ_DA_COLHEITA.forEach(k=>{patch[k]=tem(k)?c[k]:null;});
+  if(tem('preco_medio'))patch.preco_medio=c.preco_medio;
+  if(tem('vivino_url'))patch.vivino_url=c.vivino_url;
+  sel.disabled=true;
+  try{
+    const r=await sbReq('PATCH',`vinhos?id=eq.${id}`,patch,{'Prefer':'return=representation'});
+    Object.assign(v,patch,(r&&r[0])||{});
+    // A ligação ao Catálogo muda DEPOIS do UPDATE (o trigger), e o
+    // `return=representation` não a vê: relê-se.
+    try{
+      const x=await sbReq('GET',`vinhos?id=eq.${id}&select=catalogo_id`);
+      if(x&&x[0])v.catalogo_id=x[0].catalogo_id;
+    }catch(e){}
+    renderLista();refrescarVinhoAberto();
+    toast(!ano?'Qualquer colheita ✓':c?`Colheita ${ano} ✓ — a nota e a janela são as dela`
+      :`Colheita ${ano} ✓ — o Catálogo ainda não a tem`);
+  }catch(e){
+    toast('Não foi possível mudar a colheita: '+e.message,1);
+    repor();
+  }
 }
 
 /* "Este vinho novo é um da wishlist?" — para quem comprou um desejo e o pôs
@@ -10877,6 +10973,7 @@ const BO_PAGINAS=[
   {grupo:'Arrumar o catálogo'},
   {id:'duplicados',ic:'🧬',t:'Duplicados',d:'Pares parecidos: fundir ou marcar que não são',abrir:()=>boDupCarregar()},
   {id:'colheitas',ic:'⚖️',t:'Colheitas que não batem',d:'O mesmo vinho com fichas diferentes de colheita para colheita',n:'colh',abrir:()=>boColhCarregar()},
+  {id:'semcolheita',ic:'📅',t:'Sem colheita',d:'Uma linha sem ano ao lado das colheitas do mesmo vinho',n:'semc',abrir:()=>boSemcCarregar()},
   {id:'produtores',ic:'🏷️',t:'Produtores',d:'Nome oficial e as grafias que são ele',abrir:()=>boProdCarregar(),
     barra:()=>`<button type="button" id="bo-prod-ia-bt" class="bo-barra-bt${_boProdVista==='ia'?' on':''}" onclick="boProdVista(_boProdVista==='ia'?'todos':'ia')">✨ IA</button>`},
   {id:'nomes',ic:'✍️',t:'Nomes dos vinhos',d:'Sem produtor, cor nem colheita no nome',abrir:()=>{}},
@@ -10895,7 +10992,7 @@ const BO_PAGINAS=[
   {id:'vivcfg',ic:'⚙️',t:'O script do Vivino',d:'Quantos vinhos de cada vez',abrir:()=>boVivConfig()}
 ];
 let BO_PAG=null;
-const BO_CONTA={rep:0,viv:0,vinho:0,sugestao:0,colh:0};
+const BO_CONTA={rep:0,viv:0,vinho:0,sugestao:0,colh:0,semc:0};
 
 function boAbrir(){
   if(!EU.admin_catalogo){
@@ -10932,8 +11029,9 @@ function boPagina(id,refrescar){
 }
 /* O que está à espera de uma decisão do admin: os alertas, os links do
    Vivino por validar, os comentários e sugestões por tratar (a vez dele —
-   os que esperam por quem escreveu não contam) e os vinhos com colheitas
-   que não batem (só com o Catálogo já lido). No separador vai a soma. */
+   os que esperam por quem escreveu não contam), os vinhos com colheitas
+   que não batem e os com uma linha sem colheita ao lado das colheitas (estes
+   dois só com o Catálogo já lido). No separador vai a soma. */
 async function boContar(){
   if(!EU.admin_catalogo)return;
   const [n1,n2,c,n3]=await Promise.all([
@@ -10941,6 +11039,7 @@ async function boContar(){
     boRpc('vivino_contar',{}).catch(()=>0),
     boRpc('contar_comentarios',{}).catch(()=>null),
     boColhContar()]);
+  BO_CONTA.semc=Number(boSemcContar()||0);
   BO_CONTA.rep=Number(n1||0);BO_CONTA.viv=Number(n2||0);BO_CONTA.colh=Number(n3||0);
   BO_CONTA.vinho=Number((c&&c.vinho)||0);BO_CONTA.sugestao=Number((c&&c.sugestao)||0);
   boPintarContas();
@@ -10982,6 +11081,18 @@ const BO_TPL={
         <span class="note" id="bo-colh-n"></span></div>
     </div><div id="bo-colh-ia"></div><div id="bo-colh-lista"></div><div id="bo-colh-fim"></div>`;
   },
+  semcolheita:()=>`<div class="fcard bo-arr">
+      <p class="note">O mesmo vinho (nome, produtor e cor) com uma linha <b>sem colheita</b> ao lado das colheitas.
+        <b>Juntar</b> passa à colheita escolhida o que é do vinho e lhe falta (castas, região, harmonização, notas de
+        prova…) e os preços das lojas que ela não tem — nunca a nota da colheita, o preço de referência nem a janela,
+        que na linha sem colheita são de uma colheita qualquer. Não se apaga: fica estacionada (desfaz-se na
+        WineCatalog), e os vinhos das garrafeiras ligados a ela, a wishlist incluída, passam a apontar à que fica.</p>
+      <p class="note"><b>Está certo</b> é para um vinho que não tem colheita a sério (um bruto, um tawny) ao lado de
+        um que tem — volta se chegar outra colheita. O ano abre a ficha.</p>
+      <label class="bo-chk"><input type="checkbox" id="bo-semc-aceites" onchange="boSemcPintar()"> mostrar também os aceites</label>
+      <div class="bo-acoes"><button class="btn ghost" onclick="boSemcCarregar(true)">🔄 Rever</button>
+        <span class="note" id="bo-semc-n"></span></div>
+    </div><div id="bo-semc-lista"></div>`,
   produtores:()=>`<div class="fcard prod-card">
       <p class="note">Um produtor, um nome. As grafias de um produtor passam ao <b>nome oficial</b> no catálogo e em
         todas as garrafeiras, agora e em qualquer escrita futura.</p>
@@ -11619,6 +11730,158 @@ async function boColhIAAplicar(){
   boColhPintar();boPintarContas();
   toast(`${ok} ${ok===1?'aplicada':'aplicadas'} ✓${erros.length?` · ${erros.length} com erro`:''}`,erros.length?1:0);
   if(erros.length)alert('Não foi possível:\n'+erros.join('\n'));
+}
+
+/* ── A LINHA SEM COLHEITA AO LADO DAS COLHEITAS (09/10/2026, migração 50) ──
+   O dono das apps: "Faz-me confusão ter vinhos que têm uma colheita
+   preenchida e depois têm outro registo com colheita vazia … um alerta no
+   backoffice, para poder apagar o vinho sem colheita e ficar apenas com o
+   vinho com colheita preenchida." O mesmo vinho é o do `catFamChave` (as
+   colheitas que o Detalhe do Catálogo junta num cartão, e as que não
+   batem), e a deteção corre AQUI, sobre o `CAT_VINHOS` — como a de lá.
+   - Não se apaga: JUNTA-SE à colheita que se escolher
+     (`winecatalog.sem_colheita_juntar` → `garrafeira.colheita_absorver`).
+     Passa o que é do VINHO e falta à que fica (e às outras colheitas), e os
+     preços das lojas que ela não tem; nunca a nota da colheita, o preço de
+     referência, a janela, o link do Vivino nem a imagem — na linha sem
+     colheita são de uma colheita qualquer (`CAT_DA_COLHEITA`). A linha sem
+     colheita fica estacionada no `alias` (a WineCatalog desfaz), e os vinhos
+     das garrafeiras ligados a ela passam à que fica, sem mudar o ano deles.
+   - "Está certo" (um bruto ou um tawny sem colheita a sério ao lado de um
+     com ela) é uma `colheitas_aceites` com o campo `sem_colheita` e as
+     linhas como assinatura: se chegar outra colheita, o alerta volta.
+   - A causa já não deixa linhas novas: um vinho de uma garrafeira que ganha
+     o ano junta a sua linha sem colheita à colheita que nasce nessa
+     gravação (`vinhos_colheita_nasceu`, na BD). */
+const BO_SEMC_FORA=new Set(['nome','produtor','ano','tipo',...CAT_DA_COLHEITA]);
+const BO_SEMC_CAMPOS=[...IA_CAMPOS.map(c=>[c.k,c.rot]),['pais','País']].filter(([k])=>!BO_SEMC_FORA.has(k));
+let BO_SEMC={ligados:{},vista:[]};
+const boSemcVazio=x=>x==null||(typeof x==='string'&&!x.trim())||(Array.isArray(x)&&!x.length);
+// Cada vinho com linha(s) sem colheita e alguma com colheita: uma entrada por
+// linha sem colheita (quase sempre uma), as colheitas da mais recente para a
+// mais antiga.
+function boSemcFamilias(){
+  const m=new Map();
+  (CAT_VINHOS||[]).forEach(v=>{const k=catFamChave(v);if(!m.has(k))m.set(k,[]);m.get(k).push(v);});
+  const out=[];
+  m.forEach((linhas,k)=>{
+    const sem=linhas.filter(v=>!v.ano), com=linhas.filter(v=>v.ano).sort((a,b)=>b.ano-a.ano||b.cat_id-a.cat_id);
+    if(!sem.length||!com.length)return;
+    const ass='L'+boColhHash(linhas.map(v=>v.cat_id).sort((a,b)=>a-b).join(','));
+    const aceite=BO_COLH.aceites.get(boColhChaveDif(k,'sem_colheita',ass))||null;
+    sem.forEach(de=>out.push({k,de,com,ass,aceite}));
+  });
+  return out.sort((a,b)=>(!!a.aceite-!!b.aceite)||String(a.de.nome).localeCompare(String(b.de.nome),'pt'));
+}
+// O número do hub — síncrono: o `boContar` já leu as aceites (`boColhContar`).
+function boSemcContar(){
+  if(!CAT_VINHOS)return BO_CONTA.semc;
+  try{return boSemcFamilias().filter(f=>!f.aceite).length;}catch(e){return BO_CONTA.semc;}
+}
+// O que a linha sem colheita sabe e a colheita `para` não: os campos do
+// vinho que ela tem vazios, e as lojas.
+function boSemcPassa(de,para){
+  // A nota de todas as colheitas e as avaliações dela são um par (como na BD).
+  const campos=BO_SEMC_CAMPOS.filter(([k])=>!boSemcVazio(de[k])&&boSemcVazio(para[k])
+    &&!(k==='vivino_avaliacoes_global'&&!boSemcVazio(para.vivino_nota_global))).map(([,t])=>t);
+  const tem=new Set((CAT_PRECOS[para.id]||[]).map(x=>x.loja));
+  const lojas=(CAT_PRECOS[de.id]||[]).filter(x=>!tem.has(x.loja)).map(x=>lojaInfo(x.loja).nome);
+  return {campos,lojas,txt:[...campos,...(lojas.length?[`${lojas.length===1?'o preço':'os preços'} de ${lojas.join(', ')}`]:[])]};
+}
+function boSemcNCampos(v){return BO_SEMC_CAMPOS.filter(([k])=>!boSemcVazio(v[k])).length;}
+function boSemcLigTxt(v){
+  const x=BO_SEMC.ligados[String(v.cat_id)];
+  if(!x||!x.n)return '';
+  const d=Number(x.desejos||0), g=Number(x.n)-d;
+  return [g?`🍾 ${g} ${g===1?'vinho':'vinhos'} nas garrafeiras`:'',d?`⭐ ${d} na wishlist`:''].filter(Boolean).join(' · ');
+}
+async function boSemcLigados(){
+  const ids=[...new Set(boSemcFamilias().flatMap(f=>[f.de,...f.com].map(v=>v.cat_id)))];
+  BO_SEMC.ligados={};
+  if(!ids.length)return;
+  try{BO_SEMC.ligados=(await boRpc('sem_colheita_ligados',{p_ids:ids}))||{};}catch(e){BO_SEMC.ligados={};}
+}
+async function boSemcCarregar(reler){
+  const box=document.getElementById('bo-semc-lista');
+  if(!box)return;
+  box.innerHTML=boCaixa(reler?'A reler o catálogo…':'A procurar…');
+  try{
+    await Promise.all([reler?boColhReler():catCarregar(),boColhLerAceites()]);
+    await boSemcLigados();
+    boSemcPintar();boPintarContas();
+  }catch(e){box.innerHTML=boErro(e);}
+}
+function boSemcPintar(){
+  const box=document.getElementById('bo-semc-lista');
+  if(!box)return;
+  const todas=boSemcFamilias(), ver=!!(document.getElementById('bo-semc-aceites')||{}).checked;
+  const pend=todas.filter(f=>!f.aceite), ac=todas.length-pend.length;
+  BO_CONTA.semc=pend.length;
+  const n=document.getElementById('bo-semc-n');
+  if(n)n.innerHTML=pend.length
+    ?`<b>${pend.length}</b> ${pend.length===1?'vinho':'vinhos'} com uma linha sem colheita${ac?` · ${ac} ${ac===1?'aceite':'aceites'}`:''}.`
+    :`Nenhuma linha sem colheita por ver${ac?` (${ac} ${ac===1?'aceite':'aceites'})`:''}.`;
+  BO_SEMC.vista=todas.filter(f=>ver||!f.aceite);
+  box.innerHTML=BO_SEMC.vista.length?BO_SEMC.vista.map(boSemcHTML).join('')
+    :boCaixa(todas.length?'Só há aceites — liga “mostrar também os aceites”.':'Nenhum vinho tem uma linha sem colheita ao lado das colheitas.');
+}
+function boSemcHTML(f,fi){
+  const de=f.de, ligDe=boSemcLigTxt(de), nDe=boSemcNCampos(de), nLoj=(CAT_PRECOS[de.id]||[]).length;
+  const anos=f.com.map(v=>v.ano).join(', ');
+  const cols=f.com.map((v,ci)=>{
+    const p=boSemcPassa(de,v), lig=boSemcLigTxt(v);
+    return `<div class="bcl-val">
+      <button type="button" class="bcl-ano" onclick="boVerFicha(${Number(v.cat_id)})" title="Abrir a ficha desta colheita">${esc(String(v.ano))}</button>
+      <span class="bcl-txt">${p.txt.length?`Recebe: ${esc(p.txt.join(', '))}`:'<span class="note">Já tem tudo o que a sem colheita sabe</span>'}${
+        lig?`<span class="bsc-lig">${esc(lig)}</span>`:''}</span>
+      ${f.aceite?'':`<button type="button" class="bcl-usar" onclick="boSemcJuntar(${fi},${ci})">Juntar à ${esc(String(v.ano))}</button>`}
+    </div>`;
+  }).join('');
+  return `<div class="fcard bcl">
+    <div class="bcl-cab"><div class="bcl-tt"><span class="bo-nome bcl-nome" onclick="boVerFicha(${Number(de.cat_id)})">${esc(de.nome||'(sem nome)')}</span>
+      <span class="bo-sub">${esc([de.produtor,de.tipo].filter(Boolean).join(' · '))} · sem colheita e ${esc(anos)}</span></div></div>
+    <div class="bcl-dif n-erro${f.aceite?' aceite':''}">
+      <div class="bcl-dcab"><button type="button" class="bcl-ano" onclick="boVerFicha(${Number(de.cat_id)})" title="Abrir a ficha da linha sem colheita">s/a</button>
+        <b>Sem colheita</b><span class="bcl-delta">${nDe} ${nDe===1?'campo':'campos'}${nLoj?` · ${nLoj} ${nLoj===1?'preço':'preços'} de lojas`:''}</span></div>
+      <div class="bsc-lig">${ligDe?esc(ligDe):'Nenhum vinho das garrafeiras ligado a ela'}</div>
+      <div class="bcl-vals">${cols}</div>
+      <div class="bcl-acoes">${f.aceite
+        ?`<span class="note">✓ Aceite${f.aceite.em?' a '+esc(boData(f.aceite.em)):''}</span><button type="button" class="btn ghost" onclick="boSemcAceitar(${fi},true)">Desfazer</button>`
+        :`<button type="button" class="btn ghost" onclick="boSemcAceitar(${fi})">✓ Está certo</button>`}</div>
+    </div>
+  </div>`;
+}
+async function boSemcJuntar(fi,ci){
+  const f=BO_SEMC.vista[fi], para=f&&f.com[ci];
+  if(!para)return;
+  const p=boSemcPassa(f.de,para), lig=boSemcLigTxt(f.de).replace(/[🍾⭐] /gu,'');
+  if(!confirm(`Juntar a linha sem colheita de “${f.de.nome}” à ${para.ano}?\n\n${
+    p.txt.length?`Passa para a ${para.ano}: ${p.txt.join(', ')}.`:`A ${para.ano} já tem tudo o que ela sabe.`}${
+    f.com.length>1?'\nO que é do vinho enche também o que estiver vazio nas outras colheitas.':''}\nA nota da colheita, o preço de referência e a janela dela não passam: são de uma colheita qualquer.${
+    lig?`\n\nOs vinhos das garrafeiras ligados a ela passam a apontar à ${para.ano} (${lig}), sem mudar o ano deles.`:''}\n\nNão se apaga: fica estacionada, e dá para desfazer na WineCatalog.`))return;
+  try{
+    const r=await boRpc('sem_colheita_juntar',{p_de:f.de.cat_id,p_para:para.cat_id})||{};
+    const n=Number(r.campos||0), l=Number(r.lojas||0), o=Number(r.outras||0), g=Number(r.ligados||0);
+    toast(`Juntada à ${para.ano} ✓ ${[`${n} ${n===1?'campo':'campos'}`,l?`${l} ${l===1?'loja':'lojas'}`:'',
+      o?`${o} ${o===1?'outra colheita':'outras colheitas'}`:'',g?`${g} ${g===1?'vinho religado':'vinhos religados'}`:''].filter(Boolean).join(' · ')}`);
+    await boColhReler();
+    await boSemcLigados();
+    boSemcPintar();boPintarContas();
+  }catch(e){toast('Erro: '+e.message,1);}
+}
+async function boSemcAceitar(fi,desfazer){
+  const f=BO_SEMC.vista[fi];if(!f)return;
+  try{
+    if(desfazer)await boRpc('colheitas_desaceitar',{p_chave:f.k,p_campo:'sem_colheita',p_assinatura:f.ass});
+    else{
+      const valores={};
+      [f.de,...f.com].forEach(v=>{valores[(v.ano?String(v.ano):'s/a')+' #'+v.cat_id]=v.nome;});
+      await boRpc('colheitas_aceitar',{p_chave:f.k,p_campo:'sem_colheita',p_assinatura:f.ass,p_valores:valores});
+    }
+    await boColhLerAceites();
+    toast(desfazer?'Desfeito ✓':'Aceite — volta se chegar outra colheita');
+    boSemcPintar();boPintarContas();
+  }catch(e){toast('Erro: '+e.message,1);}
 }
 
 /* ── PRODUTORES OFICIAIS (db/produtores.sql da WineCatalog) ──
@@ -15053,7 +15316,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='211';
+const APP_BUILD='212';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
