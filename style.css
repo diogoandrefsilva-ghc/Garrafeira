@@ -1098,8 +1098,9 @@ body:not(.readonly) .msdot.vazia:hover{background:#fff;border-color:var(--vh);co
 .mbox input:focus,.mbox select:focus,.mbox textarea:focus{outline:none;border-color:var(--vh);background:#fff;box-shadow:0 0 0 3px var(--vhp)}
 .mbox textarea{resize:vertical;min-height:70px;line-height:1.55}
 /* Só de leitura (o nome e o produtor de um vinho gravado, que vêm do
-   Catálogo): sem moldura de campo, para não se ler como algo a escrever. */
-.mbox input[readonly]{background:var(--bg2);border-color:transparent;color:var(--mu)}
+   Catálogo, e a cor de uma colheita nova — `catNovaColheita`): sem
+   moldura de campo, para não se ler como algo a escrever. */
+.mbox input[readonly],.mbox select:disabled{background:var(--bg2);border-color:transparent;color:var(--mu);opacity:1}
 .mbox input[readonly]:focus{border-color:transparent;background:var(--bg2);box-shadow:none}
 input[type=date]{-webkit-appearance:none;appearance:none;display:block;min-width:0;max-width:100%;
   background-clip:padding-box;text-align:left}
@@ -2197,6 +2198,8 @@ body.cat .fab-op.so-gar{display:none!important}
 .colh-row .cm b{font-weight:600;color:var(--ou2)}
 .colh-row .bdg.viv{font-size:10px;padding:2px 8px;flex-shrink:0}
 .colh-row .cp{font-family:var(--fd);font-weight:600;font-size:13px;min-width:36px;text-align:right;flex-shrink:0}
+/* Por baixo dela, a quem corrige o catálogo, o "+ Nova colheita". */
+.btn.colh-nova{margin-top:10px}
 
 /* ── SUGESTÕES (que vinho peço?, no catálogo — 30/09/2026, refeitas a
    03/10/2026) ─────
