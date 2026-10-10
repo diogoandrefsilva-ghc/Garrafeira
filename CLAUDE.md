@@ -361,6 +361,18 @@ Quem se repinta a cada tecla são os contentores vazios (`#f-campos`,
 `#f-dominio`, `#f-activos`) — reescrever o campo perdia o cursor a meio de
 uma palavra.
 
+**A caixa dos valores (`#f-dominio`) mostra-se pela classe `.on`, posta
+pelo `renderFiltros` — nunca por `:not(:empty)` no CSS** (10/10/2026, o
+dono das apps: "de vez em quando carrego nos filtros e não aparecem as
+opções; fechando e abrindo a app resolve"). Foi um `:not(:empty)`, e no
+iPhone o campo acendia na fita sem nada por baixo: o WebKit tem uma família
+de bugs em que o `:empty` não volta a ser avaliado quando o conteúdo chega
+por `innerHTML`. Mostrar CONTEÚDO não depende de `:empty`; esconder uma
+caixa vazia (`.factivos:empty`) ainda pode, porque aí o pior é sobrar uma
+margem. E uma contagem que rebente (`opcoesCampo`) diz-se na própria caixa
+e fica no `sync_log` (acao `filtros`, `filtrosErro`) — se isto voltar a
+acontecer, é aí que se vê se foi o código ou o ecrã.
+
 `renderFiltrados()` continua a ser o despachante: atualiza o painel e volta
 a desenhar **Detalhe e Locais os dois**, sem tentar adivinhar qual está
 aberto (o mesmo raciocínio do `renderLista()`).

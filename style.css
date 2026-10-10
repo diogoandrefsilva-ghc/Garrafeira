@@ -535,7 +535,11 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    linha com os onze campos — só os valores de UM abrem por baixo. */
 .filtros .fcampos,.filtros .fdom,.filtros .fbar{display:none}
 .filtros.aberto .fcampos{display:flex;animation:abrir .18s ease both}
-.filtros.aberto .fdom:not(:empty){display:block;animation:abrir .18s ease both}
+/* A caixa dos valores mostra-se pela classe `.on` (o `renderFiltros`), e
+   não por `:not(:empty)`: no iPhone o WebKit às vezes não reavaliava o
+   `:empty` quando os valores chegavam por `innerHTML`, e a caixa ficava
+   escondida com eles lá dentro (10/10/2026). */
+.filtros.aberto .fdom.on{display:block;animation:abrir .18s ease both}
 .filtros .fbar.on{display:flex}
 
 /* A FITA. Rola de lado e não quebra: onze campos em `flex-wrap` eram três

@@ -3576,6 +3576,19 @@ function abrirCampo(k){
   FILTRO_CAMPO=(FILTRO_CAMPO===k)?null:k;
   renderFiltros();
 }
+// Uma contagem que rebentou fica no `sync_log` (acao `filtros`), uma vez
+// por campo e por erro em cada sessão: é o que diz, da próxima vez que os
+// valores não aparecerem, se foi o código ou o ecrã.
+const _FILTROS_ERROS=new Set();
+function filtrosErro(k,e){
+  const msg=String(e&&e.message||e);
+  if(_FILTROS_ERROS.has(k+'|'+msg))return;
+  _FILTROS_ERROS.add(k+'|'+msg);
+  try{console.error('Filtros:',k,e);}catch(_){}
+  sbReq('POST','sync_log',[{origem:'app',acao:'filtros',estado:'erro',quem:EU.email,detalhe:{build:APP_BUILD,
+    campo:k,modo:MODO,erro:msg,stack:String(e&&e.stack||'').slice(0,1500),ua:navigator.userAgent}}],
+    {'Prefer':'return=minimal'}).catch(()=>{});
+}
 
 /* OS DOZE CAMPOS, num sítio só: chave, ícone, nome e se aceita MAIS DO QUE
    UM valor. Cor, região e castas aceitam; os outros nove não — são as três
@@ -3782,20 +3795,36 @@ function renderFiltros(){
      "Península de Setúbal" e "Cabernet Sauvignon" chegam ao ecrã cortadas
      a meio, e um filtro que não se lê não se escolhe; com `flex-grow`, o
      último cartão de uma linha ímpar estica-se sozinho de ponta a ponta. */
+  /* Quem MOSTRA a caixa é a classe `.on`, posta daqui — não um
+     `:not(:empty)` no CSS. Foi assim, e no iPhone (WebKit) às vezes a caixa
+     ficava escondida com os valores lá dentro: o campo aceso na fita e nada
+     por baixo, até se fechar e abrir a app (10/10/2026). O WebKit tem uma
+     família de bugs em que o `:empty` não volta a ser avaliado quando o
+     conteúdo chega por `innerHTML`. E uma contagem que rebente diz-se na
+     caixa (e fica no `sync_log`) em vez de a deixar calada. */
   const dom=document.getElementById('f-dominio');
+  let domHTML='';
   if(FILTROS_ABERTO&&FILTRO_CAMPO){
-    const k=FILTRO_CAMPO,ops=opcoesCampo(k);
-    dom.innerHTML=(k==='casta'?castasRegrasHTML():'')+(ops.length
-      ? `<div class="fops">${ops.map(([v,r,n])=>{
-          const on=ligados(k).includes(v);
-          const cor=k==='tipo'?(VIDRO[v]||null):null;
-          return `<button class="fop${on?' on':''}" onclick="campoToggle('${escJs(k)}','${escJs(v)}')">
-            <span class="fop-tx">${cor?`<i class="fponto" style="background:${esc(cor)}"></i>`:''}${esc(r)}</span>
-            <span class="fconta">${n}</span>
-          </button>`;
-        }).join('')}</div>`
-      : `<p class="fvazio">Nada a escolher aqui com os filtros que estão ligados.</p>`);
-  }else dom.innerHTML='';
+    const k=FILTRO_CAMPO;
+    try{
+      const ops=opcoesCampo(k);
+      domHTML=(k==='casta'?castasRegrasHTML():'')+(ops.length
+        ? `<div class="fops">${ops.map(([v,r,n])=>{
+            const on=ligados(k).includes(v);
+            const cor=k==='tipo'?(VIDRO[v]||null):null;
+            return `<button class="fop${on?' on':''}" onclick="campoToggle('${escJs(k)}','${escJs(v)}')">
+              <span class="fop-tx">${cor?`<i class="fponto" style="background:${esc(cor)}"></i>`:''}${esc(r)}</span>
+              <span class="fconta">${n}</span>
+            </button>`;
+          }).join('')}</div>`
+        : `<p class="fvazio">Nada a escolher aqui com os filtros que estão ligados.</p>`);
+    }catch(e){
+      domHTML=`<p class="fvazio">Não foi possível contar os valores deste campo. Toca noutro campo ou puxa o ecrã para baixo para atualizar.</p>`;
+      filtrosErro(k,e);
+    }
+  }
+  dom.innerHTML=domHTML;
+  dom.classList.toggle('on',!!domHTML);
 
   /* AS PASTILHAS DIZEM O QUE NÃO SE VÊ DAQUI. É a regra toda: o campo que
      está aberto já se lê nos cartões acesos, e repeti-lo por baixo era
@@ -15611,7 +15640,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='219';
+const APP_BUILD='220';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
