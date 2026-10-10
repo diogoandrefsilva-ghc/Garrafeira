@@ -597,12 +597,21 @@ partir de 600px de cartão), do tamanho do móvel e um pouco mais. De ponta
 a ponta do cartão, a parede empurrava o móvel para um canto e sobrava meia
 sala vazia. No telemóvel ocupa o cartão todo.
 
+**O móvel fica AO CENTRO do cartão** (com os encostos e a fila de cima;
+10/10/2026, o dono: "porque é que estamos tão puxados à direita? Em termos
+de posicionamento, o que está no main está melhor"). Foi empurrado para a
+parede, para ela encostar à borda do cartão, e sobrava meia sala vazia à
+esquerda com os rótulos colados ao móvel. Só sai do centro quando não
+cabe, e nunca para cima dos rótulos (o frigorífico, largo, fica um pouco à
+direita por causa deles — como antes do desenho). Os rótulos dos níveis
+ficam numa coluna JUNTO À BORDA da esquerda ("12" e não "NÍVEL 12"; um
+nome que a pessoa escreveu fica como ela o escreveu — `movelRotulo`), cada
+um com um tracejado até ao móvel, que é o que o liga ao nível dele.
+
 **As paredes** (`layout.paredes`: esquerda, direita, em cima) são reboco
-até à borda do cartão, com a sombra que o móvel lhes lança — é a sombra
-que diz parede. O tecto atravessa a sala toda. Os rótulos dos níveis
-ficam numa coluna à esquerda ("12" e não "NÍVEL 12"; um nome que a pessoa
-escreveu fica como ela o escreveu — `movelRotulo`), por cima da parede da
-esquerda se a houver. **NÃO VOLTES A PÔR O NICHO**: na grelha antiga houve
+do móvel até à borda do cartão, com a sombra que o móvel lhes lança — é a
+sombra que diz parede. O tecto atravessa a sala toda. Os rótulos ficam por
+cima da parede da esquerda, se a houver. **NÃO VOLTES A PÔR O NICHO**: na grelha antiga houve
 um recesso sombreado do primeiro ao último encosto, e lia-se como uma
 mancha cinzenta a tapar meia estante.
 

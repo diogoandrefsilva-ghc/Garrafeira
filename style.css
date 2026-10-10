@@ -1798,8 +1798,11 @@ body.naominha .minha-only{display:none!important}
 /* O rótulo de cada nível, na coluna da esquerda: "12", não "NÍVEL 12". A
    fila de cima NÃO leva dourado (o dourado é a distinção do vinho): fica
    em itálico, que é o que a separa de uma numeração. */
-.mv-niv{position:absolute;height:14px;line-height:14px;text-align:right;font-size:9.5px;font-weight:600;letter-spacing:.3px;
-  color:#9b8676;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.mv-niv{position:absolute;height:14px;line-height:14px;display:flex;align-items:center;gap:5px;font-size:9.5px;font-weight:600;letter-spacing:.3px;
+  color:#9b8676;font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none}
+.mv-niv>span{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* o tracejado até ao móvel, que fica ao centro do cartão */
+.mv-niv::after{content:'';flex:1 1 0;min-width:6px;border-bottom:1px dashed rgba(155,134,118,.38)}
 .mv-niv.topo{font-family:var(--fd);font-style:italic;font-weight:400;font-size:11px;letter-spacing:0}
 
 /* A GARRAFA: o fundo da garrafa visto de frente, em vidro da cor do

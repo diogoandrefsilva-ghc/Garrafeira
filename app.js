@@ -4641,9 +4641,12 @@ function mapaMovelDesenho(st,W,H){
   const esqMax=Math.max(oh,topoExt,...g.lugares.filter(u=>u.encosto==='esq').map(u=>-u.x+.5));
   const WW=.34, folgaPd=.06;
   const rotulos=g.niveis.map(n=>movelRotulo(n.p));
-  const RW=Math.max(.65,Math.min(2.4,Math.max(...rotulos.map(t=>t.length))*.2+.15)), GR=.18;
-  const esqU=RW+GR+(par.esq?WW+folgaPd:0)+esqMax;
-  const U=esqU+dirMax+(par.dir?folgaPd+WW:0)+.1;
+  // a coluna dos rótulos (RW), o mínimo de tracejado até ao móvel (GR) e
+  // a folga até à borda do cartão (BL)
+  const RW=Math.max(.65,Math.min(2.4,Math.max(...rotulos.map(t=>t.length))*.2+.15)), GR=.45, BL=.3;
+  const esqU=BL+RW+GR+(par.esq?WW+folgaPd:0)+esqMax;
+  const dirU=dirMax+(par.dir?folgaPd+WW:BL);
+  const U=esqU+dirU;
   const FP=.42;
   let yMax,postTop=0,capTop=0,intTop=0,corpoTop=0;
   const comTopo=g.niveis.some(n=>n.topo);
@@ -4665,9 +4668,12 @@ function mapaMovelDesenho(st,W,H){
   let s=Math.min((quadro?W-24:W)/U,(H>120?H:640)/Hu,SLOT_MAX);
   s=Math.max(s,SLOT_MIN);
   const larg=quadro?Math.min(W-24,Math.max(U*s+3*s,360)):Math.max(W,U*s);
-  const sobra=larg-U*s;
-  const off=par.dir&&!par.esq?sobra:par.esq&&!par.dir?0:sobra/2;
-  const X=x=>off+(esqU+x)*s, Y=y=>(yMax-y)*s;
+  /* O MÓVEL FICA AO CENTRO do cartão, com os encostos (10/10/2026, o
+     dono: "porque é que estamos tão puxados à direita?"), e os rótulos na
+     coluna da esquerda, junto à borda — como estava antes do desenho. Só
+     sai do centro quando não cabe: nunca por cima dos rótulos. */
+  const xc=Math.max(esqU*s,Math.min(larg/2-(dirMax-esqMax)/2*s,larg-dirU*s));
+  const X=x=>xc+x*s, Y=y=>(yMax-y)*s;
   const r1=v=>Math.round(v*10)/10;
   const blk=(cls,l0,t,w,h,est)=>`<span class="mvb ${cls}" style="left:${r1(l0)}px;top:${r1(t)}px;width:${r1(w)}px;height:${r1(h)}px${est?';'+est:''}"></span>`;
   let tras='',frente='',vidro='',svg='';
@@ -4766,7 +4772,10 @@ function mapaMovelDesenho(st,W,H){
       onmouseenter="mapaPopupHover(${l.id},'${escJs(nome)}','${escJs(k)}',this)" onmouseleave="mapaPopupSair()"
       title="${esc(tit)}" aria-label="${esc(tit)}">${ano}${u.gs.length>1?`<span class="mvg-q">×${u.gs.length}</span>`:''}</button>`;
   });
-  const rot=g.niveis.map((n,i)=>`<span class="mv-niv${n.topo?' topo':''}" style="left:${r1(off)}px;top:${r1(Y(n.sob?(n.yb+n.yt)/2:n.yb)-7)}px;width:${r1(RW*s)}px">${esc(rotulos[i])}</span>`).join('');
+  // cada rótulo leva um tracejado até ao móvel, que é o que o liga ao
+  // nível dele com o móvel ao centro e a coluna lá na borda
+  const rotL=BL*s, rotW=X(-esqMax)-.22*s-rotL;
+  const rot=g.niveis.map((n,i)=>`<span class="mv-niv${n.topo?' topo':''}" style="left:${r1(rotL)}px;top:${r1(Y(n.sob?(n.yb+n.yt)/2:n.yb)-7)}px;width:${r1(rotW)}px"><span>${esc(rotulos[i])}</span></span>`).join('');
   return `<div class="mv-desenho mv-${tipo}${favo&&corClara(cor)?' claro':''}" style="width:${r1(larg)}px;height:${r1(Hu*s)}px;--s:${r1(s)}px${favo?';'+st.favoVars:''}">${tras}${svg}${frente}${caixas}${garrafas}${vidro}${rot}</div>`;
 }
 /* O ecrã de um local com desenho: a sala (preenchida depois, quando já se
@@ -15497,7 +15506,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='214';
+const APP_BUILD='215';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
