@@ -1733,21 +1733,23 @@ body.naominha .minha-only{display:none!important}
 .mv-corpo{border-top:1px solid #e3d6c5;overflow-x:auto;overflow-y:hidden}
 .mv-sala{min-height:120px}
 .mv-desenho{position:relative;overflow:hidden;background:var(--card)}
-/* a sala: só até à parede, quando a há (o resto é o cartão) */
-.mv-quarto{background:radial-gradient(ellipse 75% 40% at 50% 0%,rgba(255,250,240,.85),rgba(255,250,240,0) 70%),linear-gradient(180deg,#f2eadf,#e8ddcf)}
-/* Num ecrã largo, a sala é um quadro centrado (ver `mapaMovelDesenho`). */
-.mv-corpo.quadro{padding:12px 0;background:linear-gradient(180deg,var(--bg),var(--card))}
-.mv-corpo.quadro .mv-desenho{margin:0 auto;border-radius:14px;box-shadow:0 0 0 1px var(--bo),0 10px 24px -16px rgba(78,18,40,.35)}
+/* Num ecrã largo, o desenho tem a largura do móvel e um pouco mais, ao
+   centro (ver `mapaMovelDesenho`); sem moldura, que o fundo é o do cartão. */
+.mv-corpo.quadro{padding:12px 0}
+.mv-corpo.quadro .mv-desenho{margin:0 auto}
 .mvb{position:absolute;display:block;pointer-events:none}
 .mv-svg{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
-/* A SALA: o chão, a sombra do móvel nele, e as paredes onde as há. A
-   parede é reboco com a sombra lançada pelo móvel — é essa sombra que a
-   diz parede, e não uma tira da interface. */
-.mv-chao{background:linear-gradient(180deg,#cdb99d,#c3ad8e);box-shadow:inset 0 1px 0 #b29775}
+/* A SALA: o fundo é o do cartão, sem chão; a sombra do móvel assenta-o,
+   e a parede e o tecto são faixas de um tom só um pouco mais escuro, com
+   a sombra que o móvel lhes lança — é ela que as diz parede. */
 .mv-sombra{border-radius:50%;background:radial-gradient(closest-side,rgba(50,28,12,.42),rgba(50,28,12,0))}
-.mv-parede{background:linear-gradient(90deg,#d3c5b2,#e0d4c4 45%,#e6dbcc);box-shadow:inset 6px 0 8px -6px rgba(60,35,15,.45),inset 1px 0 0 rgba(120,90,60,.25),inset -1px 0 0 rgba(120,90,60,.3)}
-.mv-parede.esq{background:linear-gradient(270deg,#d3c5b2,#e0d4c4 45%,#e6dbcc);box-shadow:inset -6px 0 8px -6px rgba(60,35,15,.45),inset -1px 0 0 rgba(120,90,60,.25),inset 1px 0 0 rgba(120,90,60,.3)}
-.mv-tecto{background:linear-gradient(180deg,#e4d8c8,#d6c7b3);box-shadow:inset 0 -8px 9px -7px rgba(60,35,15,.42),inset 0 -1px 0 rgba(120,90,60,.25)}
+.mv-parede{background:linear-gradient(90deg,#efe8de,#f4efe8);box-shadow:inset 5px 0 6px -5px rgba(60,35,15,.22)}
+.mv-parede.esq{background:linear-gradient(270deg,#efe8de,#f4efe8);box-shadow:inset -5px 0 6px -5px rgba(60,35,15,.22)}
+.mv-tecto{background:linear-gradient(180deg,#f4efe8,#efe8de);box-shadow:inset 0 -5px 6px -5px rgba(60,35,15,.2)}
+/* do lado sem parede o tecto não acaba num corte: desvanece */
+.mv-tecto.solta-esq{-webkit-mask-image:linear-gradient(90deg,transparent,#000 28px);mask-image:linear-gradient(90deg,transparent,#000 28px)}
+.mv-tecto.solta-dir{-webkit-mask-image:linear-gradient(270deg,transparent,#000 28px);mask-image:linear-gradient(270deg,transparent,#000 28px)}
+.mv-tecto.solta-esq.solta-dir{-webkit-mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent)}
 /* MADEIRA: o fundo em tábuas, os prumos, o rodapé, o tampo (só sem
    parede em cima — com ela, a fila de cima assenta nas garrafas do
    último nível e o móvel acaba no tecto), e as réguas com os berços. */

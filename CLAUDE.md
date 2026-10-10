@@ -595,10 +595,11 @@ nunca por scroll. Por isso o `renderMapa` só deixa a sala vazia
 O "+ Novo local" fica de fora do que tem de caber — é uma ação, não faz
 parte da estante.
 
-**Num ecrã largo a sala é um QUADRO centrado** (`.mv-corpo.quadro`, a
-partir de 600px de cartão), do tamanho do móvel e um pouco mais. De ponta
-a ponta do cartão, a parede empurrava o móvel para um canto e sobrava meia
-sala vazia. No telemóvel ocupa o cartão todo.
+**Num ecrã largo o desenho tem a largura do móvel e um pouco mais, ao
+centro** (`.mv-corpo.quadro`, a partir de 600px de cartão). De ponta a
+ponta do cartão, a parede ficava longe do móvel e sobrava meia sala vazia.
+Foi um quadro com moldura e sombra; com o fundo igual ao do cartão, lia-se
+como um cartão dentro do cartão, e saiu. No telemóvel ocupa o cartão todo.
 
 **O móvel fica AO CENTRO do cartão** (com os encostos e a fila de cima;
 10/10/2026, o dono: "porque é que estamos tão puxados à direita? Em termos
@@ -612,14 +613,16 @@ nome que a pessoa escreveu fica como ela o escreveu — `movelRotulo`), cada
 um com um tracejado até ao móvel, que é o que o liga ao nível dele.
 
 **As paredes** (`layout.paredes`: esquerda, direita, em cima) são uma
-FAIXA de reboco logo a seguir ao móvel e aos encostos, com a sombra que o
-móvel lhes lança — é a sombra que diz parede. **E a sala acaba nela**
-(`.mv-quarto`, 10/10/2026, o dono: "a parede com largura normal, e o resto
-depois da parede com a cor neutra"): para lá da parede é o cartão; do lado
-sem parede, a sala vai até à borda. O tecto e o chão vão de ponta a ponta
-da sala. Com parede à esquerda, os rótulos ficam fora da sala, antes dela.
-No quadro do ecrã largo a moldura acaba na parede da direita, mas não na
-da esquerda — é lá que vivem os rótulos. **NÃO VOLTES A PÔR O NICHO**: na grelha antiga houve
+FAIXA estreita logo a seguir ao móvel e aos encostos (10/10/2026, o dono:
+"a parede com largura normal"), num tom só um pouco mais escuro do que o
+cartão e com a sombra que o móvel lhes lança — é a sombra que diz parede.
+**O fundo é todo o do cartão, e não há chão** (o dono: "se o fundo ficar
+todo da mesma cor, as paredes mais disfarçadas … até o próprio chão talvez
+seja desnecessário"): foi uma sala em bege com chão, e com a parede numa
+faixa a sala acabava a meio do cartão e o desenho lia-se desalinhado. O
+móvel assenta só na sua sombra (`.mv-sombra`). O tecto vai do móvel à
+parede e, do lado sem parede, desvanece (`.solta-esq`/`.solta-dir`). Com
+parede à esquerda, os rótulos ficam antes dela. **NÃO VOLTES A PÔR O NICHO**: na grelha antiga houve
 um recesso sombreado do primeiro ao último encosto, e lia-se como uma
 mancha cinzenta a tapar meia estante.
 

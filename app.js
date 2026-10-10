@@ -4626,7 +4626,7 @@ function mapaMovelDesenho(st,W,H){
   const esqU=BL+RW+GR+(par.esq?WW+folgaPd:0)+esqMax;
   const dirU=dirMax+(par.dir?folgaPd+WW:BL);
   const U=esqU+dirU;
-  const FP=.42;
+  const FP=.16;
   let yMax,postTop=0,capTop=0,intTop=0,corpoTop=0;
   const comTopo=g.niveis.some(n=>n.topo);
   if(frigo){intTop=g.ultimo+.5+.45;corpoTop=intTop+.3;}
@@ -4638,15 +4638,15 @@ function mapaMovelDesenho(st,W,H){
   else if(favo)yMax=g.ultimo+MV_R+.3;
   else yMax=capTop+.2;
   const Hu=yMax+FP;
-  /* Num ecrã largo a sala é um QUADRO centrado, do tamanho do móvel e um
-     pouco mais: de ponta a ponta do cartão, a parede empurrava o móvel
-     para um canto e sobrava meia sala vazia. No telemóvel ocupa o cartão
-     todo, que é o que ele tem. */
+  /* Num ecrã largo o desenho tem a largura do móvel e um pouco mais, ao
+     centro do cartão: de ponta a ponta, a parede ficava longe do móvel e
+     sobrava meia sala vazia. No telemóvel ocupa o cartão todo, que é o
+     que ele tem. */
   const quadro=W>=600;
   if(quadro)H-=24;
   let s=Math.min((quadro?W-24:W)/U,(H>120?H:640)/Hu,SLOT_MAX);
   s=Math.max(s,SLOT_MIN);
-  let larg=quadro?Math.min(W-24,Math.max(U*s+3*s,360)):Math.max(W,U*s);
+  const larg=quadro?Math.min(W-24,Math.max(U*s+3*s,360)):Math.max(W,U*s);
   /* O MÓVEL FICA AO CENTRO do cartão, com os encostos (10/10/2026, o
      dono: "porque é que estamos tão puxados à direita?"), e os rótulos na
      coluna da esquerda, junto à borda — como estava antes do desenho. Só
@@ -4655,22 +4655,26 @@ function mapaMovelDesenho(st,W,H){
   /* A SALA ACABA NA PAREDE (10/10/2026, o dono: "a parede com largura
      normal, e o resto depois da parede com a cor neutra"): a parede é uma
      faixa logo a seguir ao móvel e aos encostos, e para lá dela é o
-     cartão. Do lado sem parede, a sala vai até à borda. No quadro do ecrã
-     largo, a moldura acaba na parede da direita; à esquerda não, que é lá
-     que vivem os rótulos (com parede à esquerda, ficam fora da sala). */
+     cartão. Do lado sem parede, a sala vai até à borda. (Com parede à
+     esquerda, os rótulos ficam fora da sala, antes dela.) */
   const salaL=par.esq?xc-(esqMax+folgaPd+WW)*s:0;
-  let salaR=par.dir?xc+(dirMax+folgaPd+WW)*s:larg;
-  if(quadro&&par.dir)larg=salaR;
+  const salaR=par.dir?xc+(dirMax+folgaPd+WW)*s:larg;
   const X=x=>xc+x*s, Y=y=>(yMax-y)*s;
   const r1=v=>Math.round(v*10)/10;
   const blk=(cls,l0,t,w,h,est)=>`<span class="mvb ${cls}" style="left:${r1(l0)}px;top:${r1(t)}px;width:${r1(w)}px;height:${r1(h)}px${est?';'+est:''}"></span>`;
   let tras='',frente='',vidro='',svg='';
-  tras+=blk('mv-quarto',salaL,0,salaR-salaL,Hu*s);
-  tras+=blk('mv-chao',salaL,Y(0),salaR-salaL,FP*s);
-  tras+=blk('mv-sombra',X(-esqMax-.25),Y(0)-.14*s,(esqMax+dirMax+.5)*s,.32*s);
+  /* O fundo é todo o do cartão, sem chão (10/10/2026, o dono: "se o
+     fundo ficar todo da mesma cor, as paredes mais disfarçadas … até o
+     próprio chão talvez seja desnecessário"): só a sombra do móvel o
+     assenta, e a parede e o tecto são faixas de um tom só um pouco mais
+     escuro. O tecto vai do móvel à parede; do lado sem parede, desvanece. */
+  tras+=blk('mv-sombra',X(-esqMax-.25),Y(0)-.12*s,(esqMax+dirMax+.5)*s,.26*s);
   if(par.dir)tras+=blk('mv-parede dir',X(dirMax+folgaPd),0,WW*s,Y(0));
   if(par.esq)tras+=blk('mv-parede esq',salaL,0,WW*s,Y(0));
-  if(comTopo)tras+=blk('mv-tecto',salaL,0,salaR-salaL,.34*s);
+  if(comTopo){
+    const tL=par.esq?salaL:X(-esqMax-.4), tR=par.dir?salaR:X(dirMax+.4);
+    tras+=`<span class="mvb mv-tecto${par.esq?'':' solta-esq'}${par.dir?'':' solta-dir'}" style="left:${r1(tL)}px;top:0;width:${r1(tR-tL)}px;height:${r1(.3*s)}px"></span>`;
+  }
   if(mad){
     tras+=blk('mv-fundo',X(-hw),Y(postTop),2*hw*s,Y(.32)-Y(postTop));
     let cheia='',sombra='',luz='';
@@ -15496,7 +15500,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='216';
+const APP_BUILD='217';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
