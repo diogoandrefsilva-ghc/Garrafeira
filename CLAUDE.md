@@ -525,130 +525,108 @@ nenhuma das outras ("Estágio em barricas", sem meses) é *Outras opções de
 estágio*.
 
 `Locais` (`renderMapa`) é **um local de cada vez, a ocupar o ecrã**: a
-barra com ‹ › (o nome, a contagem "**35** / 45 garrafas" e ✎ editar ao
-lado), os pontos que dizem em que local se está, e por baixo as
-prateleiras nível a nível — de cima para baixo como na estante a sério (o
-Nível 1 é o de baixo, `prateleirasDesc`). Cada lugar é um círculo **cheio
-com o nº do vinho** ou **vazio com o nº do lugar**, com a legenda no fim.
+barra com ‹ › (o ponto da cor do local, o nome, a contagem "**35** / 45
+garrafas" e ✎ editar ao lado), os pontos que dizem em que local se está, e
+por baixo **o móvel desenhado** — ou, num local sem desenho, a lista de
+sempre (`mapaLocalListaHTML`). A cor do local é um PONTO antes do nome;
+foi uma faixa de 4px na borda esquerda da barra, que é um tique de
+interface e não diz nada.
+
+### O móvel desenhado (09/10/2026, o dono das apps, sobre os mockups)
+Secção "O MÓVEL DESENHADO" no app.js (`mapaMovelDesenho`, `movelGeo`) e no
+style.css (`.mv-*`, `.mvg`). Um local com desenho é o MÓVEL visto de
+frente, numa sala, e cada garrafa é o FUNDO da garrafa em vidro, da cor do
+vinho (`vidroDe`: tinto rubi, branco dourado, rosé, espumante, licoroso,
+frisante), com o **ano** ("’21") — o número do vinho, que era o que lá
+estava, não diz nada a quem está à frente da estante. Um lugar vazio
+mostra o número do lugar. Mais do que uma garrafa no mesmo lugar leva um
+aro de aviso e o ×N; a caixa de madeira (`caixa_madeira`) é um quadrado
+de madeira por trás da garrafa, em qualquer lugar.
+
+**Há quatro móveis** (`layout.movel`, escolhido no editor do local — ver
+abaixo), e é o que dá o "toque" que o dono pediu:
+- **madeira** — prumos, rodapé, o fundo em tábuas e as RÉGUAS com um
+  berço em U debaixo de cada garrafa. A régua vai de prumo a prumo (há
+  prumos para a segurar; quando não havia, cortava-se logo a seguir ao
+  último berço para não se ler como uma linha solta). O fundo do berço é
+  ACHATADO — uma onda de seno punha a garrafa a assentar num ponto só. Um
+  nível de sobrepostos leva uma tábua lisa;
+- **frigorifico** — corpo grafite, a luz LED em cima, prateleiras de arame
+  com a frente em faia, o puxador e o vidro da porta por cima de tudo;
+- **favo** — os módulos de plástico (terracota) ou esferovite: um
+  hexágono de bico para cima com um furo por lugar, e a garrafa dentro do
+  furo. É a Garrafeira Principal do Barrona (a fotografia que ele mandou):
+  os níveis encaixados fecham o favo sozinhos e **um nível sem encaixe
+  começa um bloco novo**, como os dois blocos da foto;
+- **pintado** — um móvel com prateleiras lisas, na cor que se escolheu
+  (`layout.cor`); o fundo, as laterais e o tampo saem dessa cor
+  (`corMistura`). Um nível encaixado não leva prateleira: as garrafas
+  assentam nas de baixo.
+Sem `layout.movel`, um local só de sobrepostos é um frigorífico e o resto
+é madeira — as garrafeiras que já existiam ficaram desenhadas sem ninguém
+mexer em nada. O favo e o pintado têm cor (o favo, em três: terracota,
+esferovite, preto); a madeira e o frigorífico não.
+
+**A geometria não é nova, é a de sempre.** QUE lugar fica em que coluna e
+em que fila é o `prateleiraLayoutInfo` (a numeração corrida, o `desvio`
+do encaixe, a fila curta dos sobrepostos, a fila de cima); o
+`movelGeo` só converte essas meias-colunas em posições e empilha os
+níveis na vertical, pela ORDEM DO ARRAY (a mesma que numera os lugares).
+As medidas estão em DIÂMETROS de garrafa (`MV_P`, uma linha por móvel:
+o que há debaixo do primeiro nível, o passo encaixado, com apoio e de
+sobrepostos, e o passo até à fila de cima). Mexer na numeração é mexer
+no `prateleiraLayoutInfo`, nunca aqui.
 
 **A estante inteira tem de caber no ecrã sem scroll** — é essa a medida
-de tudo o resto aqui, e é o que separa este ecrã de uma lista. Duas
-coisas o garantem:
-- cada nível é **uma linha só** (`.mprat-layout`): o nome encostado à
-  esquerda e a estante no meio. O nome já teve linha própria por cima, com
-  o filete a atravessar, e custava ~24px por nível — em oito níveis, um
-  terço da altura do ecrã gasto em rótulos. E encosta-se à esquerda em vez
-  de andar colado à estante: colado, mudava de sítio de nível para nível
-  conforme a prateleira era mais larga ou mais estreita, e a coluna dos
-  nomes deixava de se ler de uma vez. Entre os dois há um **fio tracejado
-  muito leve** (`.mp-fio`), que vai do fim do nome até onde a caixa da
-  prateleira começa e mais nada — é só uma ajuda a ver de que nível são
-  aquelas garrafas, não uma peça do móvel. Do lado direito não há fio:
-  há um **espaçador** (`.mp-esp`) do mesmo tamanho, que é o que mantém a
-  estante centrada;
-- **não há contagem por nível.** Era um "3/3" à direita, e o fio que lhe
-  ia dar atravessava a linha inteira: o que se via era um traço contínuo
-  do nome do nível até ao outro extremo, com a prateleira apanhada no
-  meio. A contagem do local já está no cabeçalho ("37 / 42 garrafas");
-  garrafa a garrafa lê-se na estante, que é o que este ecrã mostra;
-- o tamanho de um lugar (`--slot`) é **calculado**, não escrito no CSS
-  (`ajustarEstantes`). Mede-se o que sobra do ecrã abaixo do cartão e
-  procura-se por bissecção o maior lugar que ainda cabe, entre
-  `SLOT_MIN` (18px, onde se desiste porque o número deixa de se ler e de
-  se acertar com o dedo) e `SLOT_MAX` (54px, onde deixa de fazer sentido
-  crescer). Bissecção e não uma conta: a altura depende de paddings, do
-  número de filas de cada formato e de quanto cada nome quebra de linha —
-  refazer isso em JS era duplicar o `style.css` e ficar a discordar dele
-  no dia em que alguém lhe mexesse. Corre uma vez por desenho do mapa e
-  ao redimensionar, nunca por scroll.
+de tudo. O `ajustarEstantes` mede o que sobra do ecrã abaixo da sala
+(descontando a legenda e o + flutuante, que fica por cima do canto de
+baixo — `offsetParent` de um `position:fixed` é SEMPRE null, por isso
+mede-se pelo retângulo) e a largura do cartão, e o tamanho de uma garrafa
+(`s`, em px) sai de uma CONTA: o desenho é todo posicionado a partir dele
+(HTML com `left/top` em px e um SVG para as réguas e o favo), por isso não
+há CSS a adivinhar nem bissecção. Entre `SLOT_MIN` (18px — abaixo disso o
+ano não se lê e o dedo não acerta, e deixa-se rolar) e `SLOT_MAX` (46px).
+Corre a cada desenho do mapa, ao entrar no separador e ao redimensionar,
+nunca por scroll. Por isso o `renderMapa` só deixa a sala vazia e a
+legenda (`mapaEstanteHTML`); o desenho vem depois de medir (`MV_ATUAL`).
+O "+ Novo local" fica de fora do que tem de caber — é uma ação, não faz
+parte da estante.
 
-Duas armadilhas que isto já apanhou, e que valem para qualquer coisa que
-lhes toque:
-- **o default do `--slot` vive no `.ml` e não no `.est`.** Uma custom
-  property declarada no PRÓPRIO elemento ganha à que ele herdaria — com
-  `.est{--slot:34px}` o valor calculado nunca lá chegava, e a estante
-  ficava sempre do mesmo tamanho sem um erro à vista;
-- **o `<svg>` da fita precisa de `width` E `height` declaradas.** É um
-  elemento de substituição: a dimensão que falta sai da proporção do
-  viewBox e não do `left`/`right`/`bottom` do posicionamento. Sem as
-  duas, a fita ficava tão alta quanto a prateleira é larga (três vezes a
-  caixa) e o que se via eram as cristas de um ziguezague gigante a
-  espreitar por baixo dos lugares.
+**Num ecrã largo a sala é um QUADRO centrado** (`.mv-corpo.quadro`, a
+partir de 600px de cartão), do tamanho do móvel e um pouco mais. De ponta
+a ponta do cartão, a parede empurrava o móvel para um canto e sobrava meia
+sala vazia. No telemóvel ocupa o cartão todo.
 
-**As garrafas por posicionar (as que estão neste local mas sem um lugar
-válido no desenho) vivem FORA do cartão e FECHADAS** (`mapaExtrasHTML`,
-um `<details>`): são uma lista que pode ter dezenas de linhas — numa
-garrafeira acabada de importar são quase todas — e aberta, ou dentro do
-cartão, empurrava a estante para fora do ecrã, que é exatamente o que
-este separador não pode fazer. Quem as quer ver rola até elas e abre.
-Por estarem fora do `.ml`, também não entram na conta do `ajustarEstantes`.
+**As paredes** (`layout.paredes`: esquerda, direita, em cima) são reboco
+até à borda do cartão, com a sombra que o móvel lhes lança — é a sombra
+que diz parede. O tecto atravessa a sala toda. Os rótulos dos níveis
+ficam numa coluna à esquerda ("12" e não "NÍVEL 12"; um nome que a pessoa
+escreveu fica como ela o escreveu — `movelRotulo`), por cima da parede da
+esquerda se a houver. **NÃO VOLTES A PÔR O NICHO**: na grelha antiga houve
+um recesso sombreado do primeiro ao último encosto, e lia-se como uma
+mancha cinzenta a tapar meia estante.
 
-**Tocar num lugar VAZIO põe lá um vinho** (`mapaLugarVazio`,
-`guardarLugarVazio`, o `#modal-lugar`) — é a outra metade de "onde está o
-quê". Até aqui só os lugares ocupados respondiam, e a única forma de
-arrumar uma garrafa era abrir o vinho e usar "Mover": obrigava a saber de
-antemão qual o vinho, quando a pergunta que se faz à frente da estante é a
-inversa ("este buraco, o que é que lhe ponho?"). O que se guarda depende
-do que já existe, e é isso que evita duplicar: se houver uma garrafa DESTE
-vinho por arrumar (sem lugar), é ELA que se move para aqui — preferindo
-uma que já esteja neste local; só quando não há nenhuma é que se
-acrescenta uma garrafa nova. Numa garrafeira acabada de importar está tudo
-por arrumar, e sem isto cada toque criava uma segunda garrafa do mesmo
-vinho e a contagem inflava sozinha. No seletor, os vinhos com garrafas por
-arrumar vêm num grupo à parte e primeiro — são a resposta provável.
+**O ENCOSTO é uma garrafa do tamanho das outras, logo a seguir à
+prateleira** (09/10/2026, o dono: "não colocávamos tão longe da
+prateleira, nem colocávamos o vinho mais pequeno, pois a garrafa tem o
+mesmo tamanho"). No favo fica onde ficaria o módulo seguinte DESSE nível
+— o vão entre o fim da fila curta e a parede, que é o que está na foto;
+nos outros móveis, encostada à lateral. Os códigos (`15D`/`15E`) e a
+numeração não mudam: é só desenho. Foi menor do que um lugar de
+propósito, para não se ler como mais uma coluna da estante — numa estante
+desenhada como móvel isso já não acontece, e a garrafa a sério tem o
+mesmo tamanho.
 
-**O + flutuante entra na conta** (`ajustarEstantes` reserva-lhe espaço):
-fica por cima do canto de baixo à direita, que é onde acaba o último
-nível, e com tudo a caber já não há scroll que o desvie — sem a reserva,
-o último lugar ficava à vista e sem se conseguir tocar. Nota que
-`offsetParent` de um elemento `position:fixed` é SEMPRE null (regra do
-DOM, não sinal de estar escondido), por isso ele mede-se pelo retângulo.
-O "+ Novo local" é que fica de fora do que tem de caber — é uma ação, não
-faz parte da estante, e exigir que coubesse custava dois pixels em cada
-lugar.
-
-**A prateleira que encaixa SOBREPÕE-SE à de baixo** — é a sobreposição
-que desenha o encaixe. Chegou a não haver nenhuma (as duas filas
-separadas), por causa da FITA que a versão antiga esticava por trás dos
-lugares: tapada, sobravam uns arcos soltos. Com a régua fina de agora é
-ao contrário — os vales dela passam entre as garrafas de baixo, e é isso
-que se quer ver. Três medidas seguram-no, e não são gosto:
-- a margem é `-0,42 × slot` de pitch entre as duas linhas (a linha mede
-  1,22 — o lugar mais a folga onde o berço desce), que é onde um círculo
-  desviado meia coluna assenta no V entre dois de baixo;
-- vive em **`margin-bottom` e não `margin-top`**: os níveis desenham-se
-  do mais alto para o mais baixo (`prateleirasDesc`), por isso a
-  prateleira que encaixa aparece ACIMA daquela em que assenta e o
-  intervalo que tem de fechar é o de BAIXO. Com `margin-top` cada par
-  encaixava no par errado, e o desenho ficava certo de longe e trocado ao
-  perto;
-- os lugares VAZIOS são quase opacos. Com as linhas sobrepostas, a régua
-  de cima passa por trás dos lugares de baixo — e num círculo translúcido
-  via-se o traço a atravessá-lo, como se a madeira lhe passasse por
-  dentro.
-Passa-se de local com os ‹ ›, com os pontos, ou **arrastando de lado**
-(`mapaSwipe` — exceto sobre uma prateleira que rola de lado, que aí o
-gesto é dela). Dá a volta: do último passa ao primeiro.
-
-**Não há vista de conjunto nem cartões de pré-visualização.** Chegou a
-haver (um local em destaque com a estante em miniatura, mais um cartão por
-local) e eram dois ecrãs para a mesma pergunta: os locais são poucos,
-andar de lado chega, e o que se quer ver são as garrafas. Por isso também
-não há passo na história do browser nem ‹ voltar — não se "entra" em
-lado nenhum, muda-se de local. `MAPA_LOCAL` é o que está no ecrã (fica no
-`localStorage` como preferência e só vale enquanto o local existir;
-`renderMapa()` passa ao primeiro sozinho se for apagado ou se trocar a
-garrafeira). Um local sem desenho mostra a lista de sempre
-(`mapaLocalListaHTML`), e as garrafas sem local entram como o local a
-fingir `POR_ARRUMAR`, que não se edita.
-
-A estante em HTML é **uma função só** (`estanteHTML`) para o ecrã do local
-e para o seletor de posição da garrafa (`renderPickerPosicoes`): o formato
-dá a madeira — barra na fila, bloco nos sobrepostos, e no ziguezague uma
-**fita** que é um SVG esticado por trás dos lugares (`ziguezagueBgSVG`,
-`non-scaling-stroke`). A grelha do ziguezague **não tem gap** de
-propósito: é o que garante que a fita passa pelo centro de cada lugar
-(colunas a (i-½)/cols, filas a 25% e 75%).
+**A fila de cima** (`T1…Tn`): na madeira e no favo ASSENTA NAS GARRAFAS
+DO ÚLTIMO NÍVEL (não há tampo — com tampo e tecto o móvel acabava duas
+vezes); no pintado e no frigorífico, em cima do tampo. Fica CENTRADA como
+qualquer outra fila (encostada à parede lia-se como uma prateleira torta),
+e é ela que pode ser mais larga do que o móvel: entra nas margens do
+desenho (`topoExt`), senão a caixa de madeira do T1 tapava o rótulo. O
+rótulo "Em cima" **não leva dourado** (o dourado é a distinção do VINHO):
+fica em itálico, que é o que o separa de uma numeração. Na madeira, um
+lugar vazio que espreita por cima dos prumos tem a pele de "fora do móvel"
+(`.ext`), como os encostos e a fila de cima.
 
 **OS LUGARES SÃO NUMERADOS DE FORMA CORRIDA NO LOCAL** e não dentro de
 cada prateleira: um Nível 1 de 4 lugares tem 1 a 4 e o Nível 2 a seguir
@@ -675,171 +653,79 @@ contradizerem.
 prateleira com duas filas alternadas — e não é o que está no móvel: a
 fila de baixo e a de cima são prateleiras diferentes, com contagens
 diferentes (4 e 3, tipicamente). Foi um entendido de vinhos que o
-apontou, e os dados desta app já estavam gravados assim, com os lugares
-corridos a alternar 4 e 3 — era o DESENHO que discordava deles. Sobram
-dois formatos: `fila` e `sobrepostos`.
+apontou, e os dados desta app já estavam gravados assim. Sobram dois
+formatos: `fila` e `sobrepostos`. Os layouts antigos são convertidos em
+`layoutLocal`, **ao ler**, e não numa migração: qualquer garrafeira fica
+certa sem ninguém correr nada, e os dados só mudam quando alguém guardar
+o local. **Os níveis são números seguidos**: um local que teve
+ziguezagues passa a ter o dobro das prateleiras, os nomes são refeitos
+"Nível 1..N", e o **`origem`** (o nome de antes da conversão) é o que
+deixa uma garrafa que diga "Nível 8" continuar no seu lugar
+(`nomeBatePrateleira`).
 
-Os layouts antigos são convertidos em `layoutLocal`, **ao ler**, e não
-numa migração da base de dados: assim qualquer garrafeira fica certa sem
-ninguém correr nada, e os dados só mudam quando alguém guardar o local.
+O que restou do ziguezague é o **`encaixe`**: a marca de que a prateleira
+assenta na de baixo, desencontrada (no favo, fecha o favo; na madeira, a
+régua de cima passa por trás das garrafas de baixo). Não muda lugares nem
+contagens. O **`desvio`** é o desencontro horizontal: com paridades
+diferentes (4 e 3) as garrafas já caem umas entre as outras; com a mesma
+(4 e 4) é preciso meia coluna, e é o `prateleiraLayoutInfo` que a põe.
+Em **`sobrepostos`** de capacidade ímpar as duas filas ficam
+desencontradas e a de cima assenta nos vãos da de baixo; com capacidade
+par ficam alinhadas. `mais_em` diz em que fila fica o lugar a mais.
 
-**Os níveis são números seguidos.** Um local que teve ziguezagues passa a
-ter o dobro das prateleiras, e os nomes gravados deixam de servir de
-numeração: por isso são todos refeitos, "Nível 1..N". A metade de cima
-chegou a ganhar " · cima" e ficava um local com dois "Nível 8", um deles
-com um sufixo — um nível é um número, não uma nota de rodapé. Renumerar
-mexe nos NOMES, e o nome gravado na garrafa é a confirmação de que ela
-está onde diz; daí o **`origem`**, o nome que a prateleira tinha antes da
-conversão. `nomeBatePrateleira()` aceita o nome de agora, o `origem` ou
-nenhum — uma garrafa que diga "Nível 8" continua no seu lugar em vez de
-ir parar a "por posicionar" só porque o desenho passou a contar de outra
-maneira.
+**As garrafas por posicionar (as que estão neste local mas sem um lugar
+válido no desenho) vivem FORA do cartão e FECHADAS** (`mapaExtrasHTML`,
+um `<details>`): são uma lista que pode ter dezenas de linhas — numa
+garrafeira acabada de importar são quase todas — e aberta, ou dentro do
+cartão, empurrava a estante para fora do ecrã.
 
-O que restou do ziguezague é o **`encaixe`**: uma marca por prateleira a
-dizer que ela assenta na de baixo, desencontrada. Não muda lugares nem
-contagens — só o desenho:
-- **`desvio`** é o desencontro horizontal em frações de coluna. Com as
-  duas prateleiras centradas na mesma largura, os lugares já caem uns
-  entre os outros quando as capacidades têm paridades diferentes (4 e 3);
-  quando são iguais (4 e 4) ficariam alinhados e é preciso meia coluna;
-- **`ondulada`** é quem desenha a RÉGUA (`ondaBgSVG`) — e é **de todas as
-  prateleiras**, seja qual for o formato. Chegou a ser só das que
-  encaixam, e um móvel com dois desenhos de prateleira (uma tábua maciça
-  aqui, berços ali) lia-se como dois móveis: uma garrafa assenta num berço
-  em U em qualquer nível, e o que o `encaixe` decide é o DESENCONTRO, não
-  a madeira. Quem fica sem ela é o seletor de posição, que passa
-  `ondulada:false`. É uma tira fina que faz um **berço em U**
-  debaixo de cada lugar e sobe entre eles — as réguas onduladas de uma
-  garrafeira a sério, onde a garrafa assenta deitada. Quatro coisas que
-  se aprenderam a desenhá-la: não é uma tábua MACIÇA (preencher a metade
-  de baixo lia-se como um bloco de madeira com o cimo às ondas, não como
-  a prateleira que é); o fundo do berço é ACHATADO, porque uma onda de
-  seno punha a garrafa a assentar num ponto só; a sombra é o mesmo
-  caminho DESCIDO, não um traço mais grosso — mais grosso, ela assomava
-  dos dois lados e lia-se como duas réguas paralelas; e **a régua acaba
-  logo a seguir ao último berço** (`PONTA`, três décimos de coluna) e não
-  na borda da caixa. Atravessar o móvel todo dava-lhe dois troços retos e
-  compridos, e o que se lia era uma LINHA a ir de um extremo ao outro da
-  fila, com a prateleira apanhada no meio — em vez dos U, que são o
-  desenho todo. Que cada nível fique com uma régua mais curta ou mais
-  comprida é o certo: é a prateleira dele; a CAIXA é que continua a ser a
-  do móvel, e é ela que alinha os lugares de nível para nível. Os berços
-  vão sob a fila de BAIXO e só sob ela: nos `sobrepostos` as garrafas de
-  cima assentam nas de baixo, e dar-lhes berço era desenhar uma
-  prateleira que não existe. E a régua é uma TIRA colada ao fundo da
-  caixa, com altura própria em `--slot` — não `inset:0`: esticada à caixa
-  inteira, o mesmo viewBox dava uma régua mais alta nos `sobrepostos`
-  (duas filas) do que na `fila`, e os berços fugiam de debaixo dos
-  lugares;
-- em **`sobrepostos` de capacidade ÍMPAR** as duas filas ficam
-  desencontradas meia coluna, e a de cima **assenta nos vãos** da de baixo
-  (`.desenc`) em vez de flutuar por cima dela — é como se empilham
-  garrafas a sério, e é o mesmo passo (0,8 do diâmetro) do encaixe entre
-  níveis. Com capacidade par ficam alinhadas e apenas se sobrepõem;
-- **todas as prateleiras de um local têm a largura do MÓVEL** (`colsw`: o
-  nível mais largo, mais uma coluna de folga de cada lado) e os lugares
-  ficam centrados nela. Antes cada prateleira valia o que os seus lugares
-  mediam, e uma estante de 4/3/4/3 lia-se como uma pilha de tábuas
-  irregulares. A folga é o que deixa uma prateleira desviar-se meia
-  coluna sem sair da caixa.
+**Tocar num lugar VAZIO põe lá um vinho** (`mapaLugarVazio`,
+`guardarLugarVazio`, o `#modal-lugar`) — é a outra metade de "onde está o
+quê": a pergunta que se faz à frente da estante é "este buraco, o que é
+que lhe ponho?". O que se guarda depende do que já existe, e é isso que
+evita duplicar: se houver uma garrafa DESTE vinho por arrumar (sem lugar),
+é ELA que se move para aqui — preferindo uma que já esteja neste local; só
+quando não há nenhuma é que se acrescenta uma garrafa nova. No seletor, os
+vinhos com garrafas por arrumar vêm num grupo à parte e primeiro. Tocar
+numa garrafa abre o cartão dela (`mapaPopupToggle`: substituir, mover,
+ver o vinho).
 
-A grelha é toda em **meias-colunas** (`gridCols = 2 × colsw`, cada lugar
-com `span:2`) porque meia coluna é exatamente o desencontro que se quer, e
-uma grelha de colunas inteiras não sabe fazer meio passo. As colunas têm
-largura FIXA (`--colw`, tirada do `--slot`) e não frações: em frações, a
-largura do lugar deixava de vir do `--slot` e o cálculo da altura passava
-a discordar do que se via.
+Passa-se de local com os ‹ ›, com os pontos, ou **arrastando de lado**
+(`mapaSwipe` — exceto sobre uma sala que rola de lado, que aí o gesto é
+dela). Dá a volta: do último passa ao primeiro. **Não há vista de
+conjunto nem cartões de pré-visualização**: chegou a haver, e eram dois
+ecrãs para a mesma pergunta. `MAPA_LOCAL` é o que está no ecrã (fica no
+`localStorage` como preferência e só vale enquanto o local existir), e as
+garrafas sem local entram como o local a fingir `POR_ARRUMAR`, que não se
+edita.
 
-Por isso o `ajustarEstantes` decide **duas** coisas e não uma: a ALTURA
-disponível dá o TAMANHO do lugar (`--slot`), a LARGURA dá o ESPAÇO entre
-lugares (`--colr`, quanto mede uma coluna em lugares, entre 1,18 e 1,36).
-Numa estante de poucos lugares por nível a coluna abre até ao teto; numa
-de muitos, aperta-se o espaçamento antes de encolher a garrafa. Com um
-espaçamento fixo, dois níveis de seis lugares num telemóvel punham o
-lugar no mínimo por causa da largura, com meio ecrã de altura vazio por
-baixo. O teto era 1,8 ("as garrafas devem respirar") e é aí que o
-ENCAIXE se perdia: com colunas largas, a garrafa de cima cai meia coluna
-à frente mas no meio de um vão onde cabia outra, e não entre duas —
-ficavam filas soltas em vez de um ziguezague. Pouco mais do que um lugar
-é o que as põe quase a tocarem-se, e é isso que o encaixe precisa.
+**O seletor de posição da garrafa** (`renderPickerPosicoes`, no modal da
+garrafa) continua a ser a GRELHA de sempre (`estanteHTML`, `.est-pick`):
+ali a prateleira é para se tocar, os lugares são do mesmo tamanho e não
+há madeira nem desencontro.
 
-**`--colr` e o passo do encaixe são medidas INDEPENDENTES** — e é preciso
-que continuem a ser. O passo já saiu de uma conta a partir do `--colr`
-(para os lugares se manterem tangentes à medida que o espaçamento
-abrisse), e o efeito foi mexer no espaço entre NÍVEIS quando o que se
-tinha pedido era ar entre as garrafas do MESMO nível. O `--colr` é do ar
-dentro da prateleira; o `-0,56` do `.encaixa` é de como as prateleiras
-assentam umas nas outras.
+Com a procura ligada, só se anda pelos locais com garrafas que passam nela
+(a contagem passa a "4 encontradas · de 35") e o móvel responde em **três
+pesos**, não em dois (o bloco "O LUGAR DURANTE A PROCURA" no `style.css`):
+- **encontrada** (`.mvg.achada`) — ganha um ARCO branco e bordô à volta.
+  Bordô e não dourado: uma garrafa encontrada não distingue vinho nenhum,
+  é a app a apontar para o que lhe perguntaram (o mesmo que o sombreado da
+  `.vc-match` faz no cartão). O arco é só `box-shadow`: não ocupa espaço e
+  o desenho não mexe;
+- **ocupado mas não passa** (`.mvg.fora`) — sem cor e apagado;
+- **vazio** — baixa de contraste, que não é resposta a pergunta nenhuma.
+**Os estados vivem NO FIM da secção, depois das peles de vidro**: têm a
+mesma especificidade (duas classes) e ganha quem vier por último. Um
+estado novo do lugar entra nesse bloco.
 
-Em **`sobrepostos`** com capacidade ímpar, `mais_em` diz em que fila fica
-o lugar a mais; a outra fica centrada e não encostada à esquerda, que é
-como a fila mais curta assenta na de baixo num móvel a sério.
-
-No **seletor de posição** não há onda nem desencontro (`renderPickerPosicoes`
-passa uma cópia da prateleira sem eles): ali a prateleira é para se tocar,
-e o que interessa é acertar com o dedo.
-
-**O móvel está encostado a uma PAREDE, e o vão ao lado dela também guarda
-garrafas** (`paredesLocal`, `layout.paredes`). Um local pode ter parede à
-esquerda, à direita e/ou em cima; havendo parede, cada nível pode abrir UM
-lugar de **encosto** entre o fim da prateleira e ela (`encosto_dir`/
-`encosto_esq`, códigos `15D`/`15E`) e o cimo do móvel leva uma fila
-(`layout.topo.capacidade`, códigos `T1…Tn`). Nenhum deles mexe na
-numeração corrida: o encosto cai na coluna de folga que o `colsw` já tinha
-(o `+2`) e a fila de cima é uma prateleira A FINGIR (`prateleiraTopo`), sem
-`base`. Quem os conta à parte é `especiaisLocal`.
-
-São **DUAS peças a desenhar**: a parede (o fundo) e a garrafa encostada.
-A primeira versão tinha uma barra clara na borda do ecrã — lida como uma
-barra de scroll do iOS, que é o que ela era: cinco pixels, cantos redondos
-e uma textura em diagonal:
-- a **parede** é reboco: sem cantos redondos (é no canto quadrado que ela
-  encontra a do topo), sem textura, e com a SOMBRA lançada para dentro —
-  essa sombra é a única pista que transforma uma tira numa parede;
-- o **lugar de encosto é MENOR** do que um lugar de prateleira, e é a única
-  coisa que o diz sozinho: não é um lugar do móvel, é uma garrafa de pé no
-  vão ao lado dele. Do mesmo tamanho, seis encostos empilhados liam-se como
-  uma sétima coluna da estante. E **vazio cala-se**: a tracejado cheio, seis
-  buracos faziam a coluna mais forte do ecrã a dizer "não tenho nada aqui".
-
-**NÃO VOLTES A PÔR O NICHO.** Houve um (`.pd-nicho`): um recesso sombreado
-de uma coluna, do primeiro ao último encosto, medido no
-`posicionarParedes`. Existia para resolver o "as garrafas estão a
-flutuar" — a régua de cada prateleira acaba logo a seguir ao último berço
-(de propósito: uma garrafa encostada não está deitada na prateleira), e
-sem nada por baixo o círculo ficava suspenso no ar. O remédio saiu pior
-do que a doença: o que se via era uma MANCHA CINZENTA de vários níveis de
-altura encostada à borda do ecrã — o elemento mais escuro de um separador
-feito de madeira clara, a tapar meia estante para dizer "aqui ao lado não
-há prateleira". As garrafas de encosto já se dizem sozinhas: são menores
-do que um lugar do móvel, e a parede atrás delas diz onde estão.
-
-**O móvel acaba UMA vez, e é em cima** (`.est-topo`). A fila de cima teve
-uma tábua de madeira colada por baixo, a fazer de tampo — e com o tecto
-(`.pd-h`) por cima dela ficavam duas barras a dizer a mesma coisa, uma de
-cada lado das garrafas: o fim do móvel desenhado a dobrar. Fica só o
-tecto, em cima.
-
-**E não há vão nenhum por baixo: estas garrafas ASSENTAM NAS DO ÚLTIMO
-NÍVEL.** Ficaram a um terço de lugar de distância (o `padding-bottom` da
-`.est-topo`) e o espaço lia-se como uma prateleira que falta — como se
-houvesse ainda uma madeira invisível a segurá-las. A fila de cima encosta
-às garrafas de baixo com o MESMO passo de qualquer outro nível
-(`.mprat-layout.mp-emcima`, `margin-bottom` negativo): é o encosto que diz
-em que é que ela assenta.
-
-**E a fila de cima fica CENTRADA**, como todas as outras. Encostava-se à
-parede que houvesse (era o `alinha` do `prateleiraTopo`, que já não
-existe), e o que se lia não era uma fila em cima do móvel: era uma
-prateleira torta, com todos os níveis centrados e esta a fugir para um
-lado. Quem diz que estas garrafas estão em cima é o sítio onde a fila
-está — acima de tudo, debaixo do tecto — não o canto a que encosta.
-
-O rótulo da fila de cima **não leva dourado**. Levou, e é o erro clássico
-nesta app: o dourado é a distinção do VINHO (menção, nota do Vivino) e
-gastá-lo a dizer "esta fila fica mais acima" é gastar a única cor que quer
-dizer alguma coisa. O que a separa dos "NÍVEL n" é já não ser um número —
-fica em itálico, sem o espacejamento de versalete.
+**Os dados das paredes** (`paredesLocal`, `layout.paredes`): havendo
+parede, cada nível pode abrir UM lugar de **encosto** entre o fim da
+prateleira e ela (`encosto_dir`/`encosto_esq`, códigos `15D`/`15E` — o
+número é o do NOME do nível) e, com parede em cima, o cimo do móvel leva
+uma fila (`layout.topo.capacidade`, códigos `T1…Tn`). Nenhum deles mexe na
+numeração corrida: a fila de cima é uma prateleira A FINGIR
+(`prateleiraTopo`), sem `base`, e quem os conta à parte é
+`especiaisLocal`.
 
 No editor, os encostos só aparecem depois de a parede desse lado estar
 ligada (sem parede não há vão) e usam a **mesma pele** do "Encaixa na de
@@ -853,40 +739,6 @@ fora ("CABE U…") com a caixa nativa azul por baixo.
 exatamente assim ("VEM …" cortado, a caixa nativa azul por baixo). É o
 mesmo visto do editor do local, tem de se ver igual — `ll-enc`, sempre.
 
-Com a procura ligada, só se anda pelos locais com garrafas que passam nela
-(a contagem passa a "4 encontradas · de 35") e a estante responde em **três
-pesos**, não em dois (`.ml.procurando`, o bloco "O LUGAR DURANTE A PROCURA"
-no `style.css`):
-- **encontrada** (`.msdot.achada`) — o vidro escurece e ganha um **arco** à
-  volta. É um destaque a sério e não a ausência de apagado: sem ele, a
-  resposta ficava com exatamente o aspeto que tem quando não se procura
-  nada, e era preciso saber de cor como é a estante em repouso para
-  perceber o que tinha sido encontrado. Bordô e não dourado — o dourado é a
-  distinção do VINHO (menção, nota do Vivino) e uma garrafa encontrada não
-  distingue vinho nenhum: é a app a apontar para o que lhe perguntaram, o
-  mesmo que o sombreado da `.vc-match` faz no cartão;
-- **ocupado mas não passa** (`.msdot.fora`) — apagado, como sempre foi;
-- **vazio** — baixa de contraste enquanto se procura. Não é resposta a
-  pergunta nenhuma, e branco sobre madeira era o maior contraste do ecrã:
-  gritava mais alto do que a garrafa encontrada.
-
-O arco é feito só de `box-shadow` (e de uma medida em `--slot`) porque
-`box-shadow` **não ocupa espaço de layout** — um `outline` ou uma `border`
-mais grossa mudavam a altura do lugar e o `ajustarEstantes` passava a
-discordar do que se vê. Pára nos `.09` de `--slot`: o vão entre dois
-lugares vizinhos é `(--colr - 1)`, que no mínimo (1,18) dá `.09` de cada
-lado — mais do que isso e dois arcos lado a lado colavam-se num só.
-
-**E os estados do lugar vivem NO FIM da folha, depois das três peles de
-prateleira** (`.est-fila`/`.est-sobrepostos`/`.est-regua`), nunca ao pé do
-`.msdot`. `.est-fila .msdot` e `.msdot.fora` têm a MESMA especificidade
-(duas classes cada), por isso ganha a que vier por último — e era a pele, a
-repintar o ponto a bordô cheio. O apagado da procura esteve **morto** assim
-nas três peles, sem um erro à vista: procurava-se e a estante não mexia um
-pixel. Um estado novo do lugar entra nesse bloco. Pela mesma razão o arco
-vive numa variável (`--arco`): `.msdot.cheia:hover` tem mais especificidade
-e, sem ela, passar o rato por cima apagava-o.
-
 Em **Definições › Locais da garrafeira** cada local é uma `.loc-row`: o ponto
 da cor, o NOME numa linha só dele e, por baixo, o que ele é — a contagem de
 garrafas, a descrição, as prateleiras. Os dois comandos ficam **juntos, num
@@ -898,7 +750,14 @@ extremo oposto, a lerem-se como comandos de coisas diferentes, com a
 contagem entalada entre os dois. A contagem é informação, e informação
 lê-se no texto, não entre botões.
 
-O **editor do local** (`abrirLocalModal`, `renderLocalLayoutEditor`) é uma
+O **editor do local** (`abrirLocalModal`, `renderLocalLayoutEditor`)
+começa pelo **Tipo de móvel** (`movelEditorHTML`, 09/10/2026): quatro
+cartões com o desenho pequeno de cada móvel (`movelMiniHTML` — um
+`<select>` não mostra desenhos), e por baixo a cor (no pintado: a paleta
+`CORES_MOVEL` e "outra cor", o seletor do sistema invisível por cima da
+bola do arco-íris) ou o material (no favo). Grava-se no `layout`
+(`movel`, `cor`), como as paredes: é desenho, e não precisa de coluna nem
+de migração. Depois, as paredes e uma
 linha por prateleira: o nome editável no sítio (sem caixa — é um título),
 e por baixo **Formato** e **Lugares**. O formato é um botão com os
 pontinhos do desenho atual (`prateleiraPreviewHTML`) que abre a folha

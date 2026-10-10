@@ -675,8 +675,9 @@ function prateleiraLayoutInfo(p,opt){
   let slots=[];
   /* O LUGAR DE ENCOSTO ocupa a coluna de folga do lado da parede — a
      última (ou a primeira) meia-coluna da grelha do móvel. Fica na fila
-     de BAIXO, que é onde a garrafa assenta, e não leva berço: ela está
-     encostada ao lado do móvel, não deitada na régua (ver `ondaBgSVG`). */
+     de BAIXO, que é onde a garrafa assenta. O desenho põe-na noutro
+     sítio (logo a seguir à prateleira, ver `mapaMovelDesenho`); a coluna
+     daqui é a do seletor de posição. */
   const encosto=[];
   if(!preview&&p){
     const fundo=(formato==='sobrepostos'&&capacidade>1)?2:1;
@@ -755,8 +756,7 @@ function prateleiraLayoutInfo(p,opt){
    prateleiras centradas, os lugares já caem uns entre os outros quando as
    capacidades têm paridades diferentes (4 e 3): aí não é preciso desviar
    nada. Quando têm a mesma (4 e 4), ficariam alinhados e é preciso meia
-   coluna. `ondulada` é quem desenha a tábua em onda: a que encaixa e a que
-   está por baixo dela, para o conjunto se ler como um ziguezague. */
+   coluna. */
 function layoutLocal(l){
   const raw=l&&l.layout&&Array.isArray(l.layout.prateleiras)?l.layout.prateleiras:[];
   const out=[];
@@ -791,13 +791,6 @@ function layoutLocal(l){
     p.encaixe=!!(p.encaixe&&ant);      // a primeira não tem em que encaixar
     p.desvio=p.encaixe?((ant.desvio||0)+(((p.capacidade-ant.capacidade)%2===0)?.5:0))%1:0;
   });
-  // A RÉGUA é de todas as prateleiras, não só das que encaixam: um móvel
-  // com dois desenhos diferentes (uma tábua maciça aqui, berços ali) lia-se
-  // como dois móveis. Uma garrafa assenta num berço em U seja qual for o
-  // formato do nível; o que o `encaixe` decide é o DESENCONTRO, não a
-  // madeira. Quem fica sem ela é o seletor de posição, que passa
-  // `ondulada:false` (ver `renderPickerPosicoes`).
-  out.forEach(p=>{p.ondulada=true;});
   // A largura do móvel: o nível mais largo, mais uma coluna de folga de
   // CADA lado. Meia coluna de folga não chegava — uma prateleira desviada
   // gastava-a toda e o último lugar ficava cortado pela borda.
@@ -882,7 +875,7 @@ function prateleiraTopo(l){
   if(!cap)return null;
   const prats=layoutLocal(l);
   return {nome:'Em cima',origem:'Em cima',capacidade:cap,formato:'fila',mais_em:'cima',
-    encaixe:false,ondulada:false,topo:true,
+    encaixe:false,topo:true,
     colsw:(prats[0]&&prats[0].colsw)||cap+2};
 }
 // Todos os lugares que NÃO são da numeração corrida, para as contagens.
@@ -1158,7 +1151,7 @@ function fecharModal(id){
 document.addEventListener('click',e=>{
   if(e.target.classList&&e.target.classList.contains('modal')&&!e.target.classList.contains('pagina'))
     fecharModal(e.target.id);
-  if(MAPA_POP_LOCAL&&!e.target.closest('#mapa-pop,.msdot.cheia'))mapaPopupFechar();
+  if(MAPA_POP_LOCAL&&!e.target.closest('#mapa-pop,.mvg.cheia'))mapaPopupFechar();
 });
 
 /* ── O CATÁLOGO DENTRO DA GARRAFEIRA (fase 1, 30/09/2026) ──────────
@@ -4401,140 +4394,20 @@ function mapaContagemHTML(x,d){
   return `<b>${x.gs.length}</b> ${x.gs.length===1?'garrafa':'garrafas'} · ${nv} ${nv===1?'vinho':'vinhos'}`;
 }
 
-/* A prateleira desenhada em HTML: o formato dá o fundo de madeira — barra
-   para a fila, bloco para os sobrepostos, fita em ziguezague por trás dos
-   lugares — e a grelha põe cada lugar na coluna e fila que
-   `prateleiraLayoutInfo` lhe deu. É a MESMA função para a estante do
-   local e para o seletor de posição da garrafa: os lugares são o que muda
-   (`slotsHTML`), a madeira não. */
-/* TODAS as prateleiras de um local têm a MESMA largura — a do nível mais
-   largo, mais uma coluna de folga (`colsw`) — e os lugares ficam
-   centrados nela. Antes cada prateleira valia o que os seus lugares
-   mediam, e uma estante de 4/3/4/3 lia-se como uma pilha de tábuas
-   irregulares em vez de um móvel. A folga é o que deixa uma prateleira
-   desviar-se meia coluna sem sair da caixa. */
-/* Duas madeiras, e é o FORMATO que escolhe: uma prateleira de uma fila
-   leva a régua com berços (`ondaBgSVG`) porque é nela que a garrafa
-   assenta deitada; uma de garrafas SOBREPOSTAS leva uma tábua lisa. As
-   duas tinham a régua, e nos sobrepostos ela dizia meia verdade: o berço
-   vai só sob a fila de baixo (as de cima assentam nas de baixo), e uma
-   fila com berços debaixo de outra sem eles lia-se como uma prateleira
-   inacabada. Num frigorífico — o móvel que este formato representa — a
-   garrafa assenta é numa prateleira lisa, e é isso que a tábua diz.
-   As duas partilham a cor e a espessura, para continuar a ler-se como o
-   mesmo móvel. */
+/* A prateleira em HTML do SELETOR DE POSIÇÃO da garrafa
+   (`renderPickerPosicoes`): uma grelha que põe cada lugar na coluna e
+   fila que `prateleiraLayoutInfo` lhe deu. Aqui a prateleira é para se
+   TOCAR — lugares do mesmo tamanho, sem madeira nem desencontro. O local
+   desenhado no separador Locais já não passa por aqui: é o
+   `mapaMovelDesenho`, que desenha o MÓVEL (ver "O MÓVEL DESENHADO"). */
 function estanteHTML(p,info,slotsHTML,cls){
-  const regua=!!(p&&p.ondulada);
-  const tabua=regua&&info.formato==='sobrepostos';
-  return `<div class="est est-${info.formato}${regua?' est-regua':''}${tabua?' est-lisa':''}${info.desenc?' desenc':''}${cls?' '+cls:''}"
-    style="--cols:${info.cols};--colsw:${info.colsw};--gcols:${info.gridCols};--span:${info.span}">${
-    regua?(tabua?'<span class="est-bg-l" aria-hidden="true"></span>':ondaBgSVG(info)):''}${slotsHTML}</div>`;
+  return `<div class="est est-${info.formato}${info.desenc?' desenc':''}${cls?' '+cls:''}"
+    style="--cols:${info.cols};--colsw:${info.colsw};--gcols:${info.gridCols};--span:${info.span}">${slotsHTML}</div>`;
 }
 // O `style` de um lugar na grelha. `span` é a unidade dos sobrepostos:
 // cada lugar ocupa DUAS meias-colunas, e é isso que deixa a fila mais
 // curta começar meia coluna à frente e ficar centrada.
 function slotGridStyle(s){return `grid-column:${s.col} / span ${s.span||1};grid-row:${s.row}`;}
-/* A TÁBUA EM ONDA das prateleiras que encaixam: os lugares assentam nos
-   VALES e a madeira sobe entre eles, que é como uma prateleira de
-   ziguezague é feita. Cada prateleira desenha a sua; empilhadas e
-   desencontradas, leem-se como o ziguezague de sempre.
-
-   O traço é `non-scaling-stroke` — o viewBox estica-se à caixa
-   (`preserveAspectRatio:none`) e sem isso a onda ficava mais grossa nas
-   diagonais do que nas pontas. */
-/* A RÉGUA de uma prateleira de ziguezague: uma tira fina que corre o
-   móvel todo e faz um BERÇO em U debaixo de cada lugar, subindo entre
-   eles. É o que está lá em casa — as réguas onduladas onde a garrafa
-   assenta deitada — e não uma tábua maciça: a primeira versão preenchia
-   a metade de baixo da caixa e lia-se como um bloco de madeira com o
-   cimo às ondas, não como a prateleira que é.
-
-   O fundo do berço é um ASSENTO reto e não duas curvas a juntarem-se num
-   ponto: uma onda de seno (ou um V, mesmo muito aberto) punha a garrafa a
-   assentar num ponto só, e o que segura uma garrafa é o berço inteiro.
-   As paredes sobem desse assento e o que sobra entre dois berços é a
-   crista.
-
-   A tira atravessa o móvel INTEIRO (a caixa é sempre da largura do
-   local), mas os berços têm de cair sob os lugares — que estão centrados
-   nela e podem estar desviados meia coluna. Daí a conta do `off`. */
-function ondaBgSVG(info){
-  /* A régua é uma TIRA colada ao fundo da caixa, com altura própria em
-     `--slot` (ver `.est-bg`) — não `inset:0`. Assim o berço cai sempre à
-     mesma distância do fundo da garrafa, quer a prateleira tenha uma fila
-     (`fila`) ou duas (`sobrepostos`, que é o dobro da altura). Com o SVG
-     esticado à caixa inteira, o mesmo `viewBox` dava alturas diferentes
-     conforme o formato e os berços fugiam dos lugares. */
-  const colsw=info.colsw||info.cols,SEAT=57,ESP=86;
-  const larg=100/colsw;                          // uma coluna, em % da caixa
-  /* Os berços vão sob a fila de BAIXO e só sob ela: é nela que as garrafas
-     assentam na madeira. Nos `sobrepostos`, as de cima assentam nas de
-     baixo — dar-lhes berço era desenhar uma prateleira que não existe. */
-  const fundo=info.slots.reduce((m,s)=>Math.max(m,s.row),1);
-  const cxs=info.slots.filter(s=>s.row===fundo&&!s.encosto)
-    .map(s=>((s.col-1+(s.span||1)/2)/2)*larg)     // meias-colunas → % da caixa
-    .sort((a,b)=>a-b);
-  if(!cxs.length)return '';
-  const f=n=>n.toFixed(2);
-  /* A régua acaba logo a seguir ao último berço e não na borda da caixa.
-     Atravessar o móvel todo dava-lhe dois troços retos e compridos, um de
-     cada lado — e o que se lia era uma linha contínua a ir do nome do
-     nível até ao outro extremo da linha, não uma prateleira. */
-  const PONTA=.24;                               // o que sobra depois do berço, em colunas
-  /* O berço tem TRÊS partes: uma zona de contacto RETA no fundo
-     (`ASSENTO`), onde a garrafa assenta de facto, e duas paredes
-     (`PAREDE`) que sobem dela até à crista. Antes as duas curvas
-     juntavam-se no centro e, mesmo com as tangentes quase horizontais, o
-     fundo continuava a ser um V muito aberto: a garrafa tocava-lhe num
-     ponto e lia-se pousada em cima da régua, não deitada dentro dela.
-
-     A BOCA do berço (assento + duas paredes) tem de ser MAIOR do que a
-     garrafa, e a garrafa mede `1/colr` colunas — no espaçamento mais
-     apertado (`COL_MIN`) são 0,85 da coluna. Daí a boca sair do próprio
-     `COL_MIN` com uma folga, e não de um valor a meio da gama: as paredes
-     são o desenho todo, e a meio da gama metade dos casos punha-as
-     inteiramente ATRÁS do círculo do lugar (que é opaco e vem por cima,
-     ver `.msdot`) — sobrava a crista reta e a régua voltava a ler-se como
-     uma tábua contínua. E é o caso mais comum, não o raro: cai-se em
-     `COL_MIN` exatamente nos níveis com muitos lugares num ecrã estreito.
-
-     Não se lê o `--colr` a sério aqui de propósito: ele é escrito no `.ml`
-     DEPOIS deste SVG existir e sem redesenhar o mapa, por isso um berço
-     calculado a partir dele ficaria a discordar do espaçamento no
-     primeiro desenho. */
-  const BOCA=1.08/COL_MIN;                       // a boca, em colunas: a garrafa mais 8%
-  /* A tábua é uma FORMA CHEIA e não dois traços sobre um caminho: o que
-     está no móvel é uma prancha de madeira com um berço RECORTADO no
-     cimo, debaixo de cada garrafa — e uma régua de 0,2 de espessura,
-     por muito que ondule, lê-se como um arame. Cheia, o berço é o
-     RECORTE: a garrafa desce para dentro dele e a madeira aparece entre
-     as garrafas, que é o que dá o desenho da garrafeira.
-
-     `m` é a meia-boca, `a` o meio-assento (a zona reta onde a garrafa
-     toca) e `k` a tangente que arredonda a parede. */
-  const m=larg*BOCA/2,a=m*.38,k=m*.28;
-  const ini=Math.max(0,cxs[0]-m-larg*PONTA);
-  const fim=Math.min(100,cxs[cxs.length-1]+m+larg*PONTA);
-  let topo=`M${f(ini)} 0`;
-  cxs.forEach(cx=>{
-    topo+=` L${f(cx-m)} 0`;                       // o cimo da madeira entre berços
-    topo+=` C${f(cx-m+k)} 0 ${f(cx-a-k)} ${SEAT} ${f(cx-a)} ${SEAT}`;
-    topo+=` L${f(cx+a)} ${SEAT}`;                 // o assento: onde a garrafa toca
-    topo+=` C${f(cx+a+k)} ${SEAT} ${f(cx+m-k)} 0 ${f(cx+m)} 0`;
-  });
-  topo+=` L${f(fim)} 0`;
-  /* O gradiente vive dentro do SVG (um `fill` não aceita gradiente CSS).
-     O id repete-se por prateleira — é o mesmo gradiente, e o desenho é
-     igual qualquer que seja o que o browser resolva. */
-  return `<svg class="est-bg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-    <defs><linearGradient id="est-mad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#f8ecd6"/><stop offset=".55" stop-color="#efdcbb"/><stop offset="1" stop-color="#e4cba2"/>
-    </linearGradient></defs>
-    <path class="est-tab" d="${topo} L${f(fim)} 100 L${f(ini)} 100 Z"/>
-    <path class="est-tab-esp" d="M${f(ini)} ${ESP} L${f(fim)} ${ESP} L${f(fim)} 100 L${f(ini)} 100 Z"/>
-    <path class="est-tab-borda" d="${topo}"/>
-  </svg>`;
-}
 
 function mapaCelulaListaHTML(g){
   const v=IDXV[g.vinho_id]||{nome:'?'};
@@ -4560,89 +4433,346 @@ function mapaLocalListaHTML(gs,d){
     </div>`;
   }).join('');
 }
-// Um local COM desenho: nível a nível, de cima para baixo como na estante
-// a sério (o Nível 1 é o de baixo).
-/* AS PAREDES são desenhadas UMA VEZ para a estante toda e não nível a
-   nível: o que está no móvel é uma parede contínua, e uma tira por linha
-   dava uma linha picada (as linhas têm margens entre si, e o ziguezague
-   até margens negativas). Ficam num `.ml-est` em posição relativa, e o x
-   sai de medir a estante depois de ela existir (ver `posicionarParedes`)
-   — todas as prateleiras têm a MESMA largura, por isso a parede fica
-   naturalmente ao nível das mais compridas e as curtas deixam o vão à
-   vista, como no móvel. */
-function mapaEstanteHTML(l,gs,d){
-  const prats=prateleirasDesc(layoutLocal(l));
-  const occ=ocupacaoLayout(l.id);
-  const par=paredesLocal(l);
-  const topo=prateleiraTopo(l);
-  const linhaHTML=p=>{
-    const info=prateleiraLayoutInfo(p);
-    const slots=info.slots.map(s=>{
-      const k=String(s.lugar),lista=occ[k]||[];
-      const pos=` style="${slotGridStyle(s)}"`;
-      const extra=(s.encosto?' encosto encosto-'+s.encosto:'')+(s.topo?' emcima':'');
-      if(!lista.length)return `<button class="msdot vazia${extra}"${pos}
-        onclick="mapaLugarVazio(${l.id},'${escJs(p.nome)}','${escJs(k)}')"
-        title="${esc(posicaoTxt(p.nome,k))} — vazio"><span class="msdot-id">${esc(k)}</span></button>`;
-      const passam=d.filtrando?lista.filter(g=>d.okG.has(g.id)):lista;
-      const g=passam[0]||lista[0],v=IDXV[g.vinho_id]||{nome:'?'};
-      /* A procura tem de se ver no DESENHO e não só na contagem do
-         cabeçalho: `achada` é o que passa (arco à volta), `fora` o que
-         está ocupado por garrafa que não passa (apagado). Ver "O LUGAR
-         DURANTE A PROCURA" no style.css. */
-      const achada=d.filtrando&&passam.length>0;
-      // a moldura de madeira é da GARRAFA (`caixa_madeira`): um quadrado
-      // de madeira na mesma célula, por trás do círculo
-      const cx=g.caixa_madeira?`<span class="mscx" aria-hidden="true"${pos}></span>`:'';
-      return `${cx}<button class="msdot cheia${lista.length>1?' conflito':''}${achada?' achada':''}${d.filtrando&&!passam.length?' fora':''}${extra}"${pos}
-        onclick="mapaPopupToggle(${l.id},'${escJs(p.nome)}','${escJs(k)}',this,event)"
-        onmouseenter="mapaPopupHover(${l.id},'${escJs(p.nome)}','${escJs(k)}',this)" onmouseleave="mapaPopupSair()"
-        title="${esc(v.nome)} ${v.ano||''} · ${esc(posicaoTxt(p.nome,k))}${g.caixa_madeira?' · em caixa de madeira':''}${lista.length>1?` · ${lista.length} garrafas`:''}">
-        <span class="msdot-id">${g.vinho_id}</span>
-        ${lista.length>1?`<span class="msdot-q">×${lista.length}</span>`:''}
-      </button>`;
-    }).join('');
-    return `<div class="mprat-layout${p.encaixe?' encaixa':''}${p.topo?' mp-emcima':''}">
-      <span class="mp-lbl">${esc(p.nome)}</span>
-      <span class="mp-fio"></span>
-      <div class="est-wrap">${estanteHTML(p,info,slots,p.topo?'est-topo':'')}</div>
-      <span class="mp-esp"></span>
-    </div>`;
-  };
-  const temCaixa=db.garrafas.some(g=>g.local_id===l.id&&naGarrafeira(g)&&g.caixa_madeira);
-  /* NÃO HÁ NICHO. Houve — um recesso sombreado de uma coluna, do primeiro
-     ao último encosto — para dar chão às garrafas encostadas, que sem ele
-     ficavam a flutuar ao lado do móvel. O remédio saiu pior: uma mancha
-     cinzenta de vários níveis de altura encostada à borda do ecrã, o
-     elemento mais escuro de um separador que é feito de madeira clara, a
-     tapar meia estante para dizer "aqui ao lado não há prateleira". As
-     garrafas de encosto já se dizem sozinhas — são menores do que um
-     lugar do móvel, e a parede atrás delas diz onde estão. */
-  return `<div class="ml-est${par.dir?' pd-dir':''}${par.esq?' pd-esq':''}${par.topo?' pd-topo':''}">
-    ${par.topo?'<span class="pd-h" aria-hidden="true"></span>':''}
-    ${par.dir?'<span class="pd-v dir" aria-hidden="true"></span>':''}
-    ${par.esq?'<span class="pd-v esq" aria-hidden="true"></span>':''}
-    ${topo?linhaHTML(topo):''}${prats.map(linhaHTML).join('')}
-  </div>
-  <div class="ml-leg"><span><i class="cheia"></i>Ocupado · nº do vinho</span><span><i class="vazia"></i>Vazio · nº do lugar</span>${
-    temCaixa?'<span><i class="cx"></i>Em caixa de madeira</span>':''}${
-    (par.dir||par.esq||par.topo)?'<span><i class="pd"></i>Parede</span>':''}</div>`;
+/* ── O MÓVEL DESENHADO ─────────────────────────────────────────────
+   Um local com desenho não é uma grelha de círculos: é o MÓVEL, visto de
+   frente, numa sala — e as garrafas são os fundos das garrafas em vidro,
+   da cor do vinho, com o ano (09/10/2026, o dono das apps, sobre os
+   mockups: "Até gosto da proposta A"). Há quatro móveis
+   (`layout.movel`, escolhido no editor do local):
+   - **madeira**: prumos, rodapé e réguas com um berço em U debaixo de
+     cada garrafa, de ponta a ponta entre os prumos, e o fundo em tábuas;
+   - **frigorifico**: corpo grafite, a luz em cima, prateleiras de arame
+     com a frente em faia, e o vidro da porta por cima de tudo;
+   - **favo**: os módulos de plástico (ou esferovite) em favo — um
+     hexágono com um furo por lugar, como a Garrafeira Principal do
+     Barrona. Os níveis encaixados fecham o favo; um nível sem encaixe
+     começa um bloco novo, que é o que acontece no móvel a sério;
+   - **pintado**: um móvel com prateleiras lisas, na cor que se escolheu
+     (`layout.cor`); o fundo, as laterais e o tampo saem dessa cor.
+   Sem `layout.movel` escolhido, um local só de sobrepostos é um
+   frigorífico e o resto é madeira — as garrafeiras que já existiam
+   ficam desenhadas sem ninguém mexer em nada.
+
+   A geometria não é nova: QUE lugar fica em que coluna e em que fila é o
+   `prateleiraLayoutInfo` de sempre (a numeração corrida, o desencontro do
+   encaixe, a fila curta dos sobrepostos, a fila de cima). Daqui só sai
+   onde o desenho põe cada nível na vertical e o que fica por trás. As
+   medidas estão em DIÂMETROS de garrafa (1 = uma garrafa) e o tamanho a
+   sério de uma garrafa (`s`, em px) só se escolhe no `ajustarEstantes`,
+   depois de medir o ecrã — a estante inteira tem de caber sem scroll. */
+const MOVEIS=[
+  ['madeira','Estante de madeira','Prumos e berços'],
+  ['frigorifico','Frigorífico','Prateleiras de arame'],
+  ['favo','Módulos em favo','Plástico ou esferovite'],
+  ['pintado','Móvel pintado','Escolhes a cor']];
+const CORES_MOVEL={
+  favo:[['Terracota','#b5563b'],['Esferovite','#efece4'],['Preto','#34302e']],
+  pintado:[['Branco','#f1ede6'],['Areia','#d8c6a5'],['Verde-salva','#9fb39b'],['Azul-petróleo','#2f5a63'],
+    ['Cinza','#8d8b86'],['Preto','#2b2827'],['Bordô','#7b1f3d']]};
+const COR_MOVEL_PADRAO={favo:'#b5563b',pintado:'#9fb39b'};
+function corValida(c){return /^#[0-9a-f]{6}$/i.test(String(c||''))?String(c).toLowerCase():null;}
+function movelLocal(l){
+  const lay=(l&&l.layout)||{};
+  let tipo=MOVEIS.some(m=>m[0]===lay.movel)?lay.movel:null;
+  if(!tipo){
+    const ps=layoutLocal(l);
+    tipo=ps.length&&ps.every(p=>p.formato==='sobrepostos')?'frigorifico':'madeira';
+  }
+  return {tipo,cor:COR_MOVEL_PADRAO[tipo]?(corValida(lay.cor)||COR_MOVEL_PADRAO[tipo]):null};
 }
-/* O x das paredes: medido, não calculado. A estante vive numa linha com o
-   nome do nível de um lado e um espaçador do outro, e a largura do lugar
-   é escolhida a correr (`ajustarEstantes`) — refazer essa conta aqui era
-   ficar a discordar dela. Mede-se a caixa da estante e diz-se à parede
-   onde parar. */
-function posicionarParedes(){
-  const box=document.getElementById('mapa');
-  const est=box&&box.querySelector('.ml-est');
-  if(!est)return;
-  const ests=est.querySelectorAll('.est');
-  const e=ests[ests.length-1];
-  if(!e)return;
-  const a=est.getBoundingClientRect(),b=e.getBoundingClientRect();
-  est.style.setProperty('--pd-l',Math.max(0,b.left-a.left).toFixed(1)+'px');
-  est.style.setProperty('--pd-r',Math.max(0,a.right-b.right).toFixed(1)+'px');
+// Uma cor a caminho de outra (`t` de 0 a 1): os tons do móvel pintado e
+// do favo saem todos da cor que se escolheu.
+function corMistura(hex,para,t){
+  const p=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+  const a=p(hex),b=p(para);
+  return '#'+a.map((v,i)=>Math.round(v+(b[i]-v)*t).toString(16).padStart(2,'0')).join('');
+}
+function corClara(hex){
+  const [r,g,b]=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255);
+  return 0.299*r+0.587*g+0.114*b>0.62;
+}
+/* O vidro de cada cor de vinho: o tinto rubi, o branco dourado. É a cor
+   do VINHO, e por isso não é o bordô da app nem o dourado da distinção. */
+function vidroDe(v){
+  const t=chave(v&&v.tipo);
+  return t==='branco'?'branco':t==='rose'?'rose':t==='espumante'?'espumante':t==='licoroso'?'licoroso':t==='frisante'?'frisante':'tinto';
+}
+const VIDRO_NOME={tinto:'Tinto',branco:'Branco',rose:'Rosé',espumante:'Espumante',licoroso:'Licoroso',frisante:'Frisante'};
+
+/* As medidas de cada móvel, em diâmetros de garrafa:
+   - `chao`: o que há debaixo do primeiro nível (o rodapé, a base do
+     frigorífico); `apoio`, a espessura do que segura a garrafa;
+   - `pEnc`/`pFila`/`pSob`: de um nível ao seguinte — encaixado (a garrafa
+     assenta nas de baixo), com um apoio pelo meio, ou de sobrepostos;
+   - `pTopo`: da última fila à fila de cima. Na madeira e no favo ela
+     assenta nas garrafas do último nível (não há tampo); no pintado e no
+     frigorífico, em cima do tampo. */
+const MV_C=1.16, MV_R=MV_C/Math.sqrt(3);
+const MV_P={
+  madeira:{chao:.32,apoio:.19,pEnc:.9,pFila:1.3,pSob:1.42,pTopo:.84},
+  frigorifico:{chao:.5,apoio:.17,pEnc:.84,pFila:1.42,pSob:1.42,pTopo:1.75},
+  pintado:{chao:.32,apoio:.14,pEnc:.84,pFila:1.3,pSob:1.42,pTopo:1.32},
+  favo:{chao:0,apoio:MV_R,pEnc:1.5*MV_R,pFila:1.3,pSob:1.3,pTopo:MV_R/2+.58}};
+const SLOT_MIN=18, SLOT_MAX=46;
+let MV_ATUAL=null;
+
+/* Onde fica cada lugar, em diâmetros: x a partir do eixo do móvel, y a
+   partir do chão. O x de um lugar sai da coluna que o
+   `prateleiraLayoutInfo` lhe deu (meias-colunas de um móvel com `colsw`
+   colunas); o y, de empilhar os níveis pela ordem do array — a mesma
+   ordem que numera os lugares. */
+function movelGeo(l,tipo){
+  const P=MV_P[tipo];
+  const occ=ocupacaoLayout(l.id);
+  const xDe=(s,info)=>((s.col-1+(s.span||1)/2)/2-info.colsw/2)*MV_C;
+  const niveis=[],lugares=[];
+  let prev=null;
+  layoutLocal(l).forEach(p=>{
+    const info=prateleiraLayoutInfo(p);
+    const sob=info.formato==='sobrepostos'&&info.rows===2;
+    const apoio=tipo==='favo'?MV_R:(info.formato==='sobrepostos'&&tipo==='madeira'?.14:P.apoio);
+    const yb=prev==null?P.chao+apoio+.5:prev+(p.encaixe?P.pEnc:info.formato==='sobrepostos'?P.pSob:P.pFila);
+    const yt=sob?yb+(tipo==='favo'?(info.desenc?1.5:2)*MV_R:(info.desenc?.84:.98)):yb;
+    const xs=[];
+    info.slots.forEach(s=>{
+      const baixo=!sob||s.row===2;
+      const u={k:String(s.lugar),x:s.encosto?null:xDe(s,info),y:baixo?yb:yt,p,encosto:s.encosto||null,baixo};
+      lugares.push(u);
+      if(!s.encosto&&baixo)xs.push(u.x);
+    });
+    xs.sort((a,b)=>a-b);
+    niveis.push({p,yb,yt,sob,enc:!!p.encaixe,xs,formato:info.formato});
+    prev=yt;
+  });
+  const ultimo=prev;
+  const topo=prateleiraTopo(l);
+  if(topo){
+    const info=prateleiraLayoutInfo(topo);
+    const y=prev+P.pTopo;
+    info.slots.forEach(s=>lugares.push({k:String(s.lugar),x:xDe(s,info),y,p:topo,topo:true,baixo:true}));
+    niveis.push({p:topo,yb:y,yt:y,topo:true,xs:[]});
+    prev=y;
+  }
+  lugares.forEach(u=>{u.gs=occ[u.k]||[];});
+  const xMax=Math.max(.5,...lugares.filter(u=>u.x!=null&&!u.topo).map(u=>Math.abs(u.x)));
+  return {niveis,lugares,ultimo,yTop:prev+.5,xMax};
+}
+
+/* A régua de madeira de um nível: de prumo a prumo, com um BERÇO em U
+   debaixo de cada garrafa (o fundo é um assento reto: é o berço inteiro
+   que segura a garrafa, não um ponto). Devolve a forma cheia, a faixa de
+   sombra por baixo e o contorno de cima, que leva o filete de luz. */
+function movelRegua(n,hw,X,Y){
+  const m=MV_C/2,a=.2,k=.17;
+  const seat=n.yb-.52,crest=n.yb-.5+.28,bot=n.yb-.5-.17;
+  const f=v=>v.toFixed(1);
+  let top=`M${f(X(-hw))} ${f(Y(crest))} L${f(X(n.xs[0]-m))} ${f(Y(crest))}`;
+  n.xs.forEach((cx,i)=>{
+    if(i&&cx-m>n.xs[i-1]+m+.001)top+=` L${f(X(cx-m))} ${f(Y(crest))}`;
+    top+=` C${f(X(cx-m+k))} ${f(Y(crest))} ${f(X(cx-a-k))} ${f(Y(seat))} ${f(X(cx-a))} ${f(Y(seat))}`;
+    top+=` L${f(X(cx+a))} ${f(Y(seat))}`;
+    top+=` C${f(X(cx+a+k))} ${f(Y(seat))} ${f(X(cx+m-k))} ${f(Y(crest))} ${f(X(cx+m))} ${f(Y(crest))}`;
+  });
+  top+=` L${f(X(hw))} ${f(Y(crest))}`;
+  return {
+    cheia:`${top} L${f(X(hw))} ${f(Y(bot))} L${f(X(-hw))} ${f(Y(bot))} Z`,
+    sombra:`M${f(X(-hw))} ${f(Y(bot+.07))} L${f(X(hw))} ${f(Y(bot+.07))} L${f(X(hw))} ${f(Y(bot))} L${f(X(-hw))} ${f(Y(bot))} Z`,
+    topo:top};
+}
+
+/* O nome de um nível na régua da esquerda: "Nível 12" é só "12" (o
+   rótulo cabe numa coluna estreita e lê-se como numa planta); um nome
+   que a pessoa escreveu fica como ela o escreveu. */
+function movelRotulo(p){
+  if(p.topo)return 'Em cima';
+  const m=/^n[ií]vel\s*(\d+)$/i.exec(String(p.nome||'').trim());
+  return m?m[1]:String(p.nome||'');
+}
+
+/* A legenda não depende do tamanho: é desenhada logo, e o desenho, que
+   depende, vem depois de se medir o ecrã (`ajustarEstantes`). */
+function mapaMovelLegendaHTML(l){
+  const {tipo}=movelLocal(l);
+  const g=movelGeo(l,tipo);
+  const vidros=new Set();
+  let livres=0,caixa=false;
+  g.lugares.forEach(u=>{
+    if(!u.gs.length){livres++;return;}
+    const gg=u.gs[0];
+    vidros.add(vidroDe(IDXV[gg.vinho_id]));
+    if(gg.caixa_madeira)caixa=true;
+  });
+  const par=paredesLocal(l);
+  const it=(cls,txt)=>`<span><i class="mvl ${cls}"></i>${txt}</span>`;
+  return `<div class="ml-leg">${Object.keys(VIDRO_NOME).filter(k=>vidros.has(k)).map(k=>it('v-'+k,VIDRO_NOME[k])).join('')}${
+    livres?it('vazia','Lugar livre'):''}${caixa?it('cx','Caixa de madeira'):''}${
+    (par.dir||par.esq||par.topo)?it('pd','Parede'):''}</div>`;
+}
+
+/* O desenho do local, com o tamanho de uma garrafa escolhido para caber em
+   `W`×`H` px. É HTML posicionado à mão (e um SVG para as réguas e o
+   favo): blocos da sala e do móvel por trás, as garrafas por cima. */
+function mapaMovelDesenho(st,W,H){
+  const l=st.l,d=st.d;
+  const {tipo,cor}=movelLocal(l);
+  const g=movelGeo(l,tipo);
+  const par=paredesLocal(l);
+  const favo=tipo==='favo',frigo=tipo==='frigorifico',pint=tipo==='pintado',mad=tipo==='madeira';
+  // a meia-largura por dentro do móvel, e a de fora (com os prumos)
+  const hw=favo?g.xMax+MV_C/2:g.xMax+.5+(mad?.26:.22);
+  const PW=favo?0:frigo?.34:.3;
+  const oh=hw+PW+(favo?.04:0);
+  /* O ENCOSTO é uma garrafa do tamanho das outras, logo a seguir à
+     prateleira (09/10/2026, o dono: "não colocávamos tão longe da
+     prateleira, nem o vinho mais pequeno"). No favo fica onde ficaria o
+     módulo seguinte desse nível — é o vão entre o fim da fila e a parede;
+     nos outros, encostada à lateral do móvel. */
+  const encX=u=>{
+    const n=g.niveis.find(z=>z.p===u.p);
+    const xs=(n&&n.xs.length)?n.xs:[0];
+    if(favo)return u.encosto==='dir'?xs[xs.length-1]+MV_C:xs[0]-MV_C;
+    return u.encosto==='dir'?oh+.54:-oh-.54;
+  };
+  g.lugares.forEach(u=>{if(u.encosto)u.x=encX(u);});
+  // até onde chega o desenho de cada lado: o móvel, os encostos e a fila
+  // de cima (que pode ser mais larga do que o móvel, e leva as caixas)
+  const topoExt=Math.max(0,...g.lugares.filter(u=>u.topo).map(u=>Math.abs(u.x)+.58));
+  const dirMax=Math.max(oh,topoExt,...g.lugares.filter(u=>u.encosto==='dir').map(u=>u.x+.5));
+  const esqMax=Math.max(oh,topoExt,...g.lugares.filter(u=>u.encosto==='esq').map(u=>-u.x+.5));
+  const WW=.34, folgaPd=.06;
+  const rotulos=g.niveis.map(n=>movelRotulo(n.p));
+  const RW=Math.max(.65,Math.min(2.4,Math.max(...rotulos.map(t=>t.length))*.2+.15)), GR=.18;
+  const esqU=RW+GR+(par.esq?WW+folgaPd:0)+esqMax;
+  const U=esqU+dirMax+(par.dir?folgaPd+WW:0)+.1;
+  const FP=.42;
+  let yMax,postTop=0,capTop=0,intTop=0,corpoTop=0;
+  const comTopo=g.niveis.some(n=>n.topo);
+  if(frigo){intTop=g.ultimo+.5+.45;corpoTop=intTop+.3;}
+  if(pint||(mad&&!comTopo))capTop=g.ultimo+.5+.1+.2+(pint?.02:0);
+  if(mad)postTop=comTopo?(g.niveis.filter(n=>!n.topo).pop().yb-.5+.4):capTop-.2;
+  if(pint)postTop=capTop-.2;
+  if(comTopo)yMax=g.yTop+.06+.34;
+  else if(frigo)yMax=corpoTop+.15;
+  else if(favo)yMax=g.ultimo+MV_R+.3;
+  else yMax=capTop+.2;
+  const Hu=yMax+FP;
+  /* Num ecrã largo a sala é um QUADRO centrado, do tamanho do móvel e um
+     pouco mais: de ponta a ponta do cartão, a parede empurrava o móvel
+     para um canto e sobrava meia sala vazia. No telemóvel ocupa o cartão
+     todo, que é o que ele tem. */
+  const quadro=W>=600;
+  if(quadro)H-=24;
+  let s=Math.min((quadro?W-24:W)/U,(H>120?H:640)/Hu,SLOT_MAX);
+  s=Math.max(s,SLOT_MIN);
+  const larg=quadro?Math.min(W-24,Math.max(U*s+3*s,360)):Math.max(W,U*s);
+  const sobra=larg-U*s;
+  const off=par.dir&&!par.esq?sobra:par.esq&&!par.dir?0:sobra/2;
+  const X=x=>off+(esqU+x)*s, Y=y=>(yMax-y)*s;
+  const r1=v=>Math.round(v*10)/10;
+  const blk=(cls,l0,t,w,h,est)=>`<span class="mvb ${cls}" style="left:${r1(l0)}px;top:${r1(t)}px;width:${r1(w)}px;height:${r1(h)}px${est?';'+est:''}"></span>`;
+  let tras='',frente='',vidro='',svg='';
+  tras+=blk('mv-chao',0,Y(0),larg,FP*s);
+  tras+=blk('mv-sombra',X(-esqMax-.25),Y(0)-.14*s,(esqMax+dirMax+.5)*s,.32*s);
+  if(par.dir)tras+=blk('mv-parede dir',X(dirMax+folgaPd),0,larg-X(dirMax+folgaPd),Y(0));
+  // a parede vai até à borda do cartão, como a da direita; os rótulos
+  // dos níveis ficam por cima dela
+  if(par.esq)tras+=blk('mv-parede esq',0,0,X(-esqMax-folgaPd),Y(0));
+  if(comTopo)tras+=blk('mv-tecto',0,0,larg,.34*s);
+  if(mad){
+    tras+=blk('mv-fundo',X(-hw),Y(postTop),2*hw*s,Y(.32)-Y(postTop));
+    let cheia='',sombra='',luz='';
+    g.niveis.forEach(n=>{
+      if(n.topo)return;
+      if(n.formato==='sobrepostos'){frente+=blk('mv-tabua',X(-hw),Y(n.yb-.5),2*hw*s,.14*s);return;}
+      if(!n.xs.length)return;
+      const r=movelRegua(n,hw,X,Y);cheia+=r.cheia+' ';sombra+=r.sombra+' ';luz+=r.topo+' ';
+    });
+    svg=`<svg class="mv-svg mv-sombra-svg" width="${r1(larg)}" height="${r1(Hu*s)}" aria-hidden="true">
+      <path class="mv-regua" d="${cheia}"/><path class="mv-regua-s" d="${sombra}"/><path class="mv-regua-l" d="${luz}"/></svg>`;
+    frente+=blk('mv-prumo',X(-oh),Y(postTop),PW*s,Y(0)-Y(postTop));
+    frente+=blk('mv-prumo',X(hw),Y(postTop),PW*s,Y(0)-Y(postTop));
+    frente+=blk('mv-soco',X(-oh),Y(.32),2*oh*s,.32*s);
+    if(capTop)frente+=blk('mv-tampo',X(-oh-.1),Y(capTop),(2*oh+.2)*s,.2*s);
+  }else if(pint){
+    const escura=corMistura(cor,'#000000',.5);
+    tras+=blk('mv-p-fundo',X(-hw),Y(postTop),2*hw*s,Y(.32)-Y(postTop),
+      `background:linear-gradient(90deg,rgba(0,0,0,.28),rgba(0,0,0,0) 14%,rgba(0,0,0,0) 86%,rgba(0,0,0,.28)),${escura}`);
+    const tabua=`background:linear-gradient(180deg,${corMistura(cor,'#ffffff',.22)},${corMistura(cor,'#000000',.1)})`;
+    g.niveis.forEach(n=>{if(!n.topo&&!n.enc)tras+=blk('mv-p-tabua',X(-hw),Y(n.yb-.5),2*hw*s,.14*s,tabua);});
+    const lado=`background:linear-gradient(90deg,${corMistura(cor,'#000000',.16)},${corMistura(cor,'#ffffff',.14)} 40%,${cor} 70%,${corMistura(cor,'#000000',.2)})`;
+    frente+=blk('mv-p-lado',X(-oh),Y(postTop),PW*s,Y(0)-Y(postTop),lado);
+    frente+=blk('mv-p-lado',X(hw),Y(postTop),PW*s,Y(0)-Y(postTop),lado);
+    frente+=blk('mv-p-soco',X(-oh),Y(.32),2*oh*s,.32*s,`background:${corMistura(cor,'#000000',.3)}`);
+    frente+=blk('mv-p-tampo',X(-oh-.1),Y(capTop),(2*oh+.2)*s,.2*s,
+      `background:linear-gradient(180deg,${corMistura(cor,'#ffffff',.25)},${corMistura(cor,'#000000',.1)})`);
+  }else if(frigo){
+    tras+=blk('mv-f-corpo',X(-oh),Y(corpoTop),2*oh*s,Y(.1)-Y(corpoTop));
+    tras+=blk('mv-f-interior',X(-hw),Y(intTop),2*hw*s,Y(.5)-Y(intTop));
+    tras+=blk('mv-f-led',X(-hw+.3),Y(intTop)+.1*s,(2*hw-.6)*s,Math.max(2,.05*s));
+    tras+=blk('mv-f-grelha',X(-hw+.2),Y(.44),(2*hw-.4)*s,.24*s);
+    tras+=blk('mv-f-pe',X(-oh+.25),Y(.1),.5*s,.1*s);
+    tras+=blk('mv-f-pe',X(oh-.75),Y(.1),.5*s,.1*s);
+    g.niveis.forEach(n=>{
+      if(n.topo||n.enc)return;
+      tras+=blk('mv-f-arame',X(-hw),Y(n.yb-.5)-.03*s,2*hw*s,Math.max(1.5,.04*s));
+      tras+=blk('mv-f-prat',X(-hw),Y(n.yb-.5),2*hw*s,.15*s);
+    });
+    frente+=blk('mv-f-pega',X(oh)-.2*s,Y(intTop)+.9*s,Math.max(3,.08*s),(intTop-.5)*.42*s);
+    vidro+=blk('mv-f-vidro',X(-hw),Y(intTop),2*hw*s,Y(.5)-Y(intTop));
+  }else{
+    /* O favo: um hexágono de bico para cima por lugar, com um furo
+       redondo. As filas desencontradas fecham o favo sozinhas; um nível
+       sem encaixe fica a um passo maior e lê-se como outro bloco. */
+    const f=v=>v.toFixed(1),w2=MV_C/2;
+    let hx='';
+    g.lugares.forEach(u=>{
+      if(u.topo||u.encosto)return;
+      const pts=[[u.x,u.y+MV_R],[u.x+w2,u.y+MV_R/2],[u.x+w2,u.y-MV_R/2],[u.x,u.y-MV_R],[u.x-w2,u.y-MV_R/2],[u.x-w2,u.y+MV_R/2]];
+      hx+='M'+pts.map(q=>`${f(X(q[0]))} ${f(Y(q[1]))}`).join(' L')+' Z ';
+      const dF=.98*s;
+      frente+=`<span class="mvb mv-furo" style="left:${r1(X(u.x)-dF/2)}px;top:${r1(Y(u.y)-dF/2)}px;width:${r1(dF)}px;height:${r1(dF)}px"></span>`;
+    });
+    const clara=corClara(cor);
+    svg=`<svg class="mv-svg mv-favo-svg" width="${r1(larg)}" height="${r1(Hu*s)}" aria-hidden="true">
+      <path d="${hx}" style="fill:${cor};stroke:${corMistura(cor,'#000000',clara?.18:.28)}"/></svg>`;
+    st.favoVars=`--anel:${corMistura(cor,'#ffffff',clara?.5:.12)};--anel2:${corMistura(cor,'#ffffff',clara?.7:.22)};--furo:${corMistura(cor,'#000000',clara?.72:.84)}`;
+  }
+  // As garrafas, e o que elas dizem durante a procura (ver "O LUGAR
+  // DURANTE A PROCURA" no style.css).
+  let caixas='',garrafas='';
+  g.lugares.forEach(u=>{
+    const noFuro=favo&&!u.topo&&!u.encosto;
+    const dd=s*(noFuro?.86:frigo&&!u.topo?.97:1);
+    const cx=X(u.x), cy=Y(u.y)+(noFuro?.05*s:0);
+    // fora do móvel: os encostos, a fila de cima e, na madeira, o que fica
+    // acima do fundo (o último nível espreita por cima dos prumos)
+    const ext=!!(u.encosto||u.topo||(mad&&u.y>postTop));
+    const pos=`left:${r1(cx-dd/2)}px;top:${r1(cy-dd/2)}px;width:${r1(dd)}px;height:${r1(dd)}px`;
+    const nome=u.p.nome, k=u.k;
+    if(!u.gs.length){
+      garrafas+=`<button type="button" class="mvg vazia${ext?' ext':''}${noFuro?' nofuro':''}${frigo&&!ext?' frio':''}" style="${pos};font-size:${r1(Math.max(7.5,dd*(k.length>2?.26:.3)))}px"
+        onclick="mapaLugarVazio(${l.id},'${escJs(nome)}','${escJs(k)}')"
+        title="${esc(posicaoTxt(nome,k))} — vazio" aria-label="${esc(posicaoTxt(nome,k))} — vazio">${esc(k)}</button>`;
+      return;
+    }
+    const passam=d.filtrando?u.gs.filter(x=>d.okG.has(x.id)):u.gs;
+    const gg=passam[0]||u.gs[0],v=IDXV[gg.vinho_id]||{nome:'?'};
+    const achada=d.filtrando&&passam.length>0, apagada=d.filtrando&&!passam.length;
+    if(gg.caixa_madeira)caixas+=`<span class="mvb mv-cx" style="left:${r1(cx-dd*.58)}px;top:${r1(cy-dd*.58)}px;width:${r1(dd*1.16)}px;height:${r1(dd*1.16)}px"></span>`;
+    const ano=v.ano?'’'+String(v.ano).slice(-2):'—';
+    const tit=`${v.nome} ${v.ano||''} · ${posicaoTxt(nome,k)}${gg.caixa_madeira?' · em caixa de madeira':''}${u.gs.length>1?` · ${u.gs.length} garrafas`:''}`;
+    garrafas+=`<button type="button" class="mvg cheia v-${vidroDe(v)}${ext?' ext':''}${u.gs.length>1?' conflito':''}${achada?' achada':''}${apagada?' fora':''}" style="${pos};font-size:${r1(Math.max(8,dd*.33))}px"
+      onclick="mapaPopupToggle(${l.id},'${escJs(nome)}','${escJs(k)}',this,event)"
+      onmouseenter="mapaPopupHover(${l.id},'${escJs(nome)}','${escJs(k)}',this)" onmouseleave="mapaPopupSair()"
+      title="${esc(tit)}" aria-label="${esc(tit)}">${ano}${u.gs.length>1?`<span class="mvg-q">×${u.gs.length}</span>`:''}</button>`;
+  });
+  const rot=g.niveis.map((n,i)=>`<span class="mv-niv${n.topo?' topo':''}" style="left:${r1(off)}px;top:${r1(Y(n.sob?(n.yb+n.yt)/2:n.yb)-7)}px;width:${r1(RW*s)}px">${esc(rotulos[i])}</span>`).join('');
+  return `<div class="mv-desenho mv-${tipo}${favo&&corClara(cor)?' claro':''}" style="width:${r1(larg)}px;height:${r1(Hu*s)}px;--s:${r1(s)}px${favo?';'+st.favoVars:''}">${tras}${svg}${frente}${caixas}${garrafas}${vidro}${rot}</div>`;
+}
+/* O ecrã de um local com desenho: a sala (preenchida depois, quando já se
+   sabe quanto ecrã sobra) e a legenda. */
+function mapaEstanteHTML(l,gs,d){
+  return `<div class="mv-corpo"><div class="mv-sala" id="mv-sala"></div></div>${mapaMovelLegendaHTML(l)}`;
 }
 /* As garrafas que estão NESTE local mas sem um lugar válido no desenho.
    Ficam FORA do cartão e FECHADAS (`<details>`): são uma lista que pode
@@ -4667,11 +4797,11 @@ function mapaExtrasHTML(l,gs,d){
 function mapaLocalHTML(x,d){
   const l=x.l,pseudo=l.id<0,vis=d.visiveis,varios=vis.length>1;
   const i=vis.findIndex(y=>y.l.id===l.id);
-  return `<div class="ml${d.filtrando?' procurando':''}" style="--lc:${esc(l.cor||'#7b1f3d')}">
+  return `<div class="ml${d.filtrando?' procurando':''}">
     <div class="ml-bar">
       <button class="ml-nav" onclick="mapaLocalIr(-1)" aria-label="Local anterior"${varios?'':' disabled'}>‹</button>
       <div class="ml-t">
-        <h3>${esc(l.nome)}${pseudo?'':`<button class="ml-edit ro-hide" onclick="editarLocal(${l.id})" title="Editar local" aria-label="Editar local">✎</button>`}</h3>
+        <h3><span class="ml-pt" style="background:${esc(l.cor||'#7b1f3d')}"></span>${esc(l.nome)}${pseudo?'':`<button class="ml-edit ro-hide" onclick="editarLocal(${l.id})" title="Editar local" aria-label="Editar local">✎</button>`}</h3>
         <div class="ml-sub">${mapaContagemHTML(x,d)}${!pseudo&&l.descricao?` <i>· ${esc(l.descricao)}</i>`:''}</div>
       </div>
       <button class="ml-nav" onclick="mapaLocalIr(1)" aria-label="Local seguinte"${varios?'':' disabled'}>›</button>
@@ -4683,90 +4813,33 @@ function mapaLocalHTML(x,d){
   ${temLayoutLocal(l)?mapaExtrasHTML(l,x.gs,d):''}
   <div class="ml-add ro-hide"><button class="btn ghost" onclick="novoLocal()">+ Novo local</button></div>`;
 }
-/* A ESTANTE INTEIRA NUM ECRÃ, sem scroll — é para isso que existe o
-   `--slot`. Quantos níveis uma pessoa tem, e quantos lugares cada um, é
-   coisa dela: um tamanho fixo cabia numa garrafeira de três níveis e
-   obrigava a rolar meia página numa de oito. Aqui mede-se o que sobra do
-   ecrã abaixo do mapa e escolhe-se o maior lugar que ainda cabe.
-
-   Por BISSECÇÃO e não por conta: a altura depende de paddings, do número
-   de filas de cada formato, das margens negativas do ziguezague e de
-   quanto o nome de cada prateleira quebra de linha — refazer essa conta
-   aqui era duplicar o `style.css` e ficar a discordar dele no dia em que
-   alguém lhe mexesse. Seis passos chegam para acertar a menos de 1px, e
-   isto corre uma vez por desenho do mapa (não a cada scroll).
-
-   `SLOT_MIN` é onde se desiste: abaixo disso o número do vinho não se lê
-   nem se acerta com o dedo, e é preferível deixar rolar. Medimos com o
-   scroll onde estiver (`rect.top + scrollY` é a posição no documento) —
-   o que interessa é caber quando se chega ao separador, com a página no
-   topo. */
-/* Quanto mede uma coluna, em lugares. `COL_MIN` é o espaçamento apertado
-   (garrafas quase a tocarem-se, que é o que o encaixe precisa) e `COL_MAX`
-   o folgado. Vive aqui, fora do `ajustarEstantes`, porque a `ondaBgSVG`
-   também precisa dele: a boca do berço tem de ser maior do que a garrafa
-   no caso mais apertado. */
-const COL_MIN=1.18, COL_MAX=1.36;
-const SLOT_MIN=18, SLOT_MAX=54;
+/* A ESTANTE INTEIRA NUM ECRÃ, sem scroll. Mede-se o que sobra do ecrã
+   abaixo da sala (descontando a legenda e o + flutuante, que fica por cima
+   do canto de baixo) e a largura do cartão, e o tamanho de uma garrafa sai
+   de uma conta: o desenho é todo posicionado a partir dele, por isso já
+   não há CSS a adivinhar nem bissecção a fazer. Abaixo de `SLOT_MIN`
+   desiste-se — o ano deixa de se ler e o dedo de acertar, e é preferível
+   deixar rolar. Medimos com o scroll onde estiver (`rect.top + scrollY` é
+   a posição no documento): o que interessa é caber com a página no topo.
+   `offsetParent` de um elemento `position:fixed` é SEMPRE null, por isso o
+   + mede-se pelo retângulo. */
 function ajustarEstantes(){
   const box=document.getElementById('mapa');
-  const ml=box&&box.querySelector('.ml');
+  const sala=document.getElementById('mv-sala');
   // escondido (o `renderFiltrados` refaz Locais mesmo fora dele) — medir
-  // um `display:none` dá zeros e punha tudo no mínimo
-  if(!ml||!box.offsetParent)return;
-  // O + flutuante (adicionar vinho) fica POR CIMA do canto de baixo à
-  // direita, que é onde acaba o último nível — e com tudo a caber no ecrã
-  // já não há scroll que o desvie. Por isso o cartão tem de acabar antes
-  // dele: senão o último lugar da última prateleira ficava por baixo do
-  // botão, à vista e sem se conseguir tocar.
-  // `offsetParent` de um elemento `position:fixed` é SEMPRE null (é regra
-  // do DOM, não um sinal de estar escondido) — por isso o FAB mede-se pelo
-  // retângulo. O que se reserva é o que ele ocupa acima do fundo, menos a
-  // faixa que o cartão já não usa para lugares (a legenda no fim).
+  // um `display:none` dá zeros
+  if(!sala||!MV_ATUAL||!box||!box.offsetParent)return;
+  const ml=sala.closest('.ml');
   const fab=document.querySelector('.fab');
   const r=fab?fab.getBoundingClientRect():null;
   const reserva=r&&r.height?Math.max(0,window.innerHeight-r.top-32):0;
-  const disponivel=window.innerHeight-(ml.getBoundingClientRect().top+window.scrollY)-10-reserva;
-  if(disponivel<120)return;
-  // o alvo é o CARTÃO DO LOCAL e não o separador todo: o "+ Novo local"
-  // que vem por baixo é uma ação, não faz parte da estante, e obrigar a
-  // que ele também coubesse custava dois pixels em cada lugar
-  const alturaCom=v=>{ml.style.setProperty('--slot',v.toFixed(1)+'px');return ml.offsetHeight;};
-  /* A ALTURA decide o TAMANHO do lugar; a LARGURA decide o ESPAÇO entre
-     lugares. São duas coisas e não uma: numa estante com poucos lugares
-     por nível há largura de sobra e as garrafas devem respirar, que é o
-     que a faz ler-se como uma estante; numa com muitos, aperta-se o
-     espaçamento antes de encolher a garrafa. Daí `--colr` — quanto mede
-     uma coluna, em lugares — sair daqui e não do CSS. */
-  const linha=ml.querySelector('.mprat-layout');
-  const colsw=[...ml.querySelectorAll('.est')].reduce((m,e)=>
-    Math.max(m,parseFloat(getComputedStyle(e).getPropertyValue('--colsw'))||1),1);
-  // o espaço que a prateleira tem: a linha menos o nome, as folgas do
-  // `.est-wrap` e o mínimo que o fio e o espaçador precisam para a estante
-  // continuar CENTRADA. Medir o `.est-wrap` não servia — ele encolhe ao que
-  // a estante mede, e a estante mede o que o lugar der: era circular.
-  const larg=el=>el?el.getBoundingClientRect().width:0;
-  const livre=linha?linha.clientWidth-larg(linha.querySelector('.mp-lbl'))-80:0;
-  /* Uma coluna mede pouco mais do que um lugar de propósito: é o que põe
-     as garrafas quase encostadas, e é isso que faz o ENCAIXE existir —
-     com colunas largas, a garrafa de cima cai meia coluna à frente mas
-     no meio de um vão onde cabia outra, e não entre duas. Era 1,28–1,8
-     ("as garrafas devem respirar") e o resultado foram filas soltas em
-     vez de um ziguezague. */
-  const ajustar=v=>{
-    const r=livre>0?Math.min(COL_MAX,Math.max(COL_MIN,livre/(colsw*v))):COL_MAX;
-    ml.style.setProperty('--colr',r.toFixed(3));
-    return alturaCom(v);
-  };
-  const teto=Math.max(SLOT_MIN,livre>0?Math.min(SLOT_MAX,livre/(colsw*COL_MIN)):SLOT_MAX);
-  if(ajustar(teto)<=disponivel)return;
-  if(ajustar(SLOT_MIN)>disponivel)return;       // nem no mínimo cabe: fica no mínimo e rola
-  let lo=SLOT_MIN,hi=teto;
-  for(let i=0;i<6;i++){const m=(lo+hi)/2;if(ajustar(m)<=disponivel)lo=m;else hi=m;}
-  ajustar(lo);
+  const leg=ml&&ml.querySelector('.ml-leg');
+  const H=window.innerHeight-(sala.getBoundingClientRect().top+window.scrollY)-(leg?leg.offsetHeight:0)-14-reserva;
+  sala.parentElement.classList.toggle('quadro',sala.clientWidth>=600);
+  sala.innerHTML=mapaMovelDesenho(MV_ATUAL,sala.clientWidth,H);
 }
 let _estT=null;
-window.addEventListener('resize',()=>{clearTimeout(_estT);_estT=setTimeout(()=>{ajustarEstantes();posicionarParedes();},120);});
+window.addEventListener('resize',()=>{clearTimeout(_estT);_estT=setTimeout(ajustarEstantes,120);});
 
 function renderMapa(){
   const box=document.getElementById('mapa');
@@ -4774,6 +4847,7 @@ function renderMapa(){
   mapaPopupFechar();
   const d=mapaGrupos();
   const vis=d.visiveis;
+  MV_ATUAL=null;
   if(!vis.length){
     box.innerHTML=d.filtrando
       ?'<div class="vazio"><b>Nada encontrado</b>Nenhuma garrafa corresponde a esta procura.</div>'
@@ -4784,10 +4858,10 @@ function renderMapa(){
   if(!MAPA_LOCAL){let t=0;try{t=parseInt(localStorage.getItem('gf_local')||'0',10)||0;}catch(e){}MAPA_LOCAL=t;}
   let x=vis.find(y=>y.l.id===MAPA_LOCAL);
   if(!x){x=vis[0];MAPA_LOCAL=x.l.id;}
+  MV_ATUAL=temLayoutLocal(x.l)?{l:x.l,d}:null;
   box.innerHTML=mapaLocalHTML(x,d);
   mapaSwipe(box.querySelector('.ml'));
   ajustarEstantes();
-  posicionarParedes();
 }
 function mapaLocalMostrar(id){
   MAPA_LOCAL=id;
@@ -4810,7 +4884,7 @@ function mapaSwipe(el){
   let x0=null,y0=null;
   el.addEventListener('touchstart',e=>{
     const t=e.touches[0];x0=t.clientX;y0=t.clientY;
-    const w=e.target.closest&&e.target.closest('.est-wrap');
+    const w=e.target.closest&&e.target.closest('.mv-corpo');
     if(w&&w.scrollWidth>w.clientWidth+2)x0=null;
   },{passive:true});
   el.addEventListener('touchend',e=>{
@@ -6742,7 +6816,7 @@ function renderPickerPosicoes(prefix,gid){
         <div class="lpick-n">${livres} ${livres===1?'livre':'livres'}</div>
       </div>
       ${(topoPick?[topoPick]:[]).concat(prateleirasDesc(prats)).map(p=>`
-        ${(()=>{const pp=Object.assign({},p,{ondulada:false,desvio:0});const info=prateleiraLayoutInfo(pp);const compacto=p.formato!=='fila';return `<div class="lprat">
+        ${(()=>{const pp=Object.assign({},p,{desvio:0});const info=prateleiraLayoutInfo(pp);const compacto=p.formato!=='fila';return `<div class="lprat">
           <div class="lprat-t">${esc(p.nome)} <span>${p.topo?(p.capacidade===1?'lugar T1':`lugares T1–T${p.capacidade}`)
             :(p.capacidade===1?`lugar ${p.base+1}`:`lugares ${p.base+1}–${p.base+p.capacidade}`)}${
             p.encosto_dir||p.encosto_esq?` · encosto ${[p.encosto_esq?p.cod_esq:'',p.encosto_dir?p.cod_dir:''].filter(Boolean).join(' e ')}`:''}</span></div>
@@ -6756,7 +6830,7 @@ function renderPickerPosicoes(prefix,gid){
               return `<button type="button" class="lpslot${compacto?' mini':''} ocup" disabled${pos} title="${esc(v.nome)} · ${esc(posicaoTxt(p.nome,k))}">${garrafaSVG(v,1)}<span>${esc(k)}</span></button>`;
             }
             return `<button type="button" class="lpslot${compacto?' mini':''}${sel?' on':''}"${pos} onclick="escolherPosicaoLayout('${prefix}','${escJs(k)}')" title="${esc(posicaoTxt(p.nome,k))}"><span>${esc(k)}</span></button>`;
-          }).join(''),'est-pick'+(p.topo?' est-topo':''))}
+          }).join(''),'est-pick')}
         </div>`;})()}
       `).join('')}
       <div class="lpick-foot">
@@ -13620,6 +13694,59 @@ function renderCfgLocais(){
 let LOC_LAYOUT_EDIT=[];
 let LOC_PAREDES={esq:false,dir:false,topo:false};
 let LOC_TOPO=0;
+/* O TIPO DE MÓVEL e a cor dele (ver "O MÓVEL DESENHADO"). Vivem no
+   `layout` do local (`movel`, `cor`), como as paredes: é desenho, e por
+   isso não precisa de coluna nem de migração. */
+let LOC_MOVEL={tipo:'madeira',cor:null};
+// O desenho pequeno de cada móvel no cartão da escolha: a mesma linguagem
+// da estante, em miniatura (e com a cor que se escolheu, no pintado e no
+// favo).
+function movelMiniHTML(id,cor){
+  const pts=(n,y,p,cls)=>Array.from({length:n},(_,j)=>`<i class="${cls||''}" style="left:${(50+(j-(n-1)/2)*p).toFixed(1)}%;top:${y}px"></i>`).join('');
+  const ln=(y,c)=>`<span class="ln" style="top:${y}px${c?';background:'+c:''}"></span>`;
+  if(id==='frigorifico')return `<span class="mvm mvm-frigo">${ln(32)}${pts(5,25,13)}${pts(4,14,13)}</span>`;
+  if(id==='favo'){
+    const c=cor||COR_MOVEL_PADRAO.favo;
+    return `<span class="mvm mvm-favo" style="background:${c};--anel:${corMistura(c,'#ffffff',corClara(c)?.5:.18)}">${pts(5,35,12,'f')}${pts(4,23,12,'f')}${pts(5,11,12,'f')}</span>`;
+  }
+  if(id==='pintado'){
+    const c=cor||COR_MOVEL_PADRAO.pintado;
+    return `<span class="mvm mvm-pint" style="border-color:${c};background:${corMistura(c,'#000000',.45)}">${ln(15,c)}${ln(34,c)}${pts(4,8.5,15)}${pts(4,27.5,15)}</span>`;
+  }
+  return `<span class="mvm mvm-mad">${ln(31,'#d9b07a')}${ln(19,'#d9b07a')}${pts(5,25,13)}${pts(4,13,13)}</span>`;
+}
+function nomeCorMovel(tipo,cor){
+  const c=(CORES_MOVEL[tipo]||[]).find(x=>x[1]===cor);
+  return c?c[0]:'Outra cor';
+}
+/* Os quatro móveis em cartões com o desenho (um <select> não mostra
+   desenhos, e aqui a diferença É o desenho), e por baixo a cor: no
+   pintado, a paleta e "outra cor" (o seletor do sistema); no favo, o
+   material. Madeira e frigorífico não têm cor a escolher. */
+function movelEditorHTML(){
+  const t=LOC_MOVEL.tipo, pal=CORES_MOVEL[t];
+  const daPaleta=!!pal&&pal.some(x=>x[1]===LOC_MOVEL.cor);
+  return `<div class="ll-movel">
+    <div class="msec">Tipo de móvel</div>
+    <div class="mv-tipos">${MOVEIS.map(([id,nome,sub])=>`
+      <button type="button" class="mv-tipo${t===id?' on':''}" aria-pressed="${t===id}" onclick="locSetMovel('${id}')">
+        ${movelMiniHTML(id,t===id?LOC_MOVEL.cor:null)}<b>${nome}</b><small>${sub}</small></button>`).join('')}</div>
+    ${pal?`<div class="mv-cor-t">${t==='favo'?'Material':'Cor do móvel'} <i>${esc(nomeCorMovel(t,LOC_MOVEL.cor))}</i></div>
+    <div class="mv-cores">${pal.map(([n,h])=>`<button type="button" class="mv-cor${LOC_MOVEL.cor===h?' on':''}" style="background:${h}" title="${esc(n)}" aria-label="${esc(n)}" onclick="locSetCorMovel('${h}')"></button>`).join('')}${
+      t==='pintado'?`<span class="mv-cor outra${daPaleta?'':' on'}" title="Outra cor"><input type="color" value="${esc(LOC_MOVEL.cor||COR_MOVEL_PADRAO.pintado)}" aria-label="Outra cor"
+        oninput="LOC_MOVEL.cor=corValida(this.value)||LOC_MOVEL.cor" onchange="locSetCorMovel(this.value)"></span>`:''}</div>`:''}
+  </div>`;
+}
+function locSetMovel(id){
+  if(!MOVEIS.some(m=>m[0]===id))return;
+  if(LOC_MOVEL.tipo!==id)LOC_MOVEL={tipo:id,cor:COR_MOVEL_PADRAO[id]||null};
+  renderLocalLayoutEditor();
+}
+function locSetCorMovel(c){
+  const v=corValida(c);if(!v)return;
+  LOC_MOVEL.cor=v;
+  renderLocalLayoutEditor();
+}
 const PAREDES_LADOS=[['esq','Esquerda'],['dir','Direita'],['topo','Em cima']];
 function locSetParede(lado,v){
   LOC_PAREDES[lado]=!!v;
@@ -13702,6 +13829,7 @@ function renderLocalLayoutEditor(){
     </div>`;
   box.innerHTML=`
     <div class="note">A app desenha este local como estante: uma prateleira por linha, o Nível 1 em baixo. Os lugares são numerados de seguida ao longo do móvel — se o primeiro nível tem 4 lugares, o segundo começa no 5.</div>
+    ${movelEditorHTML()}
     ${paredesHTML}
     <div class="ll-lista">${LOC_LAYOUT_EDIT.map((p,i)=>`
       <div class="ll-row">
@@ -13809,6 +13937,8 @@ function lerLayoutLocalModal(){
     vistos.add(k);
   }
   const out={prateleiras};
+  out.movel=MOVEIS.some(m=>m[0]===LOC_MOVEL.tipo)?LOC_MOVEL.tipo:'madeira';
+  if(CORES_MOVEL[out.movel]){const c=corValida(LOC_MOVEL.cor);if(c)out.cor=c;}
   if(Object.keys(paredes).length)out.paredes=paredes;
   if(LOC_PAREDES.topo&&LOC_TOPO>0)out.topo={capacidade:LOC_TOPO};
   return out;
@@ -13826,6 +13956,7 @@ function abrirLocalModal(l){
   LOC_LAYOUT_EDIT=layoutLocal(l);
   LOC_PAREDES=paredesLocal(l);
   LOC_TOPO=topoLocal(l);
+  LOC_MOVEL=movelLocal(l);
   document.getElementById('modal-local-in').innerHTML=`
     <div class="mtop"><h3>${l?'Editar local':'Novo local'}</h3>
       <button class="mx" onclick="fecharModal('modal-local')">✕</button></div>
@@ -15366,7 +15497,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='213';
+const APP_BUILD='214';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
