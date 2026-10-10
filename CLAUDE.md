@@ -169,6 +169,10 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   garrafeiras ligados a ela vão atrás (`garrafeira.colheita_absorver`, ver
   "O Backoffice" › "A linha sem colheita"); e um vinho que ganha o ano já
   não a deixa órfã (o trigger `vinhos_colheita_nasceu`).
+  `migracao-apagar-catalogo.sql` é a 51: apagar um vinho do Catálogo que
+  não está em garrafeira nenhuma (`winecatalog.apagar`, e o `ligados` da
+  `catalogo_fontes`; ver "O Catálogo dentro da app" › "Apagar um vinho do
+  Catálogo").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1596,6 +1600,32 @@ só para curadores." Secção "OS LINKS DAS PESQUISAS E O HISTÓRICO" no app.js
   (`boHistLinhaHTML(a,false)`).
 - O que se leu fica em `PG_EXTRAS` por linha do catálogo: o
   `refrescarVinhoAberto` não volta a pedir.
+
+### Apagar um vinho do Catálogo (10/10/2026, migração 51)
+O dono das apps: "há alguns vinhos que puxei de algumas cartas de vinhos,
+mas que na verdade não têm informação nenhuma de jeito … um botão eliminar
+vinhos, que só disponibilizas caso não esteja em nenhuma garrafeira".
+- **🗑 Apagar do Catálogo**, no fundo da página do vinho do Catálogo, ao
+  lado do Fechar (`pgAcoesCatHTML`, `catApagar`). **Só ao admin do
+  catálogo**, e só quando NENHUM vinho de garrafeira nenhuma está ligado à
+  linha — com garrafas, na wishlist ou já bebido, também pelas linhas
+  fundidas nela (`winecatalog.linha_ligados`). A app só conhece a garrafeira
+  aberta: o número vem da BD com os links das pesquisas (`catalogo_fontes`
+  → `ligados`, só ao admin, e nunca de quem), e até chegar o botão não
+  aparece.
+- Apaga ESTA colheita; as outras do mesmo vinho ficam (o confirm di-lo).
+- **Quem apaga é a `winecatalog.apagar`**, que volta a contar (alguém pode
+  tê-lo posto na garrafeira entretanto) e recusa uma linha fundida noutra.
+  Leva a linha, as fundidas nela (estacionadas no `alias` — sem a que
+  ficou, voltavam ao Catálogo como linhas vivas), o `alias` que as ligava
+  (senão a `achar` levava as grafias antigas a uma linha morta), as notas
+  da casa e os links retirados. Ficam o histórico (`alteracoes`), os
+  comentários e os reportes, que são o registo do que se passou.
+- **Não há "Desfazer"**, mas a linha inteira (e as fundidas, e o `alias`)
+  fica no `winecatalog.sync_log`, acao `apagar_linha` — a mesma da que se
+  apagou à mão a 02/10/2026 (a #383) —, de onde se repõe à mão. As notas da
+  casa só pelo número (quem deu qual nunca sai da `notas_catalogo`).
+- A app tira-a do `CAT_VINHOS` em memória, sem reler o Catálogo.
 
 ### Os curadores do catálogo (30/09/2026, migração 32)
 O dono das apps: "eu quero definir quem cria novos vinhos no catálogo… e se

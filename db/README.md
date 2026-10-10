@@ -736,6 +736,26 @@ todas as colheitas não foram sozinhas, e o "Coelheiros" 2019 — a mesma
 sessão de admin, recusou ("Só o admin do catálogo."). Os cinco casos reais
 ficaram por juntar — são do admin, no Backoffice.
 
+### Migração 51 — apagar um vinho do Catálogo que não está em garrafeira nenhuma (por acabar)
+
+`db/migracao-apagar-catalogo.sql`, depois da 47. Cria a
+`winecatalog.linha_ligados(id)` (sem `GRANT`: quantos vinhos das
+garrafeiras estão ligados à linha, ou às fundidas nela), a
+`winecatalog.apagar(id)` (só o admin do catálogo; recusa com um vinho
+ligado ou numa linha fundida noutra; apaga a linha, as fundidas, o `alias`,
+as notas da casa e os links retirados, e deixa tudo no `sync_log` do
+catálogo, acao `apagar_linha`) e uma nova versão da
+`garrafeira.catalogo_fontes` (a da 47, mais o `ligados`, só ao admin do
+catálogo). Ver o `CLAUDE.md`, "O Catálogo dentro da app" › "Apagar um vinho
+do Catálogo".
+A 10/10/2026 a `linha_ligados` e a `catalogo_fontes` foram aplicadas pelo
+MCP e ensaiadas num bloco desfeito: como admin, a #1 (numa garrafeira) deu
+1, a #57 e a #185 (com uma linha fundida) deram 0; com outro email, `null`.
+**A `apagar` tem `DELETE` dentro e o MCP ficou preso nela até dar timeout**
+(como na 50): cola-se o ficheiro inteiro no SQL Editor — é idempotente, as
+outras duas só se repetem. Até lá, o botão aparece e a gravação diz que
+falta a função.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -802,6 +822,8 @@ Numa base de dados limpa:
 17. **`migracao-sem-colheita.sql`** — a linha sem colheita junta-se a uma
    colheita, e um vinho que ganha o ano já não a deixa órfã (migração 50).
    Depois da 28, da 39 e da 49.
+18. **`migracao-apagar-catalogo.sql`** — apagar um vinho do Catálogo que
+   não está em garrafeira nenhuma (migração 51). Depois da 47.
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)

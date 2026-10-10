@@ -5397,6 +5397,9 @@ function pgExtrasPintar(v){
   const h=document.getElementById('pg-hist');if(h)h.innerHTML=pgHistHTML(v);
   // Os preços retirados vêm na mesma resposta (`precos_retirados`).
   const p=document.getElementById('pg-precos');if(p&&v.id<0&&catPodeCriar())p.innerHTML=precosLojaHTML(v);
+  // E o número de vinhos das garrafeiras ligados (`ligados`), que decide
+  // o "Apagar do Catálogo".
+  const a=document.getElementById('pg-acoes-cat');if(a&&v.id<0)a.innerHTML=pgAcoesCatHTML(v);
 }
 async function pgExtrasCarregar(v,deCache){
   const id=pgCatId(v);if(!id)return;
@@ -5429,6 +5432,42 @@ async function pgFonteDevolver(url){
     delete PG_EXTRAS.fontes[id];
     pgExtrasCarregar(v,true);
   }catch(e){toast('Erro: '+e.message,1);}
+}
+
+/* APAGAR UM VINHO DO CATÁLOGO (10/10/2026, migração 51). O dono das apps:
+   "há alguns vinhos que puxei de algumas cartas de vinhos, mas que na
+   verdade não têm informação nenhuma de jeito … um botão eliminar vinhos,
+   que só disponibilizas caso não esteja em nenhuma garrafeira".
+   - Só ao admin do catálogo, e só quando NENHUM vinho de garrafeira nenhuma
+     está ligado a esta linha (com garrafas, na wishlist ou já bebido; também
+     pelas linhas fundidas nela). A app só conhece a garrafeira aberta, por
+     isso o número vem da BD, com os links (`catalogo_fontes` → `ligados`):
+     até ele chegar, o botão não aparece.
+   - Apaga ESTA colheita; as outras do mesmo vinho ficam.
+   - Quem apaga é a `winecatalog.apagar`, que volta a contar (alguém pode
+     tê-lo posto na garrafeira entretanto) e deixa a linha inteira no
+     `sync_log` do catálogo (acao `apagar_linha`): não há "Desfazer", mas há
+     de onde a repor à mão. Aqui tira-se do Catálogo em memória, sem o reler. */
+function pgAcoesCatHTML(v){
+  const id=pgCatId(v), r=id?PG_EXTRAS.fontes[id]:null;
+  const pode=EU.admin_catalogo&&r&&r.ligados===0;
+  return `<button class="btn ghost" onclick="fecharModal('modal-vinho')">Fechar</button>
+    ${pode?`<button class="btn danger" onclick="catApagar(${v.id})">🗑 Apagar do Catálogo</button>`:''}`;
+}
+async function catApagar(vid){
+  const v=IDXV[vid],id=pgCatId(v);if(!v||v.id>=0||!id)return;
+  const outras=catColheitas(v).length-1;
+  if(!confirm(`Apagar "${v.nome}${v.ano?' '+v.ano:''}" do Catálogo?\n\nNão está em garrafeira nenhuma. Sai do Catálogo para toda a gente e não há "Desfazer" (fica registado, para se poder repor à mão).${outras>0?`\n\n${outras===1?'A outra colheita':'As outras '+outras+' colheitas'} deste vinho fica${outras===1?'':'m'}.`:''}`))return;
+  try{
+    await boRpc('apagar',{p_id:id});
+    const ids=v.cat_ids||[id];
+    CAT_VINHOS=(CAT_VINHOS||[]).filter(x=>x.cat_id!==id);
+    delete CAT_PRECOS[v.id];
+    ids.forEach(i=>{delete PG_EXTRAS.fontes[i];delete PG_EXTRAS.hist[i];delete CAT_NOTAS[i];});
+    reindexar();fecharModal('modal-vinho');renderLista();
+    if(EU.admin_catalogo)boContar();
+    toast('Apagado do Catálogo ✓');
+  }catch(e){toast('Não foi possível apagar: '+e.message,1);}
 }
 
 /* OS PREÇOS RETIRADOS (08/10/2026, migração 47). O dono das apps: "no
@@ -6437,7 +6476,7 @@ function vinhoDetalheHTML(v){
 
     ${cat?`<div class="msec">Atualizações</div>
     <div class="ia-fontes">Última alteração no catálogo: ${dataHoraLocal(v.atualizado_em||v.criado_em)}</div>
-    <div class="macoes"><button class="btn ghost" onclick="fecharModal('modal-vinho')">Fechar</button></div>`:`
+    <div class="macoes" id="pg-acoes-cat">${pgAcoesCatHTML(v)}</div>`:`
     <div class="msec">Atualizações</div>
     <div class="ia-fontes">
       Pesquisa com IA: ${v.ai_atualizado_em&&/^gemini/i.test(String(v.ai_modelo||''))
@@ -15678,7 +15717,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='221';
+const APP_BUILD='222';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
