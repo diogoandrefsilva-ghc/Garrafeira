@@ -537,9 +537,12 @@ Secção "O MÓVEL DESENHADO" no app.js (`mapaMovelDesenho`, `movelGeo`) e no
 style.css (`.mv-*`, `.mvg`). Um local com desenho é o MÓVEL visto de
 frente, numa sala, e cada garrafa é o FUNDO da garrafa em vidro, da cor do
 vinho (`vidroDe`: tinto rubi, branco dourado, rosé, espumante, licoroso,
-frisante), com o **ano** ("’21") — o número do vinho, que era o que lá
-estava, não diz nada a quem está à frente da estante. Um lugar vazio
-mostra o número do lugar. Mais do que uma garrafa no mesmo lugar leva um
+frisante), com o **número do vinho**, como sempre esteve (10/10/2026, o
+dono: foi o ano, "’21", e repetia-se pela estante e lia-se como um número
+cortado). O mesmo número em dois lugares são duas garrafas do mesmo
+vinho. Um lugar vazio mostra o número do lugar, num tracejado.
+**Não há legenda** (o dono: "não acho necessária"): o vidro, o tracejado e
+a parede lêem-se no próprio desenho, e o resto está no toque. Mais do que uma garrafa no mesmo lugar leva um
 aro de aviso e o ×N; a caixa de madeira (`caixa_madeira`) é um quadrado
 de madeira por trás da garrafa, em qualquer lugar.
 
@@ -579,16 +582,16 @@ no `prateleiraLayoutInfo`, nunca aqui.
 
 **A estante inteira tem de caber no ecrã sem scroll** — é essa a medida
 de tudo. O `ajustarEstantes` mede o que sobra do ecrã abaixo da sala
-(descontando a legenda e o + flutuante, que fica por cima do canto de
+(descontando o + flutuante, que fica por cima do canto de
 baixo — `offsetParent` de um `position:fixed` é SEMPRE null, por isso
 mede-se pelo retângulo) e a largura do cartão, e o tamanho de uma garrafa
 (`s`, em px) sai de uma CONTA: o desenho é todo posicionado a partir dele
 (HTML com `left/top` em px e um SVG para as réguas e o favo), por isso não
 há CSS a adivinhar nem bissecção. Entre `SLOT_MIN` (18px — abaixo disso o
-ano não se lê e o dedo não acerta, e deixa-se rolar) e `SLOT_MAX` (46px).
+número não se lê e o dedo não acerta, e deixa-se rolar) e `SLOT_MAX` (46px).
 Corre a cada desenho do mapa, ao entrar no separador e ao redimensionar,
-nunca por scroll. Por isso o `renderMapa` só deixa a sala vazia e a
-legenda (`mapaEstanteHTML`); o desenho vem depois de medir (`MV_ATUAL`).
+nunca por scroll. Por isso o `renderMapa` só deixa a sala vazia
+(`mapaEstanteHTML`); o desenho vem depois de medir (`MV_ATUAL`).
 O "+ Novo local" fica de fora do que tem de caber — é uma ação, não faz
 parte da estante.
 
@@ -608,10 +611,15 @@ ficam numa coluna JUNTO À BORDA da esquerda ("12" e não "NÍVEL 12"; um
 nome que a pessoa escreveu fica como ela o escreveu — `movelRotulo`), cada
 um com um tracejado até ao móvel, que é o que o liga ao nível dele.
 
-**As paredes** (`layout.paredes`: esquerda, direita, em cima) são reboco
-do móvel até à borda do cartão, com a sombra que o móvel lhes lança — é a
-sombra que diz parede. O tecto atravessa a sala toda. Os rótulos ficam por
-cima da parede da esquerda, se a houver. **NÃO VOLTES A PÔR O NICHO**: na grelha antiga houve
+**As paredes** (`layout.paredes`: esquerda, direita, em cima) são uma
+FAIXA de reboco logo a seguir ao móvel e aos encostos, com a sombra que o
+móvel lhes lança — é a sombra que diz parede. **E a sala acaba nela**
+(`.mv-quarto`, 10/10/2026, o dono: "a parede com largura normal, e o resto
+depois da parede com a cor neutra"): para lá da parede é o cartão; do lado
+sem parede, a sala vai até à borda. O tecto e o chão vão de ponta a ponta
+da sala. Com parede à esquerda, os rótulos ficam fora da sala, antes dela.
+No quadro do ecrã largo a moldura acaba na parede da direita, mas não na
+da esquerda — é lá que vivem os rótulos. **NÃO VOLTES A PÔR O NICHO**: na grelha antiga houve
 um recesso sombreado do primeiro ao último encosto, e lia-se como uma
 mancha cinzenta a tapar meia estante.
 

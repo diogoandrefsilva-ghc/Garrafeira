@@ -647,9 +647,6 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
 .ml-dot.on{background:var(--vh);width:18px}
 .ml-nota{padding:10px 14px 0}
 .ml-vazio{padding:26px 18px 14px}
-.ml-leg{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:center;padding:9px 12px 0;font-size:10px;color:var(--mu)}
-.ml-leg span{display:inline-flex;align-items:center;gap:6px}
-.ml-leg i{width:13px;height:13px;border-radius:50%;flex-shrink:0;display:inline-block}
 /* As garrafas por posicionar vivem FORA do cartão e fechadas: são uma
    lista que pode ter dezenas de linhas e aberta empurrava a estante para
    fora do ecrã. */
@@ -1652,8 +1649,6 @@ body.naominha .minha-only{display:none!important}
 .ml-dots{gap:5px;padding:5px 0 0}
 .ml-dot{width:6px;height:6px}
 .ml-dot.on{width:15px}
-.ml-leg{font-size:9px;padding:6px 10px 0;gap:3px 12px}
-.ml-leg i{width:11px;height:11px}
 
 /* Pequena moldura de madeira apenas na zona das prateleiras. Não interfere
    nos cliques porque é background, não elemento sobreposto. */
@@ -1737,8 +1732,9 @@ body.naominha .minha-only{display:none!important}
    o que não muda — as sombras, o brilho. */
 .mv-corpo{border-top:1px solid #e3d6c5;overflow-x:auto;overflow-y:hidden}
 .mv-sala{min-height:120px}
-.mv-desenho{position:relative;overflow:hidden;
-  background:radial-gradient(ellipse 75% 40% at 50% 0%,rgba(255,250,240,.85),rgba(255,250,240,0) 70%),linear-gradient(180deg,#f2eadf,#e8ddcf)}
+.mv-desenho{position:relative;overflow:hidden;background:var(--card)}
+/* a sala: só até à parede, quando a há (o resto é o cartão) */
+.mv-quarto{background:radial-gradient(ellipse 75% 40% at 50% 0%,rgba(255,250,240,.85),rgba(255,250,240,0) 70%),linear-gradient(180deg,#f2eadf,#e8ddcf)}
 /* Num ecrã largo, a sala é um quadro centrado (ver `mapaMovelDesenho`). */
 .mv-corpo.quadro{padding:12px 0;background:linear-gradient(180deg,var(--bg),var(--card))}
 .mv-corpo.quadro .mv-desenho{margin:0 auto;border-radius:14px;box-shadow:0 0 0 1px var(--bo),0 10px 24px -16px rgba(78,18,40,.35)}
@@ -1749,8 +1745,8 @@ body.naominha .minha-only{display:none!important}
    diz parede, e não uma tira da interface. */
 .mv-chao{background:linear-gradient(180deg,#cdb99d,#c3ad8e);box-shadow:inset 0 1px 0 #b29775}
 .mv-sombra{border-radius:50%;background:radial-gradient(closest-side,rgba(50,28,12,.42),rgba(50,28,12,0))}
-.mv-parede{background:linear-gradient(90deg,#d3c5b2,#e0d4c4 45%,#e6dbcc);box-shadow:inset 8px 0 10px -7px rgba(60,35,15,.45),inset 1px 0 0 rgba(120,90,60,.25)}
-.mv-parede.esq{background:linear-gradient(270deg,#d3c5b2,#e0d4c4 45%,#e6dbcc);box-shadow:inset -8px 0 10px -7px rgba(60,35,15,.45),inset -1px 0 0 rgba(120,90,60,.25)}
+.mv-parede{background:linear-gradient(90deg,#d3c5b2,#e0d4c4 45%,#e6dbcc);box-shadow:inset 6px 0 8px -6px rgba(60,35,15,.45),inset 1px 0 0 rgba(120,90,60,.25),inset -1px 0 0 rgba(120,90,60,.3)}
+.mv-parede.esq{background:linear-gradient(270deg,#d3c5b2,#e0d4c4 45%,#e6dbcc);box-shadow:inset -6px 0 8px -6px rgba(60,35,15,.45),inset -1px 0 0 rgba(120,90,60,.25),inset 1px 0 0 rgba(120,90,60,.3)}
 .mv-tecto{background:linear-gradient(180deg,#e4d8c8,#d6c7b3);box-shadow:inset 0 -8px 9px -7px rgba(60,35,15,.42),inset 0 -1px 0 rgba(120,90,60,.25)}
 /* MADEIRA: o fundo em tábuas, os prumos, o rodapé, o tampo (só sem
    parede em cima — com ela, a fila de cima assenta nas garrafas do
@@ -1859,16 +1855,6 @@ body:not(.readonly) .mvg.vazia:hover{border:1.5px solid #fff;color:#fff;backgrou
 .mvg.achada{box-shadow:0 0 0 calc(var(--s) * .06) #fff,0 0 0 calc(var(--s) * .12) var(--vh2),0 2px 6px rgba(0,0,0,.45)}
 .ml.procurando .mvg.vazia{opacity:.35}
 body:not(.readonly) .ml.procurando .mvg.vazia:hover{opacity:1}
-/* As amostras da legenda: os mesmos vidros, pequenos. */
-.mvl.v-tinto{background:radial-gradient(circle,#80263b 0,#5a1527 28%,#2b0912 30%,#3d0e1a 44%,#120306 100%)}
-.mvl.v-branco{background:radial-gradient(circle,#f4df9a 0,#e0c16b 28%,#a98a3a 30%,#c9a650 44%,#6e5520 100%)}
-.mvl.v-rose{background:radial-gradient(circle,#f4b3c3 0,#e2899f 28%,#a8465f 30%,#c7647d 44%,#5e1a2d 100%)}
-.mvl.v-espumante{background:radial-gradient(circle,#eef0b6 0,#d6d98a 28%,#8f9a46 30%,#adb860 44%,#434c18 100%)}
-.mvl.v-licoroso{background:radial-gradient(circle,#dc9a48 0,#bf7429 28%,#6f3a0f 30%,#8f4f1a 44%,#2f1505 100%)}
-.mvl.v-frisante{background:radial-gradient(circle,#f6efc8 0,#e6dca2 28%,#ada25e 30%,#c8be7c 44%,#5d5527 100%)}
-.mvl.vazia{border:1px dashed #b49b86;box-sizing:border-box;background:rgba(0,0,0,.06)}
-.mvl.cx{border-radius:2px;background:linear-gradient(135deg,#e2bb81,#c18f55);box-shadow:inset 0 0 0 1px rgba(100,60,25,.5)}
-.mvl.pd{border-radius:2px;background:#ddd1c1;box-shadow:inset 3px 0 3px -2px rgba(60,35,15,.45)}
 
 /* ── WISHLIST (migração 15) ─────────────────────────────────────────
    Tudo o que é da wishlist some enquanto a coluna `vinhos.desejado` não

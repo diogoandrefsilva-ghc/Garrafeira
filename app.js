@@ -4436,7 +4436,7 @@ function mapaLocalListaHTML(gs,d){
 /* ── O MÓVEL DESENHADO ─────────────────────────────────────────────
    Um local com desenho não é uma grelha de círculos: é o MÓVEL, visto de
    frente, numa sala — e as garrafas são os fundos das garrafas em vidro,
-   da cor do vinho, com o ano (09/10/2026, o dono das apps, sobre os
+   da cor do vinho, com o número do vinho (09/10/2026, o dono das apps, sobre os
    mockups: "Até gosto da proposta A"). Há quatro móveis
    (`layout.movel`, escolhido no editor do local):
    - **madeira**: prumos, rodapé e réguas com um berço em U debaixo de
@@ -4497,7 +4497,6 @@ function vidroDe(v){
   const t=chave(v&&v.tipo);
   return t==='branco'?'branco':t==='rose'?'rose':t==='espumante'?'espumante':t==='licoroso'?'licoroso':t==='frisante'?'frisante':'tinto';
 }
-const VIDRO_NOME={tinto:'Tinto',branco:'Branco',rose:'Rosé',espumante:'Espumante',licoroso:'Licoroso',frisante:'Frisante'};
 
 /* As medidas de cada móvel, em diâmetros de garrafa:
    - `chao`: o que há debaixo do primeiro nível (o rodapé, a base do
@@ -4589,26 +4588,6 @@ function movelRotulo(p){
   return m?m[1]:String(p.nome||'');
 }
 
-/* A legenda não depende do tamanho: é desenhada logo, e o desenho, que
-   depende, vem depois de se medir o ecrã (`ajustarEstantes`). */
-function mapaMovelLegendaHTML(l){
-  const {tipo}=movelLocal(l);
-  const g=movelGeo(l,tipo);
-  const vidros=new Set();
-  let livres=0,caixa=false;
-  g.lugares.forEach(u=>{
-    if(!u.gs.length){livres++;return;}
-    const gg=u.gs[0];
-    vidros.add(vidroDe(IDXV[gg.vinho_id]));
-    if(gg.caixa_madeira)caixa=true;
-  });
-  const par=paredesLocal(l);
-  const it=(cls,txt)=>`<span><i class="mvl ${cls}"></i>${txt}</span>`;
-  return `<div class="ml-leg">${Object.keys(VIDRO_NOME).filter(k=>vidros.has(k)).map(k=>it('v-'+k,VIDRO_NOME[k])).join('')}${
-    livres?it('vazia','Lugar livre'):''}${caixa?it('cx','Caixa de madeira'):''}${
-    (par.dir||par.esq||par.topo)?it('pd','Parede'):''}</div>`;
-}
-
 /* O desenho do local, com o tamanho de uma garrafa escolhido para caber em
    `W`×`H` px. É HTML posicionado à mão (e um SVG para as réguas e o
    favo): blocos da sala e do móvel por trás, as garrafas por cima. */
@@ -4667,23 +4646,31 @@ function mapaMovelDesenho(st,W,H){
   if(quadro)H-=24;
   let s=Math.min((quadro?W-24:W)/U,(H>120?H:640)/Hu,SLOT_MAX);
   s=Math.max(s,SLOT_MIN);
-  const larg=quadro?Math.min(W-24,Math.max(U*s+3*s,360)):Math.max(W,U*s);
+  let larg=quadro?Math.min(W-24,Math.max(U*s+3*s,360)):Math.max(W,U*s);
   /* O MÓVEL FICA AO CENTRO do cartão, com os encostos (10/10/2026, o
      dono: "porque é que estamos tão puxados à direita?"), e os rótulos na
      coluna da esquerda, junto à borda — como estava antes do desenho. Só
      sai do centro quando não cabe: nunca por cima dos rótulos. */
-  const xc=Math.max(esqU*s,Math.min(larg/2-(dirMax-esqMax)/2*s,larg-dirU*s));
+  let xc=Math.max(esqU*s,Math.min(larg/2-(dirMax-esqMax)/2*s,larg-dirU*s));
+  /* A SALA ACABA NA PAREDE (10/10/2026, o dono: "a parede com largura
+     normal, e o resto depois da parede com a cor neutra"): a parede é uma
+     faixa logo a seguir ao móvel e aos encostos, e para lá dela é o
+     cartão. Do lado sem parede, a sala vai até à borda. No quadro do ecrã
+     largo, a moldura acaba na parede da direita; à esquerda não, que é lá
+     que vivem os rótulos (com parede à esquerda, ficam fora da sala). */
+  const salaL=par.esq?xc-(esqMax+folgaPd+WW)*s:0;
+  let salaR=par.dir?xc+(dirMax+folgaPd+WW)*s:larg;
+  if(quadro&&par.dir)larg=salaR;
   const X=x=>xc+x*s, Y=y=>(yMax-y)*s;
   const r1=v=>Math.round(v*10)/10;
   const blk=(cls,l0,t,w,h,est)=>`<span class="mvb ${cls}" style="left:${r1(l0)}px;top:${r1(t)}px;width:${r1(w)}px;height:${r1(h)}px${est?';'+est:''}"></span>`;
   let tras='',frente='',vidro='',svg='';
-  tras+=blk('mv-chao',0,Y(0),larg,FP*s);
+  tras+=blk('mv-quarto',salaL,0,salaR-salaL,Hu*s);
+  tras+=blk('mv-chao',salaL,Y(0),salaR-salaL,FP*s);
   tras+=blk('mv-sombra',X(-esqMax-.25),Y(0)-.14*s,(esqMax+dirMax+.5)*s,.32*s);
-  if(par.dir)tras+=blk('mv-parede dir',X(dirMax+folgaPd),0,larg-X(dirMax+folgaPd),Y(0));
-  // a parede vai até à borda do cartão, como a da direita; os rótulos
-  // dos níveis ficam por cima dela
-  if(par.esq)tras+=blk('mv-parede esq',0,0,X(-esqMax-folgaPd),Y(0));
-  if(comTopo)tras+=blk('mv-tecto',0,0,larg,.34*s);
+  if(par.dir)tras+=blk('mv-parede dir',X(dirMax+folgaPd),0,WW*s,Y(0));
+  if(par.esq)tras+=blk('mv-parede esq',salaL,0,WW*s,Y(0));
+  if(comTopo)tras+=blk('mv-tecto',salaL,0,salaR-salaL,.34*s);
   if(mad){
     tras+=blk('mv-fundo',X(-hw),Y(postTop),2*hw*s,Y(.32)-Y(postTop));
     let cheia='',sombra='',luz='';
@@ -4765,23 +4752,28 @@ function mapaMovelDesenho(st,W,H){
     const gg=passam[0]||u.gs[0],v=IDXV[gg.vinho_id]||{nome:'?'};
     const achada=d.filtrando&&passam.length>0, apagada=d.filtrando&&!passam.length;
     if(gg.caixa_madeira)caixas+=`<span class="mvb mv-cx" style="left:${r1(cx-dd*.58)}px;top:${r1(cy-dd*.58)}px;width:${r1(dd*1.16)}px;height:${r1(dd*1.16)}px"></span>`;
-    const ano=v.ano?'’'+String(v.ano).slice(-2):'—';
+    // o NÚMERO DO VINHO, como sempre esteve (10/10/2026, o dono: o ano,
+    // "’21", repetia-se pela estante e lia-se como um número cortado)
+    const num=String(gg.vinho_id), fs=dd*(num.length<=2?.38:num.length===3?.34:.27);
     const tit=`${v.nome} ${v.ano||''} · ${posicaoTxt(nome,k)}${gg.caixa_madeira?' · em caixa de madeira':''}${u.gs.length>1?` · ${u.gs.length} garrafas`:''}`;
-    garrafas+=`<button type="button" class="mvg cheia v-${vidroDe(v)}${ext?' ext':''}${u.gs.length>1?' conflito':''}${achada?' achada':''}${apagada?' fora':''}" style="${pos};font-size:${r1(Math.max(8,dd*.33))}px"
+    garrafas+=`<button type="button" class="mvg cheia v-${vidroDe(v)}${ext?' ext':''}${u.gs.length>1?' conflito':''}${achada?' achada':''}${apagada?' fora':''}" style="${pos};font-size:${r1(Math.max(8,fs))}px"
       onclick="mapaPopupToggle(${l.id},'${escJs(nome)}','${escJs(k)}',this,event)"
       onmouseenter="mapaPopupHover(${l.id},'${escJs(nome)}','${escJs(k)}',this)" onmouseleave="mapaPopupSair()"
-      title="${esc(tit)}" aria-label="${esc(tit)}">${ano}${u.gs.length>1?`<span class="mvg-q">×${u.gs.length}</span>`:''}</button>`;
+      title="${esc(tit)}" aria-label="${esc(tit)}">${num}${u.gs.length>1?`<span class="mvg-q">×${u.gs.length}</span>`:''}</button>`;
   });
   // cada rótulo leva um tracejado até ao móvel, que é o que o liga ao
   // nível dele com o móvel ao centro e a coluna lá na borda
-  const rotL=BL*s, rotW=X(-esqMax)-.22*s-rotL;
+  // (com parede à esquerda, ficam fora da sala, antes dela)
+  const rotL=BL*s, rotW=(par.esq?salaL-.15*s:X(-esqMax)-.22*s)-rotL;
   const rot=g.niveis.map((n,i)=>`<span class="mv-niv${n.topo?' topo':''}" style="left:${r1(rotL)}px;top:${r1(Y(n.sob?(n.yb+n.yt)/2:n.yb)-7)}px;width:${r1(rotW)}px"><span>${esc(rotulos[i])}</span></span>`).join('');
   return `<div class="mv-desenho mv-${tipo}${favo&&corClara(cor)?' claro':''}" style="width:${r1(larg)}px;height:${r1(Hu*s)}px;--s:${r1(s)}px${favo?';'+st.favoVars:''}">${tras}${svg}${frente}${caixas}${garrafas}${vidro}${rot}</div>`;
 }
-/* O ecrã de um local com desenho: a sala (preenchida depois, quando já se
-   sabe quanto ecrã sobra) e a legenda. */
+/* O ecrã de um local com desenho: a sala, preenchida depois, quando já se
+   sabe quanto ecrã sobra. Sem legenda (10/10/2026, o dono: "não acho
+   necessária") — as garrafas, os lugares livres e as paredes lêem-se no
+   próprio desenho, e o nome de cada garrafa está no toque. */
 function mapaEstanteHTML(l,gs,d){
-  return `<div class="mv-corpo"><div class="mv-sala" id="mv-sala"></div></div>${mapaMovelLegendaHTML(l)}`;
+  return `<div class="mv-corpo"><div class="mv-sala" id="mv-sala"></div></div>`;
 }
 /* As garrafas que estão NESTE local mas sem um lugar válido no desenho.
    Ficam FORA do cartão e FECHADAS (`<details>`): são uma lista que pode
@@ -4823,11 +4815,11 @@ function mapaLocalHTML(x,d){
   <div class="ml-add ro-hide"><button class="btn ghost" onclick="novoLocal()">+ Novo local</button></div>`;
 }
 /* A ESTANTE INTEIRA NUM ECRÃ, sem scroll. Mede-se o que sobra do ecrã
-   abaixo da sala (descontando a legenda e o + flutuante, que fica por cima
+   abaixo da sala (descontando o + flutuante, que fica por cima
    do canto de baixo) e a largura do cartão, e o tamanho de uma garrafa sai
    de uma conta: o desenho é todo posicionado a partir dele, por isso já
    não há CSS a adivinhar nem bissecção a fazer. Abaixo de `SLOT_MIN`
-   desiste-se — o ano deixa de se ler e o dedo de acertar, e é preferível
+   desiste-se — o número deixa de se ler e o dedo de acertar, e é preferível
    deixar rolar. Medimos com o scroll onde estiver (`rect.top + scrollY` é
    a posição no documento): o que interessa é caber com a página no topo.
    `offsetParent` de um elemento `position:fixed` é SEMPRE null, por isso o
@@ -4838,12 +4830,10 @@ function ajustarEstantes(){
   // escondido (o `renderFiltrados` refaz Locais mesmo fora dele) — medir
   // um `display:none` dá zeros
   if(!sala||!MV_ATUAL||!box||!box.offsetParent)return;
-  const ml=sala.closest('.ml');
   const fab=document.querySelector('.fab');
   const r=fab?fab.getBoundingClientRect():null;
   const reserva=r&&r.height?Math.max(0,window.innerHeight-r.top-32):0;
-  const leg=ml&&ml.querySelector('.ml-leg');
-  const H=window.innerHeight-(sala.getBoundingClientRect().top+window.scrollY)-(leg?leg.offsetHeight:0)-14-reserva;
+  const H=window.innerHeight-(sala.getBoundingClientRect().top+window.scrollY)-14-reserva;
   sala.parentElement.classList.toggle('quadro',sala.clientWidth>=600);
   sala.innerHTML=mapaMovelDesenho(MV_ATUAL,sala.clientWidth,H);
 }
@@ -15506,7 +15496,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='215';
+const APP_BUILD='216';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
