@@ -233,6 +233,19 @@ isto": está sobretudo em garrafas baratas ou caras? O painel também mostra
 o **valor médio por garrafa** (só ali, não no card fechado — o card fechado
 já tem o total).
 
+**O valor nasce ESCONDIDO** ("•••• €", com um cadeado no lugar do chevron;
+10/10/2026, o dono das apps: "só o mostrar clicando no card e pedindo Face ID
+ou PIN do telemóvel"). Tocar no card pede o Face ID/código pelas chaves de
+acesso (WebAuthn, `valorTocar`/`valorConfirmar`, secção "O VALOR ESCONDIDO"
+no app.js): da primeira vez em cada aparelho cria uma chave de acesso só
+para isto (o iPhone pergunta se a guarda), depois pede-a. Confirmado, o
+valor fica à vista e o painel abre; volta a esconder-se quando a app vai
+para segundo plano. É uma cortina para quem olha para o ecrã, não uma
+fechadura: não há servidor a conferir a assinatura, e o valor sai dos dados
+que já estão no browser. Sem Face ID nem código no aparelho (um PC sem
+Windows Hello/Touch ID), o toque mostra-o sem perguntar. O pedido sai
+direto do toque, sem `await` antes — o Safari recusa-o fora do gesto.
+
 **A completar** são os vinhos a quem falta alguma coisa que a app usa —
 imagem, castas, preço médio, nota do Vivino, harmonização ou janela
 (`FALTAS`/`faltasDe`). A classificação não conta (06/10/2026, o dono das

@@ -2847,13 +2847,106 @@ function resumoDrill(qual,valor){
 function resumoVoltar(){RESUMO_DRILL=null;renderResumo();}
 function resumoFechar(){RESUMO_ABERTO=null;RESUMO_DRILL=null;renderResumo();}
 
+/* ── O VALOR ESCONDIDO (10/10/2026) ────────────────────────────────
+   O dono das apps: "ocultar o valor e só o mostrar clicando no card e
+   pedindo Face ID ou PIN do telemóvel". Um site não chega ao Face ID
+   diretamente: chega pelas chaves de acesso (WebAuthn). Da primeira vez
+   neste aparelho cria-se uma chave de acesso só para isto (`create` — o
+   iPhone pergunta se a guarda); das outras pede-se (`get`), e o sistema
+   pede o Face ID, ou o código se falhar. Não há servidor a conferir a
+   assinatura: é uma cortina para quem está a olhar para o ecrã, não uma
+   fechadura — o valor sai dos dados que já estão no browser.
+   - O pedido tem de sair do próprio toque (o Safari recusa-o fora do
+     gesto): nada de `await` antes do `navigator.credentials`.
+   - A chave procura-se sem a dizer (`allowCredentials` vazio): a do iPhone
+     sincroniza-se para o iPad pelo iCloud, e o id guardado num aparelho não
+     servia no outro. O `user.id` é fixo pela mesma razão — criar outra vez
+     SUBSTITUI a chave em vez de deixar duas.
+   - Volta a esconder-se quando a app vai para segundo plano.
+   - Sem Face ID nem código neste aparelho (um PC sem Windows Hello nem
+     Touch ID), o toque mostra-o sem perguntar: não há a quem perguntar. */
+let VALOR_VISIVEL=false;
+let VALOR_BIO=null;      // há Face ID/código neste aparelho? null: ainda não se sabe
+let VALOR_FALHAS=0;
+const VALOR_CHAVE_KEY='gf_valor_chave';
+try{
+  const pkc=window.PublicKeyCredential;
+  if(pkc&&pkc.isUserVerifyingPlatformAuthenticatorAvailable)
+    pkc.isUserVerifyingPlatformAuthenticatorAvailable().then(b=>{VALOR_BIO=!!b;},()=>{VALOR_BIO=false;});
+  else VALOR_BIO=false;
+}catch(_){VALOR_BIO=false;}
+
+function valorTocar(){
+  if(VALOR_VISIVEL){resumoToggle('valor');return;}
+  valorConfirmar().then(ok=>{
+    if(!ok)return;
+    VALOR_VISIVEL=true;RESUMO_ABERTO='valor';RESUMO_DRILL=null;
+    renderResumo();
+  });
+}
+// O bit UV (0x04) das flags, no byte 32 dos dados do autenticador: o
+// sistema confirmou MESMO quem está ao telemóvel, não só a presença.
+function valorUV(ad){
+  if(!ad)return false;
+  const b=new Uint8Array(ad);
+  return b.length>32&&(b[32]&4)!==0;
+}
+function valorConfirmar(){
+  if(VALOR_BIO===false||!navigator.credentials)return Promise.resolve(true);
+  let temChave=false;
+  try{temChave=localStorage.getItem(VALOR_CHAVE_KEY)==='1';}catch(_){}
+  const challenge=crypto.getRandomValues(new Uint8Array(32));
+  let p;
+  try{
+    p=temChave
+      ?navigator.credentials.get({publicKey:{challenge,allowCredentials:[],
+          userVerification:'required',timeout:60000,hints:['client-device']}})
+        .then(c=>valorUV(c&&c.response&&c.response.authenticatorData))
+      :navigator.credentials.create({publicKey:{challenge,
+          rp:{name:'Garrafeira'},
+          user:{id:new TextEncoder().encode('garrafeira-valor'),name:'Garrafeira · valor',displayName:'Garrafeira · valor estimado'},
+          pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+          authenticatorSelection:{authenticatorAttachment:'platform',residentKey:'required',requireResidentKey:true,userVerification:'required'},
+          attestation:'none',timeout:60000,hints:['client-device']}})
+        .then(c=>{
+          try{localStorage.setItem(VALOR_CHAVE_KEY,'1');}catch(_){}
+          const r=c&&c.response;
+          return r&&r.getAuthenticatorData?valorUV(r.getAuthenticatorData()):true;
+        });
+  }catch(e){p=Promise.reject(e);}
+  return p.then(ok=>{
+    if(!ok){toast('O aparelho não confirmou quem és — o valor continua escondido.',1);return false;}
+    VALOR_FALHAS=0;return true;
+  },e=>{
+    const n=e&&e.name;
+    // Este browser não deixa pedir (fora do HTTPS, numa moldura, sem
+    // suporte): não há como perguntar, e esconder para sempre não servia.
+    if(n==='NotSupportedError'||n==='SecurityError'||n==='TypeError'){VALOR_BIO=false;return true;}
+    // Cancelado, o tempo acabou, ou a chave foi apagada no aparelho — o
+    // browser diz o mesmo nos três. À segunda falha seguida esquece-se a
+    // chave: o toque seguinte cria outra (e substitui a antiga, se existir).
+    VALOR_FALHAS++;
+    if(temChave&&VALOR_FALHAS>=2){try{localStorage.removeItem(VALOR_CHAVE_KEY);}catch(_){}VALOR_FALHAS=0;}
+    toast('Não foi confirmado — o valor continua escondido.');
+    return false;
+  });
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='hidden'||!VALOR_VISIVEL)return;
+  VALOR_VISIVEL=false;
+  if(RESUMO_ABERTO==='valor'){RESUMO_ABERTO=null;RESUMO_DRILL=null;}
+  renderResumo();
+});
+const CADEADO_SVG='<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+
 // Um card da grelha, no formato de sempre (.sc, com a barra de cor à
 // esquerda). Com `id` fica clicável e ganha o chevron; sem `id` é só um
-// número (o card dos Vinhos).
-function scCard(cor,label,valor,sub,id){
+// número (o card dos Vinhos). `clique` troca o que o toque faz (o Valor,
+// que pede o Face ID antes de abrir), e `chev` o que vai no círculo.
+function scCard(cor,label,valor,sub,id,clique,chev){
   const aberto=id&&RESUMO_ABERTO===id;
-  return `<div class="sc ${cor}${id?' sc-click':''}${aberto?' open':''}"${id?` onclick="resumoToggle('${id}')"`:''}>
-    ${id?'<div class="sc-chev">▾</div>':''}
+  return `<div class="sc ${cor}${id?' sc-click':''}${aberto?' open':''}"${id?` onclick="${clique||`resumoToggle('${id}')`}"`:''}>
+    ${id?`<div class="sc-chev">${chev||'▾'}</div>`:''}
     <div class="sc-l">${esc(label)}</div>
     <div class="sc-v">${valor}</div>
     <div class="sc-s">${esc(sub)}</div>
@@ -3226,6 +3319,8 @@ function renderResumo(){
   const cat=modoCat();
   const comStock=cat?(CAT_VINHOS||[]):db.vinhos.filter(v=>stockDe(v.id)>0);
   const totalVinhos=comStock.length;
+  // O painel do valor só abre com o valor à vista (ver "O VALOR ESCONDIDO").
+  if(RESUMO_ABERTO==='valor'&&!VALOR_VISIVEL){RESUMO_ABERTO=null;RESUMO_DRILL=null;}
 
   const monoWines=comStock.filter(v=>(v.castas||[]).length===1);
   const monoRows=contarPor(monoWines,v=>[v.castas[0]]);
@@ -3313,9 +3408,13 @@ function renderResumo(){
     (topProd?scCardFav(cat?'Top Produtor':'Produtor preferido',topProd.nome,
       `${topProd.n} vinho${topProd.n===1?'':'s'}`,'produtor',
       String(CASA_MAE[topProd.nome]||'').trim()):'')+
-    (cat?'':scCard('co','Valor estimado',`<span class="sc-eur">${esc(eur0(valorTotal))}</span>`,
+    (cat?'':!VALOR_VISIVEL
+      // Escondido até se confirmar quem está ao telemóvel (`valorTocar`).
+      ?scCard('co','Valor estimado','<span class="sc-eur sc-oculto">•••• €</span>','Toca para ver',
+        'valor','valorTocar()',CADEADO_SVG)
+      :scCard('co','Valor estimado',`<span class="sc-eur">${esc(eur0(valorTotal))}</span>`,
       comPreco.length===ativas.length?`${ativas.length} garrafa${ativas.length===1?'':'s'}`
-        :`${comPreco.length} de ${ativas.length} garrafas com preço`,'valor'))+
+        :`${comPreco.length} de ${ativas.length} garrafas com preço`,'valor','valorTocar()'))+
     scCard('cb','A completar',faltosos.length,
       faltosos.length?'vinhos com dados em falta':'está tudo preenchido','falta');
 
@@ -15366,7 +15465,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='213';
+const APP_BUILD='214';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

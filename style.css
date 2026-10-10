@@ -119,6 +119,9 @@ html,body{overflow-x:clip}
 .sc-v{font-family:var(--fd);font-weight:600;font-size:34px;line-height:1;color:var(--vh);font-variant-numeric:lining-nums}
 /* O valor da garrafeira pode ir aos milhares — aos 34px rebentava o card. */
 .sc-eur{font-size:27px;overflow-wrap:anywhere}
+/* Escondido até ao Face ID/código (`valorTocar`): os pontos em tom de papel,
+   que não são um número; o cadeado vai no círculo do chevron. */
+.sc-eur.sc-oculto{color:var(--mu);letter-spacing:1px}
 .sc-s{font-size:11px;color:var(--mu);margin-top:4px;line-height:1.4}
 /* O subtítulo (a contagem) vai sempre ao rodapé: um cartão mais baixo do que o
    vizinho da mesma linha estica (o `stretch` da grelha) e deixava-a a meio. */
