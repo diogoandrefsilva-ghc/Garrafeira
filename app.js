@@ -3576,6 +3576,43 @@ function abrirCampo(k){
   FILTRO_CAMPO=(FILTRO_CAMPO===k)?null:k;
   renderFiltros();
 }
+/* A FITA NUM PC SEM ECRÃ TÁCTIL (10/10/2026, o dono das apps: "o meu PC
+   não é touch, não sei como avançar para a direita"). A fita rola de lado
+   com a barra de scroll escondida: no telemóvel arrasta-se com o dedo, e
+   com um rato não havia por onde lhe pegar. Daí duas coisas:
+   · as SETAS ‹ › nas pontas (só com rato — o CSS esconde-as num ecrã
+     táctil), cada uma só do lado onde há mais campos; andam quase uma
+     fita inteira de cada vez;
+   · a RODA do rato por cima da fita rola-a de lado — só enquanto ela tiver
+     para onde andar nesse sentido: na ponta, a roda volta a ser da página.
+     Um touchpad que já rola de lado (deltaX) fica com o gesto dele.
+   O `ResizeObserver` apanha a fita a aparecer (abrir os filtros, mudar de
+   separador — dentro de uma secção escondida mede zero) e a janela a mudar
+   de largura; o `renderFiltros` chama-a quando as pastilhas mudam. */
+function fitaSetas(){
+  const f=document.getElementById('f-campos');if(!f)return;
+  const max=f.scrollWidth-f.clientWidth;
+  document.getElementById('f-seta-esq').classList.toggle('on',f.scrollLeft>2);
+  document.getElementById('f-seta-dir').classList.toggle('on',f.scrollLeft<max-2);
+}
+function fitaRolar(d){
+  const f=document.getElementById('f-campos');
+  f.scrollBy({left:d*Math.max(120,f.clientWidth*.7),behavior:'smooth'});
+}
+function fitaRoda(e){
+  if(!e.deltaY||Math.abs(e.deltaX)>=Math.abs(e.deltaY))return;
+  const f=e.currentTarget,max=f.scrollWidth-f.clientWidth;
+  if(max<=0||(e.deltaY<0&&f.scrollLeft<=0)||(e.deltaY>0&&f.scrollLeft>=max-1))return;
+  e.preventDefault();
+  f.scrollLeft+=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?f.clientWidth:1);
+}
+(()=>{
+  const f=document.getElementById('f-campos');if(!f)return;
+  f.addEventListener('scroll',fitaSetas,{passive:true});
+  f.addEventListener('wheel',fitaRoda,{passive:false});
+  if(window.ResizeObserver)new ResizeObserver(fitaSetas).observe(f);
+  else window.addEventListener('resize',fitaSetas);
+})();
 // Uma contagem que rebentou fica no `sync_log` (acao `filtros`), uma vez
 // por campo e por erro em cada sessão: é o que diz, da próxima vez que os
 // valores não aparecerem, se foi o código ou o ecrã.
@@ -3825,6 +3862,7 @@ function renderFiltros(){
   }
   dom.innerHTML=domHTML;
   dom.classList.toggle('on',!!domHTML);
+  fitaSetas();
 
   /* AS PASTILHAS DIZEM O QUE NÃO SE VÊ DAQUI. É a regra toda: o campo que
      está aberto já se lê nos cartões acesos, e repeti-lo por baixo era
@@ -15640,7 +15678,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='220';
+const APP_BUILD='221';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

@@ -341,7 +341,16 @@ Agora são **dois** estados e uma fita:
   `abrirCampo`, `#f-dominio`); tocar no mesmo outra vez fecha-os.
 
 É isso que mantém o painel baixo: o que ocupa altura é um campo de cada
-vez, não três. E a fita diz quais os campos que estão a filtrar sem se
+vez, não três.
+
+**Num PC sem ecrã táctil, a fita tem setas e anda com a roda do rato**
+(10/10/2026, o dono das apps: "o meu PC não é touch, não sei como avançar
+para a direita"). A barra de scroll está escondida, e sem um dedo não havia
+por onde lhe pegar. As setas ‹ › (`fitaSetas`/`fitaRolar`, na moldura
+`.fcampos-w`) só aparecem com rato (`hover:hover` e `pointer:fine`) e só do
+lado onde há mais campos, por cima de um esbatido no papel do cartão; num
+ecrã táctil ficavam com o toque da pastilha da ponta. A roda por cima da
+fita rola-a de lado (`fitaRoda`) até à ponta, e aí volta a ser da página. E a fita diz quais os campos que estão a filtrar sem se
 abrir nenhum — a pastilha acende (`.fcampo.ativo`) e leva a contagem de
 valores escolhidos (`.fcn`).
 

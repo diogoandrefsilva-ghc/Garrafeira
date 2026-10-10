@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="220">
+<body data-build="221">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone-claro.png" alt="">
@@ -169,8 +169,13 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
         <button class="ftoggle" onclick="filtrosToggle()">Filtros <span class="fn" id="f-n"></span> <span class="fchev">▾</span></button>
       </div>
       <!-- A fita: uma linha, rola de lado, e é ela que mantém o painel
-           baixo — os valores que abrem por baixo são de um campo só. -->
-      <div class="fcampos" id="f-campos"></div>
+           baixo — os valores que abrem por baixo são de um campo só.
+           As setas são para um PC sem ecrã táctil (ver `fitaSetas`). -->
+      <div class="fcampos-w">
+        <button class="fseta esq" id="f-seta-esq" onclick="fitaRolar(-1)" tabindex="-1" aria-label="Campos anteriores"><i>‹</i></button>
+        <div class="fcampos" id="f-campos"></div>
+        <button class="fseta dir" id="f-seta-dir" onclick="fitaRolar(1)" tabindex="-1" aria-label="Mais campos"><i>›</i></button>
+      </div>
       <div class="fdom" id="f-dominio"></div>
       <div class="fbar" id="fbar-info">
         <span class="fcount" id="f-count"></span>

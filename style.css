@@ -533,8 +533,8 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    andar do meio dava meio ecrã de cartões antes de se chegar à lista.
    Agora é a procura sempre à vista e, atrás do botão, uma FITA de uma
    linha com os onze campos — só os valores de UM abrem por baixo. */
-.filtros .fcampos,.filtros .fdom,.filtros .fbar{display:none}
-.filtros.aberto .fcampos{display:flex;animation:abrir .18s ease both}
+.filtros .fcampos-w,.filtros .fdom,.filtros .fbar{display:none}
+.filtros.aberto .fcampos-w{display:block;animation:abrir .18s ease both}
 /* A caixa dos valores mostra-se pela classe `.on` (o `renderFiltros`), e
    não por `:not(:empty)`: no iPhone o WebKit às vezes não reavaliava o
    `:empty` quando os valores chegavam por `innerHTML`, e a caixa ficava
@@ -548,10 +548,28 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
    de altura a uma linha de 32); `overscroll-behavior-x:contain` impede
    que chegar ao fim da fita puxe a página — ou, no iOS, o gesto de voltar
    atrás. */
-.fcampos{gap:6px;overflow-x:auto;overscroll-behavior-x:contain;
-  margin-top:11px;padding:11px 0 2px;border-top:1px solid var(--bo);
+.fcampos-w{position:relative;margin-top:11px;padding-top:11px;border-top:1px solid var(--bo)}
+.fcampos{display:flex;gap:6px;overflow-x:auto;overscroll-behavior-x:contain;padding-bottom:2px;
   scrollbar-width:none;-ms-overflow-style:none}
 .fcampos::-webkit-scrollbar{display:none}
+/* AS SETAS, só num PC com rato (10/10/2026, o dono das apps: "o meu PC não
+   é touch, não sei como avançar para a direita"). Sem a barra de scroll, a
+   fita não tinha por onde se lhe pegar sem um dedo. Cada seta só aparece do
+   lado onde há mais campos (`.on`, posta pelo `fitaSetas`), por cima de um
+   esbatido no papel do cartão que é também o que diz que a fita continua.
+   Num ecrã táctil não aparecem: arrasta-se, e uma seta na ponta ficava com
+   o toque que era da pastilha por baixo dela. */
+.fseta{display:none}
+@media (hover:hover) and (pointer:fine){
+  .fseta.on{display:flex;align-items:center;position:absolute;top:11px;bottom:2px;z-index:1;
+    width:48px;padding:0;border:0;font:inherit;cursor:pointer}
+  .fseta.esq{left:0;justify-content:flex-start;background:linear-gradient(to right,var(--card) 45%,transparent)}
+  .fseta.dir{right:0;justify-content:flex-end;background:linear-gradient(to left,var(--card) 45%,transparent)}
+  .fseta i{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--bo2);background:#fff;color:var(--vh);font-style:normal;font-size:17px;
+    font-weight:700;line-height:1;box-shadow:0 1px 3px rgba(78,18,40,.14);transition:border-color .15s}
+  .fseta:hover i{border-color:var(--vh)}
+}
 .fcampo{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;
   padding:7px 12px;border:1px solid var(--bo);border-radius:99px;background:var(--bg);
   font-family:inherit;font-size:12px;font-weight:600;color:var(--mu);cursor:pointer;
