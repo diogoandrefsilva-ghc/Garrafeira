@@ -239,8 +239,11 @@ ou PIN do telemóvel"). Tocar no card pede o Face ID/código pelas chaves de
 acesso (WebAuthn, `valorTocar`/`valorConfirmar`, secção "O VALOR ESCONDIDO"
 no app.js): da primeira vez em cada aparelho cria uma chave de acesso só
 para isto (o iPhone pergunta se a guarda), depois pede-a. Confirmado, o
-valor fica à vista e o painel abre; volta a esconder-se quando a app vai
-para segundo plano. É uma cortina para quem olha para o ecrã, não uma
+valor fica à vista e o painel abre; volta a esconder-se no cadeado ABERTO do
+canto (`valorEsconder`, um botão — o toque não chega ao cartão) e quando a app
+vai para segundo plano. Antes do Face ID o iOS mostra SEMPRE a folha "Iniciar
+sessão… Usar chave-passe" (o dono queria o Face ID direto): não há opção que
+a salte num site, só uma app nativa chama o Face ID sem ela. É uma cortina para quem olha para o ecrã, não uma
 fechadura: não há servidor a conferir a assinatura, e o valor sai dos dados
 que já estão no browser. Sem Face ID nem código no aparelho (um PC sem
 Windows Hello/Touch ID), o toque mostra-o sem perguntar. O pedido sai

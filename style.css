@@ -122,6 +122,11 @@ html,body{overflow-x:clip}
 /* Escondido até ao Face ID/código (`valorTocar`): os pontos em tom de papel,
    que não são um número; o cadeado vai no círculo do chevron. */
 .sc-eur.sc-oculto{color:var(--mu);letter-spacing:1px}
+/* À vista, o círculo é o cadeado ABERTO e é um botão: esconde outra vez. Não
+   roda como o chevron, e a área de toque vai além dos 20px do desenho. */
+button.sc-chev.sc-fechar{border:0;padding:0;cursor:pointer;font:inherit}
+.sc-click.open .sc-chev.sc-fechar{transform:none}
+.sc-chev.sc-fechar::after{content:'';position:absolute;inset:-10px;border-radius:50%}
 .sc-s{font-size:11px;color:var(--mu);margin-top:4px;line-height:1.4}
 /* O subtítulo (a contagem) vai sempre ao rodapé: um cartão mais baixo do que o
    vizinho da mesma linha estica (o `stretch` da grelha) e deixava-a a meio. */

@@ -2855,7 +2855,11 @@ function resumoFechar(){RESUMO_ABERTO=null;RESUMO_DRILL=null;renderResumo();}
      sincroniza-se para o iPad pelo iCloud, e o id guardado num aparelho não
      servia no outro. O `user.id` é fixo pela mesma razão — criar outra vez
      SUBSTITUI a chave em vez de deixar duas.
-   - Volta a esconder-se quando a app vai para segundo plano.
+   - A folha do iOS ("Iniciar sessão… Usar chave-passe") vem sempre antes
+     do Face ID, e não há opção que a salte: é o sistema a garantir que um
+     site não pede o Face ID às escondidas. Só uma app nativa o chama direto.
+   - Volta a esconder-se no cadeado aberto do canto (`valorEsconder`) e
+     quando a app vai para segundo plano.
    - Sem Face ID nem código neste aparelho (um PC sem Windows Hello nem
      Touch ID), o toque mostra-o sem perguntar: não há a quem perguntar. */
 let VALOR_VISIVEL=false;
@@ -2924,22 +2928,29 @@ function valorConfirmar(){
     return false;
   });
 }
-document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState!=='hidden'||!VALOR_VISIVEL)return;
+// O cadeado aberto do canto: esconde outra vez (e fecha o painel do valor).
+// O toque não chega ao cartão, que abria ou fechava o painel por baixo.
+function valorEsconder(ev){
+  if(ev)ev.stopPropagation();
   VALOR_VISIVEL=false;
   if(RESUMO_ABERTO==='valor'){RESUMO_ABERTO=null;RESUMO_DRILL=null;}
   renderResumo();
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'&&VALOR_VISIVEL)valorEsconder();
 });
 const CADEADO_SVG='<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+const CADEADO_ABERTO_SVG='<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.75-1.4"/></svg>';
 
 // Um card da grelha, no formato de sempre (.sc, com a barra de cor à
 // esquerda). Com `id` fica clicável e ganha o chevron; sem `id` é só um
 // número (o card dos Vinhos). `clique` troca o que o toque faz (o Valor,
-// que pede o Face ID antes de abrir), e `chev` o que vai no círculo.
-function scCard(cor,label,valor,sub,id,clique,chev){
+// que pede o Face ID antes de abrir), e `canto` o círculo do canto inteiro
+// (o cadeado do Valor, que aberto é um botão).
+function scCard(cor,label,valor,sub,id,clique,canto){
   const aberto=id&&RESUMO_ABERTO===id;
   return `<div class="sc ${cor}${id?' sc-click':''}${aberto?' open':''}"${id?` onclick="${clique||`resumoToggle('${id}')`}"`:''}>
-    ${id?`<div class="sc-chev">${chev||'▾'}</div>`:''}
+    ${id?(canto||'<div class="sc-chev">▾</div>'):''}
     <div class="sc-l">${esc(label)}</div>
     <div class="sc-v">${valor}</div>
     <div class="sc-s">${esc(sub)}</div>
@@ -3404,10 +3415,11 @@ function renderResumo(){
     (cat?'':!VALOR_VISIVEL
       // Escondido até se confirmar quem está ao telemóvel (`valorTocar`).
       ?scCard('co','Valor estimado','<span class="sc-eur sc-oculto">•••• €</span>','Toca para ver',
-        'valor','valorTocar()',CADEADO_SVG)
+        'valor','valorTocar()',`<div class="sc-chev">${CADEADO_SVG}</div>`)
       :scCard('co','Valor estimado',`<span class="sc-eur">${esc(eur0(valorTotal))}</span>`,
       comPreco.length===ativas.length?`${ativas.length} garrafa${ativas.length===1?'':'s'}`
-        :`${comPreco.length} de ${ativas.length} garrafas com preço`,'valor','valorTocar()'))+
+        :`${comPreco.length} de ${ativas.length} garrafas com preço`,'valor','valorTocar()',
+        `<button class="sc-chev sc-fechar" onclick="valorEsconder(event)" title="Esconder o valor" aria-label="Esconder o valor">${CADEADO_ABERTO_SVG}</button>`))+
     scCard('cb','A completar',faltosos.length,
       faltosos.length?'vinhos com dados em falta':'está tudo preenchido','falta');
 
@@ -15599,7 +15611,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='218';
+const APP_BUILD='219';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
