@@ -86,8 +86,15 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
    `clip` e não `hidden`: não faz do .wrap um contentor de scroll, e os
    `sticky` lá dentro continuam a colar ao ecrã. */
 html,body{overflow-x:clip}
-.sec{display:none}.sec.on{display:block;animation:fadeup .22s ease both}
-@keyframes fadeup{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+/* SEM animação de entrada, e não é gosto (10/10/2026). Era um `fadeup`
+   (opacidade + transform) em cada separador, e animar transform/opacidade
+   obriga o WebKit a pôr o elemento INTEIRO numa camada própria — a
+   secção do Detalhe do Catálogo mede ~92 000 px (533 linhas), uma camada
+   que a 3× no iPhone pode chegar a ~1 GB. A página rebentava logo depois
+   de abrir no Catálogo e o PWA ficou em "Um problema ocorreu
+   repetidamente" — é a causa mais provável (ver o CLAUDE.md). Nada que
+   cresça com os dados leva uma animação destas (ver também o `.sc-det`). */
+.sec{display:none}.sec.on{display:block}
 .itabs{position:sticky;top:57px;z-index:80;display:flex;gap:3px;margin-bottom:18px;background:var(--bg2);padding:4px;
   border-radius:99px;overflow-x:auto;scrollbar-width:none;box-shadow:0 0 0 18px var(--bg),inset 0 1px 2px rgba(78,18,40,.06)}
 .itabs::-webkit-scrollbar{display:none}
@@ -143,8 +150,10 @@ html,body{overflow-x:clip}
 .sc-chev{position:absolute;top:11px;right:12px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;
   justify-content:center;font-size:9px;line-height:1;color:var(--mu);background:var(--bg2);transition:transform .22s,background .18s,color .18s}
 .sc-click.open .sc-chev{transform:rotate(180deg);background:var(--vh);color:#fff}
+/* Sem o `abrir` (10/10/2026): no Catálogo o painel do produtor chega aos
+   9 000 px, e animá-lo era a mesma camada gigante do `.sec.on`. */
 .sc-det{grid-column:1/-1;background:var(--card);border:1px solid var(--vh);border-radius:var(--r);padding:0;
-  box-shadow:var(--sh2);overflow:hidden;animation:abrir .2s ease both}
+  box-shadow:var(--sh2);overflow:hidden}
 @keyframes abrir{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 .rdet-bar{display:flex;align-items:center;gap:10px;padding:11px 14px;background:linear-gradient(180deg,var(--vhp),#fff);
   border-bottom:1px solid var(--bo)}

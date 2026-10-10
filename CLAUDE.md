@@ -3449,6 +3449,35 @@ aparecia ao fechar e abrir a app. Secção "PUXAR PARA ATUALIZAR" no app.js
 O painel do PC (WineCatalog, `batch/painel.mjs`) tem o mesmo num botão,
 **🔄 Atualizar**, na barra dos separadores.
 
+## O arranque que a página não aguenta (10/10/2026)
+O PWA do iPhone do dono deixou de abrir ("Um problema ocorreu
+repetidamente"), e no Safari/Chrome abria. Os logs do Supabase (`edge_logs`,
+o UA do iPhone) contaram a história: o PWA abria na garrafeira do Barrona e
+no **Detalhe do Catálogo** (as preferências do PWA são só dele), o arranque
+chegava ao fim (`comentarios_avisos`) e 1 a 5 s depois começava outro — a
+página rebentava e o iOS recarregava-a no mesmo ecrã, até desistir. No
+browser, sem essas preferências, abria a garrafeira do próprio no Resumo.
+- **A causa mais provável: a animação de entrada dos separadores**
+  (`.sec.on{animation:fadeup}`, opacidade + transform). Animar isso obriga
+  o WebKit a pôr o elemento INTEIRO numa camada própria, e a secção do
+  Detalhe do Catálogo mede ~92 000 px (533 linhas, 04/10 → 10/10 cresceu
+  ~130) — até ~1 GB a 3×. Não houve um iPhone para o provar; daí também a
+  saída de emergência a seguir.
+  Saiu, e a do painel do Resumo (`.sc-det`, até 9 000 px no Catálogo)
+  também. **Nada cuja altura cresce com os dados leva animação de
+  transform/opacidade** — o que entra animado é pequeno (um modal, uma
+  fita, um crachá). Visto no Chromium com `LayerTree` (a camada
+  `SECTION#s-detalhe`, razão `ActiveTransformAnimation`): de 32 camadas
+  para 5.
+- **A saída de emergência** (`arranqueMarcar`/`arranqueSeguro`, ao lado do
+  `sbAposLogin`): o arranque deixa a marca `gf_arranque` (fase, modo,
+  separador, garrafeira, build) e só a apaga 15 s depois de aberto ou ao
+  sair pelo seu pé (`pagehide`, segundo plano). Se o arranque seguinte
+  (até 10 min depois) ainda a encontra, a página anterior rebentou: abre no
+  Resumo da garrafeira sem o ecrã de abertura nem o separador guardado,
+  di-lo num toast e escreve no `sync_log` (origem `app`, acao `arranque`,
+  com a marca e o UA). Só dessa vez — a seguinte volta ao de sempre.
+
 ## Regras técnicas (não partir a app)
 - `app.js` carrega como `<script src>` **normal, NÃO module** — há
   `onclick="…"` no HTML e no HTML gerado, as funções têm de ser **globais**.

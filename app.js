@@ -13294,6 +13294,49 @@ function sbMostrarNovaPass(){
   if(window.glEsconderSplash)window.glEsconderSplash();
 }
 
+/* O ARRANQUE QUE A PÁGINA NÃO AGUENTA (10/10/2026). O PWA do iPhone ficou
+   em "Um problema ocorreu repetidamente": abria no Detalhe do Catálogo, a
+   página rebentava logo a seguir a desenhá-lo (a memória — ver o `.sec.on`
+   no style.css), o iOS recarregava-a e ela voltava a abrir no mesmo ecrã.
+   No Safari abria, porque as preferências do PWA (o ecrã de abertura, a
+   garrafeira aberta) são só dele — e não havia como chegar às Definições
+   para as mudar.
+   Por isso o arranque deixa uma marca no aparelho (`gf_arranque`), com a
+   fase e o ecrã, e só a apaga quando a página sobrevive 15 s depois de
+   aberta ou sai pelo seu pé (`pagehide`, a app a ir para segundo plano).
+   Uma página que rebenta não apaga nada: se o arranque seguinte (até
+   10 min depois) ainda a encontra, abre no Resumo da garrafeira — sem o
+   ecrã de abertura nem o separador onde se ficou —, di-lo, e deixa no
+   `sync_log` onde foi (acao `arranque`). Na vez seguinte volta a ser o de
+   sempre: é uma saída de emergência, não uma preferência nova. */
+const ARRANQUE_KEY='gf_arranque', ARRANQUE_OK_MS=15000, ARRANQUE_VALE_MS=600000;
+let _arranqueT=null;
+function arranqueMarcar(fase){
+  // Em segundo plano o iOS mata a app por rotina — isso não é rebentar.
+  if(document.visibilityState==='hidden')return;
+  let ab=null;try{ab=EU.email?aberturaLer():null;}catch(e){}
+  try{localStorage.setItem(ARRANQUE_KEY,JSON.stringify({t:Date.now(),build:APP_BUILD,fase,
+    modo:MODO,tab:tabAtiva,ga:GA_ID,abertura:ab}));}catch(e){}
+}
+function arranqueLimpar(){
+  clearTimeout(_arranqueT);
+  try{localStorage.removeItem(ARRANQUE_KEY);}catch(e){}
+}
+function arranqueAnterior(){
+  let a=null;try{a=JSON.parse(localStorage.getItem(ARRANQUE_KEY)||'null');}catch(e){}
+  return a&&a.t&&Date.now()-a.t<ARRANQUE_VALE_MS?a:null;
+}
+window.addEventListener('pagehide',arranqueLimpar);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')arranqueLimpar();});
+function arranqueSeguro(a){
+  const onde=a.fase==='a carregar'?'a carregar os dados'
+    :a.modo==='catalogo'?'no Catálogo':'na garrafeira';
+  toast(`Da última vez a app fechou-se sozinha (${onde}) — desta vez abriu no Resumo da garrafeira.`,1);
+  sbReq('POST','sync_log',[{origem:'app',acao:'arranque',estado:'erro',quem:EU.email,detalhe:{build:APP_BUILD,anterior:a,
+    standalone:!!((window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone),
+    ua:navigator.userAgent}}],{'Prefer':'return=minimal'}).catch(()=>{});
+}
+
 async function sbAposLogin(){
   document.getElementById('page-login').style.display='none';
   document.getElementById('page-nova-pass').style.display='none';
@@ -13325,9 +13368,12 @@ async function sbAposLogin(){
   }
   document.getElementById('page-sem-acesso').style.display='none';
 
+  const anterior=arranqueAnterior();
+  arranqueMarcar('a carregar');
   try{
     await carregar();
   }catch(e){
+    arranqueLimpar();
     // A migração das garrafeiras (db/migracao-garrafeiras.sql) é a única
     // que a app não consegue contornar sozinha — sem ela não sabe de quem
     // são as garrafas, e adivinhar era mostrar as de toda a gente a toda a
@@ -13340,10 +13386,14 @@ async function sbAposLogin(){
     return;
   }
   renderLista();renderCfg();
-  await abrirEcraInicial();
+  if(anterior)arranqueSeguro(anterior);
+  else{arranqueMarcar('a abrir');await abrirEcraInicial();}
+  arranqueMarcar('aberto');
+  _arranqueT=setTimeout(arranqueLimpar,ARRANQUE_OK_MS);
   PTR_PRONTO=true;ptrLigar();
   comentariosIrPara();
-  comentariosAvisos(true);
+  // No arranque de emergência o aviso é o dele: o dos comentários tapava-o.
+  comentariosAvisos(!anterior);
   if(window.glEsconderSplash)window.glEsconderSplash();
 }
 
@@ -15316,7 +15366,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='212';
+const APP_BUILD='213';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
