@@ -173,6 +173,10 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   não está em garrafeira nenhuma (`winecatalog.apagar`, e o `ligados` da
   `catalogo_fontes`; ver "O Catálogo dentro da app" › "Apagar um vinho do
   Catálogo").
+  `migracao-carta-produtor.sql` é a 52: um vinho da carta com o produtor
+  (ou a casa-mãe) escrito no nome — "Assobio Esporão" — liga-se à linha do
+  Catálogo (`garrafeira.carta_achar`, pela `carta_ligar`; ver "As
+  Sugestões").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1287,6 +1291,14 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
    (`notaVivino`), as castas, o preço de referência (`precoPrincipal`) e o
    nome como o Catálogo o escreve; **tocar no nome abre a página do vinho**,
    a mesma do Detalhe. O que o Catálogo não tem diz "sem dados".
+   **O produtor colado ao nome também liga** (`carta_achar`, migração 52,
+   11/10/2026, o dono das apps: a carta dizia "Assobio Esporão" e o Catálogo
+   tem o "Assobio" da Quinta dos Murças, casa do Esporão). A leitura
+   transcreve o nome como está impresso e quase nunca separa o produtor; por
+   isso, quando a procura de sempre não dá nada, tira-se do nome um produtor
+   que o Catálogo conhece (o oficial ou uma grafia, casas-mãe incluídas) e
+   procura-se outra vez com ele. Só fica a linha DESSE produtor ou de uma
+   casa dele: "Assobio Sogrape" não liga ao Assobio.
 3. **Procurar informação, até 5 de cada vez** (`wsDetalhe`): os vistos da
    lista (nenhum vem marcado) vão ao "Procurar informação" com IA de sempre —
    a `vinho-info`, com o motor do plano de cada um — e **o que se encontrar

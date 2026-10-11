@@ -756,6 +756,29 @@ MCP e ensaiadas num bloco desfeito: como admin, a #1 (numa garrafeira) deu
 outras duas só se repetem. Até lá, o botão aparece e a gravação diz que
 falta a função.
 
+### Migração 52 — o produtor escrito no nome do vinho da carta (já aplicada)
+
+`db/migracao-carta-produtor.sql`, depois da 40 e da 43. Cria a
+`garrafeira.carta_achar(nome, produtor, ano, tipo)` (sem `GRANT` a
+ninguém: só a chama a `carta_ligar`, que é SECURITY DEFINER) e uma nova
+versão da `garrafeira.carta_ligar` (a da 40, com a procura de cada vinho
+nela). Quando a `achar` de sempre não encontra nada, tira do nome um
+produtor que o Catálogo conhece (`winecatalog.produtor_variantes`, casas-mãe
+incluídas) e pergunta outra vez com ele como produtor; só aceita uma linha
+desse produtor ou de um produtor que o tem como casa-mãe. Foi o "Assobio
+Esporão" Tinto de uma carta (11/10/2026), que não ligava ao "Assobio" da
+Quinta dos Murças (#551). Ver o `CLAUDE.md`, "As Sugestões".
+Ensaiada a 11/10/2026 em funções temporárias (`pg_temp`), contra a base
+real: nas 6 cartas guardadas só mudou o Assobio Tinto; com cada vinho do
+Catálogo escrito com o produtor ou a casa-mãe colados ao nome (604 casos),
+nenhum ligou a outro vinho. Aplicada no mesmo dia pelo MCP (só `CREATE OR
+REPLACE`, `REVOKE` e `GRANT`) e confirmada: a carta de hoje liga o Assobio
+Tinto ao #551, o resto como antes, e a `carta_achar` não se executa como
+`anon` nem como `authenticated`.
+No mesmo dia, à parte da migração e pela `winecatalog.editar` (fica no
+histórico do vinho): o #573 "Assobio Touriga Nacional" tinha o produtor
+"Assobio" e passou a Quinta dos Murças.
+
 ## Regra de ouro
 
 **O repo é a fonte; o Supabase segue atrás.** Quando muda o schema, as
@@ -824,6 +847,8 @@ Numa base de dados limpa:
    Depois da 28, da 39 e da 49.
 18. **`migracao-apagar-catalogo.sql`** — apagar um vinho do Catálogo que
    não está em garrafeira nenhuma (migração 51). Depois da 47.
+19. **`migracao-carta-produtor.sql`** — o produtor (ou a casa-mãe) escrito
+   no nome de um vinho da carta (migração 52). Depois da 40 e da 43.
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)
