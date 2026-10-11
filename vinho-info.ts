@@ -1766,6 +1766,23 @@ async function registar(estado: string, detalhe: Record<string, unknown>, quem: 
    o gasto ao todo em vez de app a app. Nunca deita a chamada principal
    abaixo por isto falhar — mesma regra do `registar()` local, só que este
    POST vai para outro schema (`Content-Profile: ia_uso`). */
+/* A FUNCIONALIDADE de um registo — o painel de custos (AI-API-Control) conta o
+   custo médio de cada uma, porque esta função faz seis coisas que não têm nada
+   a ver umas com as outras e a média delas não dizia nada de nenhuma. Sai das
+   chaves que o `detalhe` já leva. É a MESMA regra que a `ia_uso.funcionalidade()`
+   (AI-API-Control/db/funcionalidades.sql) aplica ao histórico: mexer numa é
+   mexer na outra. Recusado antes de se saber o que era → `entrada`. */
+function funcionalidadeDe(d: Record<string, unknown>): string {
+  const passo = String(d.passo ?? "");
+  if (passo === "autorizacao" || passo === "plano" || passo === "excecao_inicial") return "entrada";
+  if (passo.startsWith("links")) return "links";
+  if (passo.startsWith("lote") || d.modo === "catalogo-lote" || typeof d.vinhos === "number") return "lote";
+  if (d.da_carta === true) return "carta";
+  if (d.documentos || d.imagem_doc || passo === "documentos") return "documento";
+  if (d.so_sites === true || passo === "so_sites_vazio" || d.pesquisa === "paginas") return "sites";
+  return "procurar";
+}
+
 async function registarIaUso(funcao: string, estado: string, detalhe: Record<string, unknown>, quem: string | null): Promise<void> {
   try {
     const usage = (detalhe.usageMetadata ?? null) as
@@ -1780,7 +1797,7 @@ async function registarIaUso(funcao: string, estado: string, detalhe: Record<str
         Prefer: "return=minimal",
       },
       body: JSON.stringify({
-        app: "garrafeira", funcao,
+        app: "garrafeira", funcao, funcionalidade: funcionalidadeDe(detalhe),
         estado: estado === "pedido" || estado === "erro" ? estado : "ok",
         modelo: (detalhe.modelo as string | undefined) ?? null,
         pesquisa_web: typeof pesquisa === "boolean" ? pesquisa : (typeof pesquisa === "string" ? pesquisa.length > 0 : null),
@@ -2315,6 +2332,7 @@ async function produzirFicha(
     await registar("erro", {
       passo: "vazio", nome, modo: usadoModo, modelo: usadoModelo,
       ...(paginasRes.length ? { paginas: paginasRes } : {}), ...(soSites ? { so_sites: true } : {}),
+      ...(documentos.length ? { documentos: documentos.length } : {}), ...(daCarta ? { da_carta: true } : {}),
       tentativas, erro: erroUltimo.slice(0, 300), ms: Date.now() - inicio,
       ...(usageTotal ? { usageMetadata: usageTotal } : {}),
     }, quem);
@@ -2451,6 +2469,9 @@ async function produzirFicha(
     // O vinho novo com um nome que o catálogo não conhece: vai quando for gravado.
     ...(catalogoAdiado ? { catalogo: "adiado" } : {}),
     ...(daCarta ? { da_carta: true } : {}),
+    // Quantos documentos foram em anexo (só o número — os ficheiros não se
+    // guardam): é o que diz que isto foi um "Num documento".
+    ...(documentos.length ? { documentos: documentos.length } : {}),
     ...(Object.keys(precosLoja).length ? { precos_loja: Object.keys(precosLoja), precos_gravados: precosGravados } : {}),
     ...(pesquisou !== null ? { pesquisaWeb: pesquisou } : {}), ...(profunda ? { profunda: true } : {}),
     ...(serperConsultas ? { serper_consultas: serperConsultas, consultas: consultasFeitas } : {}),

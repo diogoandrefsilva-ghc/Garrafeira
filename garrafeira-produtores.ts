@@ -216,7 +216,7 @@ async function registar(estado: string, detalhe: Record<string, unknown>, quem: 
     const u = (detalhe.usageMetadata ?? null) as Usage | null;
     await sb("registos", { method: "POST", headers: { Prefer: "return=minimal" },
       body: JSON.stringify({
-        app: "garrafeira", funcao: "garrafeira-produtores", estado: estado === "erro" ? "erro" : "ok",
+        app: "garrafeira", funcao: "garrafeira-produtores", funcionalidade: detalhe.passo === "excecao_inicial" ? "entrada" : "analisar", estado: estado === "erro" ? "erro" : "ok",
         modelo: (detalhe.modelo as string | undefined) ?? null, pesquisa_web: false,
         tokens_entrada: u?.promptTokenCount ?? null, tokens_saida: u?.candidatesTokenCount ?? null,
         tokens_pensamento: u?.thoughtsTokenCount ?? null, tokens_total: u?.totalTokenCount ?? null,

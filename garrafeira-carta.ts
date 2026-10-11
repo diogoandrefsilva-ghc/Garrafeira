@@ -617,6 +617,13 @@ async function registar(estado: string, detalhe: Record<string, unknown>, quem: 
     await sb("registos", { method: "POST", headers: { Prefer: "return=minimal" },
       body: JSON.stringify({
         app: "garrafeira", funcao: "garrafeira-carta",
+        // A funcionalidade (o painel de custos conta o custo médio de cada uma):
+        // ler a carta, sugerir da carta, ou sugerir da garrafeira/do Catálogo.
+        // Recusado antes de se saber o que era → `entrada`.
+        funcionalidade: detalhe.passo === "sugerir" ? `sugerir-${String(detalhe.modo ?? "garrafeira")}`
+          : detalhe.passo === "recomendar" ? "recomendar"
+          : (detalhe.passo === "autorizacao" || detalhe.passo === "excecao_inicial") ? "entrada"
+          : "ler",
         estado: estado === "erro" ? "erro" : "ok",
         modelo: (detalhe.modelo as string | undefined) ?? null, pesquisa_web: false,
         tokens_entrada: u?.promptTokenCount ?? null, tokens_saida: u?.candidatesTokenCount ?? null,
