@@ -12,7 +12,9 @@
 //      (`ordenarCarta`, 03/10/2026, o dono: "a ordem dos vinhos que aparece
 //      podia aparecer pela sugestão do Gemini"). É a ordem da lista, para se
 //      saber por onde começar a procurar — nunca um facto, nunca a sugestão.
-//      Fica em `garrafeira.cartas` (`vinhos`, `ordem`).
+//      Fica em `garrafeira.cartas` (`vinhos`, `ordem`). E a seguir, sem
+//      ninguém a pedir, a sugestão do passo 4 entre os vinhos que o Catálogo
+//      já conhece (ver "A SUGESTÃO JÁ COM A LEITURA").
 //   2. a APP mostra só os que cabem no orçamento (+5 €) e, de cada um que o
 //      Catálogo conhece, a nota do Vivino e a ficha (`carta_ligar`).
 //   3. a APP manda até 5 ao "Procurar informação" com IA de sempre
@@ -382,7 +384,7 @@ async function ligarComFicha(vinhos: any[], signal: AbortSignal): Promise<any[]>
   const d = await r.json();
   return Array.isArray(d) ? d : [];
 }
-async function ordenarCarta(vinhos: any[], prato: string, orcamento: number | null, modelos: string[], parent: AbortSignal) {
+async function ordenarCarta(vinhos: any[], ligados: any[], prato: string, orcamento: number | null, modelos: string[], parent: AbortSignal) {
   const cand = vinhos.map((v, i) => i).filter((i) => cabe(vinhos[i].preco ?? null, orcamento));
   const out = { ordem: null as number[] | null, usage: null as Usage | null, modelo: "", chamadas: 0, erro: "" };
   if (cand.length < 2) { out.ordem = cand; return out; }
@@ -392,8 +394,6 @@ async function ordenarCarta(vinhos: any[], prato: string, orcamento: number | nu
   parent.addEventListener("abort", onAbort);
   const timer = setTimeout(() => ctrl.abort(), 30_000);
   try {
-    let ligados: any[] = [];
-    try { ligados = await ligarComFicha(vinhos, ctrl.signal); } catch (_) { /* ordena-se só com a carta */ }
     const linhas = cand.map((i) => linhaDaCarta(vinhos[i], i, ligados[i]));
     const g = await gerar([[modelos[0], 512], [MODELO_LEVE, 0]], [{ text: promptOrdem(linhas, prato, orcamento) }], ctrl.signal);
     out.usage = g.usage; out.modelo = g.modelo; out.chamadas = g.chamadas;
@@ -636,11 +636,28 @@ async function registar(estado: string, detalhe: Record<string, unknown>, quem: 
   } catch (_) { /**/ }
 }
 
+/* ── A SUGESTÃO JÁ COM A LEITURA (11/10/2026) ──
+   O dono das apps: "é como se fosse aquele nosso amigo a quem pedimos
+   opinião e ele diz 'olha, dos que conheço da carta, recomendaria este'".
+   Acabada a leitura, a carta fica 'lida' (a app mostra logo a lista) com a
+   sugestão 'pendente', e o mesmo trabalho em segundo plano segue para a
+   recomendação de sempre (`recomendarCarta`), só entre os vinhos de que o
+   Catálogo já sabe alguma coisa — basta UM. Sem nenhum, não se chama o
+   modelo e fica como era. A app já espera por uma sugestão 'pendente' ao
+   abrir a carta. Diz-se sempre quantos se conhecem de quantos (`conhecidos`,
+   `possiveis` na `recomendacao`). Leitura e sugestão cabem no tempo que a
+   plataforma dá a um trabalho em segundo plano (`PRAZO_TOTAL_MS`); se a
+   leitura o gastou quase todo, não há sugestão já — pede-se no fim da
+   lista, como antes. */
+const PRAZO_TOTAL_MS = 140_000;
+const PRAZO_SUGESTAO_MIN_MS = 20_000;
+
 /* ── Ler (em segundo plano) ── */
 async function lerCarta(id: number, quem: string, partsImg: unknown[], nFotos: number, prato: string, orcamento: number | null) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), PROC_TIMEOUT_MS);
   const t0 = Date.now();
+  let sugerirJa: { vinhos: any[]; ligados: any[] } | null = null;
   try {
     const modelos = await candidatosModelo(ctrl.signal);
     // Transcrever não precisa de pensar — e pensar é o que gastava o
@@ -660,13 +677,28 @@ async function lerCarta(id: number, quem: string, partsImg: unknown[], nFotos: n
     }
     const vinhos = (Array.isArray(j.vinhosCarta) ? j.vinhosCarta : []).map(normVinhoCarta).filter(Boolean).slice(0, 80);
     const aviso = j.aviso ? s(j.aviso, 200) : null;
+    // A linha do Catálogo de cada vinho, com a ficha: para a ordem e para a
+    // sugestão. Se o Catálogo não responder, ordena-se só com a carta.
+    // Com um tecto próprio: um catálogo lento não pode levar a leitura atrás.
+    let ligados: any[] = [];
+    if (vinhos.length && !ctrl.signal.aborted) {
+      const cl = new AbortController(), onAbort = () => cl.abort();
+      ctrl.signal.addEventListener("abort", onAbort);
+      const tl = setTimeout(() => cl.abort(), 20_000);
+      try { ligados = await ligarComFicha(vinhos, cl.signal); } catch (_) { /* segue sem */ }
+      finally { clearTimeout(tl); ctrl.signal.removeEventListener("abort", onAbort); }
+    }
     // A ordem da lista (ver "A ORDEM DA LISTA"): nunca deita a leitura abaixo.
     const o = vinhos.length && !ctrl.signal.aborted
-      ? await ordenarCarta(vinhos, prato, orcamento, modelos, ctrl.signal)
+      ? await ordenarCarta(vinhos, ligados, prato, orcamento, modelos, ctrl.signal)
       : { ordem: null, usage: null, modelo: "", chamadas: 0, erro: "" };
     const pediuOrdem = o.chamadas > 0 || !!o.erro;
+    // A sugestão já (ver "A SUGESTÃO JÁ COM A LEITURA"): há algum conhecido, e tempo.
+    const conhecidos = vinhos.length ? conhecidosDaCarta(vinhos, ligados, orcamento).conhecidos.size : 0;
+    if (conhecidos > 0 && PRAZO_TOTAL_MS - (Date.now() - t0) >= PRAZO_SUGESTAO_MIN_MS) sugerirJa = { vinhos, ligados };
     await registar("ok", {
       passo: "ler", modelo: g.modelo, fotos: nFotos, vinhos_carta: vinhos.length,
+      conhecidos, sugestao_ja: !!sugerirJa,
       ordem: o.ordem && pediuOrdem ? "ia" : o.erro ? "falhou" : "carta",
       ...(o.erro ? { ordem_erro: o.erro } : {}), ...(o.modelo ? { modelo_ordem: o.modelo } : {}),
       chamadas_gemini: g.chamadas + o.chamadas,
@@ -674,60 +706,82 @@ async function lerCarta(id: number, quem: string, partsImg: unknown[], nFotos: n
       custo_estimado_eur: CUSTO_LEITURA_EUR + (o.chamadas ? CUSTO_ORDEM_EUR : 0), ms: Date.now() - t0,
     }, quem);
     await atualizarCarta(id, quem, vinhos.length
-      ? { estado: "lida", vinhos, aviso, ordem: o.ordem && pediuOrdem ? o.ordem : null }
+      ? { estado: "lida", vinhos, aviso, ordem: o.ordem && pediuOrdem ? o.ordem : null,
+          ...(sugerirJa ? { rec_estado: "pendente", rec_erro: null } : {}) }
       : { estado: "erro", erro: aviso || "não consegui ler vinhos nesta carta — tenta uma foto mais nítida" });
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";
+    sugerirJa = null;
     await registar("erro", { passo: timeout ? "timeout" : "excecao", erro: String(err.message).slice(0, 300), ms: Date.now() - t0 }, quem);
     await atualizarCarta(id, quem, { estado: "erro",
       erro: timeout ? "o modelo demorou demasiado a ler a carta — tenta outra vez, ou uma foto mais nítida" : (err.message || "erro inesperado") });
   } finally { clearTimeout(timer); }
+  // Fora do prazo da leitura: a sugestão tem o seu, o que sobra do total.
+  if (sugerirJa) {
+    await recomendarCarta({ id, prato, orcamento, vinhos: sugerirJa.vinhos }, quem,
+      { ligados: sugerirJa.ligados, auto: true, prazoMs: Math.max(5_000, Math.min(60_000, PRAZO_TOTAL_MS - (Date.now() - t0))) });
+  }
 }
 
-/* ── Recomendar (em segundo plano) ── */
-async function recomendarCarta(row: any, quem: string) {
+/* ── Os vinhos da carta que se CONHECEM: os que cabem no orçamento e de que
+   o Catálogo sabe alguma coisa, com os factos que o modelo vai ler. É a
+   mesma conta para a sugestão pedida e para a que sai com a leitura, e é de
+   onde vêm os dois números que a app mostra ("conheço X dos Y"). ── */
+function conhecidosDaCarta(vinhos: any[], ligados: any[], orc: number | null) {
+  const linhas: string[] = [];
+  const conhecidos = new Set<number>();
+  const comNota = new Set<number>();
+  let possiveis = 0;
+  vinhos.forEach((v, i) => {
+    if (!cabe(v.preco ?? null, orc)) return;
+    possiveis++;
+    const l = ligados[i];
+    if (!l || !sabeAlgo(l.ficha)) return;
+    const f = l.ficha;
+    const nv = notaVivino(f);
+    if (nv) comNota.add(i);
+    conhecidos.add(i);
+    const outraColheita = v.ano && l.ano && v.ano !== l.ano ? ` (os factos são da colheita ${l.ano})` : "";
+    linhas.push([
+      `[${i}] ${v.nome}`,
+      (v.produtor || l.produtor) ? `produtor: ${v.produtor || l.produtor}` : "",
+      v.ano ? `colheita: ${v.ano}${outraColheita}` : (l.ano ? `colheita no catálogo: ${l.ano}` : ""),
+      (v.tipo || f.tipo) ? `cor: ${v.tipo || f.tipo}` : "",
+      (v.regiao || f.regiao) ? `região: ${v.regiao || f.regiao}` : "",
+      v.preco != null ? `preço na carta: ${v.preco}€` : "preço na carta: ?",
+      nv ? `Vivino ${nv.nota}/5${nv.de === "global" ? " (todas as colheitas)" : ""}` : "SEM NOTA",
+      numOuNull(f.preco_medio) != null ? `preço de referência ~${numOuNull(f.preco_medio)}€` : "",
+      Array.isArray(f.castas) && f.castas.length ? `castas: ${f.castas.slice(0, 6).join(", ")}` : "",
+      f.estilo ? `estilo: ${s(f.estilo, 40)}` : "",
+      f.harmonizacao ? `harmoniza com: ${s(f.harmonizacao, 240)}` : "",
+      f.notas_prova ? `prova: ${s(f.notas_prova, 240)}` : "",
+    ].filter(Boolean).join(" | "));
+  });
+  return { linhas, conhecidos, comNota, possiveis };
+}
+
+/* ── Recomendar (em segundo plano) ──
+   Pedida (o botão "Sugerir"), ou logo a seguir à leitura (`auto`, ver "A
+   SUGESTÃO JÁ COM A LEITURA"): nesse caso a leitura já trouxe a ligação ao
+   Catálogo (`ligados`) e diz quanto tempo sobra (`prazoMs`). */
+async function recomendarCarta(row: any, quem: string, op: { ligados?: any[]; auto?: boolean; prazoMs?: number } = {}) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 60_000);
+  const timer = setTimeout(() => ctrl.abort(), op.prazoMs ?? 60_000);
   const t0 = Date.now();
   const id = row.id as number;
+  const auto = !!op.auto;
   try {
     const vinhos: any[] = Array.isArray(row.vinhos) ? row.vinhos : [];
     const orc = row.orcamento != null ? Number(row.orcamento) : null;
     // A linha do catálogo de cada um — a mesma pergunta que a app faz, mas
     // com a ficha (o que o modelo vai ler).
-    const ligados = await ligarComFicha(vinhos, ctrl.signal);
-
-    const linhas: string[] = [];
-    const conhecidos = new Set<number>();
-    const comNota = new Set<number>();
-    vinhos.forEach((v, i) => {
-      const l = ligados[i];
-      if (!cabe(v.preco ?? null, orc) || !l || !sabeAlgo(l.ficha)) return;
-      const f = l.ficha;
-      const nv = notaVivino(f);
-      if (nv) comNota.add(i);
-      conhecidos.add(i);
-      const outraColheita = v.ano && l.ano && v.ano !== l.ano ? ` (os factos são da colheita ${l.ano})` : "";
-      linhas.push([
-        `[${i}] ${v.nome}`,
-        (v.produtor || l.produtor) ? `produtor: ${v.produtor || l.produtor}` : "",
-        v.ano ? `colheita: ${v.ano}${outraColheita}` : (l.ano ? `colheita no catálogo: ${l.ano}` : ""),
-        (v.tipo || f.tipo) ? `cor: ${v.tipo || f.tipo}` : "",
-        (v.regiao || f.regiao) ? `região: ${v.regiao || f.regiao}` : "",
-        v.preco != null ? `preço na carta: ${v.preco}€` : "preço na carta: ?",
-        nv ? `Vivino ${nv.nota}/5${nv.de === "global" ? " (todas as colheitas)" : ""}` : "SEM NOTA",
-        numOuNull(f.preco_medio) != null ? `preço de referência ~${numOuNull(f.preco_medio)}€` : "",
-        Array.isArray(f.castas) && f.castas.length ? `castas: ${f.castas.slice(0, 6).join(", ")}` : "",
-        f.estilo ? `estilo: ${s(f.estilo, 40)}` : "",
-        f.harmonizacao ? `harmoniza com: ${s(f.harmonizacao, 240)}` : "",
-        f.notas_prova ? `prova: ${s(f.notas_prova, 240)}` : "",
-      ].filter(Boolean).join(" | "));
-    });
+    const ligados = op.ligados ?? await ligarComFicha(vinhos, ctrl.signal);
+    const { linhas, conhecidos, comNota, possiveis } = conhecidosDaCarta(vinhos, ligados, orc);
 
     if (!linhas.length) {
-      await registar("ok", { passo: "recomendar", conhecidos: 0, ms: Date.now() - t0 }, quem);
+      await registar("ok", { passo: "recomendar", auto, conhecidos: 0, possiveis, ms: Date.now() - t0 }, quem);
       await atualizarCarta(id, quem, { rec_estado: "concluido",
-        recomendacao: { estado: "sem-conhecidos", sugestoes: [], geradoEm: new Date().toISOString() } });
+        recomendacao: { estado: "sem-conhecidos", sugestoes: [], conhecidos: 0, possiveis, auto, geradoEm: new Date().toISOString() } });
       return;
     }
 
@@ -736,26 +790,30 @@ async function recomendarCarta(row: any, quem: string) {
     // a carta, com um tecto POSITIVO de pensamento; o lite é a rede.
     const g = await gerar([[modelos[0], 1024], [MODELO_LEVE, 0]], [{ text: promptRecomendacao(linhas, s(row.prato, 200), orc) }], ctrl.signal);
     const j = g.texto ? extrairJson(g.texto) : null;
+    // A que sai com a leitura não foi pedida: se falhar, diz-se por onde a
+    // pedir, e não "tenta outra vez".
+    const deNovo = auto ? "pede-a no fim da lista" : "tenta outra vez";
     if (!j || typeof j !== "object") {
-      await registar("erro", { passo: "recomendar", erro: g.erro || "ilegível", modelo: g.modelo || null, ms: Date.now() - t0, ...(g.usage ? { usageMetadata: g.usage } : {}) }, quem);
-      await atualizarCarta(id, quem, { rec_estado: "erro", rec_erro: "não consegui fazer a recomendação agora — tenta outra vez" });
+      await registar("erro", { passo: "recomendar", auto, erro: g.erro || "ilegível", modelo: g.modelo || null, ms: Date.now() - t0, ...(g.usage ? { usageMetadata: g.usage } : {}) }, quem);
+      await atualizarCarta(id, quem, { rec_estado: "erro", rec_erro: `não consegui fazer a sugestão agora — ${deNovo}` });
       return;
     }
 
     const sugestoes = rankingDe(j, conhecidos, comNota);
 
     await registar("ok", {
-      passo: "recomendar", modelo: g.modelo, conhecidos: conhecidos.size, sugestoes: sugestoes.length,
+      passo: "recomendar", auto, modelo: g.modelo, conhecidos: conhecidos.size, possiveis, sugestoes: sugestoes.length,
       prato: s(row.prato, 200), orcamento: orc, chamadas_gemini: g.chamadas,
       ...(g.usage ? { usageMetadata: g.usage } : {}), custo_estimado_eur: CUSTO_RECOMENDACAO_EUR, ms: Date.now() - t0,
     }, quem);
     await atualizarCarta(id, quem, { rec_estado: "concluido", rec_erro: null,
-      recomendacao: { estado: sugestoes.length ? "ok" : "nenhum-combina", sugestoes, modelo: g.modelo, geradoEm: new Date().toISOString() } });
+      recomendacao: { estado: sugestoes.length ? "ok" : "nenhum-combina", sugestoes, conhecidos: conhecidos.size, possiveis, auto,
+        modelo: g.modelo, geradoEm: new Date().toISOString() } });
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";
-    await registar("erro", { passo: "recomendar", erro: String(err.message).slice(0, 300), ms: Date.now() - t0 }, quem);
+    await registar("erro", { passo: "recomendar", auto, erro: String(err.message).slice(0, 300), ms: Date.now() - t0 }, quem);
     await atualizarCarta(id, quem, { rec_estado: "erro",
-      rec_erro: timeout ? "a recomendação demorou demasiado — tenta outra vez" : (err.message || "erro inesperado") });
+      rec_erro: timeout ? `a sugestão demorou demasiado — ${auto ? "pede-a no fim da lista" : "tenta outra vez"}` : (err.message || "erro inesperado") });
   } finally { clearTimeout(timer); }
 }
 

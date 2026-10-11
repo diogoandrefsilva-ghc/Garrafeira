@@ -1779,7 +1779,10 @@ async function modoAlternar(){
         página do vinho (`vinho-info`), e o que se encontrar fica logo no
         Catálogo (`wsDetalhe`). Mais 5, até 15 por carta;
      4. SUGERIR (`wsRecomendar`): a recomendação, só entre os vinhos de que
-        o Catálogo sabe alguma coisa.
+        o Catálogo sabe alguma coisa. A primeira vem SOZINHA com a leitura
+        (11/10/2026, o dono: "dos que conheço da carta, recomendaria
+        este"), e diz sempre quantos conhece de quantos; pede-se outra vez
+        depois de procurar informação.
    - Quem vê o separador: quem tem IA na Garrafeira (`podeUsarIA()`); a
      `garrafeira-carta` pergunta o mesmo à BD (`plano_ia()`).
    - Só no catálogo (o separador vive lá).
@@ -2137,7 +2140,9 @@ async function wsAbrirCarta(row){
   };
   wsDesenhar();
   await wsLigar(WS);
-  if(WS&&WS.id===row.id&&WS.recEstado==='pendente')wsRecIniciarPolling(WS);
+  // A sugestão que vem com a leitura (ou uma que ficou a meio): espera-se por
+  // ela sem fazer saltar o ecrã — a pessoa pode estar a ler a lista.
+  if(WS&&WS.id===row.id&&WS.recEstado==='pendente')wsRecIniciarPolling(WS,false);
 }
 async function wsLigar(c){
   try{await catCarregar();}catch(e){}
@@ -2299,8 +2304,8 @@ function wsCartaHTML(c){
     <div class="carta-list">${c.ligado?idx.map(i=>wsLinhaHTML(c,i,restam)).join(''):'<p class="ws-note">A ver o que o Catálogo sabe…</p>'}</div>
     <div class="ws-acoes">
       <p class="ws-note">${restam>0
-        ?`Escolhe até ${Math.min(WS_DET_MAX,restam)} para procurar informação com IA — o que se encontrar fica no Catálogo. Depois, pede a sugestão.`
-        :`Já procuraste ${WS_DET_TOTAL} vinhos desta carta. Pede a sugestão.`}</p>
+        ?`Escolhe até ${Math.min(WS_DET_MAX,restam)} para procurar informação com IA — o que se encontrar fica no Catálogo. Depois, pede ${c.rec||recPend?'outra vez a sugestão, já com eles':'a sugestão'}.`
+        :`Já procuraste ${WS_DET_TOTAL} vinhos desta carta. Pede ${c.rec?'outra vez ':''}a sugestão.`}</p>
       ${restam>0?`<button type="button" class="btn ghost" id="ws-btn-det" onclick="wsDetalhe()" ${(!c.sel.size||aProcurar)?'disabled':''}>🔎 Procurar informação (<span id="ws-det-n">${c.sel.size}</span>/${Math.min(WS_DET_MAX,restam)})</button>`:''}
       <button type="button" class="btn prim" onclick="wsRecomendar()" ${(aProcurar||recPend||!c.ligado)?'disabled':''}>🍷 ${c.rec?'Sugerir outra vez':'Sugerir'}</button>
       ${aProcurar?'<p class="ws-note">A procurar informação — pode demorar um minuto…</p>':''}
@@ -2393,7 +2398,15 @@ async function wsDetalhe(){
    A `garrafeira-carta` ordena só os vinhos que cabem no orçamento e de que
    o Catálogo sabe alguma coisa, e diz porquê. Devolve a ORDEM e a frase; a
    nota, o preço de referência e o "preço justo" do cartão saem daqui, dos
-   dados do Catálogo — nunca do texto do modelo. */
+   dados do Catálogo — nunca do texto do modelo.
+   A PRIMEIRA VEM COM A LEITURA (11/10/2026, o dono das apps: "é como se
+   fosse aquele nosso amigo a quem pedimos opinião e ele diz 'olha, dos que
+   conheço da carta, recomendaria este'"): a carta chega 'lida' com a
+   sugestão 'pendente', e a app espera por ela como por uma pedida. Por
+   isso diz SEMPRE de quantos escolheu — "Conheço 4 dos 18" (`conhecidos`,
+   `possiveis` da `recomendacao`; as cartas de antes não os trazem) — e,
+   quando não os conhece todos, o título é "Dos que conheço, recomendaria"
+   e o primeiro é o "melhor dos que conheço", não a melhor escolha. */
 let _wsRecTimer=null, _wsRecTick=null;
 async function wsRecomendar(){
   const c=WS;
@@ -2404,13 +2417,13 @@ async function wsRecomendar(){
   Object.entries(c.pesq).forEach(([k,v])=>{if(v==='ok'||v==='falhou')pesq[k]=v;});
   try{
     await wsFuncao({acao:'recomendar',id:c.id,pesquisados:pesq});
-    wsRecIniciarPolling(c);
+    wsRecIniciarPolling(c,true);
   }catch(e){
     c.recEstado='erro';c.recErro=e.message;
     wsDesenhar();
   }
 }
-function wsRecIniciarPolling(c){
+function wsRecIniciarPolling(c,rolar){
   clearTimeout(_wsRecTimer);
   const inicio=Date.now();
   _wsRecTick=async()=>{
@@ -2429,7 +2442,7 @@ function wsRecIniciarPolling(c){
         c.recErro=r.rec_estado==='erro'?(r.rec_erro||'Não consegui fazer a sugestão — tenta outra vez.'):'';
         wsDesenhar();
         const el=document.getElementById('ws-resultado');
-        if(el&&c.rec&&WS_MODO==='carta')el.scrollIntoView({behavior:'smooth',block:'start'});
+        if(rolar&&el&&c.rec&&WS_MODO==='carta')el.scrollIntoView({behavior:'smooth',block:'start'});
         const h=document.getElementById('ws-hist');if(h&&h.open)wsCarregarHistorico();
         return;
       }
@@ -2438,20 +2451,33 @@ function wsRecIniciarPolling(c){
   };
   _wsRecTick();
 }
+// Não os conheço a todos? (sem os números, uma carta antiga: não se sabe)
+function wsRecParcial(rec){
+  return !!rec&&Number.isInteger(rec.conhecidos)&&Number.isInteger(rec.possiveis)&&rec.conhecidos<rec.possiveis;
+}
+// "Conheço 4 dos 18 vinhos da carta" — de quantos a sugestão escolheu.
+function wsRecConta(c,rec){
+  if(!rec||!Number.isInteger(rec.conhecidos)||!Number.isInteger(rec.possiveis)||!rec.possiveis)return '';
+  const x=rec.conhecidos, y=rec.possiveis, orc=c.orcamento!=null?' que cabem no orçamento':'';
+  if(x>=y)return y===1?`Conheço o único vinho da carta${orc}.`:`Conheço os ${y} vinhos da carta${orc}.`;
+  return `Conheço <strong>${x}</strong> dos ${y} vinhos da carta${orc}.`;
+}
 function wsRecHTML(c){
-  if(c.recEstado==='pendente')return '<div class="ws-card"><p class="ws-note">🍷 A escolher, só entre os vinhos de que o Catálogo sabe alguma coisa…</p></div>';
+  if(c.recEstado==='pendente')return '<div class="ws-card"><p class="ws-note">🍷 A ver, dos vinhos desta carta que já conheço, qual recomendaria…</p></div>';
   let html='';
   if(c.recEstado==='erro'&&c.recErro)html+=`<div class="ws-card"><p class="ws-note" style="color:var(--dg)">${esc(c.recErro)}</p></div>`;
   const rec=c.rec;
   if(!rec)return html;
   const sug=(Array.isArray(rec.sugestoes)?rec.sugestoes:[]).filter(s=>c.vinhos[s.i]);
+  const conta=wsRecConta(c,rec), parcial=wsRecParcial(rec);
   if(!sug.length){
     const txt=rec.estado==='sem-conhecidos'
       ?'Ainda não sei nada de nenhum destes vinhos — e prefiro não adivinhar. Escolhe até 5 na lista e procura informação.'
-      :'Dos vinhos que conheço, nenhum combina bem com este pedido. Procura informação sobre outros da lista.';
+      :`${conta?conta+' ':''}Dos que conheço, nenhum combina bem com este pedido. Procura informação sobre outros da lista.`;
     return html+`<div class="ws-card"><p class="ws-note">${txt}</p></div>`;
   }
-  return html+`<div class="ws-card-label sug-titulo">A sugestão${sug.length>1?' <em>— toca num vinho para ver porquê</em>':''}</div>`
+  return html+`<div class="ws-card-label sug-titulo">${parcial?'Dos que conheço, recomendaria':'A sugestão'}${sug.length>1?' <em>— toca num vinho para ver porquê</em>':''}</div>`
+    +(conta?`<p class="ws-note sug-conta">${conta}${parcial?' Os outros podem ser melhores — procura informação sobre eles na lista.':''}</p>`:'')
     +sug.map((s,k)=>wsSugHTML(c,s,k)).join('');
 }
 // Um <details> por vinho, só o primeiro aberto — à mesa a pergunta é "qual?".
@@ -2460,7 +2486,7 @@ function wsSugHTML(c,s,k){
   const tipo=v.tipo||(cat&&cat.tipo)||'';
   const castas=cat&&cat.castas&&cat.castas.length?cat.castas.join(', '):'';
   const sub=[tipo,v.regiao||(cat&&cat.regiao),castas].filter(Boolean).map(x=>esc(String(x))).join(' · ');
-  const marca=k===0&&s.recomendado?'<span class="sug-marca topo">🏆 Melhor escolha</span>':s.recomendado?'<span class="sug-marca">Recomendado</span>':'';
+  const marca=k===0&&s.recomendado?`<span class="sug-marca topo">🏆 ${wsRecParcial(c.rec)?'Melhor dos que conheço':'Melhor escolha'}</span>`:s.recomendado?'<span class="sug-marca">Recomendado</span>':'';
   const nota=cat?wsNotaHTML(cat,v,'sug-nota'):'';
   const pr=wsAvaliarPreco(v.preco!=null?Number(v.preco):null,cat?precoVinho(cat):null);
   const viv=cat?vivinoLink(cat.vivino_url||''):'';
@@ -2682,7 +2708,7 @@ function wsListaHTML(modo){
 function wsListaSugHTML(st,s,k){
   const v0=st.vinhos[s.i], v=IDXV[v0.id]||v0, cat=st.modo==='catalogo';
   const sub=[v.tipo,v.regiao,v.ano,(v.castas||[]).join(', ')].filter(Boolean).map(x=>esc(String(x))).join(' · ');
-  const marca=k===0&&s.recomendado?'<span class="sug-marca topo">🏆 Melhor escolha</span>':s.recomendado?'<span class="sug-marca">Recomendado</span>':'';
+  const marca=k===0&&s.recomendado?`<span class="sug-marca topo">🏆 ${wsRecParcial(c.rec)?'Melhor dos que conheço':'Melhor escolha'}</span>`:s.recomendado?'<span class="sug-marca">Recomendado</span>':'';
   const nota=wsNotaHTML(v,v,'sug-nota')||'<span class="sug-nota"><span class="sem-dados">sem nota</span></span>';
   let dir;
   if(cat){
@@ -15717,7 +15743,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='222';
+const APP_BUILD='223';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

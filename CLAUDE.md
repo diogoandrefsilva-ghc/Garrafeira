@@ -1306,6 +1306,23 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
    do modelo. Um vinho sem nota não passa à frente de um com nota nos
    recomendados — no prompt e em código. Pode pedir-se outra vez depois de
    procurar mais.
+   **A primeira vem SOZINHA com a leitura** (11/10/2026, o dono das apps:
+   "é como se fosse aquele nosso amigo a quem pedimos opinião e ele diz
+   'olha, dos que conheço da carta, recomendaria este'"). Acabada a leitura,
+   a `garrafeira-carta` grava a carta 'lida' com `rec_estado: 'pendente'` —
+   a app mostra logo a lista, e espera pela sugestão como por uma pedida,
+   sem fazer saltar o ecrã — e o mesmo trabalho em segundo plano segue para
+   a `recomendarCarta` de sempre (`auto`), com a ligação ao Catálogo que a
+   leitura já fez. Basta UM vinho conhecido; sem nenhum, não se chama o
+   modelo. Leitura e sugestão cabem nos 140 s do trabalho em segundo plano
+   (`PRAZO_TOTAL_MS`): se a leitura os gastou quase todos, não há sugestão
+   já. **E diz sempre de quantos escolheu** (`conhecidos`/`possiveis` na
+   `recomendacao`, `wsRecConta`): "Conheço 4 dos 18 vinhos da carta que
+   cabem no orçamento"; não os conhecendo todos, o título é "Dos que
+   conheço, recomendaria" e o primeiro é o "Melhor dos que conheço"
+   (`wsRecParcial`). As cartas de antes não trazem os números e ficam como
+   eram. **Não se junta à chamada da ORDEM**: essa pode usar a memória do
+   modelo, a sugestão não — num pedido só, a memória acabava no "porquê".
 - **Três modos, no topo do separador** (07/10/2026, o dono das apps:
   "sugestão de vinhos a partir de uma carta de vinhos (já existe) — manter
   como está; a partir da garrafeira pessoal — não pedir o preço; a partir

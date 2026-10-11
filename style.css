@@ -2180,6 +2180,9 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
 /* a caixa resumo: um <details> por vinho, só o primeiro aberto */
 #s-sugestoes .sug-titulo{margin:2px 4px 8px}
 #s-sugestoes .sug-titulo em{font-weight:500;text-transform:none;letter-spacing:0}
+/* "Conheço 4 dos 18 vinhos da carta" — de quantos a sugestão escolheu */
+#s-sugestoes .sug-conta{margin:-4px 4px 10px}
+#s-sugestoes .sug-conta strong{color:var(--tx)}
 #s-sugestoes .sug-det{padding:12px 14px}
 #s-sugestoes .sug-det>summary{list-style:none;cursor:pointer}
 #s-sugestoes .sug-det>summary::-webkit-details-marker{display:none}
