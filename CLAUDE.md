@@ -1360,8 +1360,10 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
     orçamento pelo preço que conta (`precoVinho`, com a margem do `wsCabe`;
     sem limite entram também os sem preço), UMA colheita por vinho
     (`catFamChave`: a de melhor nota, em empate a mais recente).
-  Até 200 vinhos por pedido (`WS_LISTA_MAX`/`MAX_LISTA`); passando disso
-  vão os que têm mais informação, e o ecrã di-lo.
+  Até 50 vinhos por pedido (`WS_LISTA_MAX`/`MAX_LISTA`; eram 200, ~30 mil
+  tokens — 12/10/2026, o dono). Passando disso, a app pré-seleciona
+  (`wsRelevancia`): primeiro os que dizem harmonizar com uma palavra do
+  prato, depois a nota do Vivino e a informação; o ecrã di-lo.
 - **O orçamento vai até 70 €** (07/10/2026, o dono: "só estamos a permitir
   ir até 50 €"): Sem limite · 10 · 15 · 20 · 25 · 30 · 40 · 50 · 60 · 70 —
   `WS_ORCAMENTO_OPCOES` no app.js e as `.orc-item` do `index.html`, os dois

@@ -424,7 +424,7 @@ async function ordenarCarta(vinhos: any[], ligados: any[], prato: string, orcame
    janela de consumo: um vinho no ponto, sobretudo a fechar a janela, vem
    antes de um ainda cedo. No CATÁLOGO há o preço de referência (o das lojas,
    o `precoPrincipal` da app) e a relação preço/qualidade. */
-const MAX_LISTA = 200;
+const MAX_LISTA = 50;
 const MODOS_LISTA = ["garrafeira", "catalogo"];
 const LISTA_TIMEOUT_MS = 55_000;
 const CUSTO_LISTA_EUR = 0.003;

@@ -2576,14 +2576,28 @@ async function wsAbrirHist(id){
      os sem preço. UMA colheita por vinho (`catFamChave`) — a de melhor
      nota, e em empate a mais recente —, senão a sugestão eram três
      colheitas do mesmo vinho.
-   Até `WS_LISTA_MAX` vinhos por pedido: passando disso, vão os que têm mais
-   informação (a harmonização primeiro), e o ecrã di-lo. */
-const WS_LISTA_MAX=200;
+   Até `WS_LISTA_MAX` vinhos por pedido (12/10/2026, o dono: "temo que
+   estejas a enviar 200 vinhos para o Gemini" — eram ~30 mil tokens por
+   pedido, e um modelo a escolher entre 200 escolhe pior). Passando disso, a
+   APP pré-seleciona (`wsRelevancia`): primeiro os que falam do prato (uma
+   palavra dele na harmonização ou na prova), depois a nota e a informação.
+   O ecrã di-lo. */
+const WS_LISTA_MAX=50;
 const WS_LISTA={garrafeira:null,catalogo:null};
 function wsGarrafeiraVinhos(){return db.vinhos.filter(v=>stockDe(v.id)>0);}
 function wsSabeAlgo(v){return !!(notaVivino(v)||(v.castas&&v.castas.length)||v.harmonizacao||v.notas_prova);}
 function wsInfo(v){return (v.harmonizacao?2:0)+(notaVivino(v)?1:0)+((v.castas||[]).length?1:0)+(v.notas_prova?1:0);}
-function wsCandidatos(modo,orc){
+// Quantas palavras do prato o vinho diz harmonizar (pelo radical: "enchidos"
+// acha "enchido"). Palavras curtas ("com", "de") não contam.
+function wsPratoRadicais(prato){
+  return [...new Set(chave(prato).split(/[^a-z0-9]+/).filter(w=>w.length>=4).map(w=>w.slice(0,Math.max(4,w.length-2))))];
+}
+function wsRelevancia(v,rad){
+  if(!rad.length)return 0;
+  const txt=chave((v.harmonizacao||'')+' '+(v.notas_prova||''));
+  return rad.reduce((n,r)=>n+(txt.includes(r)?1:0),0);
+}
+function wsCandidatos(modo,orc,prato){
   let vs;
   if(modo==='garrafeira')vs=wsGarrafeiraVinhos();
   else{
@@ -2598,7 +2612,8 @@ function wsCandidatos(modo,orc){
   }
   const total=vs.length;
   if(total>WS_LISTA_MAX){
-    vs=vs.slice().sort((a,b)=>wsInfo(b)-wsInfo(a)||(notaVivinoNum(b)||0)-(notaVivinoNum(a)||0)).slice(0,WS_LISTA_MAX);
+    const rad=wsPratoRadicais(prato||''), rel=new Map(vs.map(v=>[v,wsRelevancia(v,rad)]));
+    vs=vs.slice().sort((a,b)=>rel.get(b)-rel.get(a)||(notaVivinoNum(b)||0)-(notaVivinoNum(a)||0)||wsInfo(b)-wsInfo(a)).slice(0,WS_LISTA_MAX);
   }
   return {vinhos:vs,total,cortados:total>vs.length};
 }
@@ -2654,7 +2669,7 @@ async function wsSugerirLista(){
   }
   const prato=document.getElementById('ws-prato').value.trim();
   const orc=modo==='catalogo'?wsOrcamentoValor():null;
-  const c=wsCandidatos(modo,orc);
+  const c=wsCandidatos(modo,orc,prato);
   const st={modo,ga:GA_ID,prato,orcamento:orc,vinhos:c.vinhos,total:c.total,cortados:c.cortados,estado:'pendente',erro:'',rec:null};
   WS_LISTA[modo]=st;
   if(!st.vinhos.length){st.estado='ok';st.rec={estado:'vazio',sugestoes:[]};}
@@ -2697,7 +2712,7 @@ function wsListaHTML(modo){
     return `<div class="ws-card"><p class="ws-note">${txt}</p></div>`;
   }
   const entre=`Entre ${n} vinho${n===1?'':'s'} ${cat?`do Catálogo${st.orcamento!=null?` até ${wsEur(st.orcamento)}`:''}`:'com garrafas na garrafeira'}`
-    +(st.cortados?` — os que têm mais informação, de ${st.total}`:'')+'.';
+    +(st.cortados?` — os mais indicados${st.prato?' para o prato':''}, de ${st.total}`:'')+'.';
   return `<div class="ws-card-label sug-titulo">A sugestão${st.prato?` · ${esc(st.prato)}`:''}${sug.length>1?' <em>— toca num vinho para ver porquê</em>':''}</div>
     <p class="ws-note sug-entre">${entre}</p>`
     +sug.map((s,k)=>wsListaSugHTML(st,s,k)).join('');
@@ -2708,7 +2723,7 @@ function wsListaHTML(modo){
 function wsListaSugHTML(st,s,k){
   const v0=st.vinhos[s.i], v=IDXV[v0.id]||v0, cat=st.modo==='catalogo';
   const sub=[v.tipo,v.regiao,v.ano,(v.castas||[]).join(', ')].filter(Boolean).map(x=>esc(String(x))).join(' · ');
-  const marca=k===0&&s.recomendado?`<span class="sug-marca topo">🏆 ${wsRecParcial(c.rec)?'Melhor dos que conheço':'Melhor escolha'}</span>`:s.recomendado?'<span class="sug-marca">Recomendado</span>':'';
+  const marca=k===0&&s.recomendado?`<span class="sug-marca topo">🏆 Melhor escolha</span>`:s.recomendado?'<span class="sug-marca">Recomendado</span>':'';
   const nota=wsNotaHTML(v,v,'sug-nota')||'<span class="sug-nota"><span class="sem-dados">sem nota</span></span>';
   let dir;
   if(cat){
@@ -15743,7 +15758,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='223';
+const APP_BUILD='224';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
