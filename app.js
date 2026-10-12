@@ -2578,44 +2578,261 @@ async function wsAbrirHist(id){
      colheitas do mesmo vinho.
    Até `WS_LISTA_MAX` vinhos por pedido (12/10/2026, o dono: "temo que
    estejas a enviar 200 vinhos para o Gemini" — eram ~30 mil tokens por
-   pedido, e um modelo a escolher entre 200 escolhe pior). Passando disso, a
-   APP pré-seleciona (`wsRelevancia`): primeiro os que falam do prato (uma
-   palavra dele na harmonização ou na prova), depois a nota e a informação.
-   O ecrã di-lo. */
+   pedido, e um modelo a escolher entre 200 escolhe pior). Com um prato, a
+   lista que vai ao modelo é a da PROCURA DO PRATO (a seguir, sem IA); sem
+   prato, vão os que têm mais informação e melhor nota. O ecrã di-lo. */
 const WS_LISTA_MAX=50;
 const WS_LISTA={garrafeira:null,catalogo:null};
 function wsGarrafeiraVinhos(){return db.vinhos.filter(v=>stockDe(v.id)>0);}
 function wsSabeAlgo(v){return !!(notaVivino(v)||(v.castas&&v.castas.length)||v.harmonizacao||v.notas_prova);}
 function wsInfo(v){return (v.harmonizacao?2:0)+(notaVivino(v)?1:0)+((v.castas||[]).length?1:0)+(v.notas_prova?1:0);}
-// Quantas palavras do prato o vinho diz harmonizar (pelo radical: "enchidos"
-// acha "enchido"). Palavras curtas ("com", "de") não contam.
-function wsPratoRadicais(prato){
-  return [...new Set(chave(prato).split(/[^a-z0-9]+/).filter(w=>w.length>=4).map(w=>w.slice(0,Math.max(4,w.length-2))))];
+// Todos os vinhos que podem entrar, sem corte.
+function wsUniverso(modo,orc){
+  if(modo==='garrafeira')return wsGarrafeiraVinhos();
+  const fam=new Map();
+  (CAT_VINHOS||[]).forEach(v=>{
+    if(!wsSabeAlgo(v)||!wsCabe({preco:precoVinho(v)},orc))return;
+    const k=catFamChave(v), o=fam.get(k);
+    const nv=notaVivinoNum(v)||0, no=o?(notaVivinoNum(o)||0):-1;
+    if(!o||nv>no||(nv===no&&(Number(v.ano)||0)>(Number(o.ano)||0)))fam.set(k,v);
+  });
+  return [...fam.values()];
 }
-function wsRelevancia(v,rad){
-  if(!rad.length)return 0;
-  const txt=chave((v.harmonizacao||'')+' '+(v.notas_prova||''));
-  return rad.reduce((n,r)=>n+(txt.includes(r)?1:0),0);
-}
-function wsCandidatos(modo,orc,prato){
-  let vs;
-  if(modo==='garrafeira')vs=wsGarrafeiraVinhos();
-  else{
-    const fam=new Map();
-    (CAT_VINHOS||[]).forEach(v=>{
-      if(!wsSabeAlgo(v)||!wsCabe({preco:precoVinho(v)},orc))return;
-      const k=catFamChave(v), o=fam.get(k);
-      const nv=notaVivinoNum(v)||0, no=o?(notaVivinoNum(o)||0):-1;
-      if(!o||nv>no||(nv===no&&(Number(v.ano)||0)>(Number(o.ano)||0)))fam.set(k,v);
-    });
-    vs=[...fam.values()];
-  }
+// Sem prato (ou "pedir na mesma"): os que têm mais informação e melhor nota.
+function wsCortar(vs){
   const total=vs.length;
-  if(total>WS_LISTA_MAX){
-    const rad=wsPratoRadicais(prato||''), rel=new Map(vs.map(v=>[v,wsRelevancia(v,rad)]));
-    vs=vs.slice().sort((a,b)=>rel.get(b)-rel.get(a)||(notaVivinoNum(b)||0)-(notaVivinoNum(a)||0)||wsInfo(b)-wsInfo(a)).slice(0,WS_LISTA_MAX);
-  }
+  if(total>WS_LISTA_MAX)vs=vs.slice().sort((a,b)=>wsInfo(b)-wsInfo(a)||(notaVivinoNum(b)||0)-(notaVivinoNum(a)||0)).slice(0,WS_LISTA_MAX);
   return {vinhos:vs,total,cortados:total>vs.length};
+}
+
+/* ── O PRATO, PROCURADO SEM IA (12/10/2026) ──
+   O dono das apps: "tem que ser uma pesquisa sem IA no catálogo, mas com
+   alguma inteligência e equivalência … charcutaria = chouriço = enchidos;
+   chuletón = costeleta = bife grelhado = entrecôte". Procura-se o prato na
+   HARMONIZAÇÃO de cada vinho, que em 543 das 559 linhas do Catálogo existe
+   e quase sempre fala por CATEGORIAS ("carnes vermelhas grelhadas", "caça",
+   "queijos curados", "peixe gordo"), raramente por pratos. Daí três peças:
+   - **as equivalências** (`PRATO_CONCEITOS`): cada conceito tem as maneiras
+     de o escrever; uma de várias palavras ("bife grelhado", "caça de pelo")
+     vale quando as palavras estão TODAS no mesmo pedaço de texto (entre
+     vírgulas, pontos ou parêntesis), por qualquer ordem. A mais comprida
+     ganha: "carnes brancas" é carne branca, não "carne" genérica;
+   - **a árvore** (os pais de cada conceito): bacalhau à Brás → bacalhau →
+     peixe; chuletón → carnes vermelhas → carne. Um vinho que diz o mesmo
+     conceito conta inteiro; um que diz um MAIS ESPECÍFICO (pedi peixe, ele
+     diz bacalhau) quase inteiro; um MAIS GERAL (pedi chuletón, ele diz
+     carnes vermelhas) menos, e menos ainda dois degraus acima. Um irmão
+     (carnes brancas para um chuletón) não conta;
+   - **a pergunta**: "ou", vírgulas e "/" separam alternativas ("coelho ou
+     pato": vale o que bater melhor); dentro de cada uma, a comida é
+     obrigatória e o modo de cozinhar (grelhado, assado…) e as palavras que
+     não se conhecem ("espiritual") só pesam na ordem. "Bacalhau à Brás"
+     é um conceito; um prato que não está cá é o ingrediente que se
+     conhece mais as palavras que sobram.
+   As palavras comparam-se sem acentos e sem plural nem género
+   (`pratoStem`: "grelhadas" = "grelhado"), dos dois lados. Uma equivalência
+   nova entra na tabela, não no código. */
+const PRATO_STOP=new Set(('a o as os ao aos de do da dos das d com sem e em no na nos nas num numa um uma uns umas '+
+  'para por pela pelas tipo prato pratos comida comidas receita jantar almoco refeicao acompanhar acompanha '+
+  'acompanhado acompanhada ideal como bem muito mais etc servir sugestao sugestoes perfeito perfeita algo coisa '+
+  'bom boa qualquer hoje noite vinho vinhos estilo base feito feita').split(' '));
+function pratoStem(w){
+  if(w.length<=3)return w;
+  if(/(oes|aes)$/.test(w))w=w.slice(0,-3)+'ao';
+  else if(/ais$/.test(w))w=w.slice(0,-3)+'al';
+  else if(/eis$/.test(w))w=w.slice(0,-3)+'el';
+  else if(/ns$/.test(w))w=w.slice(0,-2)+'m';
+  else if(/[rz]es$/.test(w))w=w.slice(0,-2);
+  else if(/[^s]s$/.test(w))w=w.slice(0,-1);
+  if(w.length>3&&w.endsWith('a'))w=w.slice(0,-1)+'o';
+  return w;
+}
+function pratoTokens(s){return chave(s).split(/[^a-z0-9]+/).filter(w=>w.length>1&&!PRATO_STOP.has(w)).map(pratoStem);}
+// [id, rótulo, maneiras de o escrever (|), pais (espaço), é modo de cozinhar,
+//  o modo de cozinhar que o prato já traz (o chuletón é grelhado)]
+const PRATO_CONCEITOS=[
+  // modos de cozinhar
+  ['grelhado','grelhados','grelhado|grelha|brasa|churrasco|barbecue|bbq|carvao|braseado','',1],
+  ['assado','assados','assado|forno','',1],
+  ['estufado','estufados','estufado|guisado|ensopado|tacho|cozinhado lento','',1],
+  ['frito','fritos','frito|fritura|panado|tempura','',1],
+  ['cru','crus','cru|carpaccio|tartaro|tartare|ceviche','',1],
+  ['fumado','fumados','fumado|defumado','',1],
+  // carne
+  ['carne','carne','carne',''],
+  ['carne_vermelha','carnes vermelhas','carne vermelha|vaca|boi|novilho|bovino|bife|rosbife|maronesa|mirandesa|barrosa|alcatra|picanha|naco|carne vaca|carne novilho|hamburguer|prego|bitoque|steak','carne'],
+  ['chuleton','chuletón / costeleta','chuleton|chuletao|costeleta|costeletao|bife grelhado|entrecote|tomahawk|tbone|t bone|ribeye|rib eye|vazia|lombo vaca|posta mirandesa|posta barrosa|posta maronesa|posta carne|costeleta novilho|costeleta vaca','carne_vermelha',0,'grelhado'],
+  ['vitela','vitela','vitela|vitelao|carne vitela|costeleta vitela','carne_vermelha'],
+  ['borrego','borrego e cabrito','borrego|cordeiro|carneiro|cabrito|chanfana|costeleta borrego|costeleta cordeiro|ensopado borrego','carne_vermelha'],
+  ['carne_branca','carnes brancas','carne branca','carne'],
+  ['porco','porco','porco|carne porco|entrecosto|secretos|secreto porco|plumas|pluma porco|presa porco|febras|bifanas|rojoes|porco preto|lombo porco|costeleta porco|entremeada|torresmos|migas','carne_branca'],
+  ['leitao','leitão','leitao|leitao bairrada','porco',0,'assado'],
+  ['aves','aves','ave|aves capoeira|frango|galinha|peru|capao|cabidela','carne_branca'],
+  ['pato','pato','pato|magret|arroz pato|confit pato','aves'],
+  ['caca','caça','caca|carne caca|caca grossa','carne'],
+  ['caca_pelo','caça de pelo','caca pelo|javali|veado|cervo|corco|gamo|lebre|coelho bravo','caca'],
+  ['caca_penas','caça de penas','caca pena|perdiz|faisao|codorniz|pombo|galinhola|narceja|pato bravo','caca aves'],
+  ['coelho','coelho','coelho','carne_branca'],
+  ['enchidos','enchidos e charcutaria','enchido|charcutaria|chourico|chourica|salpicao|alheira|farinheira|morcela|linguica|paio|paiola|presunto|fumeiro|salame|salsicha|chorizo|mortadela|pata negra|tabua frios','carne'],
+  ['cozido','cozido à portuguesa','cozido portuguesa','carne enchidos'],
+  ['feijoada','feijoada','feijoada','enchidos porco'],
+  ['francesinha','francesinha','francesinha','carne_vermelha enchidos'],
+  ['tripas','tripas','tripas|dobrada','carne enchidos'],
+  // queijo
+  ['queijo','queijos','queijo',''],
+  ['queijo_curado','queijos curados','queijo curado|queijo cura|queijo duro|pasta dura|queijo seco|queijo velho|parmesao|parmigiano|manchego|cheddar|comte|gruyere|queijo ilha|pecorino','queijo'],
+  ['queijo_mole','queijos de pasta mole','queijo mole|pasta mole|queijo amanteigado|amanteigado|queijo fresco|brie|camembert|queijo cabra|requeijao|serra estrela|queijo serra|azeitao|queijo serpa|burrata|mozzarella','queijo'],
+  ['queijo_azul','queijos azuis','queijo azul|roquefort|gorgonzola|stilton','queijo'],
+  // peixe e marisco
+  ['peixe','peixe','peixe|pescado',''],
+  ['peixe_gordo','peixe gordo','peixe gordo|salmao|atum|sardinha|cavala|carapau|enguia|espadarte|peixe espada|sardinhada','peixe'],
+  ['peixe_magro','peixe magro','peixe magro|peixe branco|robalo|dourada|pescada|pescadinha|linguado|cherne|garoupa|pregado|tamboril|corvina|sargo|besugo|faneca|filetes|truta','peixe'],
+  ['bacalhau','bacalhau','bacalhau','peixe'],
+  ['bacalhau_bras','bacalhau à Brás','bacalhau bras','bacalhau'],
+  ['bacalhau_natas','bacalhau com natas','bacalhau natas','bacalhau'],
+  ['bacalhau_lagareiro','bacalhau à lagareiro','bacalhau lagareiro','bacalhau',0,'assado'],
+  ['lampreia','lampreia','lampreia','peixe'],
+  ['caldeirada','caldeirada','caldeirada','peixe'],
+  ['marisco','marisco','marisco|fruto mar|crustaceo|bivalve',''],
+  ['camarao','camarão','camarao|gamba|lagostim|carabineiro','marisco'],
+  ['lagosta','lagosta e sapateira','lagosta|lavagante|santola|sapateira|caranguejo|navalheira','marisco'],
+  ['bivalves','amêijoas e mexilhão','ameijoa|berbigao|mexilhao|conquilha|lingueirao|vieira|percebe','marisco'],
+  ['ostras','ostras','ostra','marisco'],
+  ['polvo','polvo','polvo|polvo lagareiro','marisco peixe'],
+  ['lulas','lulas e choco','lula|choco|pota|calamares','marisco peixe'],
+  ['arroz_marisco','arroz de marisco','arroz marisco|acorda marisco|cataplana|arroz tamboril','marisco'],
+  ['sushi','sushi','sushi|sashimi|poke|temaki|nigiri','peixe asiatica'],
+  // o resto
+  ['asiatica','cozinha asiática','cozinha asiatica|comida asiatica|asiatico|oriental|chines|japones|tailandes|thai|wok','' ],
+  ['caril','caril','caril|curry|comida indiana|indiano|tandoori','asiatica picante'],
+  ['picante','pratos condimentados','picante|condimentado|especiaria|apimentado|piri piri|mexicano',''],
+  ['massa','massas','massa|pasta|esparguete|spaghetti|lasanha|ravioli|tagliatelle|macarrao|carbonara|bolonhesa',''],
+  ['pizza','pizza','pizza',''],
+  ['arroz','arroz e risotto','arroz|risotto|risoto',''],
+  ['cogumelos','cogumelos','cogumelo|trufa|portobello|boleto|shitake',''],
+  ['vegetariano','vegetariano','vegetariano|vegano|vegan|vegetal|legume|tofu',''],
+  ['salada','saladas','salada',''],
+  ['aperitivo','aperitivos e petiscos','aperitivo|entrada|petisco|tapa|snack|lanche|tosta',''],
+  ['foie','foie gras e patês','foie gras|foie|pate|terrina',''],
+  ['sobremesa','sobremesas','sobremesa|doce|chocolate|bolo|tarte|pastelaria|pudim|leite creme|arroz doce|frutos secos',''],
+  ['sopa','sopas','sopa',''],
+];
+let PRATO_KB=null;
+function pratoKB(){
+  if(PRATO_KB)return PRATO_KB;
+  const por={}, vars=[];
+  PRATO_CONCEITOS.forEach(([id,r,vs,ps,m,impl])=>{
+    por[id]={id,r,m:!!m,impl:impl||'',pais:ps?ps.split(' ').filter(Boolean):[]};
+    vs.split('|').forEach(x=>{const t=[...new Set(pratoTokens(x))];if(t.length)vars.push({id,t,m:!!m});});
+  });
+  // os antepassados de cada conceito, com a distância mais curta
+  Object.values(por).forEach(c=>{
+    const anc=new Map(), fila=c.pais.map(p=>[p,1]);
+    while(fila.length){const [p,d]=fila.shift();if(!por[p]||anc.has(p))continue;anc.set(p,d);por[p].pais.forEach(pp=>fila.push([pp,d+1]));}
+    c.anc=anc;
+  });
+  vars.sort((a,b)=>b.t.length-a.t.length);
+  return PRATO_KB={por,vars};
+}
+// Os conceitos de um pedaço de texto. A comida e o modo de cozinhar têm cada
+// um a sua cobertura: "bife grelhado" é o chuletón E é grelhado.
+function pratoAchar(toks){
+  const kb=pratoKB(), tem=new Set(toks), cob={c:new Set(),m:new Set()};
+  const res={comida:new Set(),metodo:new Set(),cobre:new Set()};
+  for(const v of kb.vars){
+    if(!v.t.every(t=>tem.has(t)))continue;
+    const k=v.m?'m':'c';
+    if(v.t.every(t=>cob[k].has(t)))continue;
+    v.t.forEach(t=>{cob[k].add(t);res.cobre.add(t);});
+    (v.m?res.metodo:res.comida).add(v.id);
+  }
+  return res;
+}
+const PRATO_PERFIS=new Map();
+function pratoPerfil(v){
+  const txt=v.harmonizacao||'';
+  let p=PRATO_PERFIS.get(txt);
+  if(p)return p;
+  p={comida:new Set(),metodo:new Set(),toks:new Set()};
+  chave(txt).split(/[.;:!?()\[\],\n]+/).forEach(seg=>{
+    const t=pratoTokens(seg);
+    t.forEach(x=>p.toks.add(x));
+    const r=pratoAchar(t);
+    r.comida.forEach(x=>p.comida.add(x));r.metodo.forEach(x=>p.metodo.add(x));
+  });
+  PRATO_PERFIS.set(txt,p);
+  return p;
+}
+// "Coelho ou pato", "pato, coelho", "pato/coelho": alternativas.
+function pratoPergunta(prato){
+  return chave(prato).split(/\s+e\/ou\s+|\s+ou\s+|[,;\/+|]/).map(g=>{
+    const t=pratoTokens(g);
+    if(!t.length)return null;
+    const r=pratoAchar(t), por=pratoKB().por;
+    r.comida.forEach(c=>{if(por[c].impl)r.metodo.add(por[c].impl);});
+    return {comida:[...r.comida],metodo:[...r.metodo],lit:[...new Set(t.filter(x=>!r.cobre.has(x)&&x.length>2))]};
+  }).filter(g=>g&&(g.comida.length||g.metodo.length||g.lit.length));
+}
+// Quanto vale o conceito `w` do vinho para o `q` pedido (0 a 1).
+function pratoFator(q,w){
+  if(q===w)return 1;
+  const por=pratoKB().por;
+  const dv=por[w]&&por[w].anc.get(q);       // o vinho diz uma coisa mais específica
+  if(dv)return dv===1?.85:.75;
+  const dq=por[q]&&por[q].anc.get(w);       // o vinho diz uma coisa mais geral
+  if(dq)return dq===1?.67:dq===2?.4:.25;
+  return 0;
+}
+function pratoMelhor(q,conj){
+  let f=0,id=null;
+  conj.forEach(w=>{const x=pratoFator(q,w);if(x>f){f=x;id=w;}});
+  return {f,id};
+}
+// A nota de um vinho em cada alternativa da pergunta (null onde não serve).
+// `pr` é o conceito do vinho que respondeu pela comida — é o que o ecrã diz.
+function pratoPontos(perg,v){
+  const p=pratoPerfil(v);
+  return perg.map(g=>{
+    let s=0,max=0,pr=null;
+    g.comida.forEach(q=>{const m=pratoMelhor(q,p.comida);s+=3*m.f;max+=3;if(m.f&&(!pr||m.f>pr.f))pr=m;});
+    g.metodo.forEach(q=>{s+=pratoMelhor(q,p.metodo).f;max+=1;});
+    g.lit.forEach(l=>{max+=1.5;if(p.toks.has(l))s+=1.5;});
+    if(g.comida.length?!pr:!s)return null;
+    return {s:s/max,pr,f:pr?pr.f:1};
+  });
+}
+/* Quão longe se vai buscar, alternativa a alternativa: só o mesmo conceito
+   (ou um mais específico) quando há pelo menos `PRATO_PERTO_MIN` vinhos
+   assim; senão também o degrau de cima ("carnes vermelhas" para um
+   chuletón); e só sem nenhum dos dois, o que for. Um vinho que diz só
+   "carnes" não entra numa pergunta de enchidos com 40 que dizem enchidos. */
+const PRATO_PERTO_MIN=8;
+function pratoProcurar(vs,prato){
+  const perg=pratoPergunta(prato);
+  if(!perg.length)return null;
+  const pts=vs.map(v=>pratoPontos(perg,v));
+  const limite=perg.map((g,i)=>{
+    const fs=pts.map(p=>p[i]).filter(Boolean).map(x=>x.f);
+    return fs.filter(f=>f>=.85).length>=PRATO_PERTO_MIN?.85:fs.filter(f=>f>=.6).length>=PRATO_PERTO_MIN?.6:0;
+  });
+  const res=[];
+  vs.forEach((v,k)=>{
+    let m=null;
+    pts[k].forEach((x,i)=>{if(x&&x.f>=limite[i]&&(!m||x.s>m.s))m=x;});
+    if(m)res.push({v,s:m.s,pr:m.pr});
+  });
+  res.sort((a,b)=>b.s-a.s||(notaVivinoNum(b.v)||0)-(notaVivinoNum(a.v)||0)||wsInfo(b.v)-wsInfo(a.v));
+  return res;
+}
+// "9 falam de bacalhau · 31 de peixe": do conceito mais próximo para o mais geral.
+function pratoResumoHTML(lista){
+  const m=new Map(), por=pratoKB().por;
+  lista.forEach(a=>{if(!a.pr)return;const o=m.get(a.pr.id)||{id:a.pr.id,f:a.pr.f,n:0};o.n++;m.set(a.pr.id,o);});
+  const xs=[...m.values()].sort((a,b)=>b.f-a.f||b.n-a.n);
+  if(!xs.length)return '';
+  const mostra=xs.slice(0,4).map((o,k)=>`${o.n} ${k?'de':`falam de`} ${esc(por[o.id].r)}`);
+  if(xs.length>4)mostra.push(`${xs.slice(4).reduce((n,o)=>n+o.n,0)} de outras coisas`);
+  return mostra.join(' · ');
 }
 // O que vai ao modelo de cada vinho: os factos e mais nada (nunca as minhas
 // notas, o preço de compra ou o lugar). Na garrafeira a janela, no Catálogo
@@ -2657,6 +2874,15 @@ function wsListaAtual(modo){
   const st=WS_LISTA[modo];
   return st&&(modo!=='garrafeira'||st.ga===GA_ID)?st:null;
 }
+/* O caminho, com um prato escrito: primeiro a procura do prato (sem IA).
+   - nenhum vinho responde → di-lo, e a IA só se se pedir ("na mesma");
+   - até `WS_AFINAR` → vão logo à IA;
+   - mais → o ecrã diz quantos e de quê, e deixa AFINAR por cor, região e
+     casta (contagens como as dos filtros: cada campo conta com os outros
+     aplicados e não com o próprio) antes de pedir a sugestão.
+   Sem prato, é como era: os que têm mais informação e melhor nota. */
+const WS_AFINAR=15;
+const WS_AFINA_CAMPOS=[['tipo','Cor',6],['regiao','Região',8],['casta','Casta',10]];
 async function wsSugerirLista(){
   const modo=WS_MODO;
   if(modo==='carta')return;
@@ -2669,15 +2895,70 @@ async function wsSugerirLista(){
   }
   const prato=document.getElementById('ws-prato').value.trim();
   const orc=modo==='catalogo'?wsOrcamentoValor():null;
-  const c=wsCandidatos(modo,orc,prato);
-  const st={modo,ga:GA_ID,prato,orcamento:orc,vinhos:c.vinhos,total:c.total,cortados:c.cortados,estado:'pendente',erro:'',rec:null};
+  const universo=wsUniverso(modo,orc);
+  const st={modo,ga:GA_ID,prato,orcamento:orc,universo,achados:null,afina:{tipo:[],regiao:[],casta:[]},
+    vinhos:[],total:0,cortados:false,estado:'pendente',erro:'',rec:null};
   WS_LISTA[modo]=st;
-  if(!st.vinhos.length){st.estado='ok';st.rec={estado:'vazio',sugestoes:[]};}
+  if(!universo.length){st.estado='ok';st.rec={estado:'vazio',sugestoes:[]};}
+  else if(prato){
+    st.achados=pratoProcurar(universo,prato);
+    if(st.achados&&!st.achados.length)st.estado='semmatch';
+    else if(st.achados&&st.achados.length>WS_AFINAR)st.estado='afinar';
+  }
   wsListaBotao();
   if(WS_MODO===modo)wsDesenhar();
-  if(st.estado==='ok')return;
+  if(st.estado!=='pendente'){wsListaMostrar(st);return;}
+  if(st.achados)wsListaEscolher(st,st.achados.map(a=>a.v));
+  else Object.assign(st,wsCortar(universo));
+  await wsListaPedir(st);
+}
+function wsListaEscolher(st,vs){
+  st.total=vs.length;
+  st.vinhos=vs.slice(0,WS_LISTA_MAX);
+  st.cortados=vs.length>st.vinhos.length;
+}
+// "Pedir à IA na mesma": nenhum vinho diz harmonizar com o prato.
+function wsSugerirNaMesma(){
+  const st=wsListaAtual(WS_MODO);
+  if(!st||st.estado!=='semmatch')return;
+  st.achados=null;
+  Object.assign(st,wsCortar(st.universo));
+  wsListaPedir(st);
+}
+function wsAfinaValores(v,k){return k==='casta'?(v.castas||[]):[k==='tipo'?v.tipo:v.regiao].filter(Boolean);}
+function wsAfinaPassa(v,af,ignorar){
+  return Object.keys(af).every(k=>k===ignorar||!af[k].length||wsAfinaValores(v,k).some(x=>af[k].includes(x)));
+}
+function wsAfinados(st){return st.achados.filter(a=>wsAfinaPassa(a.v,st.afina));}
+function wsAfinaOpcoes(st,k,max){
+  const n=new Map();
+  st.achados.forEach(a=>{if(wsAfinaPassa(a.v,st.afina,k))new Set(wsAfinaValores(a.v,k)).forEach(x=>n.set(x,(n.get(x)||0)+1));});
+  const ops=[...n.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'pt')).slice(0,max);
+  st.afina[k].forEach(x=>{if(!ops.some(o=>o[0]===x))ops.push([x,n.get(x)||0]);});
+  return ops;
+}
+function wsAfinaToggle(k,val){
+  const st=wsListaAtual(WS_MODO);
+  if(!st||st.estado!=='afinar')return;
+  const l=st.afina[k], i=l.indexOf(val);
+  if(i<0)l.push(val);else l.splice(i,1);
+  wsDesenhar();
+}
+function wsSugerirAfinados(){
+  const st=wsListaAtual(WS_MODO);
+  if(!st||st.estado!=='afinar')return;
+  const l=wsAfinados(st);
+  if(!l.length)return;
+  wsListaEscolher(st,l.map(a=>a.v));
+  wsListaPedir(st);
+}
+async function wsListaPedir(st){
+  const modo=st.modo;
+  st.estado='pendente';
+  wsListaBotao();
+  if(WS_MODO===modo)wsDesenhar();
   try{
-    const d=await wsChamar({acao:'sugerir',modo,prato,orcamento:orc,vinhos:st.vinhos.map(v=>wsFactos(v,modo))});
+    const d=await wsChamar({acao:'sugerir',modo,prato:st.prato,orcamento:st.orcamento,vinhos:st.vinhos.map(v=>wsFactos(v,modo))});
     st.rec={estado:d.estado||'ok',sugestoes:Array.isArray(d.sugestoes)?d.sugestoes:[]};
     st.estado='ok';
   }catch(e){
@@ -2687,16 +2968,46 @@ async function wsSugerirLista(){
   }
   if(WS_LISTA[modo]!==st)return;
   wsListaBotao();
-  if(WS_MODO===modo){
-    wsDesenhar();
-    const el=document.getElementById('ws-resultado');
-    if(el&&st.estado==='ok'&&tabAtiva==='sugestoes')el.scrollIntoView({behavior:'smooth',block:'start'});
-  }
+  wsListaMostrar(st);
+}
+function wsListaMostrar(st){
+  if(WS_MODO!==st.modo)return;
+  wsDesenhar();
+  const el=document.getElementById('ws-resultado');
+  if(el&&st.estado!=='pendente'&&st.estado!=='erro'&&tabAtiva==='sugestoes')el.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function wsListaOnde(st){
+  return st.modo==='catalogo'?`do Catálogo${st.orcamento!=null?` até ${wsEur(st.orcamento)}`:''}`:'da garrafeira';
+}
+function wsAfinarHTML(st){
+  const l=wsAfinados(st), n=l.length;
+  const campos=WS_AFINA_CAMPOS.map(([k,r,max])=>{
+    const ops=wsAfinaOpcoes(st,k,max);
+    if(ops.length<2&&!st.afina[k].length)return '';
+    return `<div class="ws-afina-campo">${r}</div><div class="fops">${ops.map(([v,c])=>{
+      const on=st.afina[k].includes(v), cor=k==='tipo'?(VIDRO[v]||null):null;
+      return `<button class="fop${on?' on':''}" onclick="wsAfinaToggle('${k}','${escJs(v)}')">
+        <span class="fop-tx">${cor?`<i class="fponto" style="background:${esc(cor)}"></i>`:''}${esc(v)}</span><span class="fconta">${c}</span></button>`;
+    }).join('')}</div>`;
+  }).join('');
+  return `<div class="ws-card ws-afina">
+    <p class="ws-afina-tit"><strong>${st.achados.length} vinhos</strong> ${wsListaOnde(st)} harmonizam com «${esc(st.prato)}».</p>
+    <p class="ws-note">${pratoResumoHTML(st.achados)}.</p>
+    <p class="ws-note">São muitos para escolher bem. Afina, se quiseres:</p>
+    ${campos}
+    <button class="btn prim full" style="margin-top:14px" onclick="wsSugerirAfinados()"${n?'':' disabled'}>🍷 Sugerir entre ${n===st.achados.length?'estes':'os'} ${n} vinho${n===1?'':'s'}</button>
+    ${n>WS_LISTA_MAX?`<p class="ws-note">Vão os ${WS_LISTA_MAX} que mais batem certo com o prato (e, entre eles, os de melhor nota).</p>`:''}
+  </div>`;
 }
 function wsListaHTML(modo){
   const st=wsListaAtual(modo);
   if(!st)return '';
   const n=st.vinhos.length, cat=modo==='catalogo';
+  if(st.estado==='afinar')return wsAfinarHTML(st);
+  if(st.estado==='semmatch'){
+    return `<div class="ws-card"><p class="ws-note">Nenhum vinho ${wsListaOnde(st)} diz harmonizar com «${esc(st.prato)}». Experimenta escrever o ingrediente principal: peixe, carne, marisco, queijo…</p>
+      <button class="btn full" style="margin-top:8px" onclick="wsSugerirNaMesma()">🍷 Pedir à IA na mesma</button></div>`;
+  }
   if(st.estado==='pendente'){
     return `<div class="ws-card"><p class="ws-note">🍷 A escolher entre ${n} vinho${n===1?'':'s'} ${cat?'do Catálogo':'da garrafeira'}${st.prato?` para ${esc(st.prato)}`:''}…</p></div>`;
   }
@@ -2711,8 +3022,10 @@ function wsListaHTML(modo){
       :'Nenhum destes vinhos combina bem com este pedido.';
     return `<div class="ws-card"><p class="ws-note">${txt}</p></div>`;
   }
-  const entre=`Entre ${n} vinho${n===1?'':'s'} ${cat?`do Catálogo${st.orcamento!=null?` até ${wsEur(st.orcamento)}`:''}`:'com garrafas na garrafeira'}`
-    +(st.cortados?` — os mais indicados${st.prato?' para o prato':''}, de ${st.total}`:'')+'.';
+  const entre=st.achados
+    ?`Entre ${n} vinho${n===1?'':'s'} ${wsListaOnde(st)} que harmonizam com o prato`+(st.cortados?` — os que mais batem certo, de ${st.total}`:'')+'.'
+    :`Entre ${n} vinho${n===1?'':'s'} ${cat?`do Catálogo${st.orcamento!=null?` até ${wsEur(st.orcamento)}`:''}`:'com garrafas na garrafeira'}`
+      +(st.cortados?` — os que têm mais informação, de ${st.total}`:'')+'.';
   return `<div class="ws-card-label sug-titulo">A sugestão${st.prato?` · ${esc(st.prato)}`:''}${sug.length>1?' <em>— toca num vinho para ver porquê</em>':''}</div>
     <p class="ws-note sug-entre">${entre}</p>`
     +sug.map((s,k)=>wsListaSugHTML(st,s,k)).join('');
@@ -15758,7 +16071,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='224';
+const APP_BUILD='225';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

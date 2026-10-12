@@ -2205,6 +2205,9 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
    baixo a maturação e onde estão — ou, no Catálogo, se já o tenho */
 #s-sugestoes .sug-garr{font-size:12.5px;font-weight:600;color:var(--mu);white-space:nowrap}
 #s-sugestoes .sug-prod{font-style:italic}
+/* A procura do prato, antes da IA: quantos e de quê, e afinar. */
+#s-sugestoes .ws-afina-tit{font-size:14.5px;margin:0 0 2px;line-height:1.45}
+#s-sugestoes .ws-afina-campo{font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 7px}
 #s-sugestoes .sug-entre{margin:-4px 4px 10px;font-size:11.5px}
 #s-sugestoes .sug-extra{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:2px}
 #s-sugestoes .sug-links{display:flex;gap:6px;margin-top:10px}

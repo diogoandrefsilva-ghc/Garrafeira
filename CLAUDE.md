@@ -1361,9 +1361,37 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
     sem limite entram também os sem preço), UMA colheita por vinho
     (`catFamChave`: a de melhor nota, em empate a mais recente).
   Até 50 vinhos por pedido (`WS_LISTA_MAX`/`MAX_LISTA`; eram 200, ~30 mil
-  tokens — 12/10/2026, o dono). Passando disso, a app pré-seleciona
-  (`wsRelevancia`): primeiro os que dizem harmonizar com uma palavra do
-  prato, depois a nota do Vivino e a informação; o ecrã di-lo.
+  tokens — 12/10/2026, o dono). Sem prato, vão os que têm mais informação
+  e melhor nota (`wsCortar`).
+  **Com prato, primeiro a PROCURA DO PRATO, sem IA** (12/10/2026, o dono:
+  "uma pesquisa sem IA no catálogo, mas com alguma inteligência e
+  equivalência … charcutaria = chouriço = enchidos; chuletón = costeleta =
+  bife grelhado = entrecôte"). Secção "O PRATO, PROCURADO SEM IA" no app.js
+  (`prato*`). Lê só a HARMONIZAÇÃO (543 das 559 linhas do Catálogo a têm, e
+  quase sempre por categorias: "carnes vermelhas grelhadas", "caça",
+  "queijos curados"):
+  - **as equivalências e a árvore** são uma tabela, `PRATO_CONCEITOS`: cada
+    conceito, as maneiras de o escrever, os pais (bacalhau à Brás →
+    bacalhau → peixe; chuletón → carnes vermelhas → carne) e o modo de
+    cozinhar que o prato já traz (o chuletón é grelhado). Uma maneira de
+    várias palavras vale com as palavras todas no mesmo pedaço de texto
+    (entre vírgulas, pontos, parêntesis), e a mais comprida ganha ("carnes
+    brancas" não é "carne"). As palavras comparam-se sem acentos, plural
+    nem género (`pratoStem`). **Uma equivalência nova entra na tabela.**
+  - **a pergunta**: "ou", vírgulas e "/" são alternativas ("coelho ou
+    pato"); em cada uma a comida é obrigatória, e o modo de cozinhar e as
+    palavras desconhecidas ("bacalhau espiritual") só pesam na ordem.
+  - **quão longe**: o mesmo conceito conta inteiro, um mais específico
+    quase, um degrau acima menos, e um irmão nada. Por alternativa, só o
+    mesmo (ou mais específico) quando há pelo menos 8 vinhos assim, senão
+    também o degrau de cima, e só sem nenhum dos dois o que for
+    (`PRATO_PERTO_MIN`): numa pergunta de enchidos, um vinho que diz só
+    "carnes" não entra.
+  - **o ecrã**: nenhum → di-lo e oferece "Pedir à IA na mesma"; até 15
+    (`WS_AFINAR`) → vão logo à IA; mais → "N vinhos harmonizam com «…»",
+    de quê ("17 falam de bacalhau"), e **afinar** por cor, região e casta
+    (contagens como as dos filtros, `wsAfina*`) antes de "Sugerir entre
+    estes N". Passando de 50, vão os que mais batem certo com o prato.
 - **O orçamento vai até 70 €** (07/10/2026, o dono: "só estamos a permitir
   ir até 50 €"): Sem limite · 10 · 15 · 20 · 25 · 30 · 40 · 50 · 60 · 70 —
   `WS_ORCAMENTO_OPCOES` no app.js e as `.orc-item` do `index.html`, os dois
