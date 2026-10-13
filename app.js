@@ -2935,8 +2935,12 @@ function wsAfinaOpcoes(st,k,max){
   st.achados.forEach(a=>{if(wsAfinaPassa(a.v,st.afina,k))new Set(wsAfinaValores(a.v,k)).forEach(x=>n.set(x,(n.get(x)||0)+1));});
   const ops=[...n.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'pt')).slice(0,max);
   st.afina[k].forEach(x=>{if(!ops.some(o=>o[0]===x))ops.push([x,n.get(x)||0]);});
+  // As regiões como nos filtros: Portugal primeiro, e dentro de cada país
+  // pela contagem (as que mais dão vêm à frente, como antes).
+  if(k==='regiao')return regioesOrdenar(ops,o=>o[0],wsAfinaPaises(st),(a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'pt'));
   return ops;
 }
+function wsAfinaPaises(st){return regioesPaises(st.achados.map(a=>a.v));}
 function wsAfinaToggle(k,val){
   const st=wsListaAtual(WS_MODO);
   if(!st||st.estado!=='afinar')return;
@@ -2982,12 +2986,12 @@ function wsListaOnde(st){
 function wsAfinarHTML(st){
   const l=wsAfinados(st), n=l.length;
   const campos=WS_AFINA_CAMPOS.map(([k,r,max])=>{
-    const ops=wsAfinaOpcoes(st,k,max);
+    const ops=wsAfinaOpcoes(st,k,max), paises=k==='regiao'?wsAfinaPaises(st):null;
     if(ops.length<2&&!st.afina[k].length)return '';
     return `<div class="ws-afina-campo">${r}</div><div class="fops">${ops.map(([v,c])=>{
       const on=st.afina[k].includes(v), cor=k==='tipo'?(VIDRO[v]||null):null;
       return `<button class="fop${on?' on':''}" onclick="wsAfinaToggle('${k}','${escJs(v)}')">
-        <span class="fop-tx">${cor?`<i class="fponto" style="background:${esc(cor)}"></i>`:''}${esc(v)}</span><span class="fconta">${c}</span></button>`;
+        <span class="fop-tx">${cor?`<i class="fponto" style="background:${esc(cor)}"></i>`:''}${paises?`<span>${esc(v)}${paisSiglaHTML(v,paises)}</span>`:esc(v)}</span><span class="fconta">${c}</span></button>`;
     }).join('')}</div>`;
   }).join('');
   return `<div class="ws-card ws-afina">
@@ -4057,6 +4061,52 @@ function valorDe(v,k){
    nunca fica um filtro a apontar para coisa nenhuma. Os que são FAIXAS
    (preço, grau, Vivino) e os fechados (maturação, nº de castas) têm lista
    própria, que é o que os torna perguntas em vez de valores. */
+
+/* O PAÍS DE CADA REGIÃO (13/10/2026, o dono das apps: "temos lá diferentes
+   países agora"). Nos filtros de região, cada região leva a pequenino a
+   sigla do país, e Portugal vem primeiro; as outras a seguir, país a país.
+   O país sai dos próprios vinhos (`v.pais`, o da ficha) — o mais escrito
+   para cada região —, por isso um país novo aparece sozinho. Uma região
+   sem país em vinho nenhum fica sem sigla e vai para o fim. */
+const PAIS_SIGLAS={portugal:'PT',espanha:'ES',italia:'IT',franca:'FR',alemanha:'DE',austria:'AT',
+  suica:'CH',grecia:'GR',hungria:'HU','reino unido':'UK',chile:'CL',argentina:'AR',uruguai:'UY',
+  brasil:'BR','estados unidos':'US',eua:'US','africa do sul':'ZA',australia:'AU','nova zelandia':'NZ',
+  libano:'LB',georgia:'GE',moldavia:'MD',eslovenia:'SI',croacia:'HR',romenia:'RO',israel:'IL'};
+function paisSigla(p){
+  const k=chave(p).trim();
+  return !k?'':(PAIS_SIGLAS[k]||k.replace(/[^a-z]/g,'').slice(0,2).toUpperCase());
+}
+// regiao → país, o mais escrito nos vinhos dados
+function regioesPaises(vinhos){
+  const n=new Map();
+  vinhos.forEach(v=>{
+    const r=v.regiao, p=String(v.pais||'').trim();
+    if(!r||!p)return;
+    if(!n.has(r))n.set(r,new Map());
+    n.get(r).set(p,(n.get(r).get(p)||0)+1);
+  });
+  const m=new Map();
+  n.forEach((ps,r)=>m.set(r,[...ps.entries()].sort((a,b)=>b[1]-a[1])[0][0]));
+  return m;
+}
+// 0 Portugal · 1 outro país · 2 sem país; e o nome do país para os de fora
+function regiaoGrupo(r,paises){
+  const p=paises.get(r)||'';
+  return [!p?2:chave(p)==='portugal'?0:1, chave(p)];
+}
+// Portugal primeiro, depois os outros países (por nome), sem país no fim;
+// `dentro` desempata dentro do mesmo país (por omissão, o nome da região).
+function regioesOrdenar(lista,regiaoDe,paises,dentro){
+  return lista.slice().sort((a,b)=>{
+    const ga=regiaoGrupo(regiaoDe(a),paises), gb=regiaoGrupo(regiaoDe(b),paises);
+    return ga[0]-gb[0]||ga[1].localeCompare(gb[1],'pt')
+      ||(dentro?dentro(a,b):String(regiaoDe(a)).localeCompare(String(regiaoDe(b)),'pt'));
+  });
+}
+function paisSiglaHTML(r,paises){
+  const s=paisSigla(paises.get(r));
+  return s?`<small class="fpais">${esc(s)}</small>`:'';
+}
 function valoresDe(k){
   const comStock=vinhosBase();
   const dados=()=>[...new Set([].concat(...comStock.map(v=>valorDe(v,k))))];
@@ -4072,6 +4122,7 @@ function valoresDe(k){
       .filter(l=>db.garrafas.some(g=>g.local_id===l.id&&naGarrafeira(g)))
       .map(l=>[String(l.id),l.nome]);
     case 'ano':return dados().sort((a,b)=>b-a).map(x=>[x,x]);
+    case 'regiao':return regioesOrdenar(dados(),x=>x,regioesPaises(vinhosUniverso())).map(x=>[x,x]);
     // As palavras são as mesmas que a ficha do vinho escreve (`FASES`) —
     // quem filtra por uma tem de a reconhecer quando abre o vinho.
     case 'janela':return [...FASES.map(f=>['ponto:'+f[1],'No ponto · '+f[2]]),
@@ -4199,12 +4250,13 @@ function renderFiltros(){
     const k=FILTRO_CAMPO;
     try{
       const ops=opcoesCampo(k);
+      const paises=k==='regiao'?regioesPaises(vinhosUniverso()):null;
       domHTML=(k==='casta'?castasRegrasHTML():'')+(ops.length
         ? `<div class="fops">${ops.map(([v,r,n])=>{
             const on=ligados(k).includes(v);
             const cor=k==='tipo'?(VIDRO[v]||null):null;
             return `<button class="fop${on?' on':''}" onclick="campoToggle('${escJs(k)}','${escJs(v)}')">
-              <span class="fop-tx">${cor?`<i class="fponto" style="background:${esc(cor)}"></i>`:''}${esc(r)}</span>
+              <span class="fop-tx">${cor?`<i class="fponto" style="background:${esc(cor)}"></i>`:''}${paises?`<span>${esc(r)}${paisSiglaHTML(v,paises)}</span>`:esc(r)}</span>
               <span class="fconta">${n}</span>
             </button>`;
           }).join('')}</div>`
@@ -16177,7 +16229,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='228';
+const APP_BUILD='229';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

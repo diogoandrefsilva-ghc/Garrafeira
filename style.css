@@ -616,6 +616,10 @@ mark.hl{background:rgba(123,31,61,.13);color:var(--vhd);font-weight:600;border-r
   white-space:normal;overflow-wrap:anywhere;line-height:1.25}
 .fconta{font-size:10.5px;font-weight:700;color:var(--mu);flex-shrink:0}
 .fop.on .fconta{color:rgba(255,255,255,.75)}
+/* A sigla do país de uma região ("Douro PT", "Rioja ES"), pequena e apagada:
+   diz de onde é sem competir com o nome. Ver "O PAÍS DE CADA REGIÃO". */
+.fpais{font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--mu);margin-left:5px;white-space:nowrap}
+.fop.on .fpais{color:rgba(255,255,255,.75)}
 .fponto{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
 .fop.on .fponto{box-shadow:0 0 0 1.5px rgba(255,255,255,.5)}
 /* As duas regras das castas, por cima dos valores. */

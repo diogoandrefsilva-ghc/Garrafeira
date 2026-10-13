@@ -501,6 +501,17 @@ Os VALORES possíveis de cada campo saem de `valoresDe(k)` — dos dados
 (preço, grau, Vivino, maturação, nº de castas) — e `rotuloFiltro(k,val)`
 vai lá buscar o nome por extenso para a pastilha.
 
+**As regiões levam a sigla do país e Portugal vem primeiro** (13/10/2026, o
+dono das apps: "temos lá diferentes países agora" — Rioja, Ribera del Duero,
+Úmbria…). Cada cartão de região diz a pequenino "PT", "ES", "IT"
+(`paisSiglaHTML`, `.fpais`), e a ordem é Portugal, depois os outros países
+pelo nome, e no fim uma região sem país em vinho nenhum
+(`regioesOrdenar`). O país de uma região é o mais escrito no `pais` dos
+vinhos (`regioesPaises`) — um país novo aparece sozinho; a sigla é a da
+`PAIS_SIGLAS`, senão as duas primeiras letras. Vale nos filtros (o
+`valoresDe('regiao')`) e no "afinar" das Sugestões (`wsAfinaOpcoes`, onde
+dentro de cada país manda a contagem, como antes).
+
 ### Os cartões CONTAM e CORTAM (`opcoesCampo`)
 Cada cartão diz quantos vinhos dá, e é isso que separa este painel de uma
 lista de caixas: escolher deixa de ser adivinhar. Sem os números, qualquer
