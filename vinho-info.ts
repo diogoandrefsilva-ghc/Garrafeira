@@ -261,6 +261,108 @@ async function catalogoJuntar(
   } catch (_) { /* o catálogo nunca falha uma gravação da app */ }
 }
 
+/* ── AS SUGESTÕES LIVRES (13/10/2026, migração 54) ──
+   As Sugestões da Garrafeira têm um quarto modo: só o prato, o preço e as
+   observações, e a IA sugere 5 vinhos DE MEMÓRIA (`garrafeira-carta`,
+   `acao: "livre"`). Cada vinho que o Catálogo não tem é procurado aqui,
+   com o pacote completo, e só NASCE no Catálogo se os campos principais
+   vierem com FONTE (o dono das apps: "só criávamos vinhos no Catálogo caso
+   os campos principais viessem devidamente informados com fontes —
+   Produtor, Castas, Preço, Imagem, Informação Vivino. Provavelmente vai
+   acontecer poucas vezes, mas é o que é"). Com fonte quer dizer: uma página
+   ou um resultado da pesquisa que a IA diz ter usado (`origemCampos` com
+   endereço), o grounding que PESQUISOU mesmo, ou o próprio Catálogo — nunca
+   a memória do modelo. O que faltar fica na linha de
+   `garrafeira.livre_vinhos`, e o vinho vai ao Backoffice.
+   Quem pede é a `garrafeira-carta`, em nome de quem fez a pergunta (o JWT
+   dele), com o `livreId` de uma linha em `a_verificar` — é essa linha que
+   diz que vinho é (nunca o corpo do pedido), e é ela que autoriza o pacote
+   completo a quem não o tem: a pesquisa foi pedida pelo sistema, não pela
+   pessoa. */
+type Avaliacao = { ok: boolean; falta: string[]; produtor: string; catalogoId?: number | null };
+function chaveTexto(s: string): string {
+  return semAcentos(String(s || "").toLowerCase()).replace(/[^a-z0-9]+/g, " ").trim();
+}
+// Dois produtores que são o mesmo: uma palavra com mais de 3 letras em comum
+// ("Quinta do Crasto" e "Crasto"). Sem produtor pedido, qualquer um serve.
+function produtorBate(a: string, b: string): boolean {
+  const pa = new Set(chaveTexto(a).split(" ").filter((w) => w.length > 3 && !["quinta", "herdade", "casa", "monte", "adega", "vinhos", "sociedade", "family", "estate", "estates", "wines"].includes(w)));
+  if (!pa.size) return true;
+  return chaveTexto(b).split(" ").some((w) => pa.has(w));
+}
+function avaliarSugestao(
+  ficha: Record<string, unknown>, temFonte: (k: string) => boolean,
+  produtorPedido: string, precosLoja: Record<string, unknown>,
+): Avaliacao {
+  const falta: string[] = [];
+  const tem = (k: string) => !vazioCampo(ficha[k]) && temFonte(k);
+  let produtor = produtorPedido;
+  const pf = typeof ficha.produtor === "string" ? ficha.produtor.trim() : "";
+  if (!pf || !temFonte("produtor")) falta.push("produtor");
+  else if (produtorPedido && !produtorBate(produtorPedido, pf) && !produtorBate(pf, produtorPedido)) {
+    falta.push(`produtor (a pesquisa diz «${pf}», a sugestão dizia «${produtorPedido}»)`);
+  } else produtor = pf;
+  if (!(Array.isArray(ficha.castas) && ficha.castas.length && temFonte("castas"))) falta.push("castas");
+  if (!tem("preco_medio") && !Object.keys(precosLoja).length) falta.push("preço");
+  if (!tem("imagem_url")) falta.push("imagem");
+  const vivUrl = temFonte("vivino_url") ? vivinoLink(ficha.vivino_url) : "";
+  if (!vivUrl || !(tem("vivino_nota") || tem("vivino_nota_global"))) falta.push("Vivino");
+  return { ok: !falta.length, falta, produtor };
+}
+// A `juntar` com o id da linha (a `catalogoJuntar` não o devolve).
+async function catalogoJuntarId(
+  nome: string, produtor: string, ano: number | null,
+  ficha: Record<string, unknown>, origem: string, fontes: Fonte[], signal: AbortSignal,
+): Promise<number | null> {
+  try {
+    const id = await catalogoRpc("juntar", {
+      p_nome: nome, p_produtor: produtor || "", p_ano: ano,
+      p_ficha: ficha, p_origem: origem, p_fontes: fontes.slice(0, 8),
+    }, signal);
+    return typeof id === "number" ? id : null;
+  } catch (_) { return null; }
+}
+// A linha de `garrafeira.livre_vinhos` que esta procura vem confirmar (só
+// enquanto está `a_verificar`).
+async function livreLinha(id: number, signal: AbortSignal): Promise<Record<string, any> | null> {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/livre_vinhos?id=eq.${id}&estado=eq.a_verificar&select=id,nome,produtor,ano,tipo,regiao`, {
+      headers: { apikey: SB_SRV, Authorization: "Bearer " + SB_SRV, "Accept-Profile": "garrafeira" }, signal,
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return Array.isArray(d) && d[0] ? d[0] : null;
+  } catch (_) { return null; }
+}
+// O fim da procura, na linha: criado no Catálogo, ou por carregar (com o
+// que faltou e o que se encontrou — é com isso que o Backoffice pré-enche).
+async function livreFechar(id: number, res: Res | null, erro = "") {
+  const corpo = res && res.ok ? res.corpo as Record<string, any> : null;
+  const sl = corpo?.sugestaoLivre as Avaliacao | undefined;
+  let patch: Record<string, unknown>;
+  if (sl?.ok && sl.catalogoId) {
+    patch = { estado: "criado", catalogo_id: sl.catalogoId, falta: [] };
+  } else {
+    const falta = sl?.falta?.length ? sl.falta
+      : corpo?.origem === "catalogo" ? ["o Catálogo já tem um vinho parecido — confirmar qual"]
+      : [`não encontrei informação${erro || (res && !res.ok) ? ": " + (erro || (res as any).erro || "") : ""}`.slice(0, 200)];
+    patch = { estado: "por_carregar", falta };
+  }
+  if (corpo) {
+    const { usageMetadata: _u, tentativas: _t, custoEstimadoEur: _c, ...resto } = corpo;
+    patch.verificado = resto;
+  }
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/livre_vinhos?id=eq.${id}`, {
+      method: "PATCH",
+      headers: { apikey: SB_SRV, Authorization: "Bearer " + SB_SRV, "Content-Type": "application/json",
+        "Content-Profile": "garrafeira", Prefer: "return=minimal" },
+      body: JSON.stringify({ ...patch, verificado_em: new Date().toISOString(), atualizado_em: new Date().toISOString() }),
+    });
+    if (!r.ok) console.log("VINHO livre fechar falhou:", r.status, (await r.text().catch(() => "")).slice(0, 200));
+  } catch (e) { console.log("VINHO livre fechar erro:", String((e as Error).message).slice(0, 200)); }
+}
+
 function extrairHost(url: string) {
   try { return new URL(url).hostname; } catch (_) { return ""; }
 }
@@ -2040,6 +2142,9 @@ async function produzirFicha(
   // Os documentos ENVIADOS da app (ver "OS DOCUMENTOS"), já como páginas
   // lidas: vão em anexo, à frente das páginas abertas.
   documentos: Pagina[] = [],
+  // Um vinho das Sugestões livres (ver "AS SUGESTÕES LIVRES"): só vai ao
+  // catálogo com os campos principais com fonte.
+  daSugestao: boolean = false,
 ): Promise<Res> {
   if (!GEMINI_KEY) return { ok: false, status: 503, erro: "a IA com pesquisa web ainda não está configurada (falta GEMINI_API_KEY)" };
   const inicio = Date.now();
@@ -2055,7 +2160,9 @@ async function produzirFicha(
   // Da carta também não se lê a cache: uma resposta de lá não volta a ir ao
   // catálogo, e é para lá que esta procura tem de ir. O catálogo responde
   // primeiro na mesma.
-  const cache = semAtalhos || daCarta ? null : await cacheLer(chave, signal);
+  // Nem de uma sugestão livre: a cache não guarda de onde veio cada campo, e
+  // sem isso não há como confirmar nada.
+  const cache = semAtalhos || daCarta || daSugestao ? null : await cacheLer(chave, signal);
   if (cache?.resultado) {
     await registar("ok", {
       nome, ano, modo: "cache", modelo: cache.modelo, ms: Date.now() - inicio,
@@ -2311,6 +2418,8 @@ async function produzirFicha(
   let fontesIA: Fonte[] = f1.fontes;
   // Os campos que só o grounding trouxe — dizem-se como tal no ecrã.
   const doGround = new Set<string>();
+  // E se esse grounding pesquisou MESMO (a sugestão livre só aceita assim).
+  let groundPesquisou = false;
   // O grounding só pelo que a base de evidência não trouxe, logo a seguir —
   // nunca com o "só estes sites": o que eles não disserem fica vazio.
   if (temEvidencia && !soSites) {
@@ -2320,6 +2429,7 @@ async function produzirFicha(
       const f2 = await fase(false, faltam);
       if (f2.ficha) {
         for (const k of Object.keys(f2.ficha)) if (k !== "aviso" && k !== "ano" && vazioCampo((ficha as any)?.[k])) doGround.add(k);
+        groundPesquisou = f2.pesquisou === true;
         ficha = { ...f2.ficha, ...(ficha ?? {}) };
         fontesIA = [...fontesIA, ...f2.fontes];
         usadoModelo = f1.ficha ? `${f1.modelo} + ${f2.modelo}` : f2.modelo;
@@ -2410,6 +2520,7 @@ async function produzirFicha(
     }
   }
   let precosGravados = 0;
+  let sugestaoLivre: Avaliacao | null = null;
   if (ficha) {
     const nomeConfirmado = vinhoGravado || daCarta || !!conhecido?.exato ||
       (semAtalhos && !!(await catalogoProcurar(nome, produtor, ano, signal, tipo))?.exato);
@@ -2429,10 +2540,35 @@ async function produzirFicha(
         nome, produtor, ano, factos, `vinho-info-${modoIA}`,
         fontesIA, signal,
       );
+    } else if (daSugestao) {
+      /* UMA SUGESTÃO LIVRE (ver "AS SUGESTÕES LIVRES"): só nasce com os
+         campos principais com fonte, e nunca ao lado de um vinho que o
+         catálogo já conhece (esse confirma-se à mão, no Backoffice). */
+      const temFonte = (k: string) => {
+        if (k in doCatalogo) return true;
+        const o = origemCampos[k];
+        if (o && o.url) return true;
+        if (o && o.google) return groundPesquisou;
+        // Sem base de evidência, a ficha é toda do grounding.
+        return !temEvidencia && pesquisou === true && !!ficha && k in (ficha as Record<string, unknown>);
+      };
+      sugestaoLivre = avaliarSugestao({ ...doCatalogo, ...factos }, temFonte, produtor, precosLoja);
+      if (conhecido) {
+        sugestaoLivre.ok = false;
+        sugestaoLivre.falta.push(`o Catálogo já tem um vinho parecido («${conhecido.nome}${conhecido.ano ? " " + conhecido.ano : ""}») — confirmar qual`);
+      }
+      if (sugestaoLivre.ok) {
+        if (tipo && !factos.tipo) factos.tipo = tipo;
+        // O produtor é o que a pesquisa encontrou (bate com o sugerido).
+        delete factos.produtor;
+        sugestaoLivre.catalogoId = await catalogoJuntarId(
+          nome, sugestaoLivre.produtor, ano, factos, "sugestao-livre", fontesIA, signal);
+        if (!sugestaoLivre.catalogoId) { sugestaoLivre.ok = false; sugestaoLivre.falta.push("o Catálogo não o aceitou"); }
+      }
     } else if (!nomeConfirmado) catalogoAdiado = true;
     // Depois da `juntar`: a linha pode ter nascido nela.
-    if (nomeConfirmado && Object.keys(precosLoja).length) {
-      precosGravados = await precosPagina(nome, produtor, ano, tipo, precosLoja, signal);
+    if ((nomeConfirmado || sugestaoLivre?.ok) && Object.keys(precosLoja).length) {
+      precosGravados = await precosPagina(nome, sugestaoLivre?.ok ? sugestaoLivre.produtor : produtor, ano, tipo, precosLoja, signal);
     }
   }
 
@@ -2469,6 +2605,7 @@ async function produzirFicha(
     // O vinho novo com um nome que o catálogo não conhece: vai quando for gravado.
     ...(catalogoAdiado ? { catalogo: "adiado" } : {}),
     ...(daCarta ? { da_carta: true } : {}),
+    ...(sugestaoLivre ? { sugestao_livre: { criado: sugestaoLivre.ok, catalogo_id: sugestaoLivre.catalogoId ?? null, falta: sugestaoLivre.falta } } : {}),
     // Quantos documentos foram em anexo (só o número — os ficheiros não se
     // guardam): é o que diz que isto foi um "Num documento".
     ...(documentos.length ? { documentos: documentos.length } : {}),
@@ -2510,6 +2647,8 @@ async function produzirFicha(
       ...(Object.keys(origemCampos).length ? { origemCampos } : {}),
       // O preço de cada loja aberta; `precosGravados` diz se já está no catálogo.
       ...(Object.keys(precosLoja).length ? { precosLoja, precosGravados } : {}),
+      // A sugestão livre: se nasceu no catálogo, ou o que faltou.
+      ...(sugestaoLivre ? { sugestaoLivre } : {}),
       modelo: usadoModelo,
       modo: usadoModo,
       custoEstimadoEur: custoEstimado,
@@ -2801,6 +2940,11 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
 
+    // A `garrafeira-carta` pergunta se esta versão já confirma as sugestões
+    // livres antes de lhe mandar alguma (ver "AS SUGESTÕES LIVRES"): uma
+    // versão antiga ignorava o `livreId` e deixava a linha presa.
+    if (body?.livreSonda === true) return json({ livre: 1 });
+
     /* ── PROCURAR LINKS (29/09/2026, o dono das apps) ──
        "Dar um link ao Gemini e dizer 'lê só isto'" é o que traz a
        informação mais fidedigna. Este passo só encontra os links: UMA
@@ -2954,6 +3098,23 @@ Deno.serve(async (req) => {
       return json({ error: "a atualização massiva precisa da tabela `analises` (ver o README) — tenta um vinho de cada vez entretanto" }, 503);
     }
 
+    /* UMA SUGESTÃO LIVRE (ver "AS SUGESTÕES LIVRES"): o vinho é o da linha
+       de `garrafeira.livre_vinhos` em `a_verificar`, nunca o do corpo. */
+    const livreId = typeof body?.livreId === "number" && Number.isInteger(body.livreId) ? body.livreId as number : null;
+    const livre = livreId != null ? await livreLinha(livreId, ctrl.signal) : null;
+    if (livreId != null && !livre) {
+      await registar("erro", { passo: "livre", livre_id: livreId }, quem);
+      return json({ error: "esta sugestão já não está à espera de ser confirmada" }, 409);
+    }
+    if (livre) {
+      body.nome = livre.nome; body.produtor = livre.produtor || ""; body.ano = livre.ano ?? null;
+      body.regiao = livre.regiao || ""; body.tipo = livre.tipo;
+      body.sites = []; body.documentos = []; body.soSites = false; body.campos = null;
+      body.vinhoId = null; body.daCarta = false; body.profunda = false; body.assincrono = true;
+      body.plano = "premium";
+    }
+    const daSugestao = !!livre;
+
     const nome = String(body?.nome ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
     if (!nomeChega(nome, texto(body?.produtor, 90))) {
       await registar("erro", { passo: "nome", recebido: String(body?.nome ?? "").slice(0, 60) }, quem);
@@ -3017,7 +3178,9 @@ Deno.serve(async (req) => {
       : null;
     const camposPedidos = campos && campos.length && campos.length < Object.keys(CAMPOS).length ? campos : null;
     const pedidoModo: "gratis" | "premium" = body?.plano === "premium" ? "premium" : "gratis";
-    const modoIA: "gratis" | "premium" = auth.plano === "premium" ? pedidoModo : "gratis";
+    // A sugestão livre procura sempre com o pacote completo: foi o sistema a
+    // pedir, e só a pesquisa a sério dá as fontes que a regra exige.
+    const modoIA: "gratis" | "premium" = auth.plano === "premium" || daSugestao ? pedidoModo : "gratis";
     // Por omissão a pesquisa é sobre o vinho em geral (ver a regra do
     // Vivino em `regraVivino`) — só se torna estrita quando o ecrã de
     // escolha de campos manda isto explicitamente.
@@ -3040,6 +3203,7 @@ Deno.serve(async (req) => {
        de rebentar. */
     if (body?.assincrono === true) {
       const analiseId = await criarAnalise(authHeader, { nome, ano, produtor, regiao, tipo, notas, sites, ...(soSites ? { soSites } : {}), ...(daCarta ? { daCarta } : {}),
+        ...(daSugestao ? { livreId } : {}),
         // Dos documentos, só o nome, o tipo e o tamanho — os dados não se guardam.
         ...(documentos.length ? { documentos: documentos.map(paginaRes).map(({ titulo, doc, bytes }) => ({ nome: titulo, tipo: doc, bytes })) } : {}),
         campos: camposPedidos }, vinhoId, quem!, ctrl.signal);
@@ -3050,12 +3214,14 @@ Deno.serve(async (req) => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), PROC_TIMEOUT_MS);
           try {
-          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle, daCarta, documentos), vivinoDado, camposPedidos);
+          const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, dono, c.signal, PROC_TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle, daCarta, documentos, daSugestao), vivinoDado, camposPedidos);
             await fecharAnalise(analiseId, dono, res.ok
               ? { estado: "concluido", resultado: res.corpo }
               : { estado: "erro", erro: res.erro });
+            if (livreId != null) await livreFechar(livreId, res);
           } catch (e) {
             const err = e as Error, timeout = err.name === "AbortError";
+            if (livreId != null) await livreFechar(livreId, null, timeout ? "a procura demorou demasiado" : String(err.message).slice(0, 120));
             await registar("erro", { passo: timeout ? "timeout" : "excecao", erro: String(err.message).slice(0, 500) }, dono);
             await fecharAnalise(analiseId, dono, {
               estado: "erro",
@@ -3068,7 +3234,8 @@ Deno.serve(async (req) => {
       console.log("VINHO sem tabela de análises — cai para o modo síncrono");
     }
 
-    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle, daCarta, documentos), vivinoDado, camposPedidos);
+    const res = comVivinoDado(await produzirFicha(modoIA, nome, ano, produtor, regiao, quem, ctrl.signal, TIMEOUT_MS, camposPedidos, colheitaEspecifica, tipo, notas, sites, profunda, vinhoId !== null, paginasDadas, soSites, vivinoGoogle, daCarta, documentos, daSugestao), vivinoDado, camposPedidos);
+    if (livreId != null) await livreFechar(livreId, res);
     return res.ok ? json(res.corpo) : json({ error: res.erro }, res.status);
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";

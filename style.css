@@ -2091,7 +2091,11 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
    secção; os números dos passos são um contador, e um passo escondido
    (`display:none`) não conta — "2. O que vais comer?" na carta, "1." no
    Catálogo. Na garrafeira há um passo só, e um "1." sozinho cala-se. */
-#s-sugestoes .ws-modos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:12px}
+/* Quatro modos desde 13/10/2026 (a pergunta livre): numa linha num ecrã
+   largo, dois a dois no telemóvel — quatro colunas de 80px partiam os nomes
+   em três linhas. */
+#s-sugestoes .ws-modos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:12px}
+@media(max-width:520px){#s-sugestoes .ws-modos{grid-template-columns:repeat(2,minmax(0,1fr))}}
 #s-sugestoes .ws-modo{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:9px 6px;
   border:1px solid var(--bo);border-radius:12px;background:var(--card);color:var(--mu);font-family:inherit;font-size:12px;
   font-weight:600;line-height:1.25;text-align:center;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
@@ -2099,6 +2103,8 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
 #s-sugestoes .ws-modo.on{background:var(--vh);border-color:var(--vh);color:#fff}
 #s-sugestoes:not([data-modo=carta]) .ws-so-carta,
 #s-sugestoes[data-modo=carta] .ws-sem-carta,
+#s-sugestoes:not([data-modo=livre]) .ws-so-livre,
+#s-sugestoes[data-modo=livre] .ws-sem-livre,
 #s-sugestoes[data-modo=garrafeira] .ws-sem-garrafeira,
 #s-sugestoes[data-modo=garrafeira] .ws-num{display:none}
 #s-sugestoes .ws-form{counter-reset:wsn}
@@ -2111,6 +2117,18 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
 #s-sugestoes .ws-card input[type=text]{width:100%;padding:10px 12px;border:1px solid var(--bo);border-radius:9px;font-size:14.5px;
   font-family:inherit;background:var(--bg);color:var(--tx)}
 #s-sugestoes .ws-card input[type=text]:focus{outline:none;border-color:var(--vh);background:#fff;box-shadow:0 0 0 3px var(--vhp)}
+/* A pergunta livre: o preço de… até…, e as observações */
+#s-sugestoes .ws-card textarea{width:100%;min-width:0;padding:10px 12px;border:1px solid var(--bo);border-radius:9px;font-size:14.5px;
+  font-family:inherit;line-height:1.4;background:var(--bg);color:var(--tx);resize:vertical}
+#s-sugestoes .ws-card textarea:focus{outline:none;border-color:var(--vh);background:#fff;box-shadow:0 0 0 3px var(--vhp)}
+#s-sugestoes .ws-livre-precos{display:flex;flex-wrap:wrap;gap:8px 18px}
+#s-sugestoes .ws-livre-precos label{display:flex;align-items:center;gap:7px;font-size:14px;color:var(--mu)}
+#s-sugestoes .ws-livre-precos select{padding:8px 10px;border:1px solid var(--bo);border-radius:9px;font-size:14.5px;
+  font-family:inherit;background:var(--bg);color:var(--tx);min-width:76px}
+#s-sugestoes .ws-livre-est{font-size:12.5px;color:var(--mu)}
+#s-sugestoes .ws-livre-est.ok{color:var(--vh);font-weight:600}
+#s-sugestoes .ws-livre-outra{margin:12px 4px 4px}
+#s-sugestoes .ws-livre-outra.aviso{color:var(--vh);font-weight:600}
 /* o orçamento: uma roda que desliza */
 #s-sugestoes .orc-picker{display:flex;align-items:center;gap:8px}
 #s-sugestoes .orc-arrow{flex:0 0 auto;width:36px;height:36px;border-radius:50%;border:1px solid var(--bo);background:var(--bg);
@@ -2621,6 +2639,9 @@ button.prod-dec-h:hover{background:#fbf8f4}
 .bcl-prop .pia-porque{margin-top:5px}
 .bcl-pval{display:block;margin-top:3px;font-weight:600}
 .bcl-acoes{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px}
+/* Os sugeridos pela IA (migração 54): campo · valor · de onde veio */
+.blv-k{flex:none;min-width:92px;font-size:12px;font-weight:600;color:var(--mu)}
+.blv-de{flex:none;margin:0 0 0 auto;font-size:11.5px}
 .bcl-acoes .btn{margin-top:0;padding:6px 13px;font-size:12.5px}
 .bcl-acoes .note{margin:0}
 .bcl-iacard .bo-acoes{margin-top:4px}

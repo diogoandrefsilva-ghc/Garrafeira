@@ -38,6 +38,11 @@
 // chamada só de texto e responde no próprio pedido: não há nada a ler nem a
 // guardar, e por isso não nasce linha nenhuma em `garrafeira.cartas`.
 //
+// E um quarto, LIVRE (`acao: "livre"`, 13/10/2026, migração 54): só o prato,
+// o preço e as observações, e o modelo sugere 5 vinhos de memória — que se
+// ligam ao Catálogo, ou vão à `vinho-info` para nascer lá (só com fontes).
+// Ver "AS SUGESTÕES LIVRES".
+//
 // Quem pode: quem tem IA na Garrafeira (`garrafeira.plano_ia()` 'gratis' ou
 // 'premium', perguntado com o JWT de quem chamou) — o mesmo que vê o
 // separador. A linha escreve-se com a service role, sempre com `quem=eq.` no
@@ -568,6 +573,212 @@ async function sugerirLista(body: any, quem: string): Promise<{ status: number; 
   } finally { clearTimeout(timer); }
 }
 
+/* ── AS SUGESTÕES LIVRES (13/10/2026, migração 54) ──
+   O dono das apps: "sugestões sem ter por base uma carta, uma garrafeira ou
+   um catálogo. O utilizador simplesmente colocava o prato, o preço (mínimo
+   e máximo), um campo de observações … e pedíamos à IA 5 vinhos". Aqui a
+   memória do modelo ESCOLHE os vinhos (não há outra coisa por onde
+   escolher), mas nada do que ele diz entra no Catálogo como facto:
+   · cada vinho liga-se ao Catálogo pela procura da carta (`carta_achar`,
+     dentro da `garrafeira.livre_registar`) — o que lá está mostra-se com os
+     dados de lá;
+   · o que não está vai à `vinho-info` (com o `livreId`), que só o faz nascer
+     no Catálogo com produtor, castas, preço, imagem e Vivino COM FONTE; o
+     resto fica para o Backoffice (`livre_vinhos`, estado `por_carregar`);
+   · MEMÓRIA (o dono: "dois pedidos praticamente iguais na mesma semana
+     deviam levar a mesma resposta"): a chave é o prato pelos conceitos da
+     app (`chavePrato`, a mesma tabela da procura do prato sem IA), o preço
+     e as palavras das observações; dentro de `LIVRE_MEMORIA_DIAS` responde
+     a linha de `livre_pedidos`, sem modelo nenhum. A app mostra-a com o que
+     o Catálogo sabe HOJE. E "pedir outra vez" obriga a mais detalhe nas
+     observações — é a própria chave que muda (a app confere-o).
+   As observações não se guardam por extenso: só as palavras da chave. */
+const LIVRE_N = 5;
+const LIVRE_MEMORIA_DIAS = 7;
+const LIVRE_TIMEOUT_MS = 55_000;
+const CUSTO_LIVRE_EUR = 0.003;
+const LIVRE_STOP = new Set(("a o as os ao aos de do da dos das com sem e em no na nos nas um uma uns umas para por " +
+  "pela pelo que se mais muito pouco bem tipo vinho vinhos quero queria gostava algo coisa prefiro preferencia " +
+  "preferencialmente talvez").split(" "));
+// As palavras das observações, sem acentos nem ordem, e sem as que não dizem nada.
+function obsChave(t: string): string {
+  const ws = String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !LIVRE_STOP.has(w));
+  return [...new Set(ws)].sort().join(" ").slice(0, 300);
+}
+function precoChave(v: number | null): string { return v == null ? "" : String(Math.round(v)); }
+
+function promptLivre(prato: string, min: number | null, max: number | null, obs: string) {
+  const preco = min != null && max != null ? `entre ${min} € e ${max} €`
+    : max != null ? `até ${max} €` : min != null ? `a partir de ${min} €` : "sem limite de preço";
+  return `És um escanção em Portugal. Sugere exatamente ${LIVRE_N} vinhos para acompanhar:
+"${prato}".
+
+Preço por garrafa (preço de loja, não de restaurante): ${preco}.
+${obs ? `Observações de quem pergunta (segue-as): "${obs}".` : "Sem observações."}
+
+Devolve APENAS um objeto JSON com esta forma exata:
+{"vinhos": [{"nome": string, "produtor": string, "ano": number|null,
+  "tipo": "Tinto"|"Branco"|"Rosé"|"Espumante"|"Licoroso"|"Frisante",
+  "regiao": string, "castas": [string], "preco": number, "razao": string}]}
+
+Regras:
+- Só vinhos REAIS, que existem e se compram em lojas em Portugal. Se não
+  tens a certeza de que um vinho existe com esse nome, não o sugiras.
+- Dá prioridade a vinhos PORTUGUESES, a não ser que as observações peçam
+  outra coisa. Varia: no máximo um vinho de cada produtor.
+- Pela ordem: o primeiro é o que mais recomendas para este prato.
+- "nome": o nome do vinho como está no rótulo, sem a colheita e sem a cor
+  (ex.: "Quinta do Crasto Reserva Vinhas Velhas", "Esporão Reserva").
+- "produtor": o nome do produtor.
+- "ano": null — a não ser que uma colheita concreta seja a razão da
+  sugestão.
+- "tipo": a cor, com estas palavras. Um Vinho Verde diz-se pela cor.
+- "preco": o preço aproximado de uma garrafa numa loja, em euros, dentro do
+  intervalo pedido.
+- "razao": uma a duas frases concretas, em português, sobre porque combina
+  com o prato (corpo, acidez, taninos, castas, estilo).
+Responde só com o JSON.`;
+}
+function normLivre(raw: unknown): Record<string, any> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as any;
+  const nome = s(o.nome, 120).replace(/\b(19|20)\d{2}\b/g, "").replace(/\s+/g, " ").trim();
+  if (!nome || !TIPOS.includes(o.tipo)) return null;
+  return {
+    nome, produtor: s(o.produtor, 90), ano: anoOuNull(o.ano), tipo: o.tipo, regiao: s(o.regiao, 60),
+    sugerido: {
+      castas: Array.isArray(o.castas) ? o.castas.map((c: unknown) => s(c, 40)).filter(Boolean).slice(0, 6) : [],
+      preco: numOuNull(o.preco, 1, 5000), regiao: s(o.regiao, 60),
+    },
+    razao: s(o.razao, 400),
+  };
+}
+// A `vinho-info` publicada já confirma sugestões livres? (ver lá o `livreSonda`)
+async function vinhoInfoSabe(auth: string): Promise<"sim" | "nao" | "sem-acesso"> {
+  try {
+    const r = await fetch(`${SB_URL}/functions/v1/vinho-info`, {
+      method: "POST", headers: { Authorization: auth, apikey: SB_SRV, "Content-Type": "application/json" },
+      body: JSON.stringify({ livreSonda: true }), signal: AbortSignal.timeout(15_000),
+    });
+    if (r.status === 403) return "sem-acesso";
+    if (!r.ok) return "nao";
+    const d = await r.json().catch(() => null);
+    return d?.livre === 1 ? "sim" : "nao";
+  } catch (_) { return "nao"; }
+}
+async function livrePatch(ids: number[], patch: Record<string, unknown>) {
+  if (!ids.length) return;
+  try {
+    await sb(`livre_vinhos?id=in.(${ids.join(",")})`, { method: "PATCH", headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ ...patch, atualizado_em: new Date().toISOString() }) });
+  } catch (_) { /**/ }
+}
+/* As confirmações, em segundo plano: uma procura da `vinho-info` por vinho,
+   em nome de quem perguntou (o JWT dele). A `vinho-info` responde já com o
+   `id` da análise e fecha a linha de `livre_vinhos` quando acabar — aqui só
+   se arranca. Sem a versão nova publicada, as linhas voltam a `pendente`
+   (confirmam-se no próximo pedido que as sugira). */
+async function livreVerificar(vinhos: any[], auth: string, quem: string) {
+  if (!vinhos.length) return;
+  const sabe = await vinhoInfoSabe(auth);
+  if (sabe !== "sim") {
+    await livrePatch(vinhos.map((v) => v.id), sabe === "sem-acesso"
+      ? { estado: "por_carregar", falta: ["ninguém o procurou: quem perguntou não tem acesso à procura com IA"] }
+      : { estado: "pendente" });
+    await registar("ok", { passo: "livre_verificar", vinhos: vinhos.length, vinho_info: sabe }, quem);
+    return;
+  }
+  const arrancou: number[] = [], falhou: number[] = [];
+  await Promise.all(vinhos.map(async (v) => {
+    try {
+      const r = await fetch(`${SB_URL}/functions/v1/vinho-info`, {
+        method: "POST", headers: { Authorization: auth, apikey: SB_SRV, "Content-Type": "application/json" },
+        body: JSON.stringify({ livreId: v.id, nome: v.nome, assincrono: true }), signal: AbortSignal.timeout(20_000),
+      });
+      (r.ok ? arrancou : falhou).push(v.id);
+    } catch (_) { falhou.push(v.id); }
+  }));
+  await livrePatch(falhou, { estado: "pendente" });
+  await registar("ok", { passo: "livre_verificar", vinhos: vinhos.length, arrancou: arrancou.length, falhou: falhou.length }, quem);
+}
+async function livrePedido(body: any, quem: string, auth: string): Promise<{ status: number; corpo: Record<string, unknown> }> {
+  const t0 = Date.now();
+  const prato = s(body.prato, 200);
+  if (!prato) return { status: 400, corpo: { error: "diz o prato" } };
+  let min = numOuNull(body.precoMin, 0, 10000), max = numOuNull(body.precoMax, 1, 10000);
+  if (min === 0) min = null;
+  if (min != null && max != null && min > max) [min, max] = [max, min];
+  const obs = s(body.observacoes, 400);
+  // O prato pela chave dos conceitos que a app calculou (a tabela vive lá);
+  // sem ela, as palavras do prato.
+  const cp = typeof body.chavePrato === "string" && /^[a-z0-9_ +/|:.-]{1,300}$/.test(body.chavePrato) ? body.chavePrato : obsChave(prato);
+  const oc = obsChave(obs);
+  const chave = `${cp}#${precoChave(min)}-${precoChave(max)}#${oc}`;
+
+  // A MEMÓRIA: o mesmo pedido há menos de uma semana.
+  const desde = new Date(Date.now() - LIVRE_MEMORIA_DIAS * 86400_000).toISOString();
+  try {
+    const r = await sb(`livre_pedidos?chave=eq.${encodeURIComponent(chave)}&criado_em=gte.${encodeURIComponent(desde)}&order=criado_em.desc&limit=1&select=id,criado_em,sugestoes,vezes`);
+    const p = r.ok ? (await r.json())?.[0] : null;
+    if (p) {
+      await sb(`livre_pedidos?id=eq.${p.id}`, { method: "PATCH", headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ vezes: (p.vezes || 1) + 1, ultimo_em: new Date().toISOString() }) });
+      const ids = (Array.isArray(p.sugestoes) ? p.sugestoes : []).map((x: any) => Number(x?.v)).filter((n: number) => Number.isInteger(n));
+      // Os que ficaram por confirmar (a `vinho-info` ainda não sabia) vão agora.
+      let aVerificar: any[] = [];
+      if (ids.length) {
+        const rv = await sb(`livre_vinhos?id=in.(${ids.join(",")})&estado=eq.pendente&select=id,nome`, {
+          method: "PATCH", headers: { Prefer: "return=representation" },
+          body: JSON.stringify({ estado: "a_verificar", atualizado_em: new Date().toISOString() }) });
+        aVerificar = rv.ok ? await rv.json() : [];
+      }
+      if (aVerificar.length) EdgeRuntime.waitUntil(livreVerificar(aVerificar, auth, quem));
+      await registar("ok", { passo: "livre", memoria: true, pedido: p.id, verificar: aVerificar.length, ms: Date.now() - t0 }, quem);
+      return { status: 200, corpo: { id: p.id, memoria: true, criado_em: p.criado_em } };
+    }
+  } catch (_) { /* sem memória, pergunta-se */ }
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LIVRE_TIMEOUT_MS);
+  try {
+    const modelos = await candidatosModelo(ctrl.signal);
+    const g = await gerar([[modelos[0], 1024], [MODELO_LEVE, 0]], [{ text: promptLivre(prato, min, max, obs) }], ctrl.signal);
+    const j = g.texto ? extrairJson(g.texto) : null;
+    const vinhos = (Array.isArray(j?.vinhos) ? j.vinhos : []).map(normLivre).filter(Boolean).slice(0, LIVRE_N) as Record<string, any>[];
+    if (!vinhos.length) {
+      await registar("erro", { passo: "livre", erro: g.erro || "sem vinhos", modelo: g.modelo || null, ms: Date.now() - t0,
+        ...(g.usage ? { usageMetadata: g.usage } : {}) }, quem);
+      return { status: 502, corpo: { error: g.status === 429 || g.status === 503
+        ? "o serviço está com muita procura agora — espera um minuto e tenta outra vez"
+        : "não consegui fazer a sugestão agora — tenta outra vez" } };
+    }
+    // Cada vinho, uma linha (e a ligação ao Catálogo).
+    const rr = await sb("rpc/livre_registar", { method: "POST", signal: ctrl.signal,
+      body: JSON.stringify({ p_vinhos: vinhos, p_prato: prato }) });
+    if (!rr.ok) throw new Error("não consegui guardar a sugestão (" + rr.status + ")");
+    const linhas: any[] = await rr.json();
+    const sugestoes = vinhos.map((v, k) => linhas[k] ? { v: linhas[k].id, razao: v.razao, recomendado: k === 0 } : null).filter(Boolean);
+    const rp = await sb("livre_pedidos", { method: "POST", headers: { Prefer: "return=representation" }, signal: ctrl.signal,
+      body: JSON.stringify({ chave, prato, preco_min: min, preco_max: max, obs_chave: oc, quem, sugestoes, modelo: g.modelo }) });
+    const id = rp.ok ? (await rp.json())?.[0]?.id : null;
+    if (typeof id !== "number") throw new Error("não consegui guardar a sugestão (" + rp.status + ")");
+    const aVerificar = linhas.filter((l) => l && l.verificar);
+    if (aVerificar.length) EdgeRuntime.waitUntil(livreVerificar(aVerificar, auth, quem));
+    await registar("ok", {
+      passo: "livre", modelo: g.modelo, prato, preco_min: min, preco_max: max, observacoes: !!obs,
+      vinhos: vinhos.length, no_catalogo: linhas.filter((l) => l && l.catalogo_id).length, verificar: aVerificar.length,
+      chamadas_gemini: g.chamadas, ...(g.usage ? { usageMetadata: g.usage } : {}), custo_estimado_eur: CUSTO_LIVRE_EUR,
+      ms: Date.now() - t0,
+    }, quem);
+    return { status: 200, corpo: { id, memoria: false } };
+  } catch (e) {
+    const err = e as Error, timeout = err.name === "AbortError";
+    await registar("erro", { passo: "livre", erro: String(err.message).slice(0, 300), ms: Date.now() - t0 }, quem);
+    return { status: timeout ? 504 : 500, corpo: { error: timeout ? "a sugestão demorou demasiado — tenta outra vez" : (err.message || "erro inesperado") } };
+  } finally { clearTimeout(timer); }
+}
+
 /* ── A base de dados ── */
 async function sb(path: string, init: RequestInit = {}, perfil = "garrafeira", auth = "Bearer " + SB_SRV) {
   return await fetch(`${SB_URL}/rest/v1/${path}`, {
@@ -621,6 +832,7 @@ async function registar(estado: string, detalhe: Record<string, unknown>, quem: 
         // ler a carta, sugerir da carta, ou sugerir da garrafeira/do Catálogo.
         // Recusado antes de se saber o que era → `entrada`.
         funcionalidade: detalhe.passo === "sugerir" ? `sugerir-${String(detalhe.modo ?? "garrafeira")}`
+          : detalhe.passo === "livre" ? "sugerir-livre"
           : detalhe.passo === "recomendar" ? "recomendar"
           : (detalhe.passo === "autorizacao" || detalhe.passo === "excecao_inicial") ? "entrada"
           : "ler",
@@ -877,6 +1089,11 @@ Deno.serve(async (req) => {
       await atualizarCarta(id, quem!, { rec_estado: "pendente", rec_erro: null, pesquisados: pesq });
       EdgeRuntime.waitUntil(recomendarCarta(row, quem!));
       return json({ id, estado: "pendente" }, 202);
+    }
+
+    if (body?.acao === "livre") {
+      const r = await livrePedido(body, quem!, authHeader);
+      return json(r.corpo, r.status);
     }
 
     if (body?.acao === "sugerir") {

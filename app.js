@@ -1179,12 +1179,41 @@ function vinhosUniverso(){return modoCat()?(CAT_VINHOS||[]):db.vinhos;}
 function vinhosBase(){return modoCat()?(CAT_VINHOS||[]):db.vinhos.filter(v=>stockDe(v.id)>0);}
 // O "Local" não é pergunta que se faça ao catálogo.
 // As notas da casa (`notacasa`, `minhanota`) são só do catálogo — e só com
-// a migração 33 (`TEM_NOTAS_CAT`).
-const F_SO_CAT=['notacasa','minhanota'];
+// a migração 33 (`TEM_NOTAS_CAT`). As ORIGENS (`origem`, `alterado`) também,
+// e só com a migração 54 (a `catalogo_vinhos` a dar o `nasceu_de`).
+const F_SO_CAT=['notacasa','minhanota','origem','alterado'];
 function campoVisivel(k){
   if(k==='local')return !modoCat()&&temLocaisDesenhados();
+  if(k==='origem'||k==='alterado')return modoCat()&&catTemOrigem();
   if(F_SO_CAT.includes(k))return modoCat()&&TEM_NOTAS_CAT;
   return true;
+}
+function catTemOrigem(){return !!(CAT_VINHOS&&CAT_VINHOS.length&&('nasceu_de' in CAT_VINHOS[0]));}
+/* DE ONDE VEIO CADA VINHO DO CATÁLOGO (13/10/2026, o dono das apps: "ter um
+   novo filtro de origem, para facilmente filtrar de onde veio o carregamento
+   / última atualização do vinho"). São dois campos: ORIGEM é a porta por
+   onde a linha nasceu (`nasceu_de`, migração 54), ÚLTIMA ALTERAÇÃO a da
+   escrita mais recente na ficha (`alterado_de`). As portas do catálogo
+   (`winecatalog.forca`) são muitas e técnicas; aqui juntam-se no que se
+   pergunta. Uma porta nova cai em "Outra" até entrar na lista. */
+const ORIGEM_GRUPOS=[
+  ['sugestao','✨ Sugestão livre (IA)',['sugestao-livre']],
+  ['ia','Procurar informação (IA)',['vinho-info-premium','vinho-info-gratis']],
+  ['garrafeira','Uma garrafeira',['garrafeira','garrafeira-bruto']],
+  ['desejo','Uma wishlist',['garrafeira-desejo']],
+  ['admin','Admin do Catálogo',['catalogo-admin','reposto']],
+  ['curador','Um curador',['catalogo-curador']],
+  ['vivino','Script do Vivino',['vivino-pagina','vivino-serper']],
+  ['lojas','Preços das lojas',['lojas-script','vinho-info-pagina','loja-']],
+  ['wineselection','WineSelection',['ws-verificacao','ws-sugestao']],
+  ['wcpesquisa','Pesquisa da WineCatalog',['catalogo-pesquisa']],
+  ['prenda','Prendas de anos',['prenda']],
+  ['outra','Outra',[]]
+];
+function origemGrupo(o){
+  if(!o)return '';
+  const g=ORIGEM_GRUPOS.find(([,,ps])=>ps.some(p=>p.endsWith('-')?o.startsWith(p):o===p));
+  return g?g[0]:'outra';
 }
 function camposVisiveis(){return F_CAMPOS.filter(([k])=>campoVisivel(k));}
 function catNormalizar(c){
@@ -1609,6 +1638,10 @@ async function catGuardarNovo(){
     const r=await sbReq('POST','rpc/criar',{p_nome:f.nome,p_produtor:f.produtor||'',p_ano:f.ano,p_campos:campos},
       {'Accept-Profile':'winecatalog','Content-Profile':'winecatalog'});
     _iaExtraNovo=null;FORM_CAT=false;FORM_COLH=null;
+    // Um sugerido pela IA que o Backoffice mandou acrescentar: fica `carregado`.
+    const livre=BO_LIVRE_A;BO_LIVRE_A=null;
+    if(livre&&r&&r.id)sbRpc('livre_marcar',{p_id:livre.id,p_estado:'carregado',p_catalogo_id:r.id})
+      .then(()=>{if(BO_PAG==='livres')boLivreCarregar();boContar();}).catch(()=>{});
     fecharModal('modal-edit');
     if(r&&r.id)await precosDaProcuraLevar(-r.id);
     CAT_VINHOS=null;await catCarregar();
@@ -1756,7 +1789,7 @@ async function modoAlternar(){
   RESUMO_ABERTO=null;RESUMO_DRILL=null;
   // O Local é um filtro da garrafeira (no catálogo cortava tudo), e as
   // notas da casa são do catálogo (na garrafeira cortavam tudo).
-  ['local',...F_SO_CAT].forEach(k=>{if(!campoVisivel(k))F[k]='';});
+  ['local',...F_SO_CAT].forEach(k=>{if(!campoVisivel(k))F[k]=Array.isArray(F[k])?[]:'';});
   if(FILTRO_CAMPO&&!campoVisivel(FILTRO_CAMPO))FILTRO_CAMPO=null;
   document.body.classList.toggle('cat',modoCat());
   aplicarCabecalho();
@@ -1814,7 +1847,7 @@ function wsAbrir(){
    não um estado do ecrã). O que cada modo mostra é o CSS que decide, pelo
    `data-modo` da secção (`.ws-so-carta`, `.ws-sem-carta`…), e a numeração
    dos passos é um contador do CSS: um passo escondido não conta. */
-const WS_MODOS=['carta','garrafeira','catalogo'];
+const WS_MODOS=['carta','garrafeira','catalogo','livre'];
 const WS_MODO_KEY='gf_ws_modo';
 let WS_MODO='carta';
 try{const m=localStorage.getItem(WS_MODO_KEY);if(WS_MODOS.includes(m))WS_MODO=m;}catch(e){}
@@ -1840,6 +1873,7 @@ function wsModoAplicar(){
   if(t&&WS_MODO!=='garrafeira')requestAnimationFrame(()=>wsOrcamentoScrollParaIndice(t,_wsOrcamentoIdx,false));
   wsListaNota();
   wsListaBotao();
+  wsLivreBotao();
   wsDesenhar();
 }
 
@@ -2267,6 +2301,7 @@ function wsDesenhar(){
   const box=document.getElementById('ws-resultado');
   if(!box)return;
   // o resultado é do modo que está à vista; a carta continua em `WS`
+  if(WS_MODO==='livre'){box.innerHTML=wsLivreHTML();return;}
   if(WS_MODO!=='carta'){box.innerHTML=wsListaHTML(WS_MODO);return;}
   const c=WS;
   if(!c){box.innerHTML='';return;}
@@ -3099,6 +3134,206 @@ function wsListaSugHTML(st,s,k){
   </details>`;
 }
 
+/* ── A PERGUNTA LIVRE: só o prato (13/10/2026, migração 54) ──
+   O dono das apps: "sugestões sem ter por base uma carta, uma garrafeira ou
+   um catálogo. O utilizador simplesmente colocava o prato, o preço (mínimo
+   e máximo), um campo de observações … e pedíamos à IA 5 vinhos". A IA
+   escolhe de memória (`garrafeira-carta`, `acao:'livre'`), e daí em diante
+   é tudo com dados:
+   - cada vinho liga-se ao Catálogo (`livre_registar` → `carta_achar`): o
+     que lá está mostra-se como no modo Catálogo, com a nota, o preço que
+     conta e o "Ver a ficha";
+   - o que não está vai confirmar-se na net (a `vinho-info`, em segundo
+     plano) e só nasce no Catálogo com produtor, castas, preço, imagem e
+     Vivino COM FONTE; o resto vai ao Backoffice. Até lá mostra-se o que a
+     IA disse, e o preço diz que é de memória;
+   - MEMÓRIA: o mesmo pedido há menos de uma semana responde sem IA (a
+     chave é o prato pelos conceitos da procura do prato — `wsLivreChavePrato`
+     —, o preço e as palavras das observações). Para OUTRA resposta é
+     preciso acrescentar detalhe nas observações (o dono): pedir outra vez
+     com o mesmo prato e preço e sem palavras novas não sai daqui.
+   O pedido lê-se pela `livre_ler` (nunca quem o fez), e enquanto há vinhos
+   a confirmar a app volta a ler de 5 em 5 segundos. */
+let WS_LIVRE=null;
+let _wsLivreTimer=null;
+const WS_LIVRE_POLL_MS=5000, WS_LIVRE_POLL_MAX_MS=4*60*1000;
+// As mesmas palavras de fora da `obsChave` da `garrafeira-carta`.
+const WS_LIVRE_STOP=new Set(('a o as os ao aos de do da dos das com sem e em no na nos nas um uma uns umas para por '+
+  'pela pelo que se mais muito pouco bem tipo vinho vinhos quero queria gostava algo coisa prefiro preferencia '+
+  'preferencialmente talvez').split(' '));
+function wsLivreObsPalavras(t){
+  return [...new Set(chave(String(t||'')).split(/[^a-z0-9]+/).filter(w=>w.length>2&&!WS_LIVRE_STOP.has(w)))].sort();
+}
+// O prato pelos conceitos (a tabela da procura do prato sem IA): "chuletón"
+// e "costeleta grelhada" dão a mesma chave.
+function wsLivreChavePrato(prato){
+  const p=pratoPergunta(prato);
+  if(!p.length)return '';
+  return p.map(g=>[g.comida.slice().sort().join('+'),g.metodo.slice().sort().join('+'),g.lit.slice().sort().join('+')].join('/'))
+    .sort().join('|').replace(/[^a-z0-9_ +\/|:.-]/g,'').slice(0,300);
+}
+function wsLivreValores(){
+  const num=id=>{const v=parseFloat(String((document.getElementById(id)||{}).value||'').replace(',','.'));return isFinite(v)&&v>0?v:null;};
+  let min=num('ws-livre-min'), max=num('ws-livre-max');
+  if(min!=null&&max!=null&&min>max)[min,max]=[max,min];
+  return {prato:document.getElementById('ws-prato').value.trim(),min,max,obs:(document.getElementById('ws-obs')||{}).value||''};
+}
+function wsLivreBotao(){
+  const b=document.getElementById('ws-btn-livre');
+  if(!b)return;
+  const st=WS_LIVRE;
+  b.disabled=!!(st&&st.estado==='pendente');
+  b.textContent=st&&st.estado==='pendente'?'✨ A pensar…':st&&st.estado==='ok'?'✨ Pedir outra vez':'✨ Sugerir 5 vinhos';
+}
+async function wsLivrePedir(){
+  if(WS_LIVRE&&WS_LIVRE.estado==='pendente')return;
+  if(!podeUsarIA()){toast('As sugestões usam IA, e a IA não está incluída no teu acesso',1);return;}
+  const q=wsLivreValores();
+  if(!q.prato){toast('Diz primeiro o que vais comer',1);document.getElementById('ws-prato').focus();return;}
+  const chavePrato=wsLivreChavePrato(q.prato), palavras=wsLivreObsPalavras(q.obs);
+  // Pedir OUTRA vez (o mesmo prato e o mesmo preço) obriga a mais detalhe:
+  // sem uma palavra nova nas observações, a resposta era a mesma.
+  const ant=WS_LIVRE;
+  if(ant&&ant.estado==='ok'&&(ant.q.chavePrato||chave(ant.q.prato))===(chavePrato||chave(q.prato))&&ant.q.min===q.min&&ant.q.max===q.max
+     &&palavras.every(w=>ant.q.palavras.includes(w))){
+    ant.pedeDetalhe=true;
+    wsDesenhar();
+    const o=document.getElementById('ws-obs');
+    if(o){o.focus();wsRolar(o);}
+    toast('Para outra resposta, acrescenta mais detalhe nas observações',1);
+    return;
+  }
+  clearTimeout(_wsLivreTimer);
+  const st={estado:'pendente',q:Object.assign({chavePrato,palavras},q),id:null,pedido:null,memoria:false,erro:'',inicio:0};
+  WS_LIVRE=st;
+  wsLivreBotao();wsDesenhar();
+  try{
+    const d=await wsChamar({acao:'livre',prato:q.prato,precoMin:q.min,precoMax:q.max,observacoes:q.obs.trim(),chavePrato});
+    if(!d.id)throw new Error(d.error||'Resposta inesperada — tenta outra vez.');
+    st.id=d.id;st.memoria=!!d.memoria;
+    await wsLivreLer(st);
+    st.estado='ok';
+  }catch(e){
+    st.estado='erro';
+    st.erro=/acção desconhecida/.test(e.message)?'A função `garrafeira-carta` publicada no Supabase ainda não sabe fazer a pergunta livre.':e.message;
+  }
+  if(WS_LIVRE!==st)return;
+  wsLivreBotao();
+  if(WS_MODO==='livre'){
+    wsDesenhar();
+    const el=document.getElementById('ws-resultado');
+    if(el&&st.estado==='ok'&&tabAtiva==='sugestoes')wsRolar(el);
+  }
+  if(st.estado==='ok'&&wsLivreAConfirmar(st))wsLivreSondar(st);
+}
+// O pedido como está agora, e cada vinho ligado ao Catálogo: pelo
+// `catalogo_id` que a BD já sabe, ou pela procura da carta (um vinho que
+// entretanto entrou por outro caminho também se liga).
+async function wsLivreLer(st){
+  const p=await sbRpc('livre_ler',{p_id:st.id});
+  if(!p)throw new Error('Não encontrei esta sugestão.');
+  st.pedido=p;
+  try{await catCarregar();}catch(e){}
+  const vs=Array.isArray(p.vinhos)?p.vinhos:[];
+  st.vinhos=new Map(vs.map(v=>[Number(v.id),v]));
+  st.cat=new Map();
+  vs.forEach(v=>{if(v.catalogo_id&&IDXV[-Number(v.catalogo_id)])st.cat.set(Number(v.id),-Number(v.catalogo_id));});
+  const falta=vs.filter(v=>!st.cat.has(Number(v.id)));
+  if(falta.length){
+    try{
+      const r=await sbRpc('carta_ligar',{p_pedidos:falta.map(v=>({nome:v.nome,produtor:v.produtor||'',ano:v.ano??null,tipo:v.tipo||null}))});
+      (Array.isArray(r)?r:[]).forEach((l,i)=>{if(l&&l.id!=null&&IDXV[-Number(l.id)])st.cat.set(Number(falta[i].id),-Number(l.id));});
+    }catch(e){}
+  }
+}
+function wsLivreAConfirmar(st){
+  return st.vinhos?[...st.vinhos.values()].filter(v=>v.estado==='a_verificar'&&!st.cat.has(Number(v.id))).length:0;
+}
+// Enquanto há vinhos a confirmar na net: ler outra vez, e reler o Catálogo
+// quando algum lá nasceu.
+function wsLivreSondar(st){
+  clearTimeout(_wsLivreTimer);
+  if(!st.inicio)st.inicio=Date.now();
+  _wsLivreTimer=setTimeout(async()=>{
+    if(WS_LIVRE!==st)return;
+    const antes=[...st.vinhos.values()].filter(v=>v.estado==='criado').length;
+    try{
+      const p=await sbRpc('livre_ler',{p_id:st.id});
+      const criados=(p&&Array.isArray(p.vinhos)?p.vinhos:[]).filter(v=>v.estado==='criado').length;
+      if(criados>antes){CAT_VINHOS=null;}
+      await wsLivreLer(st);
+      if(criados>antes)renderLista();
+    }catch(e){}
+    if(WS_LIVRE!==st)return;
+    if(WS_MODO==='livre')wsDesenhar();
+    if(wsLivreAConfirmar(st)&&Date.now()-st.inicio<WS_LIVRE_POLL_MAX_MS)wsLivreSondar(st);
+  },WS_LIVRE_POLL_MS);
+}
+function wsLivreDataTxt(iso){
+  const d=new Date(iso);
+  return isNaN(d)?'':d.toLocaleDateString('pt-PT',{day:'numeric',month:'long'});
+}
+function wsLivreHTML(){
+  const st=WS_LIVRE;
+  if(!st)return '';
+  if(st.estado==='pendente')return `<div class="ws-card"><p class="ws-note">✨ A pensar em 5 vinhos para «${esc(st.q.prato)}»…</p></div>`;
+  if(st.estado==='erro')return `<div class="ws-card"><p class="ws-note" style="color:var(--dg)">${esc(st.erro)}</p></div>`;
+  const p=st.pedido||{};
+  const sug=(Array.isArray(p.sugestoes)?p.sugestoes:[]).filter(s=>st.vinhos.has(Number(s.v)));
+  if(!sug.length)return '<div class="ws-card"><p class="ws-note">A IA não sugeriu nenhum vinho que eu conseguisse ler. Tenta outra vez, com outras palavras.</p></div>';
+  const n=wsLivreAConfirmar(st);
+  const eur=x=>String(Math.round(Number(x)))+' €';
+  const preco=p.preco_min!=null&&p.preco_max!=null?`${eur(p.preco_min)} a ${eur(p.preco_max)}`
+    :p.preco_max!=null?`até ${eur(p.preco_max)}`:p.preco_min!=null?`a partir de ${eur(p.preco_min)}`:'';
+  const notas=[];
+  if(st.memoria)notas.push(`É a resposta de um pedido igual de ${esc(wsLivreDataTxt(p.criado_em))} — o mesmo prato, o mesmo preço e as mesmas observações dão a mesma sugestão durante uma semana.`);
+  if(n)notas.push(`🔎 A confirmar na net ${n===1?'1 vinho que o Catálogo ainda não tem':n+' vinhos que o Catálogo ainda não tem'} — se tudo o que interessa vier com fonte, ${n===1?'entra':'entram'} no Catálogo.`);
+  return `<div class="ws-card-label sug-titulo">A sugestão · ${esc(p.prato||st.q.prato)}${preco?` · ${preco}`:''}${sug.length>1?' <em>— toca num vinho para ver porquê</em>':''}</div>`
+    +notas.map(t=>`<p class="ws-note sug-entre">${t}</p>`).join('')
+    +sug.map((s,k)=>wsLivreSugHTML(st,s,k)).join('')
+    +`<p class="ws-note ws-livre-outra${st.pedeDetalhe?' aviso':''}">Queres outra resposta? Acrescenta mais detalhe nas <b>observações</b> (uma casta, uma região, um estilo…) e pede outra vez.</p>`;
+}
+// Um vinho que o Catálogo tem: como no modo Catálogo. Um que não tem: o que
+// a IA disse (o preço dito como de memória) e em que pé está a confirmação.
+function wsLivreSugHTML(st,s,k){
+  const x=st.vinhos.get(Number(s.v)), cid=st.cat.get(Number(s.v)), v=cid?IDXV[cid]:null;
+  const marca=k===0?'<span class="sug-marca topo">🏆 Melhor escolha</span>':'';
+  const razao=s.razao?`<p class="vinho-txt"><strong>Porquê:</strong> ${esc(s.razao)}</p>`:'';
+  if(v){
+    const sub=[v.tipo,v.regiao,v.ano,(v.castas||[]).join(', ')].filter(Boolean).map(y=>esc(String(y))).join(' · ');
+    const pr=precoPrincipal(v), viv=vivinoLink(v.vivino_url||''), t=catTensHTML(v);
+    const nota=wsNotaHTML(v,v,'sug-nota')||'<span class="sug-nota"><span class="sem-dados">sem nota</span></span>';
+    const novo=x.estado==='criado'?'<span class="ws-livre-est ok">✨ Entrou agora no Catálogo</span>':'';
+    return `<details class="vinho-card sug-det${k===0?' destaque':''}"${k===0?' open':''}>
+      <summary class="sug-sum"><span class="sug-pos">${k+1}</span>
+        <span class="sug-cab">${marca}<span class="vinho-nome">${esc(v.nome||'Vinho')}</span>
+          ${sub?`<span class="vinho-sub">${sub}</span>`:''}${v.produtor?`<span class="vinho-sub sug-prod">${esc(v.produtor)}</span>`:''}</span>
+        <span class="sug-dir"><span class="vinho-preco"${pr&&pr.loja?` title="${esc(precoFonteTxt(pr))}"`:''}>${wsEur(pr?pr.preco:null)}</span>${nota}</span>
+      </summary>
+      <div class="sug-corpo">
+        ${t||novo?`<div class="sug-extra">${novo}${t||''}</div>`:''}${razao}
+        <div class="sug-links"><button type="button" class="mini" onclick="verVinho(${v.id})">Ver a ficha</button>${viv?`<a class="mini" href="${esc(viv)}" target="_blank" rel="noopener">Vivino ↗</a>`:''}</div>
+      </div></details>`;
+  }
+  const sg=x.sugerido||{};
+  const sub=[x.tipo,x.regiao||sg.regiao,(sg.castas||[]).join(', ')].filter(Boolean).map(y=>esc(String(y))).join(' · ');
+  const preco=typeof sg.preco==='number'?`<span class="vinho-preco" title="Preço aproximado, dito pela IA de memória">~${wsEur(sg.preco)}</span>`:'';
+  const est=x.estado==='a_verificar'?'<span class="ws-livre-est">🔎 A confirmar na net…</span>'
+    :x.estado==='pendente'?'<span class="ws-livre-est">Ainda por confirmar na net.</span>'
+    :x.estado==='por_carregar'||x.estado==='descartado'?`<span class="ws-livre-est">Não ficou no Catálogo${x.falta&&x.falta.length&&x.estado==='por_carregar'?': faltou '+esc(x.falta.join(', ')):''}.</span>`
+    :'';
+  return `<details class="vinho-card sug-det ws-livre-fora${k===0?' destaque':''}"${k===0?' open':''}>
+    <summary class="sug-sum"><span class="sug-pos">${k+1}</span>
+      <span class="sug-cab">${marca}<span class="vinho-nome">${esc(x.nome||'Vinho')}</span>
+        ${sub?`<span class="vinho-sub">${sub}</span>`:''}${x.produtor?`<span class="vinho-sub sug-prod">${esc(x.produtor)}</span>`:''}</span>
+      <span class="sug-dir">${preco}<span class="sug-nota"><span class="sem-dados">fora do Catálogo</span></span></span>
+    </summary>
+    <div class="sug-corpo">
+      ${est?`<div class="sug-extra">${est}</div>`:''}${razao}
+      <p class="ws-note">O que está aqui é o que a IA disse de memória — o preço é aproximado.</p>
+    </div></details>`;
+}
+
 /* ── NAVEGAÇÃO ─────────────────────────────────────────────────────── */
 let tabAtiva='garrafeira';
 const ORDEM_TABS=['garrafeira','detalhe','locais','consumidos','desejos','sugestoes','backoffice','cfg'];
@@ -3905,7 +4140,7 @@ function renderFiltrados(){
    É a mesma decisão, o mesmo desenho e o mesmo vocabulário do Catálogo da
    WineCatalog: quem anda nas duas apps não aprende dois nomes para a mesma
    coisa. */
-let F={local:'',tipo:[],regiao:[],casta:[],produtor:'',ano:'',mencao:'',preco:'',teor:'',estagio:'',janela:'',vivino:'',falta:[],notacasa:'',minhanota:''};
+let F={local:'',tipo:[],regiao:[],casta:[],produtor:'',ano:'',mencao:'',preco:'',teor:'',estagio:'',janela:'',vivino:'',falta:[],notacasa:'',minhanota:'',origem:[],alterado:[]};
 let CASTAS_TODAS=false;
 try{CASTAS_TODAS=localStorage.getItem('gf_castas_todas')==='1';}catch(e){}
 /* "Só monocasta" foi um VALOR do campo "Nº de castas" e agora é um estado
@@ -4027,7 +4262,9 @@ const F_CAMPOS=[
   ['falta','🧩','Em falta',1],
   // Só no catálogo (`F_SO_CAT`): a média de quem usa a Garrafeira, e os
   // vinhos a que EU já dei nota (ou ainda não).
-  ['notacasa','<i class="fg-g"></i>','Nota da casa',0],['minhanota','⭐','A minha nota',0]
+  ['notacasa','<i class="fg-g"></i>','Nota da casa',0],['minhanota','⭐','A minha nota',0],
+  // Também só no catálogo: por onde nasceu cada vinho, e a última escrita.
+  ['origem','🧭','Origem',1],['alterado','🕘','Última alteração',1]
 ];
 const F_META={};
 F_CAMPOS.forEach(([k,ico,nome])=>{F_META[k]=[ico,nome];});
@@ -4061,6 +4298,8 @@ function valorDe(v,k){
     case 'notacasa':{const x=catNota(v);return x&&x.n?[String(faixaVivinoIndice(Number(x.media)))]:[];}
     case 'minhanota':{const x=catNota(v);return [x&&x.minha!=null?'sim':'nao'];}
     case 'falta':   return FALTAS.filter(f=>f.f&&!f.tem(v)).map(f=>f.f);
+    case 'origem':  {const g=origemGrupo(v.nasceu_de);return g?[g]:[];}
+    case 'alterado':{const g=origemGrupo(v.alterado_de);return g?[g]:[];}
     /* A maturação não filtra por "No ponto" — filtra pelo TERÇO da janela.
        "No ponto" sozinho está em quase todos os vinhos e devolvia a lista
        quase inteira; a pergunta que sobra é em que parte da janela se está.
@@ -4162,6 +4401,7 @@ function valoresDe(k){
     case 'teor':return FAIXAS_TEOR.map((f,i)=>[String(i),f.nome]);
     case 'estagio':return ESTAGIO_OPCOES;
     case 'falta':return FALTAS.filter(f=>f.f).map(f=>[f.f,f.fr||f.k]);
+    case 'origem':case 'alterado':{const t=dados();return ORIGEM_GRUPOS.filter(([g])=>t.includes(g)).map(([g,r])=>[g,r]);}
     default:return dados().sort(pt).map(x=>[x,x]);
   }
 }
@@ -7579,6 +7819,7 @@ function abrirEditarVinho(id,modo,colheitaDe){
   const titulo=fc?'Nova colheita no catálogo':noCat?'Novo vinho no catálogo':catEd?'Corrigir no catálogo':conv?'Passar para a garrafeira':id?'Editar vinho':paraDesejo?'Novo vinho na wishlist':'Novo vinho';
   const rotulo=noCat?'Criar no catálogo':catEd?'Guardar no catálogo':conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
   _catBaseNovo=null;
+  BO_LIVRE_A=null;     // o sugerido do Backoffice é só do formulário que o abriu (`boLivreAcrescentar`)
   _iaExtraNovo=null;   // o que a procura trouxe é de UM formulário, não fica de um para o outro
   _precosProcura=null;_imagemDocNovo=null;
   const o=(k,d)=>v?(v[k]==null?'':v[k]):(d==null?'':d);
@@ -11709,6 +11950,7 @@ const BO_PAGINAS=[
   {id:'alertas',ic:'⚠️',t:'Alertas',d:'Um campo que não bate certo com o catálogo',n:'rep',abrir:()=>boRepCarregar('aberto')},
   {id:'comentarios',ic:'💬',t:'Comentários sobre vinhos',d:'“Algo não está bem?” na página do vinho',n:'vinho',abrir:()=>boComentarios('vinho','aberto')},
   {id:'sugestoes',ic:'💡',t:'Sugestões de melhoria',d:'Ideias e coisas que não funcionam',n:'sugestao',abrir:()=>boComentarios('sugestao','aberto')},
+  {id:'livres',ic:'✨',t:'Sugeridos pela IA',d:'Vinhos da pergunta livre que não ficaram no Catálogo',n:'livre',abrir:()=>boLivreCarregar()},
   {grupo:'O Vivino e as garrafeiras'},
   {id:'vivino',ic:'🍇',t:'Links do Vivino por validar',d:'O que o script propõe e pede uma decisão',n:'viv',abrir:()=>boVivLista('pendente')},
   {id:'glinks',ic:'🔗',t:'Links do Vivino nas garrafeiras',d:'Os links das garrafeiras × os do catálogo',abrir:()=>{}},
@@ -11720,7 +11962,7 @@ const BO_PAGINAS=[
   {id:'vivcfg',ic:'⚙️',t:'O script do Vivino',d:'Quantos vinhos de cada vez',abrir:()=>boVivConfig()}
 ];
 let BO_PAG=null;
-const BO_CONTA={rep:0,viv:0,vinho:0,sugestao:0,colh:0,semc:0};
+const BO_CONTA={rep:0,viv:0,vinho:0,sugestao:0,colh:0,semc:0,livre:0};
 
 function boAbrir(){
   if(!EU.admin_catalogo){
@@ -11762,11 +12004,13 @@ function boPagina(id,refrescar){
    dois só com o Catálogo já lido). No separador vai a soma. */
 async function boContar(){
   if(!EU.admin_catalogo)return;
-  const [n1,n2,c,n3]=await Promise.all([
+  const [n1,n2,c,n3,n4]=await Promise.all([
     boRpc('contar_reportes',{}).catch(()=>0),
     boRpc('vivino_contar',{}).catch(()=>0),
     boRpc('contar_comentarios',{}).catch(()=>null),
-    boColhContar()]);
+    boColhContar(),
+    sbRpc('livre_contar',{}).catch(()=>0)]);
+  BO_CONTA.livre=Number(n4||0);
   BO_CONTA.semc=Number(boSemcContar()||0);
   BO_CONTA.rep=Number(n1||0);BO_CONTA.viv=Number(n2||0);BO_CONTA.colh=Number(n3||0);
   BO_CONTA.vinho=Number((c&&c.vinho)||0);BO_CONTA.sugestao=Number((c&&c.sugestao)||0);
@@ -11783,6 +12027,17 @@ function boPintarContas(){
 /* O cabeçalho de cada página: os cartões da WineCatalog, com as classes
    daqui. Vazios no HTML — quem os enche é o `abrir` da página. */
 const BO_TPL={
+  livres:()=>`<div class="fcard bo-arr">
+      <p class="note">Na <b>pergunta livre</b> das Sugestões, a IA sugere vinhos de memória. Os que o Catálogo não tem são
+        procurados na net, e só entram sozinhos com <b>produtor, castas, preço, imagem e Vivino com fonte</b>. Estes ficaram
+        de fora — por baixo de cada um, o que faltou e o que a procura encontrou.</p>
+      <p class="note"><b>Acrescentar ao Catálogo</b> abre o vinho novo já com o que se encontrou (e daí o Procurar informação
+        de sempre). <b>Descartar</b> é para um vinho que a IA inventou. Um que entretanto entre no Catálogo por outro caminho
+        sai da lista sozinho.</p>
+      <label class="bo-chk"><input type="checkbox" id="bo-livre-todos" onchange="boLivreCarregar()"> mostrar também os tratados</label>
+      <div class="bo-acoes"><button class="btn ghost" onclick="boLivreCarregar()">🔄 Rever</button>
+        <span class="note" id="bo-livre-n"></span></div>
+    </div><div id="bo-livre-lista"></div>`,
   duplicados:()=>`<div class="fcard">
       <p class="note">Pares parecidos o suficiente para valer a pena olhar — <b>a semelhança sugere, nunca decide</b>.
         Já apanhou um <em>Vallado</em> com um <em>Esporão</em> por partilharem o nome de uma casta.
@@ -12716,6 +12971,110 @@ async function boSemcAceitar(fi,desfazer){
     toast(desfazer?'Desfeito ✓':'Aceite — volta se chegar outra colheita');
     boSemcPintar();boPintarContas();
   }catch(e){toast('Erro: '+e.message,1);}
+}
+
+/* ── OS SUGERIDOS PELA IA QUE NÃO FICARAM NO CATÁLOGO (13/10/2026, migração 54) ──
+   O dono das apps: "no backoffice, podias dar-me informação de vinhos que
+   foram sugeridos neste novo formato e não carregados no Catálogo. Aqui, eu
+   poderia então entrar num ecrã tipo detalhe do vinho e poderia escolher
+   adicionar ao Catálogo e complementar a informação com as features que já
+   temos". A lista é a `garrafeira.livre_lista` (os `por_carregar`, e com o
+   visto os tratados), que antes de responder volta a perguntar ao Catálogo
+   por cada um. "Acrescentar ao Catálogo" é o vinho novo no Catálogo de
+   sempre (`abrirEditarVinho(0,'catalogo')`), já com o nome, o produtor, a
+   cor e o que a procura encontrou (`verificado`, a resposta da `vinho-info`)
+   — e daí os parecidos, o Procurar informação, o Num documento. Ao criar,
+   a linha fica `carregado` (`BO_LIVRE_A`, no `catGuardarNovo`). */
+let BO_LIVRE=[];
+let BO_LIVRE_A=null;   // o sugerido que o vinho novo aberto vem carregar
+const BO_LIVRE_CAMPOS=[['produtor','Produtor'],['castas','Castas'],['preco_medio','Preço'],['imagem_url','Imagem'],
+  ['vivino_url','Vivino'],['vivino_nota_global','Nota Vivino (todas)'],['regiao','Região']];
+const BO_LIVRE_ESTADOS={por_carregar:'Por carregar',criado:'Entrou sozinho',carregado:'Acrescentado à mão',
+  descartado:'Descartado',no_catalogo:'Já estava no Catálogo'};
+async function boLivreCarregar(){
+  const box=document.getElementById('bo-livre-lista');
+  if(!box)return;
+  box.innerHTML=boCaixa('A procurar…');
+  const todos=!!(document.getElementById('bo-livre-todos')||{}).checked;
+  try{
+    const r=await sbRpc('livre_lista',{p_todos:todos});
+    BO_LIVRE=Array.isArray(r)?r:[];
+    boLivrePintar();
+  }catch(e){
+    box.innerHTML=boErro(/livre_lista|schema cache|does not exist/i.test(String(e&&e.message))
+      ?'Falta a migração 54 no Supabase (db/migracao-sugestao-livre.sql).':e);
+  }
+}
+function boLivrePintar(){
+  const box=document.getElementById('bo-livre-lista');
+  if(!box)return;
+  const pend=BO_LIVRE.filter(x=>x.estado==='por_carregar').length;
+  BO_CONTA.livre=pend;boPintarContas();
+  const n=document.getElementById('bo-livre-n');
+  if(n)n.innerHTML=pend?`<b>${pend}</b> ${pend===1?'vinho por carregar':'vinhos por carregar'}.`:'Nenhum vinho por carregar.';
+  box.innerHTML=BO_LIVRE.length?BO_LIVRE.map(boLivreHTML).join('')
+    :boCaixa('Nenhum vinho sugerido pela IA ficou de fora do Catálogo.');
+}
+// De onde veio um campo, na resposta da `vinho-info` (as frases do `pqFonteHTML`, curtas).
+function boLivreOrigem(ver,k){
+  const o=ver&&ver.origemCampos&&ver.origemCampos[k];
+  if(ver&&Array.isArray(ver.catalogoCampos)&&ver.catalogoCampos.includes(k))return 'do Catálogo';
+  if(!o)return 'sem fonte';
+  if(o.url)return o.site||String(o.url).replace(/^https?:\/\/(www\.)?/,'').split('/')[0];
+  return o.google?'pesquisa Google':'sem fonte';
+}
+function boLivreHTML(x,i){
+  const ver=x.verificado||{}, sg=x.sugerido||{};
+  const campos=BO_LIVRE_CAMPOS.map(([k,t])=>{
+    const v=ver[k];
+    if(v==null||v===''||(Array.isArray(v)&&!v.length))return `<div class="bcl-val vazio"><b class="blv-k">${t}</b><span class="bcl-txt">—</span></div>`;
+    return `<div class="bcl-val"><b class="blv-k">${t}</b><span class="bcl-txt">${boRvValorHTML(k,v)}</span><span class="note blv-de">${esc(boLivreOrigem(ver,k))}</span></div>`;
+  }).join('');
+  const pratos=(x.pratos||[]).slice(-4).map(p=>'«'+p+'»').join(', ');
+  const sub=[x.produtor,x.tipo,x.regiao||sg.regiao].filter(Boolean).join(' · ');
+  const cat=x.catalogo_id&&IDXV[-Number(x.catalogo_id)];
+  const acoes=x.estado==='por_carregar'
+    ?(catPodeCriar()?`<button type="button" class="btn" onclick="boLivreAcrescentar(${i})">＋ Acrescentar ao Catálogo</button>`:'')
+      +`<button type="button" class="btn ghost" onclick="boLivreMarcar(${i},'descartado')">Descartar</button>`
+    :`<span class="note">${esc(BO_LIVRE_ESTADOS[x.estado]||x.estado)}</span>`
+      +(cat?`<button type="button" class="btn ghost" onclick="boVerFicha(${Number(x.catalogo_id)})">Abrir a ficha</button>`:'')
+      +(x.estado==='descartado'||x.estado==='carregado'?`<button type="button" class="btn ghost" onclick="boLivreMarcar(${i},'por_carregar')">Devolver à lista</button>`:'');
+  return `<div class="fcard bcl">
+    <div class="bcl-cab"><div class="bcl-tt"><span class="bo-nome">${esc(x.nome||'(sem nome)')}</span>
+      ${sub?`<span class="bo-sub">${esc(sub)}</span>`:''}
+      <span class="bo-sub">Sugerido ${x.vezes===1?'uma vez':x.vezes+' vezes'}${pratos?` · para ${esc(pratos)}`:''}${typeof sg.preco==='number'?` · a IA disse ~${esc(wsEur(sg.preco))}`:''}</span></div></div>
+    <div class="bcl-dif n-erro${x.estado==='por_carregar'?'':' aceite'}">
+      ${x.falta&&x.falta.length?`<div class="bcl-dcab"><b>Faltou:</b><span>${esc(x.falta.join(' · '))}</span></div>`:''}
+      <div class="bcl-vals">${x.verificado?campos:'<div class="bcl-val vazio"><span class="bcl-txt">A procura não trouxe nada.</span></div>'}</div>
+      <div class="bcl-acoes">${acoes}</div>
+    </div>
+  </div>`;
+}
+async function boLivreMarcar(i,estado){
+  const x=BO_LIVRE[i];
+  if(!x)return;
+  if(estado==='descartado'&&!confirm(`Descartar “${x.nome}”?\n\nSai desta lista. Se a IA o voltar a sugerir, continua descartado — não se volta a procurar.`))return;
+  try{
+    await sbRpc('livre_marcar',{p_id:x.id,p_estado:estado,p_catalogo_id:null});
+    toast(estado==='descartado'?'Descartado ✓':'Devolvido à lista ✓');
+    boLivreCarregar();boContar();
+  }catch(e){toast('Não foi possível: '+(e.message||e),1);}
+}
+// O vinho novo no Catálogo, já com o que se sabe: o nome, o produtor e a
+// cor da sugestão; a ficha que a procura encontrou (só ela — o que a IA disse
+// de memória não entra).
+async function boLivreAcrescentar(i){
+  const x=BO_LIVRE[i];
+  if(!x||!catPodeCriar())return;
+  try{await catCarregar();}catch(e){}
+  abrirEditarVinho(0,'catalogo');
+  BO_LIVRE_A={id:x.id,nome:x.nome};
+  const por=(eid,val)=>{const e=document.getElementById(eid);if(e&&val!=null)e.value=val;};
+  por('e-nome',x.nome);por('e-ano',x.ano||'');
+  if(TIPOS.includes(x.tipo))por('e-tipo',x.tipo);
+  const ver=x.verificado||{};
+  iaPreencherForm(Object.assign({},ver,{produtor:ver.produtor||x.produtor,regiao:ver.regiao||x.regiao}),false);
+  formMostrarResto();
 }
 
 /* ── PRODUTORES OFICIAIS (db/produtores.sql da WineCatalog) ──
@@ -16257,7 +16616,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='234';
+const APP_BUILD='235';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

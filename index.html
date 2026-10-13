@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="234">
+<body data-build="235">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone-claro.png" alt="">
@@ -259,6 +259,7 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       <button type="button" class="ws-modo on" data-modo="carta" role="tab" aria-selected="true" onclick="wsModo('carta')"><span class="ws-modo-ic">📖</span>Uma carta de vinhos</button>
       <button type="button" class="ws-modo" data-modo="garrafeira" role="tab" aria-selected="false" onclick="wsModo('garrafeira')"><span class="ws-modo-ic">🍾</span>A minha garrafeira</button>
       <button type="button" class="ws-modo" data-modo="catalogo" role="tab" aria-selected="false" onclick="wsModo('catalogo')"><span class="ws-modo-ic">📚</span>O Catálogo</button>
+      <button type="button" class="ws-modo" data-modo="livre" role="tab" aria-selected="false" onclick="wsModo('livre')"><span class="ws-modo-ic">✨</span>Pergunta livre</button>
     </div>
     <div class="ws-card ws-form">
       <div class="ws-so-carta">
@@ -269,10 +270,28 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
         <div id="ws-img-status" class="ws-note" style="display:none"></div>
       </div>
 
-      <div class="ws-card-label ws-passo ws-passo-prato"><span class="ws-num"></span>O que vais comer? <em>(opcional, mas ajuda)</em></div>
+      <div class="ws-card-label ws-passo ws-passo-prato"><span class="ws-num"></span>O que vais comer? <em class="ws-sem-livre">(opcional, mas ajuda)</em></div>
       <input type="text" id="ws-prato" placeholder="ex: bacalhau à Brás, bife grelhado, sushi…">
 
-      <div class="ws-sem-garrafeira">
+      <div class="ws-so-livre">
+        <div class="ws-card-label ws-passo"><span class="ws-num"></span>Preço por garrafa <em>(numa loja — opcional)</em></div>
+        <div class="ws-livre-precos">
+          <label>De<select id="ws-livre-min">
+            <option value="">—</option><option>5</option><option>10</option><option>15</option><option>20</option>
+            <option>25</option><option>30</option><option>40</option><option>50</option><option>75</option><option>100</option>
+          </select> €</label>
+          <label>até<select id="ws-livre-max">
+            <option value="">—</option><option>10</option><option>15</option><option>20</option><option>25</option>
+            <option>30</option><option>40</option><option>50</option><option>75</option><option>100</option><option>150</option>
+          </select> €</label>
+        </div>
+        <div class="ws-card-label ws-passo"><span class="ws-num"></span>Observações <em>(opcional — cor, casta, região, estilo…)</em></div>
+        <textarea id="ws-obs" rows="2" maxlength="400" placeholder="ex: prefiro tinto do Douro, de Touriga Nacional; pouca madeira"></textarea>
+        <button class="btn prim full" id="ws-btn-livre" onclick="wsLivrePedir()" style="margin-top:18px">✨ Sugerir 5 vinhos</button>
+        <p class="ws-note">A IA sugere de memória. Os vinhos que o Catálogo tem aparecem com os dados dele; os outros são confirmados na net e só entram no Catálogo com fontes.</p>
+      </div>
+
+      <div class="ws-sem-garrafeira ws-sem-livre">
         <div class="ws-card-label ws-passo"><span class="ws-num"></span>Orçamento máximo por garrafa <em>(opcional — desliza)</em></div>
         <div class="orc-picker">
           <button type="button" class="orc-arrow" onclick="wsOrcamentoMover(-1)" aria-label="Valor anterior">
@@ -301,7 +320,7 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
         <button class="btn prim full" id="ws-btn-ler" onclick="wsLer()" style="margin-top:18px" disabled>📖 Ler a carta</button>
         <div id="ws-sugerir-status" class="ws-note" style="display:none"></div>
       </div>
-      <div class="ws-sem-carta">
+      <div class="ws-sem-carta ws-sem-livre">
         <p class="ws-note" id="ws-lista-nota" style="margin-top:14px"></p>
         <button class="btn prim full" id="ws-btn-sugerir" onclick="wsSugerirLista()" style="margin-top:6px">🍷 Sugerir</button>
       </div>

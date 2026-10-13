@@ -37,8 +37,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   para o bucket `garrafeira-imagens` (migração 34). Deploy:
   `supabase functions deploy garrafeira-imagens`.
 - `garrafeira-carta.ts` — a Edge Function das Sugestões: lê a carta e faz
-  a sugestão — da carta, da garrafeira ou do Catálogo (migração 40; ver "As
-  Sugestões"). Deploy:
+  a sugestão — da carta, da garrafeira, do Catálogo ou só do prato (a
+  pergunta livre, migração 54) (migração 40; ver "As Sugestões"). Deploy:
   `supabase functions deploy garrafeira-carta`.
 - `garrafeira-push.ts` — a Edge Function das notificações push (a chave
   pública VAPID para a app, e o envio da caixa de saída `push_avisos`; ver
@@ -180,6 +180,11 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-colheitas-origens.sql` é a 53: de onde veio cada valor nas
   colheitas que não batem (`garrafeira.colheitas_origens`; ver "O
   Backoffice" › "As colheitas que não batem").
+  `migracao-sugestao-livre.sql` é a 54: a pergunta livre das Sugestões (as
+  tabelas `livre_pedidos`/`livre_vinhos`, a porta `sugestao-livre` na
+  `winecatalog.forca`) e a origem de cada linha do Catálogo
+  (`winecatalog.vinhos.nasceu_de`, e o `nasceu_de`/`alterado_de` da
+  `catalogo_vinhos`) — ver "As Sugestões" › "A pergunta livre".
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1269,6 +1274,20 @@ notas são diz o `title` e a página do vinho.
   sem nota minha). Estão no `F_CAMPOS` mas só aparecem no catálogo e com a
   migração (`F_SO_CAT`, `campoVisivel`); fora disso o `passaFiltros` salta-os,
   e trocar de modo limpa-os — como o Local, ao contrário.
+- **E dois de ORIGEM** (13/10/2026, migração 54, o dono das apps: "um novo
+  filtro de origem, para facilmente filtrar de onde veio o carregamento /
+  última atualização do vinho"): **Origem** (a porta por onde a linha
+  NASCEU, `nasceu_de`) e **Última alteração** (a porta da escrita mais
+  recente no `origens`, `alterado_de`). Listas, como a cor. As portas do
+  catálogo juntam-se no que se pergunta (`ORIGEM_GRUPOS`: Sugestão livre,
+  Procurar informação, uma garrafeira, uma wishlist, admin, curador, script
+  do Vivino, preços das lojas, WineSelection…); uma porta nova cai em
+  "Outra" até entrar na lista. Só a porta, nunca quem. O `nasceu_de` escreve-o
+  um trigger na primeira escrita da linha (`vinhos_nasceu_de`) e não muda;
+  nas linhas de antes da migração é a primeira escrita do histórico logo a
+  seguir a nascer, ou (antes do histórico, 25/09/2026) a do campo mais
+  antigo — uma aproximação. A "última alteração" é quase sempre um script
+  (as lojas e o Vivino reescrevem a data a cada corrida): é o que é.
 
 ### As Sugestões: que vinho peço? (30/09/2026, por passos desde 03/10/2026)
 Nasceram como a página "Sugerir" da WineSelection transposta (30/09/2026, o
@@ -1351,7 +1370,8 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
    (`wsRecParcial`). As cartas de antes não trazem os números e ficam como
    eram. **Não se junta à chamada da ORDEM**: essa pode usar a memória do
    modelo, a sugestão não — num pedido só, a memória acabava no "porquê".
-- **Três modos, no topo do separador** (07/10/2026, o dono das apps:
+- **Três modos, no topo do separador** (e um quarto, a pergunta livre,
+  mais abaixo) (07/10/2026, o dono das apps:
   "sugestão de vinhos a partir de uma carta de vinhos (já existe) — manter
   como está; a partir da garrafeira pessoal — não pedir o preço; a partir
   dos vinhos em Catálogo — pedir o preço"). `WS_MODO`/`wsModo`, guardado
@@ -1416,6 +1436,46 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
     estes N". Passando de 20, vão os que mais batem certo com o prato.
     O ecrã rola até ao resultado descontando o cabeçalho e os separadores,
     que estão colados ao topo (`wsRolar`).
+- **A pergunta livre** (13/10/2026, o quarto modo, ✨, migração 54; o dono
+  das apps: "sugestões sem ter por base uma carta, uma garrafeira ou um
+  catálogo … o prato, o preço (mínimo e máximo), um campo de observações …
+  pedíamos à IA 5 vinhos … e nós criávamos os vinhos que ainda não
+  existissem no Catálogo"). Secção "A PERGUNTA LIVRE" no app.js (`wsLivre*`)
+  e "AS SUGESTÕES LIVRES" na `garrafeira-carta` (`acao:'livre'`) e na
+  `vinho-info`. O prato é obrigatório; o preço é de… até… (preço de LOJA).
+  - **A IA escolhe de memória, os dados confirmam.** Os 5 vinhos vão para
+    `garrafeira.livre_vinhos` (uma linha por vinho, pela chave do catálogo
+    sem colheita, `livre_registar`) e ligam-se ao Catálogo pela procura da
+    carta (`carta_achar`). O que lá está mostra-se como no modo Catálogo; o
+    que não está mostra o que a IA disse, com o preço "~" e dito como de
+    memória.
+  - **Só nasce no Catálogo com fontes** (o dono: "caso os campos principais
+    viessem devidamente informados com fontes do Gemini — Produtor, Castas,
+    Preço, Imagem, Informação Vivino. Provavelmente vai acontecer poucas
+    vezes, mas é o que é"). Cada vinho que o Catálogo não tem vai à
+    `vinho-info` (`livreId`, em segundo plano, em nome de quem perguntou e
+    sempre com o pacote completo) e só a `juntar` com a porta
+    `sugestao-livre` (força 2) quando o produtor (a bater com o sugerido),
+    as castas, o preço (ou o de uma página de loja), a imagem e o link do
+    Vivino com nota vieram com origem numa página, num resultado, no
+    grounding que pesquisou MESMO ou no Catálogo (`avaliarSugestao`). Nunca
+    ao lado de um vinho que o Catálogo já conhece em qualquer forma (esse é
+    do admin). O que faltou fica em `falta`, e o vinho vai ao Backoffice.
+    A `garrafeira-carta` pergunta primeiro à `vinho-info` se já sabe isto
+    (`livreSonda`): uma versão antiga deixava a linha presa — sem ela, os
+    vinhos ficam `pendente` e confirmam-se no próximo pedido que os sugira.
+  - **Memória** (o dono: "dois pedidos praticamente iguais na mesma semana
+    deviam levar a mesma resposta"): `garrafeira.livre_pedidos`, por chave —
+    o prato pelos conceitos da procura do prato sem IA (`wsLivreChavePrato`:
+    "chuletón grelhado" e "costeleta de novilho na brasa" dão a mesma), o
+    preço e as palavras das observações (sem acentos nem ordem). Durante 7
+    dias responde a linha, sem modelo, para toda a gente; mostra-se com o que
+    o Catálogo sabe HOJE. As observações não se guardam por extenso.
+  - **"Pedir outra vez" obriga a mais detalhe nas observações** (o dono):
+    com o mesmo prato e preço e sem uma palavra nova nas observações, a app
+    não pede — diz para acrescentar detalhe e põe o cursor lá.
+  - Enquanto há vinhos a confirmar, a app relê o pedido (`livre_ler`) de 5
+    em 5 segundos, até 4 minutos, e relê o Catálogo quando algum nasceu.
 - **O orçamento vai até 70 €** (07/10/2026, o dono: "só estamos a permitir
   ir até 50 €"): Sem limite · 10 · 15 · 20 · 25 · 30 · 40 · 50 · 60 · 70 —
   `WS_ORCAMENTO_OPCOES` no app.js e as `.orc-item` do `index.html`, os dois
@@ -1672,6 +1732,21 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
     liga o vinho à linha nova) — um trigger novo nesta tabela com um nome
     entre os dois muda isso. Relê a ligação, porque o NEW não a vê (foi
     escrita por outro UPDATE, o da `ligar_catalogo`).
+- **Sugeridos pela IA** (13/10/2026, migração 54, o dono das apps: "no
+  backoffice, podias dar-me informação de vinhos que foram sugeridos neste
+  novo formato e não carregados no Catálogo … e poderia escolher adicionar
+  ao Catálogo e complementar a informação com as features que já temos").
+  Em "O que chega das garrafeiras" (`boLivre*`, secção "OS SUGERIDOS PELA IA
+  QUE NÃO FICARAM NO CATÁLOGO"): os `por_carregar` de `livre_vinhos`, com
+  quantas vezes e para que pratos foram sugeridos, o que faltou e, campo a
+  campo, o que a procura encontrou e de onde (`verificado`, a resposta da
+  `vinho-info`). **Acrescentar ao Catálogo** abre o vinho novo no Catálogo
+  já preenchido com isso (só com o que veio da procura, nunca com o que a
+  IA disse de memória) — daí os parecidos, o Procurar informação, o Num
+  documento; ao criar, a linha passa a `carregado` (`BO_LIVRE_A`, no
+  `catGuardarNovo`). **Descartar** é para um vinho inventado (não se volta
+  a procurar). A `livre_lista` volta a perguntar ao Catálogo por cada um
+  antes de responder: um que entrou por outro caminho sai sozinho.
 - **Ficou de fora** a password temporária (já está nas Definições da
   Garrafeira, para o dono da conta) e o que só corre no PC (o painel, o
   script do Vivino e das lojas).

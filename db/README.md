@@ -768,6 +768,33 @@ importações de ficheiros onde foi lido (`garrafeira.importacoes`). Nunca
 quem procurou. Qual delas explica o valor decide-o a app. Aplicada a
 13/10/2026 pelo MCP e ensaiada com o Cartuxa Colheita (#17, #586, #18).
 
+### Migração 54 — a pergunta livre das Sugestões e a origem de cada linha do Catálogo (já aplicada)
+
+`db/migracao-sugestao-livre.sql`, depois da 31, da 40 e da 52. Faz:
+- a porta `sugestao-livre` (força 2) na `winecatalog.forca` — **a fonte
+  dessa função é o `db/catalogo.sql` da WineCatalog**: quem a mexer lá leva
+  esta linha;
+- `winecatalog.vinhos.nasceu_de` (a porta por onde a linha nasceu, escrita
+  uma vez pelo trigger `vinhos_nasceu_de`), as funções
+  `winecatalog.origem_primeira`/`origem_ultima`, e uma nova versão da
+  `garrafeira.catalogo_vinhos` com `nasceu_de` e `alterado_de`;
+- as tabelas `garrafeira.livre_pedidos` (a memória) e
+  `garrafeira.livre_vinhos` (cada vinho sugerido e o estado da
+  confirmação), com RLS ligada e sem policies — escreve a service role;
+- `garrafeira.livre_registar` (só a service role), `livre_ler` (quem entra),
+  `livre_lista`/`livre_contar`/`livre_marcar` (o admin do catálogo).
+Aplicada a 13/10/2026 pelo MCP, por partes. **O `DROP TRIGGER` pendura o
+MCP** (fica à espera de uma confirmação e o pedido morre por tempo), por
+isso o ficheiro usa `CREATE OR REPLACE TRIGGER`; e o preenchimento do
+`nasceu_de` correu em lotes. Ensaiada num bloco desfeito: a
+`livre_registar` ligou o "Quinta do Crasto Reserva Vinhas Velhas" ao #216
+e deixou um vinho inventado em `a_verificar`.
+Depois dela, publicar a `garrafeira-carta` e a `vinho-info`
+(`supabase functions deploy garrafeira-carta vinho-info`). Sem a
+`vinho-info` nova, a pergunta livre funciona mas os vinhos que o Catálogo
+não tem ficam `pendente` (a `garrafeira-carta` pergunta-lhe antes,
+`livreSonda`).
+
 ### Migração 52 — o produtor escrito no nome do vinho da carta (já aplicada)
 
 `db/migracao-carta-produtor.sql`, depois da 40 e da 43. Cria a
@@ -863,6 +890,9 @@ Numa base de dados limpa:
    no nome de um vinho da carta (migração 52). Depois da 40 e da 43.
 20. **`migracao-colheitas-origens.sql`** — de onde veio cada valor, nas
    colheitas que não batem (migração 53). Depois da 49.
+21. **`migracao-sugestao-livre.sql`** — a pergunta livre das Sugestões e a
+   origem de cada linha do Catálogo (migração 54). Depois da 31, da 40 e da
+   52.
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)
