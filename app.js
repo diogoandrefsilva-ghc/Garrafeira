@@ -11999,7 +11999,9 @@ async function boDesmarcar(a,b){
      volta. No preço e na nota da colheita a assinatura são só as linhas —
      esses números mudam a cada corrida do script, e uma diferença aceite não
      pode voltar por causa de um cêntimo.
-   - "Usar em todas" (só nos campos que são do VINHO, `vinho:true`) põe esse
+   - "Usar em todas" (nos campos que são do VINHO, `vinho:true`, e no álcool,
+     `usar:true` — muda de colheita para colheita, mas um valor mal lido
+     corrige-se assim e o confirm lembra-o; 13/10/2026, o dono) põe esse
      valor em todas as colheitas pela `winecatalog.editar` — a origem do
      admin, no histórico, com "Repor". Na nota global vão as avaliações com ela.
    - ✨ IA: a `garrafeira-colheitas` lê as linhas da BD (os valores não vão
@@ -12012,7 +12014,7 @@ const BO_COLH_NIVEIS={alta:{t:'Alarmante',o:0},erro:{t:'Provável erro',o:1},ana
 const BO_COLH_REGRAS=[
   {k:'regiao',t:'Região',nivel:'alta',vinho:true},
   {k:'classificacao',t:'Classificação',nivel:'alta',vinho:true},
-  {k:'teor',t:'Álcool',nivel:'alta'},
+  {k:'teor',t:'Álcool',nivel:'alta',usar:true},
   {k:'castas',t:'Castas',nivel:'alta',vinho:true},
   {k:'harmonizacao',t:'Harmonização',nivel:'alta',vinho:true},
   {k:'vivino_nota_global',t:'Vivino · todas as colheitas',nivel:'erro',vinho:true},
@@ -12199,7 +12201,7 @@ function boColhDifHTML(f,fi,d,di){
   const vistos=new Set();
   const vals=d.vals.map((x,li)=>{
     // "Usar em todas" no primeiro de cada valor diferente, só nos campos do vinho.
-    const usar=r.vinho&&!d.aceite&&x.val&&!vistos.has(x.val.n)&&(vistos.add(x.val.n),true);
+    const usar=(r.vinho||r.usar)&&!d.aceite&&x.val&&!vistos.has(x.val.n)&&(vistos.add(x.val.n),true);
     return `<div class="bcl-val${x.val?'':' vazio'}${susp.has(x.v.cat_id)?' susp':''}">
       <button type="button" class="bcl-ano" onclick="boVerFicha(${Number(x.v.cat_id)})" title="Abrir a ficha desta colheita">${x.v.ano?esc(String(x.v.ano)):'s/a'}</button>
       <span class="bcl-txt">${x.val?esc(x.val.txt):'—'}</span>
@@ -12380,7 +12382,7 @@ async function boColhUsarTodas(fi,di,li){
   const f=BO_COLH.vista[fi], d=f&&f.difs[di], x=d&&d.vals[li];
   if(!x||!x.val)return;
   const muda=d.vals.filter(y=>!y.val||y.val.n!==x.val.n).length;
-  if(!confirm(`${d.r.t} de “${f.linhas[0].nome}”: pôr\n\n${x.val.txt}\n\nnas outras ${muda} ${muda===1?'colheita':'colheitas'}? Corrige o catálogo (fica no histórico, com “Repor”).`))return;
+  if(!confirm(`${d.r.t} de “${f.linhas[0].nome}”: pôr\n\n${x.val.txt}\n\nnas outras ${muda} ${muda===1?'colheita':'colheitas'}?${d.r.vinho?'':'\n\nAtenção: este valor costuma mudar de colheita para colheita.'} Corrige o catálogo (fica no histórico, com “Repor”).`))return;
   try{
     const n=await boColhUsar(f,d,x.val.raw,x.v.cat_id);
     toast(`Corrigido em ${n} ${n===1?'colheita':'colheitas'} ✓`);
@@ -16178,7 +16180,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='226';
+const APP_BUILD='227';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

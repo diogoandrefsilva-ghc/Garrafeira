@@ -1562,6 +1562,10 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
     castas, harmonização, nota global) põe esse valor em todas as colheitas,
     também nas vazias, pela `winecatalog.editar` (no histórico, com "Repor");
     a nota global leva as avaliações dela.
+    E no álcool também (`usar:true`, 13/10/2026, o dono: "imagina que queria
+    colocar o mesmo teor em todas"): muda de colheita para colheita, mas um
+    valor mal lido corrige-se assim; o confirm lembra-o. A nota da colheita
+    e o preço continuam sem o botão — são de cada colheita.
   - **✨ IA** (por vinho, ou "Analisar com IA" para os que se veem, de 4 em 4
     e síncrona): a `garrafeira-colheitas` recebe só as linhas e os campos,
     LÊ OS VALORES DA BD e propõe por diferença **manter**, **uniformizar**
