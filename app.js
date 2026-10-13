@@ -3021,7 +3021,7 @@ function wsAfinarHTML(st){
     <p class="ws-note">São muitos para escolher bem. Afina, se quiseres:</p>
     ${campos}
     <button class="btn prim full" style="margin-top:14px" onclick="wsSugerirAfinados()"${n?'':' disabled'}>🍷 Sugerir entre ${n===st.achados.length?'estes':'os'} ${n} vinho${n===1?'':'s'}</button>
-    ${n>WS_LISTA_MAX?`<p class="ws-note">A IA escolhe entre os ${WS_LISTA_MAX} que mais batem certo com o prato (e, entre eles, os de melhor nota), e mostra os 10 melhores.</p>`:''}
+    ${n>WS_LISTA_MAX?`<p class="ws-note">Como existem mais do que ${WS_LISTA_MAX} potenciais vinhos ${st.modo==='catalogo'?'no Catálogo':'na tua garrafeira'}, a aplicação vai escolher os ${WS_LISTA_MAX} melhores cotados e enviar à IA para pedir opinião.</p>`:''}
   </div>`;
 }
 function wsListaHTML(modo){
@@ -16257,7 +16257,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='233';
+const APP_BUILD='234';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
