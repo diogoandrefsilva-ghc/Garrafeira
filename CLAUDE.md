@@ -1376,8 +1376,9 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
     orçamento pelo preço que conta (`precoVinho`, com a margem do `wsCabe`;
     sem limite entram também os sem preço), UMA colheita por vinho
     (`catFamChave`: a de melhor nota, em empate a mais recente).
-  Até 50 vinhos por pedido (`WS_LISTA_MAX`/`MAX_LISTA`; eram 200, ~30 mil
-  tokens — 12/10/2026, o dono). Sem prato, vão os que têm mais informação
+  Até 20 vinhos por pedido (`WS_LISTA_MAX`/`MAX_LISTA`; eram 200, ~30 mil
+  tokens — 12/10/2026, o dono; 50 e depois 20, a 13/10: "20 vinhos para a
+  IA parece-me suficiente"). Sem prato, vão os que têm mais informação
   e melhor nota (`wsCortar`).
   **Com prato, primeiro a PROCURA DO PRATO, sem IA** (12/10/2026, o dono:
   "uma pesquisa sem IA no catálogo, mas com alguma inteligência e
@@ -1412,7 +1413,7 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
     (`WS_AFINAR`) → vão logo à IA; mais → "N vinhos harmonizam com «…»",
     de quê ("17 falam de bacalhau"), e **afinar** por cor, região e casta
     (contagens como as dos filtros, `wsAfina*`) antes de "Sugerir entre
-    estes N". Passando de 50, vão os que mais batem certo com o prato.
+    estes N". Passando de 20, vão os que mais batem certo com o prato.
     O ecrã rola até ao resultado descontando o cabeçalho e os separadores,
     que estão colados ao topo (`wsRolar`).
 - **O orçamento vai até 70 €** (07/10/2026, o dono: "só estamos a permitir

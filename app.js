@@ -2590,7 +2590,7 @@ async function wsAbrirHist(id){
    pedido, e um modelo a escolher entre 200 escolhe pior). Com um prato, a
    lista que vai ao modelo é a da PROCURA DO PRATO (a seguir, sem IA); sem
    prato, vão os que têm mais informação e melhor nota. O ecrã di-lo. */
-const WS_LISTA_MAX=50;
+const WS_LISTA_MAX=20;
 const WS_LISTA={garrafeira:null,catalogo:null};
 function wsGarrafeiraVinhos(){return db.vinhos.filter(v=>stockDe(v.id)>0);}
 function wsSabeAlgo(v){return !!(notaVivino(v)||(v.castas&&v.castas.length)||v.harmonizacao||v.notas_prova);}
@@ -16257,7 +16257,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='232';
+const APP_BUILD='233';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
