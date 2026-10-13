@@ -2254,6 +2254,15 @@ function wsNotaHTML(cat,v,cls){
    A recomendação (quando há) por cima — é a resposta —, e a carta por baixo,
    com os vistos para procurar informação. Uma carta só no ecrã de cada vez:
    abrir uma das anteriores troca-a por esta. */
+/* Rolar até ao resultado SEM o deixar por baixo do cabeçalho e da barra
+   dos separadores, que estão colados ao topo: o `scrollIntoView` punha o
+   princípio do cartão (a frase de quantos vinhos e de quê) atrás deles
+   (12/10/2026, o dono: "não vejo aquela frase à primeira"). */
+function wsRolar(el){
+  const h=document.querySelector('body>header'), t=document.querySelector('.itabs');
+  const tapa=(h?h.getBoundingClientRect().height:0)+(t?t.getBoundingClientRect().height:0)+10;
+  window.scrollTo({top:Math.max(0,el.getBoundingClientRect().top+window.scrollY-tapa),behavior:'smooth'});
+}
 function wsDesenhar(){
   const box=document.getElementById('ws-resultado');
   if(!box)return;
@@ -2442,7 +2451,7 @@ function wsRecIniciarPolling(c,rolar){
         c.recErro=r.rec_estado==='erro'?(r.rec_erro||'Não consegui fazer a sugestão — tenta outra vez.'):'';
         wsDesenhar();
         const el=document.getElementById('ws-resultado');
-        if(rolar&&el&&c.rec&&WS_MODO==='carta')el.scrollIntoView({behavior:'smooth',block:'start'});
+        if(rolar&&el&&c.rec&&WS_MODO==='carta')wsRolar(el);
         const h=document.getElementById('ws-hist');if(h&&h.open)wsCarregarHistorico();
         return;
       }
@@ -2554,7 +2563,7 @@ async function wsAbrirHist(id){
     wsStatus('');
     const el=document.getElementById('ws-resultado');
     wsAbrirCarta(rows[0]);
-    if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
+    if(el)wsRolar(el);
   }catch(e){toast('Não foi possível abrir esta carta',1);}
 }
 
@@ -2663,7 +2672,7 @@ const PRATO_CONCEITOS=[
   ['carne_vermelha','carnes vermelhas','carne vermelha|vaca|boi|novilho|bovino|bife|rosbife|maronesa|mirandesa|barrosa|alcatra|picanha|naco|carne vaca|carne novilho|hamburguer|prego|bitoque|steak','carne'],
   ['chuleton','chuletón / costeleta','chuleton|chuletao|costeleta|costeletao|bife grelhado|entrecote|tomahawk|tbone|t bone|ribeye|rib eye|vazia|lombo vaca|posta mirandesa|posta barrosa|posta maronesa|posta carne|costeleta novilho|costeleta vaca','carne_vermelha',0,'grelhado'],
   ['vitela','vitela','vitela|vitelao|carne vitela|costeleta vitela','carne_vermelha'],
-  ['borrego','borrego e cabrito','borrego|cordeiro|carneiro|cabrito|chanfana|costeleta borrego|costeleta cordeiro|ensopado borrego','carne_vermelha'],
+  ['borrego','borrego e cabrito','borrego|cordeiro|carneiro|cabrito|chanfana|costeleta borrego|costeleta cordeiro|ensopado borrego','carne_vermelha',0,'assado'],
   ['carne_branca','carnes brancas','carne branca','carne'],
   ['porco','porco','porco|carne porco|entrecosto|secretos|secreto porco|plumas|pluma porco|presa porco|febras|bifanas|rojoes|porco preto|lombo porco|costeleta porco|entremeada|torresmos|migas','carne_branca'],
   ['leitao','leitão','leitao|leitao bairrada','porco',0,'assado'],
@@ -2769,7 +2778,9 @@ function pratoPergunta(prato){
     const t=pratoTokens(g);
     if(!t.length)return null;
     const r=pratoAchar(t), por=pratoKB().por;
-    r.comida.forEach(c=>{if(por[c].impl)r.metodo.add(por[c].impl);});
+    // o modo de cozinhar do prato só quando não se escreveu outro:
+    // "costeleta de borrego grelhada" é grelhada, não assada
+    if(!r.metodo.size)r.comida.forEach(c=>{if(por[c].impl)r.metodo.add(por[c].impl);});
     return {comida:[...r.comida],metodo:[...r.metodo],lit:[...new Set(t.filter(x=>!r.cobre.has(x)&&x.length>2))]};
   }).filter(g=>g&&(g.comida.length||g.metodo.length||g.lit.length));
 }
@@ -2783,9 +2794,17 @@ function pratoFator(q,w){
   if(dq)return dq===1?.67:dq===2?.4:.25;
   return 0;
 }
-function pratoMelhor(q,conj){
+// Um conceito do vinho que se cozinha de outra maneira não responde por um
+// mais geral: pedido um bitoque grelhado (carnes vermelhas), o vinho que só
+// diz borrego — que é de assar — não conta (12/10/2026, o dono).
+function pratoMelhor(q,conj,metodos){
+  const por=pratoKB().por;
   let f=0,id=null;
-  conj.forEach(w=>{const x=pratoFator(q,w);if(x>f){f=x;id=w;}});
+  conj.forEach(w=>{
+    const im=w!==q&&por[w]&&por[w].impl;
+    if(im&&metodos&&metodos.length&&!metodos.includes(im))return;
+    const x=pratoFator(q,w);if(x>f){f=x;id=w;}
+  });
   return {f,id};
 }
 // A nota de um vinho em cada alternativa da pergunta (null onde não serve).
@@ -2794,7 +2813,7 @@ function pratoPontos(perg,v){
   const p=pratoPerfil(v);
   return perg.map(g=>{
     let s=0,max=0,pr=null;
-    g.comida.forEach(q=>{const m=pratoMelhor(q,p.comida);s+=3*m.f;max+=3;if(m.f&&(!pr||m.f>pr.f))pr=m;});
+    g.comida.forEach(q=>{const m=pratoMelhor(q,p.comida,g.metodo);s+=3*m.f;max+=3;if(m.f&&(!pr||m.f>pr.f))pr=m;});
     g.metodo.forEach(q=>{s+=pratoMelhor(q,p.metodo).f;max+=1;});
     g.lit.forEach(l=>{max+=1.5;if(p.toks.has(l))s+=1.5;});
     if(g.comida.length?!pr:!s)return null;
@@ -2978,7 +2997,7 @@ function wsListaMostrar(st){
   if(WS_MODO!==st.modo)return;
   wsDesenhar();
   const el=document.getElementById('ws-resultado');
-  if(el&&st.estado!=='pendente'&&st.estado!=='erro'&&tabAtiva==='sugestoes')el.scrollIntoView({behavior:'smooth',block:'start'});
+  if(el&&st.estado!=='pendente'&&st.estado!=='erro'&&tabAtiva==='sugestoes')wsRolar(el);
 }
 function wsListaOnde(st){
   return st.modo==='catalogo'?`do Catálogo${st.orcamento!=null?` até ${wsEur(st.orcamento)}`:''}`:'da garrafeira';
@@ -16236,7 +16255,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='230';
+const APP_BUILD='231';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

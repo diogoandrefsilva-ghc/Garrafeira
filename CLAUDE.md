@@ -1389,7 +1389,11 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
   - **as equivalências e a árvore** são uma tabela, `PRATO_CONCEITOS`: cada
     conceito, as maneiras de o escrever, os pais (bacalhau à Brás →
     bacalhau → peixe; chuletón → carnes vermelhas → carne) e o modo de
-    cozinhar que o prato já traz (o chuletón é grelhado). Uma maneira de
+    cozinhar que o prato já traz (o chuletón é grelhado; o borrego, o
+    cabrito e o leitão são assados — só quando não se escreveu outro).
+    Um conceito do vinho que se cozinha de outra maneira não responde por
+    um mais geral: um bitoque grelhado não acha os vinhos que só dizem
+    borrego (13/10/2026, o dono). Uma maneira de
     várias palavras vale com as palavras todas no mesmo pedaço de texto
     (entre vírgulas, pontos, parêntesis), e a mais comprida ganha ("carnes
     brancas" não é "carne"). As palavras comparam-se sem acentos, plural
@@ -1408,6 +1412,8 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
     de quê ("17 falam de bacalhau"), e **afinar** por cor, região e casta
     (contagens como as dos filtros, `wsAfina*`) antes de "Sugerir entre
     estes N". Passando de 50, vão os que mais batem certo com o prato.
+    O ecrã rola até ao resultado descontando o cabeçalho e os separadores,
+    que estão colados ao topo (`wsRolar`).
 - **O orçamento vai até 70 €** (07/10/2026, o dono: "só estamos a permitir
   ir até 50 €"): Sem limite · 10 · 15 · 20 · 25 · 30 · 40 · 50 · 60 · 70 —
   `WS_ORCAMENTO_OPCOES` no app.js e as `.orc-item` do `index.html`, os dois
