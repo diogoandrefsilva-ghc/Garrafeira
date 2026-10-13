@@ -2669,8 +2669,10 @@ const PRATO_CONCEITOS=[
   ['fumado','fumados','fumado|defumado','',1],
   // carne
   ['carne','carne','carne',''],
-  ['carne_vermelha','carnes vermelhas','carne vermelha|vaca|boi|novilho|bovino|bife|rosbife|maronesa|mirandesa|barrosa|alcatra|picanha|naco|carne vaca|carne novilho|hamburguer|prego|bitoque|steak','carne'],
-  ['chuleton','chuletón / costeleta','chuleton|chuletao|costeleta|costeletao|bife grelhado|entrecote|tomahawk|tbone|t bone|ribeye|rib eye|vazia|lombo vaca|posta mirandesa|posta barrosa|posta maronesa|posta carne|costeleta novilho|costeleta vaca','carne_vermelha',0,'grelhado'],
+  ['carne_vermelha','carnes vermelhas','carne vermelha|vaca|boi|novilho|bovino|rosbife|maronesa|mirandesa|barrosa|alcatra|naco|carne vaca|carne novilho','carne'],
+  // o bife é do grelhador (ou da frigideira): um bitoque não acha os vinhos que só dizem borrego
+  ['bife','bife e bitoque','bife|bitoque|prego|steak|picanha|hamburguer|bife vaca|bife novilho','carne_vermelha',0,'grelhado'],
+  ['chuleton','chuletón / costeleta','chuleton|chuletao|costeleta|costeletao|bife grelhado|entrecote|tomahawk|tbone|t bone|ribeye|rib eye|vazia|lombo vaca|posta mirandesa|posta barrosa|posta maronesa|posta carne|costeleta novilho|costeleta vaca','bife',0,'grelhado'],
   ['vitela','vitela','vitela|vitelao|carne vitela|costeleta vitela','carne_vermelha'],
   ['borrego','borrego e cabrito','borrego|cordeiro|carneiro|cabrito|chanfana|costeleta borrego|costeleta cordeiro|ensopado borrego','carne_vermelha',0,'assado'],
   ['carne_branca','carnes brancas','carne branca','carne'],
@@ -2825,7 +2827,7 @@ function pratoPontos(perg,v){
    assim; senão também o degrau de cima ("carnes vermelhas" para um
    chuletón); e só sem nenhum dos dois, o que for. Um vinho que diz só
    "carnes" não entra numa pergunta de enchidos com 40 que dizem enchidos. */
-const PRATO_PERTO_MIN=8;
+const PRATO_PERTO_MIN=15;
 function pratoProcurar(vs,prato){
   const perg=pratoPergunta(prato);
   if(!perg.length)return null;
@@ -3019,7 +3021,7 @@ function wsAfinarHTML(st){
     <p class="ws-note">São muitos para escolher bem. Afina, se quiseres:</p>
     ${campos}
     <button class="btn prim full" style="margin-top:14px" onclick="wsSugerirAfinados()"${n?'':' disabled'}>🍷 Sugerir entre ${n===st.achados.length?'estes':'os'} ${n} vinho${n===1?'':'s'}</button>
-    ${n>WS_LISTA_MAX?`<p class="ws-note">Vão os ${WS_LISTA_MAX} que mais batem certo com o prato (e, entre eles, os de melhor nota).</p>`:''}
+    ${n>WS_LISTA_MAX?`<p class="ws-note">A IA escolhe entre os ${WS_LISTA_MAX} que mais batem certo com o prato (e, entre eles, os de melhor nota), e mostra os 10 melhores.</p>`:''}
   </div>`;
 }
 function wsListaHTML(modo){
@@ -16255,7 +16257,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='231';
+const APP_BUILD='232';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

@@ -1392,8 +1392,9 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
     cozinhar que o prato já traz (o chuletón é grelhado; o borrego, o
     cabrito e o leitão são assados — só quando não se escreveu outro).
     Um conceito do vinho que se cozinha de outra maneira não responde por
-    um mais geral: um bitoque grelhado não acha os vinhos que só dizem
-    borrego (13/10/2026, o dono). Uma maneira de
+    um mais geral: um bitoque não acha os vinhos que só dizem borrego
+    (13/10/2026, o dono) — o bife/bitoque é um conceito próprio, grelhado,
+    debaixo das carnes vermelhas, e o chuletón debaixo dele. Uma maneira de
     várias palavras vale com as palavras todas no mesmo pedaço de texto
     (entre vírgulas, pontos, parêntesis), e a mais comprida ganha ("carnes
     brancas" não é "carne"). As palavras comparam-se sem acentos, plural
@@ -1403,7 +1404,7 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
     palavras desconhecidas ("bacalhau espiritual") só pesam na ordem.
   - **quão longe**: o mesmo conceito conta inteiro, um mais específico
     quase, um degrau acima menos, e um irmão nada. Por alternativa, só o
-    mesmo (ou mais específico) quando há pelo menos 8 vinhos assim, senão
+    mesmo (ou mais específico) quando há pelo menos 15 vinhos assim (os que vão logo à IA), senão
     também o degrau de cima, e só sem nenhum dos dois o que for
     (`PRATO_PERTO_MIN`): numa pergunta de enchidos, um vinho que diz só
     "carnes" não entra.
