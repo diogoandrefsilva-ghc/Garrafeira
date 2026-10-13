@@ -2988,9 +2988,9 @@ function wsAfinarHTML(st){
   const campos=WS_AFINA_CAMPOS.map(([k,r,max])=>{
     const ops=wsAfinaOpcoes(st,k,max), paises=k==='regiao'?wsAfinaPaises(st):null;
     if(ops.length<2&&!st.afina[k].length)return '';
-    return `<div class="ws-afina-campo">${r}</div><div class="fops">${ops.map(([v,c])=>{
+    return `<div class="ws-afina-campo">${r}</div><div class="fops">${ops.map(([v,c],i)=>{
       const on=st.afina[k].includes(v), cor=k==='tipo'?(VIDRO[v]||null):null;
-      return `<button class="fop${on?' on':''}" onclick="wsAfinaToggle('${k}','${escJs(v)}')">
+      return `${paisSepHTML(ops,i,o=>o[0],paises)}<button class="fop${on?' on':''}" onclick="wsAfinaToggle('${k}','${escJs(v)}')">
         <span class="fop-tx">${cor?`<i class="fponto" style="background:${esc(cor)}"></i>`:''}${paises?`<span>${esc(v)}${paisSiglaHTML(v,paises)}</span>`:esc(v)}</span><span class="fconta">${c}</span></button>`;
     }).join('')}</div>`;
   }).join('');
@@ -4103,6 +4103,13 @@ function regioesOrdenar(lista,regiaoDe,paises,dentro){
       ||(dentro?dentro(a,b):String(regiaoDe(a)).localeCompare(String(regiaoDe(b)),'pt'));
   });
 }
+// Um traço muito leve entre os países (13/10/2026, o dono): ocupa a linha
+// toda da grelha, antes da primeira região de um país diferente da anterior.
+function paisSepHTML(lista,i,regiaoDe,paises){
+  if(!paises||!i)return '';
+  const a=paises.get(regiaoDe(lista[i-1]))||'', b=paises.get(regiaoDe(lista[i]))||'';
+  return chave(a)===chave(b)?'':'<i class="fsep" aria-hidden="true"></i>';
+}
 function paisSiglaHTML(r,paises){
   const s=paisSigla(paises.get(r));
   return s?`<small class="fpais">${esc(s)}</small>`:'';
@@ -4252,10 +4259,10 @@ function renderFiltros(){
       const ops=opcoesCampo(k);
       const paises=k==='regiao'?regioesPaises(vinhosUniverso()):null;
       domHTML=(k==='casta'?castasRegrasHTML():'')+(ops.length
-        ? `<div class="fops">${ops.map(([v,r,n])=>{
+        ? `<div class="fops">${ops.map(([v,r,n],i)=>{
             const on=ligados(k).includes(v);
             const cor=k==='tipo'?(VIDRO[v]||null):null;
-            return `<button class="fop${on?' on':''}" onclick="campoToggle('${escJs(k)}','${escJs(v)}')">
+            return `${paisSepHTML(ops,i,o=>o[0],paises)}<button class="fop${on?' on':''}" onclick="campoToggle('${escJs(k)}','${escJs(v)}')">
               <span class="fop-tx">${cor?`<i class="fponto" style="background:${esc(cor)}"></i>`:''}${paises?`<span>${esc(r)}${paisSiglaHTML(v,paises)}</span>`:esc(r)}</span>
               <span class="fconta">${n}</span>
             </button>`;
@@ -16229,7 +16236,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='229';
+const APP_BUILD='230';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
