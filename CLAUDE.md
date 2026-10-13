@@ -1566,8 +1566,9 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
     colocar o mesmo teor em todas"): muda de colheita para colheita, mas um
     valor mal lido corrige-se assim; o confirm lembra-o. A nota da colheita
     e o preço continuam sem o botão — são de cada colheita.
-  - **✨ IA** (por vinho, ou "Analisar com IA" para os que se veem, de 4 em 4
-    e síncrona): a `garrafeira-colheitas` recebe só as linhas e os campos,
+  - **✨ IA** (por vinho, um de cada vez e síncrona; o "Analisar com IA"
+    que mandava os que se viam de 4 em 4 saiu a 13/10/2026 — o dono: "se
+    analisar 1 de cada vez vai-me dar melhores respostas"): a `garrafeira-colheitas` recebe só as linhas e os campos,
     LÊ OS VALORES DA BD e propõe por diferença **manter**, **uniformizar**
     (com o valor) ou **rever** (com as colheitas suspeitas, que ficam a
     vermelho). A limpeza é dela: "uniformizar" só nos campos do vinho e,

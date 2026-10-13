@@ -12404,31 +12404,28 @@ async function boColhIAFn(corpo){
   return d;
 }
 function boColhIAHTML(){
+  // Um vinho de cada vez, pelo ✨ IA de cada cartão (13/10/2026, o dono: "se
+  // analisar 1 de cada vez vai-me dar melhores respostas") — saiu o botão
+  // que mandava os que se viam todos.
   const I=BO_COLH.iaEstado;
-  const semProp=BO_COLH.vista.filter(f=>f.difs.some(d=>!d.aceite&&!boColhProp(f,d))).length;
   const m=boColhMarcadas().length;
   return `<div class="fcard bcl-iacard">
-    <p class="note">✨ A IA olha para cada diferença e propõe o que fazer: <b>manter</b>, pôr o mesmo valor em <b>todas</b> as
+    <p class="note">✨ O <b>IA</b> de cada vinho olha para as diferenças dele e propõe o que fazer: <b>manter</b>, pôr o mesmo valor em <b>todas</b> as
       colheitas, ou <b>rever</b> à mão. Responde do que sabe, sem pesquisar na net — nada muda sem confirmares.</p>
-    <div class="bo-acoes">
-      <button type="button" class="btn prim" onclick="boColhIA()"${I?' disabled':''}>${I
-        ?`A analisar… ${I.feitos} de ${I.total}`
-        :semProp?`✨ Analisar com IA (${semProp} ${semProp===1?'vinho':'vinhos'})`:'✨ Analisar outra vez'}</button>
+    ${I||m?`<div class="bo-acoes">
+      ${I?`<span class="note">A analisar…</span>`:''}
       ${m&&!I?`<button type="button" class="btn ghost" onclick="boColhIAAplicar()">Aplicar as marcadas (${m})</button>`:''}
-    </div>
+    </div>`:''}
     ${BO_COLH.iaErro?`<p class="note bo-erro">${esc(BO_COLH.iaErro)}</p>`:''}
   </div>`;
 }
-// `fis`: os vinhos (índices da vista) a analisar; sem ele, os que se veem e
-// ainda não têm proposta (ou todos os que se veem, se já tiverem).
+// `fis`: os vinhos (índices da vista) a analisar — na prática um, o do ✨ IA
+// do cartão. Vai UM vinho por chamada: sozinho, a IA responde melhor.
 async function boColhIA(fis){
-  if(BO_COLH.iaEstado)return;
-  const vis=BO_COLH.vista.filter(f=>f.difs.some(d=>!d.aceite));
-  let alvo=fis?fis.map(i=>BO_COLH.vista[i]).filter(Boolean)
-    :vis.filter(f=>f.difs.some(d=>!d.aceite&&!boColhProp(f,d)));
-  if(!fis&&!alvo.length)alvo=vis;
+  if(BO_COLH.iaEstado||!fis)return;
+  const alvo=fis.map(i=>BO_COLH.vista[i]).filter(Boolean);
   if(!alvo.length)return;
-  const LOTE=4;
+  const LOTE=1;
   BO_COLH.iaEstado={feitos:0,total:alvo.length};BO_COLH.iaErro='';
   boColhPintar();
   let props=0;
@@ -16180,7 +16177,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='227';
+const APP_BUILD='228';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
