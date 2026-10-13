@@ -3698,3 +3698,14 @@ gerar:
 
 ## Deploy
 GitHub Pages a partir de `main`. Um push para `main` publica.
+
+As Edge Functions publicam-se à parte. Sem a CLI do Supabase (numa sessão
+na nuvem), publica-se pelo MCP uma entrada de uma linha que IMPORTA o
+ficheiro do repositório num commit fixo — `import
+"https://raw.githubusercontent.com/diogoandrefsilva-ghc/Garrafeira/<sha>/vinho-info.ts";`
+— em vez de colar 180 KB de código (13/10/2026: a `vinho-info` e a
+`garrafeira-carta`, no commit da migração 54). Confere antes que o ficheiro
+desse commit é igual ao local, e depois que a função arranca (um
+`net.http_post` da BD com o token da `service_role` do cofre: a função
+responde com o seu próprio 403). Um `supabase functions deploy` do PC
+substitui-a pelo ficheiro inteiro, como sempre.
