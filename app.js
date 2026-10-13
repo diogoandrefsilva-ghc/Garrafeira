@@ -12097,7 +12097,7 @@ async function boColhLerAceites(){
   BO_COLH.lidos=true;
 }
 async function boColhReler(){
-  CAT_VINHOS=null;
+  CAT_VINHOS=null;BO_COLH.orig=null;
   await catCarregar();
   renderLista();refrescarVinhoAberto();
 }
@@ -12178,12 +12178,13 @@ function boColhPintar(){
     const m=boColhMarcadas().length;
     fim.innerHTML=m?`<div class="pia-fim"><button class="btn prim" onclick="boColhIAAplicar()">Aplicar as marcadas (${m})</button></div>`:'';
   }
+  boColhOrigensPedir();
 }
 function boColhFamHTML(f,fi){
   const v0=f.linhas[0];
   const anos=f.linhas.map(v=>v.ano?String(v.ano):'s/a').join(', ');
   const ult=f.linhas[f.linhas.length-1];
-  return `<div class="fcard bcl">
+  return `<div class="fcard bcl" id="bcl-f-${fi}">
     <div class="bcl-cab">
       <div class="bcl-tt"><span class="bo-nome bcl-nome" onclick="boVerFicha(${Number(ult.cat_id)})">${esc(v0.nome||'(sem nome)')}</span>
         <span class="bo-sub">${esc([v0.produtor,v0.tipo].filter(Boolean).join(' · '))} · ${f.linhas.length} colheitas: ${esc(anos)}</span></div>
@@ -12203,6 +12204,7 @@ function boColhDifHTML(f,fi,d,di){
       <button type="button" class="bcl-ano" onclick="boVerFicha(${Number(x.v.cat_id)})" title="Abrir a ficha desta colheita">${x.v.ano?esc(String(x.v.ano)):'s/a'}</button>
       <span class="bcl-txt">${x.val?esc(x.val.txt):'—'}</span>
       ${usar?`<button type="button" class="bcl-usar" onclick="boColhUsarTodas(${fi},${di},${li})">Usar em todas</button>`:''}
+      ${x.val?boColhDeHTML(f,r.k,x.v):''}
     </div>`;
   }).join('');
   let ia='';
@@ -12227,6 +12229,111 @@ function boColhDifHTML(f,fi,d,di){
       ?`<span class="note">✓ Aceite${ac.em?' a '+esc(boData(ac.em)):''}</span><button type="button" class="btn ghost" onclick="boColhDesaceitar(${fi},${di})">Desfazer</button>`
       :`<button type="button" class="btn ghost" onclick="boColhAceitar(${fi},${di})">✓ Está certo</button>`}</div>
   </div>`;
+}
+/* ── DE ONDE VEIO CADA VALOR (migração 53, 13/10/2026, o dono das apps:
+   "o método de obtenção de cada atributo — à mão, IA sem fonte, pesquisa
+   num site e qual, ou um documento") ──
+   O `origens` da linha só diz a PORTA por onde o valor entrou no catálogo
+   (`garrafeira`, `catalogo-admin`…): um valor que a procura com IA leu na
+   Garrafeira Nacional e que alguém aceitou entra como `garrafeira`. O
+   pormenor está no resultado de cada procura e de cada importação, que a
+   `garrafeira.colheitas_origens` traz para as colheitas de um vinho. Qual
+   delas deu o valor decide-se AQUI, comparando o valor como o ecrã o
+   compara (`boColhValor`): a procura com o MESMO valor, de antes de ele
+   entrar, da mesma colheita primeiro e a mais recente. Sem nenhuma, vale a
+   porta — e uma garrafeira ou o admin sem procura que o explique é "à mão".
+   Lê-se uma vez por vinho (`BO_COLH.orig`), depois de a lista aparecer. */
+const BO_COLH_DE_IA=new Set(['vinho-info-premium','vinho-info-gratis','catalogo-pesquisa','ws-verificacao','ws-sugestao']);
+function boColhOrigensPedir(){
+  if(!BO_COLH.orig)BO_COLH.orig=new Map();
+  const M=BO_COLH.orig, falta=BO_COLH.vista.filter(f=>!M.has(f.k));
+  if(!falta.length)return;
+  falta.forEach(f=>M.set(f.k,null));
+  let i=0;
+  const um=async()=>{
+    while(i<falta.length){
+      const f=falta[i++];
+      let o;
+      try{o=await sbRpc('colheitas_origens',{p_ids:f.linhas.map(v=>Number(v.cat_id))});}
+      catch(e){o={erro:/does not exist|schema cache/i.test(String(e&&e.message||e))?'falta':'erro'};}
+      if(BO_COLH.orig!==M)return;   // relido entretanto
+      M.set(f.k,o||{});
+      const fi=BO_COLH.vista.findIndex(x=>x.k===f.k), el=fi>=0&&document.getElementById('bcl-f-'+fi);
+      if(el)el.outerHTML=boColhFamHTML(BO_COLH.vista[fi],fi);
+    }
+  };
+  Promise.all([um(),um(),um()]).catch(()=>{});
+}
+function boColhDeData(t){
+  const d=new Date(t);
+  return isNaN(d)?'':d.toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+const boColhDeLnk=(url,txt)=>url?`<a href="${esc(url)}" target="_blank" rel="noopener">${esc(txt||url)}</a>`:esc(txt||'');
+const boColhDe=t=>`<span class="rv-de bcl-de">↳ ${t}</span>`;
+// O valor que uma procura (ou importação) deu, comparado com o da linha.
+function boColhDeIgual(k,r,val){
+  if(!r||!val)return false;
+  if(k==='preco'){const x=num(r.preco_medio);return x!=null&&Math.abs(x-val.n)<.005;}
+  const o=boColhValor(k,r);
+  if(!o)return false;
+  return typeof o.n==='number'?Math.abs(o.n-val.n)<.001:o.n===val.n;
+}
+function boColhDeHTML(f,k,v){
+  const O=BO_COLH.orig&&BO_COLH.orig.get(f.k);
+  if(O===null)return boColhDe('…');
+  if(!O)return '';
+  if(O.erro)return O.erro==='falta'?boColhDe('<i>(de onde veio: falta a migração 53 no Supabase)</i>'):'';
+  const val=boColhValor(k,v);if(!val)return '';
+  const campo=k==='preco'?'preco_medio':k;
+  const ano=v.ano?String(v.ano):'';
+  // O preço que conta de uma loja vem da página da loja, não de uma procura.
+  if(k==='preco'){
+    const p=precoPrincipal(v);
+    if(p&&p.loja){
+      const e=(precosLojaDe(v)||[]).find(x=>x.loja===p.loja)||{};
+      const como=e.de==='manual'?'posto à mão':e.de==='pesquisa'?'lido na procura com IA':'script das lojas';
+      return boColhDe(`🔗 ${boColhDeLnk(p.url||e.url,lojaInfo(p.loja).nome)} <i>· ${como}</i>`);
+    }
+  }
+  const og=((O.linhas||{})[String(v.cat_id)]||{})[campo]||null;
+  const porta=og&&og.o, ate=og&&og.em?new Date(og.em).getTime()+5*60e3:Infinity;
+  const antes=a=>!(new Date(a.em).getTime()>ate);
+  const mesmo=a=>a.ano!=null&&String(a.ano)===ano?1:0;
+  const cand=[...(O.analises||[]),...(O.lotes||[]).map(a=>({...a,lote:true}))]
+    .filter(a=>antes(a)&&boColhDeIgual(k,a.r,val))
+    .sort((a,b)=>(mesmo(b)-mesmo(a))||(new Date(b.em)-new Date(a.em)));
+  for(const a of cand){
+    const r=a.r||{};
+    // A procura que só repetiu o catálogo não explica nada: a seguinte.
+    if(Array.isArray(r.catalogoCampos)&&r.catalogoCampos.includes(campo))continue;
+    const quando=boColhDeData(a.em)+(a.ano!=null&&ano&&String(a.ano)!==ano?` · procura da ${esc(String(a.ano))}`:'')
+      +(a.lote?' · atualização massiva':'');
+    const oc=(r.origemCampos||{})[campo];
+    let t='';
+    if(oc&&typeof oc==='object'){
+      const doc=oc.documento?(oc.documento==='application/pdf'?'PDF':'imagem'):'';
+      if(oc.documento&&!oc.url)t=`📄 do documento «${esc(oc.titulo||'')}»`;
+      else if(oc.url)t=doc?`📄 ${doc} em ${boColhDeLnk(oc.url,oc.site)}`
+        :oc.pagina?`🔗 página de ${boColhDeLnk(oc.url,oc.site)}`:`🔗 ${boColhDeLnk(oc.url,oc.site)} <i>(resumo no Google)</i>`;
+      else if(oc.google)t='🔎 pesquisa Google <i>(sem dizer a página)</i>';
+    }
+    if(!t)t=a.docs&&a.docs.length?'✨ IA sem fonte <i>(numa procura com documento)</i>'
+      :r.pesquisaWeb===false?'✨ IA de memória, sem fonte'
+      :r.origemCampos?'✨ IA sem fonte':'✨ IA <i>(procura antiga, sem registo da página)</i>';
+    return boColhDe(`${t} <i>· ${quando}</i>`);
+  }
+  const im=(O.importacoes||[]).find(a=>antes(a)&&boColhDeIgual(k,a.r,val)&&(a.ano==null||!ano||String(a.ano)===ano));
+  if(im)return boColhDe(`📄 importado de ${im.tipo&&/pdf/i.test(im.tipo)?'um PDF':im.tipo?'uma imagem':'ficheiros'} <i>· ${boColhDeData(im.em)}</i>`);
+  // Sem procura que o explique: a porta por onde entrou.
+  const d=og&&og.em?` <i>· ${boColhDeData(og.em)}</i>`:'';
+  if(!porta)return boColhDe('<i>(sem registo de origem)</i>');
+  if(porta==='garrafeira'||porta==='garrafeira-bruto')return boColhDe(`✍️ escrito à mão numa garrafeira${d}`);
+  if(porta==='garrafeira-desejo')return boColhDe(`✍️ escrito à mão numa wishlist${d}`);
+  if(porta==='catalogo-admin'||porta==='catalogo-curador')return boColhDe(`✍️ corrigido à mão no Catálogo <i>(${porta==='catalogo-admin'?'admin':'curador'})</i>${d}`);
+  if(BO_COLH_DE_IA.has(porta))return boColhDe(`✨ IA <i>(${esc(boOrigemTxt(porta,og.f))}, sem registo da página)</i>${d}`);
+  if(porta==='vivino-pagina')return boColhDe(`🔗 ${boColhDeLnk(v.vivino_url,'página do Vivino')} <i>· script</i>${d}`);
+  if(/^loja-|^lojas-script$/.test(porta))return boColhDe(`🔗 ${esc(boOrigemTxt(porta,og.f))} <i>· script</i>${d}`);
+  return boColhDe(`${esc(boOrigemTxt(porta,og.f))}${d}`);
 }
 async function boColhGravarAceite(f,d){
   const valores={};
@@ -16071,7 +16178,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='225';
+const APP_BUILD='226';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

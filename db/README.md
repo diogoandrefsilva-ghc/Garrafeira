@@ -756,6 +756,18 @@ MCP e ensaiadas num bloco desfeito: como admin, a #1 (numa garrafeira) deu
 outras duas só se repetem. Até lá, o botão aparece e a gravação diz que
 falta a função.
 
+### Migração 53 — de onde veio cada valor, nas colheitas que não batem (já aplicada)
+
+`db/migracao-colheitas-origens.sql`, depois da 49. Cria a
+`garrafeira.colheitas_origens(p_ids)` (só ao admin do catálogo,
+`winecatalog.sou_admin()`): para as linhas do catálogo dadas, o `origens` de
+cada uma (só os campos que o ecrã compara), as procuras com IA deste vinho
+(`garrafeira.analises`, pelo vinho de garrafeira ligado, pelo nome ou pelo
+lote da atualização massiva — com o `origemCampos` de cada uma) e as
+importações de ficheiros onde foi lido (`garrafeira.importacoes`). Nunca
+quem procurou. Qual delas explica o valor decide-o a app. Aplicada a
+13/10/2026 pelo MCP e ensaiada com o Cartuxa Colheita (#17, #586, #18).
+
 ### Migração 52 — o produtor escrito no nome do vinho da carta (já aplicada)
 
 `db/migracao-carta-produtor.sql`, depois da 40 e da 43. Cria a
@@ -849,6 +861,8 @@ Numa base de dados limpa:
    não está em garrafeira nenhuma (migração 51). Depois da 47.
 19. **`migracao-carta-produtor.sql`** — o produtor (ou a casa-mãe) escrito
    no nome de um vinho da carta (migração 52). Depois da 40 e da 43.
+20. **`migracao-colheitas-origens.sql`** — de onde veio cada valor, nas
+   colheitas que não batem (migração 53). Depois da 49.
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)

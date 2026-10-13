@@ -177,6 +177,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   (ou a casa-mãe) escrito no nome — "Assobio Esporão" — liga-se à linha do
   Catálogo (`garrafeira.carta_achar`, pela `carta_ligar`; ver "As
   Sugestões").
+  `migracao-colheitas-origens.sql` é a 53: de onde veio cada valor nas
+  colheitas que não batem (`garrafeira.colheitas_origens`; ver "O
+  Backoffice" › "As colheitas que não batem").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1572,6 +1575,22 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
     enquanto a assinatura da diferença for a mesma.
   O número da pastilha (`BO_CONTA.colh`) são os vinhos com diferenças por
   ver, e só se conta com o Catálogo já lido (`boColhContar`).
+  - **De onde veio cada valor** (migração 53, 13/10/2026, o dono: "se foi
+    introduzido manualmente, se veio da IA sem fonte, se veio de pesquisa
+    em site e qual o site ou se veio dum documento"): por baixo de cada
+    valor, uma linha "↳ …" (`boColhDeHTML`, `.bcl-de`). O `origens` da
+    linha só diz a PORTA (`garrafeira`, `catalogo-admin`…) — um valor que a
+    IA leu num site e alguém aceitou entra como `garrafeira` —, por isso a
+    `garrafeira.colheitas_origens` traz também as procuras com IA do vinho
+    (com o `origemCampos`) e as importações de ficheiros, e a app escolhe a
+    que deu o MESMO valor (`boColhValor`), de antes de ele entrar, da mesma
+    colheita primeiro; uma que só repetiu o catálogo (`catalogoCampos`) não
+    conta. Diz: o documento, o PDF ou a página do site (com link), "resumo
+    no Google", "pesquisa Google", "IA sem fonte", "IA de memória", ou, sem
+    procura que o explique, "escrito à mão numa garrafeira" / "corrigido à
+    mão no Catálogo" / o script do Vivino ou das lojas. O preço de uma loja
+    é a página dessa loja. Lê-se uma vez por vinho, depois de a lista
+    aparecer (`boColhOrigensPedir`, `BO_COLH.orig`), e esquece-se ao reler.
 - **A linha sem colheita** (migração 50, 09/10/2026, o dono: "faz-me
   confusão ter vinhos que têm uma colheita preenchida e depois têm outro
   registo com colheita vazia … um alerta no backoffice … e as wishlists
