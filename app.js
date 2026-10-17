@@ -3256,7 +3256,7 @@ function wsLivreBotao(){
   const st=WS_LIVRE, foto=_wsLivreImagens.length>0;
   b.disabled=!!(st&&st.estado==='pendente');
   b.textContent=st&&st.estado==='pendente'?(st.foto?'📸 A ler a foto…':'✨ A pensar…')
-    :foto?'📸 Escolher entre os vinhos da foto':st&&st.estado==='ok'?'✨ Pedir outra vez':'✨ Sugerir 5 vinhos';
+    :foto?'📸 Sugerir':st&&st.estado==='ok'?'✨ Pedir outra vez':'✨ Sugerir 5 vinhos';
 }
 async function wsLivrePedir(){
   if(WS_LIVRE&&WS_LIVRE.estado==='pendente')return;
@@ -17155,7 +17155,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='236';
+const APP_BUILD='237';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
