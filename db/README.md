@@ -831,7 +831,9 @@ passou de 2,5 s a 2,9 s. Aplicada no mesmo dia pelo MCP
 `no_catalogo` com o #12, o pedido #9 tem o `cat` 12 no Castro Reserva, a
 "Quinta dos Carvalhais Touriga Franca" não liga à das Carvalhas, e nem a
 `carta_achar` nem a `palavra_mal_lida` se executam como `anon` ou
-`authenticated`.
+`authenticated`. A `garrafeira-carta` (a leitura das fotos pede o nome letra a
+letra) foi publicada no mesmo dia (versão 12, pelo commit `8805a0c`) e
+arranca — um `net.http_post` com o token da service role recebe o 403 dela.
 
 ### Migração 56 — Identificar vinhos numa fotografia (já aplicada)
 
