@@ -2338,6 +2338,12 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
 #s-sugestoes .ws-livre-foto>summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;padding:9px 0}
 #s-sugestoes .ws-card .ws-livre-foto{border:none;padding:0;margin:6px 0 0;background:none}
 #s-sugestoes .carta-item.ws-foto-item{grid-template-columns:auto minmax(0,1fr) auto auto}
+/* o veredicto de cada vinho da foto: quebra a linha (é uma frase) e diz-se
+   pela cor — verde combina, âmbar serve, vermelho não é para isto */
+#s-sugestoes .carta-sub.ws-ver{white-space:normal;line-height:1.45;margin-top:3px;color:var(--mu)}
+#s-sugestoes .ws-ver.bem b{color:var(--vd)}
+#s-sugestoes .ws-ver.serve b{color:var(--ou2)}
+#s-sugestoes .ws-ver.mal b{color:var(--dg)}
 :is(#s-sugestoes,#s-identificar) .hist-data{font-size:11px;color:var(--mu);white-space:nowrap}
 
 /* ── IDENTIFICAR VINHOS NUMA FOTOGRAFIA (17/10/2026) ──
