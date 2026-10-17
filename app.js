@@ -1770,15 +1770,18 @@ async function curadorNovo(vid,base){
   try{await sbRpc('curador_levar_novo',{p_vinho_id:vid,p_base:base});}catch(e){return;}
   curadorAviso(vid);
 }
-async function modoAlternar(){
-  if(!modoCat()){
+// Passa ao catálogo (`cat`) ou à garrafeira sem escolher o separador — é o
+// que o ⇄ e os cards do ecrã inicial têm em comum. Falso se o catálogo não
+// se deixou ler (e aí fica-se onde se estava).
+async function modoMudar(cat){
+  if(cat===modoCat())return true;
+  if(cat){
     if(!CAT_VINHOS){
       document.body.classList.add('cat-a-abrir');
       try{await catCarregar();}
-      catch(e){toast('Não foi possível abrir o catálogo: '+(e.message||e),1);return;}
+      catch(e){toast('Não foi possível abrir o catálogo: '+(e.message||e),1);return false;}
       finally{document.body.classList.remove('cat-a-abrir');}
     }
-    TAB_GARRAFEIRA=tabAtiva;
     MODO='catalogo';
   }else{
     MODO='garrafeira';
@@ -1793,8 +1796,14 @@ async function modoAlternar(){
   if(FILTRO_CAMPO&&!campoVisivel(FILTRO_CAMPO))FILTRO_CAMPO=null;
   document.body.classList.toggle('cat',modoCat());
   aplicarCabecalho();
+  return true;
+}
+async function modoAlternar(){
+  const de=tabAtiva, cat=!modoCat();
+  if(!await modoMudar(cat))return;
+  if(cat)TAB_GARRAFEIRA=de;
   const alvo=modoCat()?'detalhe':(TAB_GARRAFEIRA||'garrafeira');
-  tab(alvo,document.querySelector(`.itabs .it[onclick^="tab('${alvo}'"]`));
+  tab(alvo,tabBotao(alvo));
 }
 
 /* ── SUGESTÕES: QUE VINHO PEÇO? (30/09/2026, refeitas a 03/10/2026) ──────
@@ -3513,9 +3522,15 @@ let _idImagens=[];   // [{base64, mime}]
 let ID=null;         // a identificação que está no ecrã
 let _idPollTimer=null,_idPollInicio=0,_idLivreTimer=null;
 
-function idAbrir(){
+// Volta-se para onde se veio: o Detalhe (o "+") ou o ecrã inicial.
+let ID_VOLTA='detalhe';
+function idAbrir(origem){
   if(!modoCat())return;
   if(!podeUsarIA()){toast('Identificar vinhos usa IA, e a IA não está incluída no teu acesso',1);return;}
+  ID_VOLTA=origem==='inicio'?'inicio':'detalhe';
+  const b=document.getElementById('id-volta');
+  if(b)b.textContent=ID_VOLTA==='inicio'?'‹ Início':'‹ Detalhe';
+  try{localStorage.setItem(INI_VISTO_KEY,'1');}catch(e){}
   tab('identificar');
 }
 // O `tab('identificar')` chega aqui.
@@ -3528,7 +3543,10 @@ function idMostrar(){
   }
   const h=document.getElementById('id-hist');if(h&&h.open)idCarregarHistorico();
 }
-function idVoltar(){tab('detalhe',tabBotao('detalhe'));}
+function idVoltar(){
+  if(ID_VOLTA==='inicio')inicioAbrir();
+  else tab('detalhe',tabBotao('detalhe'));
+}
 
 // ── As fotografias (a mesma moldura das da carta) ──
 function idRenderImgGrid(){
@@ -3869,12 +3887,19 @@ async function idAbrirHist(id){
 let tabAtiva='garrafeira';
 const ORDEM_TABS=['garrafeira','detalhe','locais','consumidos','desejos','sugestoes','backoffice','cfg'];
 function tab(nome,btn){
+  const deInicio=tabAtiva==='inicio';
   tabAtiva=nome;
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));
   document.getElementById('s-'+nome).classList.add('on');
   document.querySelectorAll('.itabs .it').forEach(b=>b.classList.remove('on'));
   if(btn)btn.classList.add('on');
-  try{localStorage.setItem('gf_tab',nome);}catch(e){}
+  // O ecrã inicial não se guarda: o `gf_tab` é o separador onde se ficou.
+  if(nome!=='inicio')try{localStorage.setItem('gf_tab',nome);}catch(e){}
+  if(!modoCat()&&TABS_GARRAFEIRA.includes(nome))TAB_GARRAFEIRA=nome;
+  document.body.classList.toggle('inicio',nome==='inicio');
+  // Com o cabeçalho escondido não havia altura para medir.
+  if(deInicio&&nome!=='inicio')ajustarSticky();
+  if(nome==='inicio')renderInicio();
   if(nome==='garrafeira')renderResumo();
   if(nome==='detalhe'||nome==='locais'){posicionarFiltros(nome);renderFiltrados();}
   // só agora a secção está visível: antes disto o `ajustarEstantes` de
@@ -3893,29 +3918,44 @@ function tab(nome,btn){
    user, o ecrã predefinido de abertura — catálogo ou garrafeira, resumo ou
    detalhe"). Definições › Ao abrir a app. É uma preferência de quem usa,
    como a vista da lista: fica no `localStorage`, com o email na chave para
-   duas contas no mesmo browser não se pisarem. Sem escolha nenhuma é o de
-   sempre — a garrafeira, no separador onde se ficou (`restaurarTab`). */
+   duas contas no mesmo browser não se pisarem. Sem escolha nenhuma é o ecrã
+   inicial; a garrafeira sem separador escolhido abre onde se ficou
+   (`restaurarTab`). */
 function aberturaChave(){return 'gf_abertura_'+String(EU.email||'').toLowerCase();}
+/* Desde o ECRÃ INICIAL (17/10/2026) o de sempre é ele (`modo:'inicio'`). Uma
+   escolha guardada antes (`v` < 2) era entre as duas únicas portas que
+   havia — não diz que não se quer o ecrã inicial — e não conta. */
 function aberturaLer(){
   let o=null;try{o=JSON.parse(localStorage.getItem(aberturaChave())||'null');}catch(e){}
-  o=o||{};
-  return {modo:o.modo==='catalogo'?'catalogo':'garrafeira',
+  o=o&&o.v===2?o:{};
+  return {modo:['garrafeira','catalogo'].includes(o.modo)?o.modo:'inicio',
           tab:['garrafeira','detalhe'].includes(o.tab)?o.tab:''};
 }
 function aberturaMudar(){
   const m=document.getElementById('cfg-ab-modo'),t=document.getElementById('cfg-ab-tab');
   if(!m||!t)return;
-  try{localStorage.setItem(aberturaChave(),JSON.stringify({modo:m.value,tab:t.value}));}catch(e){}
+  try{localStorage.setItem(aberturaChave(),JSON.stringify({v:2,modo:m.value,tab:t.value}));}catch(e){}
+  aberturaPintar();
   toast('Guardado — é assim que a app abre neste aparelho');
 }
 function aberturaPintar(){
   const m=document.getElementById('cfg-ab-modo'),t=document.getElementById('cfg-ab-tab');
   if(!m||!t)return;
   const a=aberturaLer();m.value=a.modo;t.value=a.tab;
+  // O separador é de um dos dois sítios; o ecrã inicial não tem.
+  const w=document.getElementById('cfg-ab-tab-w');
+  if(w)w.style.display=a.modo==='inicio'?'none':'';
 }
 function tabBotao(nome){return document.querySelector(`.itabs .it[onclick^="tab('${nome}'"]`);}
 async function abrirEcraInicial(){
   const a=aberturaLer();
+  if(a.modo==='inicio'){
+    // O card da garrafeira volta ao separador onde se ficou da última vez.
+    let t=null;try{t=localStorage.getItem('gf_tab');}catch(e){}
+    if(tabGarrafeiraOk(t))TAB_GARRAFEIRA=t;
+    inicioAbrir();
+    return;
+  }
   if(a.modo==='catalogo'){
     await modoAlternar();   // abre no Detalhe; se falhar, fica na garrafeira
     if(modoCat()){
@@ -3936,6 +3976,83 @@ function restaurarTab(){
   const bts=document.querySelectorAll('.itabs .it');
   const i=ORDEM_TABS.indexOf(t);
   if(i>0&&bts[i])tab(t,bts[i]);
+}
+
+/* ── O ECRÃ INICIAL (17/10/2026) ───────────────────────────────────────
+   O dono das apps, sobre os dois mockups: "Adoro a opção A. Avança." Quatro
+   cards à entrada — A minha Garrafeira e o Catálogo (os dois SÍTIOS, grandes
+   e com a cor dos cabeçalhos deles) e Sugestões e Identificar (as duas
+   FERRAMENTAS, em papel; só com IA, como os separadores delas).
+   - É um separador sem botão (`tab('inicio')`), sem o cabeçalho nem a barra
+     dos separadores (`body.inicio`); volta-se cá pelo G do cabeçalho
+     (`inicioAbrir`). Chegar aqui não muda o MODO: muda-o o card que se toca
+     (`modoMudar`).
+   - A garrafeira volta ao separador onde se estava nela (`TAB_GARRAFEIRA`,
+     que o `tab()` acompanha; ao arrancar, o `gf_tab` que ficou); o Catálogo
+     abre no Detalhe, como pelo ⇄.
+   - O Catálogo só se lê quando se toca num dos três cards dele (~380 KB da
+     primeira vez), e a roda fica no card até ele chegar.
+   - É onde a app abre, a não ser que se escolha outra coisa em Definições ›
+     Ao abrir a app (`aberturaLer`). */
+const TABS_GARRAFEIRA=['garrafeira','detalhe','locais','consumidos','desejos'];
+function tabGarrafeiraOk(t){
+  if(!TABS_GARRAFEIRA.includes(t))return false;
+  if(t==='desejos'&&!TEM_DESEJO)return false;
+  if(t==='locais'&&!temLocaisDesenhados())return false;
+  if(t==='consumidos'&&!temConsumidos())return false;
+  return true;
+}
+const INI_VISTO_KEY='gf_identificar_visto';   // o "Novo" sai depois de se abrir o Identificar
+let INI_DESENHADO=false, INI_A_IR=false;
+function inicioAbrir(){tab('inicio');}
+function inicioTexto(id,txt){const el=document.getElementById(id);if(el)el.textContent=txt;}
+function renderInicio(){
+  if(!INI_DESENHADO)inicioDesenhar();
+  const h=new Date().getHours();
+  inicioTexto('ini-ola',h>=5&&h<12?'Bom dia':h>=12&&h<20?'Boa tarde':'Boa noite');
+  // A garrafeira aberta pode não ser minha (emprestada, ou o admin
+  // convidado), e quem tem duas distingue-as pelo nome.
+  const g=garrafeiraAtiva(), minha=!g||souDonoDaGarrafeira(g);
+  inicioTexto('ini-gar-k',minha?'As garrafas de casa':'Partilhada contigo');
+  inicioTexto('ini-gar-t',g&&(!minha||minhasGarrafeiras().length>1)?g.nome:'A minha Garrafeira');
+  const nV=db.vinhos.filter(v=>stockDe(v.id)>0).length, nG=db.garrafas.filter(naGarrafeira).length;
+  inicioTexto('ini-gar-n',nG?`${nV} ${nV===1?'vinho':'vinhos'} · ${nG} ${nG===1?'garrafa':'garrafas'}`:'Ainda sem garrafas');
+  let visto=false;try{visto=!!localStorage.getItem(INI_VISTO_KEY);}catch(e){}
+  const n=document.getElementById('ini-novo');
+  if(n)n.style.display=visto?'none':'';
+}
+// O desenho dos dois cards grandes: os fundos das garrafas, com a pele do
+// móvel dos Locais (o mesmo número na mesma cor é o mesmo vinho, e há um
+// lugar vazio), e três garrafas do Catálogo com a colheita no rótulo.
+const INI_RACK=[[0,0,'tinto',4],[38,0,'branco',9],[76,0,'tinto',4],[114,0,'rose',12],[152,0,'tinto',2],
+  [19,33,'tinto',7],[57,33,'',18],[95,33,'branco',9],[133,33,'licoroso',21],
+  [0,66,'rose',12],[38,66,'tinto',3],[76,66,'tinto',3],[114,66,'branco',15],[152,66,'tinto',6]];
+function inicioDesenhar(){
+  INI_DESENHADO=true;
+  const r=document.getElementById('ini-rack');
+  if(r)r.innerHTML=INI_RACK.map(([x,y,v,n])=>
+    `<span class="mvg ${v?'v-'+v:'vazia'}" style="left:${x}px;top:${y}px">${n}</span>`).join('');
+  const b=document.getElementById('ini-garrafas');
+  if(b)b.innerHTML=[{tipo:'Branco',ano:'2022'},{tipo:'Rosé',ano:'2023'},{tipo:'Tinto',ano:'2019'}]
+    .map(v=>garrafaSVG(v)).join('');
+}
+async function inicioIr(dest){
+  if(INI_A_IR)return;
+  if(dest==='cfg'){tab('cfg',tabBotao('cfg'));return;}
+  const cat=dest!=='garrafeira', el=document.getElementById('ini-'+dest);
+  INI_A_IR=true;
+  if(cat&&!CAT_VINHOS&&el)el.classList.add('a-abrir');
+  let ok=false;
+  try{ok=await modoMudar(cat);}
+  finally{INI_A_IR=false;if(el)el.classList.remove('a-abrir');}
+  if(!ok)return;
+  if(dest==='garrafeira'){
+    const t=tabGarrafeiraOk(TAB_GARRAFEIRA)?TAB_GARRAFEIRA:'garrafeira';
+    tab(t,tabBotao(t));
+  }
+  else if(dest==='catalogo')tab('detalhe',tabBotao('detalhe'));
+  else if(dest==='sugestoes')tab('sugestoes',tabBotao('sugestoes'));
+  else if(dest==='identificar')idAbrir('inicio');
 }
 // A procura é UM nó só (o mesmo <input>, o mesmo estado), que se muda de
 // sítio consoante o separador — não duas cópias com ids repetidos. Fica em
@@ -5722,6 +5839,7 @@ function renderLista(){
   renderResumo();
   renderFiltrados();
   if(tabAtiva==='desejos')renderDesejos();
+  if(tabAtiva==='inicio')renderInicio();
   fabSincronizar();
   verificarImagens();
 }
@@ -17155,7 +17273,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='237';
+const APP_BUILD='238';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
@@ -17218,7 +17336,8 @@ async function sbInit(){
 // tamanho — por isso mede-se.
 function ajustarSticky(){
   const h=document.querySelector('body>header');
-  if(h)document.querySelector('.itabs').style.top=h.offsetHeight+'px';
+  // Escondido (o ecrã inicial) mede 0: fica a medida de antes.
+  if(h&&h.offsetHeight)document.querySelector('.itabs').style.top=h.offsetHeight+'px';
 }
 window.addEventListener('resize',ajustarSticky);
 window.addEventListener('resize',()=>{if(MAPA_POP_LOCAL&&MAPA_POP_ANCHOR)mapaPopupPos(MAPA_POP_ANCHOR);});

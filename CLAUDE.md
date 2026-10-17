@@ -13,7 +13,8 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
 
 ## Estrutura
 - `index.html` — só markup: os três ecrãs de autenticação (`page-login`,
-  `page-nova-pass`, `page-sem-acesso`), o splash, os 5 separadores e os 5
+  `page-nova-pass`, `page-sem-acesso`), o splash, o ecrã inicial
+  (`s-inicio`), os 5 separadores e os 5
   modais (que são preenchidos por JS, vazios no HTML) — mais a folha
   `modal-formato`, que abre por cima do modal do local.
 - `app.js` — **toda a lógica** (~2000 linhas). Secções (`grep` pelo título,
@@ -21,8 +22,7 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   Sessão Supabase (`sbHeaders`/`sbFetch`/`sbReq`/`sbRpc`) ·
   **A garrafeira aberta** (`GA_ID`) · Permissões ·
   **DB** (`carregar` + `carregarGarrafeira`) · Índices e cálculos ·
-  Navegação · **Resumo** (ecrã
-  inicial) · Pesquisa (Detalhe + Locais) · Filtros · **Detalhe** (lista
+  Navegação · **Ecrã inicial** · **Resumo** · Pesquisa (Detalhe + Locais) · Filtros · **Detalhe** (lista
   organizada) · **Mapa dos locais** (um local de cada vez) · Consumidos · **Página do vinho** ·
   Modal editar/novo · Consumir garrafa · Modal da garrafa · **IA** ·
   Auth (Supabase) · Definições · Locais · **Garrafeiras** ·
@@ -204,7 +204,45 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
 - Não mexer à mão: `apple-touch-icon.png`, `icone.png`, `icone-claro.png`, `icone-512.png`,
   `icone-maskable.png` e `nota-g.png` (são gerados — ver "Ícones").
 
-## Os cinco separadores (o ecrã inicial não é a lista)
+## O ecrã inicial: quatro cards à entrada (17/10/2026)
+O dono das apps, sobre dois mockups ("Adoro a opção A. Avança. No
+Identificar Vinhos, coloca só Identificar"). Secção "O ECRÃ INICIAL" no
+app.js (`inicio*`/`INI_*`) e no style.css (`.ini-*`); `#s-inicio` no
+`index.html`.
+- **Dois SÍTIOS e duas FERRAMENTAS.** A minha Garrafeira e o Catálogo são
+  cards grandes com a cor dos cabeçalhos deles (bordô, verde-garrafa, o
+  filete dourado em baixo) e um desenho: os fundos das garrafas com a pele
+  do móvel dos Locais (`.mvg.v-*` — o mesmo número na mesma cor é o mesmo
+  vinho, e um lugar vazio) e três garrafas da `garrafaSVG` com a colheita.
+  Sugestões e Identificar são cards de papel lado a lado, com um ícone
+  bordô — só com IA, como os separadores delas (`body.sem-sugestoes`). O
+  "Novo" do Identificar sai depois de ele se abrir uma vez neste aparelho
+  (`gf_identificar_visto`).
+- **O card da garrafeira diz a garrafeira aberta**: "2 vinhos · 3 garrafas"
+  (as que têm stock, como o Resumo), e o nome dela quando não é minha
+  ("Partilhada contigo") ou quando tenho mais do que uma.
+- **É um separador sem botão** (`tab('inicio')`), sem o cabeçalho nem a
+  barra dos separadores (`body.inicio`), com a engrenagem das Definições
+  no canto. **Volta-se cá pelo G do cabeçalho**, que passou a botão com um
+  ‹ à frente (`inicioAbrir`). Não se guarda no `gf_tab`.
+- **Chegar aqui não muda o MODO; muda-o o card que se toca** (`inicioIr` →
+  `modoMudar`, a metade do `modoAlternar` que não escolhe separador). A
+  garrafeira volta ao separador onde se estava nela (`TAB_GARRAFEIRA`, que
+  o `tab()` acompanha; ao arrancar, o `gf_tab` que ficou, se ainda existir
+  — `tabGarrafeiraOk`); o Catálogo abre no Detalhe, como pelo ⇄; as
+  Sugestões e o Identificar no deles, e o Identificar aberto daqui tem
+  "‹ Início" em vez de "‹ Detalhe" (`ID_VOLTA`).
+- **O Catálogo só se lê quando se toca num dos três cards dele** (~380 KB
+  da primeira vez), com a roda no lugar da seta (`.a-abrir`); se não se
+  deixar ler, fica-se aqui, com o toast.
+- **É onde a app abre** (`abrirEcraInicial`), a não ser que se escolha a
+  garrafeira ou o Catálogo em Definições › Ao abrir a app — e o "No
+  separador" só aparece com um deles. Uma escolha guardada antes
+  (`v` < 2) não conta: era entre as duas únicas portas que havia, e não
+  dizia que não se queria esta.
+- Num ecrã largo fica a 560px ao centro.
+
+## Os cinco separadores (o Resumo não é a lista)
 **Locais e Consumidos só aparecem quando fazem falta** (30/09/2026, o dono):
 Locais só com um local DESENHADO (`temLocaisDesenhados`), Consumidos só com
 garrafas bebidas (`sincronizarTabs`, no `renderLista`). Sem local desenhado
@@ -218,10 +256,11 @@ parágrafo.
 — mais a **`Wishlist`** (antes do ⚙️), que só aparece depois da migração 15
 (ver "A wishlist é um vinho sem garrafas").
 
-O ecrã inicial (`Garrafeira`) é **só o resumo** — nada de procura aqui. Já
+O Resumo (`Garrafeira`, o ecrã inicial até haver o de cima) é **só o
+resumo** — nada de procura aqui. Já
 teve os cards em cima e a procura por baixo, mas com a procura a viver
 também em Detalhe e Locais (ver abaixo), ter uma terceira cópia era ter três
-sítios com a mesma pergunta; o ecrã inicial ficou só para o retrato de
+sítios com a mesma pergunta; o Resumo ficou só para o retrato de
 conjunto. De propósito: a primeira versão copiou demasiado do Goals
 (painel cheio de números **e** a lista toda logo à entrada) e ficou
 carregada para o que é.
@@ -1087,10 +1126,11 @@ ser o back-office. **Tocar no título do cabeçalho ("Garrafeira ⇄") troca
 para o Catálogo** (`modoAlternar`, `MODO`): o cabeçalho fica verde-garrafa,
 o título passa a "Catálogo", e só ficam o Resumo, o Detalhe, as **Sugestões**
 (ver abaixo) e as Definições (abre no Detalhe). Não se
-grava ao trocar: a app abre na garrafeira, a não ser que se escolha outra coisa
-em **Definições › Ao abrir a app** (06/10/2026, o dono das apps: garrafeira
-ou catálogo, e Resumo, Detalhe ou onde se ficou — `abrirEcraInicial`, no
-`localStorage` por email e por aparelho; sem escolha é o de sempre). Decisões do dono:
+grava ao trocar: a app abre no ecrã inicial (desde 17/10/2026 — ver "O ecrã
+inicial"), a não ser que se escolha outra coisa em **Definições › Ao abrir a
+app** (06/10/2026, o dono das apps: garrafeira ou catálogo, e Resumo,
+Detalhe ou onde se ficou — `abrirEcraInicial`, no `localStorage` por email e
+por aparelho). Decisões do dono:
 - **É o MESMO Detalhe e a MESMA página do vinho**, com outra fonte. Os
   filtros varrem `vinhosUniverso()`/`vinhosBase()` (o catálogo ou a
   garrafeira), e o campo Local não aparece no catálogo (`camposVisiveis`).
@@ -1555,11 +1595,13 @@ resumo do que encontrou e link para o detalhe) e dizia quais não conhecia
 (com opção de pesquisar detalhe adicional — para adicionar ao Catálogo)".
 Decidido com ele: "para já coloca apenas uma opção no +, quando estamos no
 catálogo" (a futuro, uma página inicial com A minha Garrafeira, Catálogo,
-Sugestões e Identificar Vinhos), e um vinho desconhecido entra no Catálogo
+Sugestões e Identificar Vinhos — veio a 17/10/2026, ver "O ecrã inicial"),
+e um vinho desconhecido entra no Catálogo
 "só com fontes". Secção "IDENTIFICAR VINHOS NUMA FOTOGRAFIA" no app.js
 (`id*`/`ID_*`), na `garrafeira-carta.ts` e no style.css.
 - **Abre-se pelo "+" do Detalhe do Catálogo** ("📸 Identificar vinhos numa
-  foto", `fabAcao('identificar')` → `idAbrir`), a quem tem IA. É uma SECÇÃO
+  foto", `fabAcao('identificar')` → `idAbrir`), a quem tem IA, e pelo card
+  Identificar do ecrã inicial (aí o "‹" volta ao início). É uma SECÇÃO
   (`#s-identificar`) sem botão na barra dos separadores — nada lá acende, e
   a secção tem o seu "‹ Detalhe" — e não um modal: a página do vinho abre
   por cima dela como por cima do Detalhe (um modal ficava por cima da

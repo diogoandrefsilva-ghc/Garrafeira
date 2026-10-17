@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="237">
+<body data-build="238">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone-claro.png" alt="">
@@ -95,7 +95,8 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 <header>
   <div class="hdr">
     <div class="brand">
-      <div class="escudo"><img src="icone-claro.png" alt=""></div>
+      <!-- O G É A VOLTA AO ECRÃ INICIAL (17/10/2026): o ‹ diz que é por aqui. -->
+      <button type="button" class="escudo" onclick="inicioAbrir()" title="Ecrã inicial" aria-label="Ecrã inicial"><svg class="escudo-v" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><img src="icone-claro.png" alt=""></button>
       <div style="min-width:0">
         <!-- O TÍTULO É O INTERRUPTOR entre a garrafeira e o catálogo
              (`modoAlternar`): um toque, à vista em todos os separadores. -->
@@ -139,7 +140,64 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
     <button class="it so-ic" onclick="tab('cfg',this)" title="Definições" aria-label="Definições">⚙️<span class="it-n" id="cfg-n"></span></button>
   </div>
 
-  <!-- ═══ GARRAFEIRA (ecrã inicial: só o resumo) ═══ -->
+  <!-- ═══ O ECRÃ INICIAL (17/10/2026) ═══
+       Os quatro cards da entrada: os dois SÍTIOS (a garrafeira, o
+       Catálogo), grandes e com a cor dos cabeçalhos deles, e as duas
+       FERRAMENTAS (Sugestões, Identificar), em papel. Sem o cabeçalho nem
+       os separadores (`body.inicio`); volta-se aqui pelo G do cabeçalho.
+       Ver "O ECRÃ INICIAL" no app.js. -->
+  <section class="sec" id="s-inicio">
+    <div class="ini">
+      <div class="ini-top">
+        <div class="ini-marca"><img src="icone.png" alt=""><span>Garrafeira</span></div>
+        <button type="button" class="ini-cfg" onclick="inicioIr('cfg')" title="Definições" aria-label="Definições"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      </div>
+      <div class="ini-ola" id="ini-ola">Olá</div>
+      <h2 class="ini-h">Por onde começamos?</h2>
+      <div class="ini-cards">
+        <button type="button" class="ini-c ini-g ini-gar" id="ini-garrafeira" onclick="inicioIr('garrafeira')">
+          <span class="ini-rack" id="ini-rack" aria-hidden="true"></span>
+          <span class="ini-seta" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+          <span class="ini-txt">
+            <span class="ini-k" id="ini-gar-k">As garrafas de casa</span>
+            <span class="ini-t" id="ini-gar-t">A minha Garrafeira</span>
+            <span class="ini-s">O que tens, onde está e o que já bebeste.</span>
+            <span class="ini-p" id="ini-gar-n"></span>
+          </span>
+        </button>
+        <button type="button" class="ini-c ini-g ini-cat" id="ini-catalogo" onclick="inicioIr('catalogo')">
+          <span class="ini-garrafas" id="ini-garrafas" aria-hidden="true"></span>
+          <span class="ini-seta" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+          <span class="ini-txt">
+            <span class="ini-k">Todos os vinhos</span>
+            <span class="ini-t">Catálogo</span>
+            <span class="ini-s">Os vinhos que a casa conhece, colheita a colheita.</span>
+            <span class="ini-p">Notas · preços das lojas · Vivino</span>
+          </span>
+        </button>
+        <!-- As ferramentas usam IA: sem ela não aparecem (`body.sem-sugestoes`). -->
+        <div class="ini-ferr">
+          <button type="button" class="ini-c ini-f" id="ini-sugestoes" onclick="inicioIr('sugestoes')">
+            <span class="ini-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.5 3h9c0 4.6-1.6 8.2-4.5 8.2S6.5 7.6 6.5 3z"/><path d="M11 11.2V19"/><path d="M7.5 21h7"/><path d="M19.5 3v4"/><path d="M17.5 5h4"/><path d="M18 11.5v2.4"/><path d="M16.8 12.7h2.4"/></svg></span>
+            <span class="ini-fb">
+              <span class="ini-t">Sugestões</span>
+              <span class="ini-s">Uma carta, um prato ou só a pergunta: que vinho?</span>
+            </span>
+          </button>
+          <button type="button" class="ini-c ini-f" id="ini-identificar" onclick="inicioIr('identificar')">
+            <span class="ini-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 8V5a2 2 0 0 1 2-2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M21 16v3a2 2 0 0 1-2 2h-3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M11 6.5h2v2.2c0 .9 1.6 1.6 1.6 3.3V16.5a1 1 0 0 1-1 1h-3.2a1 1 0 0 1-1-1V12c0-1.7 1.6-2.4 1.6-3.3z"/></svg></span>
+            <span class="ini-novo" id="ini-novo">Novo</span>
+            <span class="ini-fb">
+              <span class="ini-t">Identificar</span>
+              <span class="ini-s">Uma foto da prateleira: o que conheço e o que não.</span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ GARRAFEIRA (o Resumo) ═══ -->
   <section class="sec on" id="s-garrafeira">
     <div class="g4" id="resumo-cards"></div>
   </section>
@@ -346,7 +404,7 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
        Catálogo e não tem botão na barra (ver `idAbrir` no app.js). -->
   <section class="sec" id="s-identificar">
     <div class="id-barra">
-      <button type="button" class="bo-volta" onclick="idVoltar()">‹ Detalhe</button>
+      <button type="button" class="bo-volta" id="id-volta" onclick="idVoltar()">‹ Detalhe</button>
       <span class="id-titulo">📸 Identificar vinhos</span>
     </div>
     <div class="ws-card">
@@ -388,15 +446,18 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
       <div class="note">O ecrã onde a app abre neste aparelho.</div>
       <label for="cfg-ab-modo">Abrir em</label>
       <select id="cfg-ab-modo" onchange="aberturaMudar()">
+        <option value="inicio">Ecrã inicial</option>
         <option value="garrafeira">Garrafeira</option>
         <option value="catalogo">Catálogo</option>
       </select>
-      <label for="cfg-ab-tab">No separador</label>
-      <select id="cfg-ab-tab" onchange="aberturaMudar()">
-        <option value="">Onde fiquei da última vez</option>
-        <option value="garrafeira">Resumo</option>
-        <option value="detalhe">Detalhe</option>
-      </select>
+      <div id="cfg-ab-tab-w">
+        <label for="cfg-ab-tab">No separador</label>
+        <select id="cfg-ab-tab" onchange="aberturaMudar()">
+          <option value="">Onde fiquei da última vez</option>
+          <option value="garrafeira">Resumo</option>
+          <option value="detalhe">Detalhe</option>
+        </select>
+      </div>
     </div>
 
     <!-- SEM `ro-hide`: numa garrafeira emprestada o modo de leitura liga-se,
