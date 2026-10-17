@@ -1515,6 +1515,29 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
     estes N". Passando de 20, vão os que mais batem certo com o prato.
     O ecrã rola até ao resultado descontando o cabeçalho e os separadores,
     que estão colados ao topo (`wsRolar`).
+  **Ou escolho eu os vinhos, até 5** (17/10/2026, o dono: "marcar
+  manualmente até 5 vinhos (talvez pesquisando pelo nome) para que a IA
+  sugerisse qual dos 5 melhor acompanha com o prato"). Secção "ESCOLHER EU
+  OS VINHOS" no app.js (`wsEsc*`/`WS_ESC`). Um passo a seguir ao prato
+  (antes do orçamento — depois, a caixa saltava para cima ao escolher o
+  primeiro): procura-se pelo nome, o produtor, a casa-mãe ou o ano (com as
+  siglas, `wsEscAlvo`) e toca-se para pôr na lista. Na garrafeira, só os
+  vinhos com garrafas; no Catálogo qualquer linha (cada colheita é uma — é a
+  nota dela que vai). Com vinhos escolhidos, o prato passa a obrigatório, o
+  orçamento esconde-se (`data-escolha` na secção) e o "Sugerir" ("Qual
+  destes combina melhor?", "Combina com o prato?" com um só) salta a procura
+  do prato e manda SÓ esses à `acao:'sugerir'`, com `escolhidos:true`
+  (`MAX_ESCOLHIDOS` na função, o `WS_ESC_MAX` daqui). O prompt muda: a
+  pessoa está indecisa entre eles, ordenam-se TODOS, recomenda-se só o
+  melhor e, se nenhum combinar, diz-se (`nenhum` + `aviso`) — sem o
+  recomendado à força que o `rankingDe` põe. A resposta mostra todos, pela
+  ordem da IA (um que ela deixe de fora vai no fim, sem porquê), com
+  "🏆 Melhor escolha" ou "O menos mau" (`wsEscHTML`/`wsEscMarca`). Uma
+  `garrafeira-carta` de antes não conhece a marca e responde como sempre;
+  com um vinho só, a app então não diz "Combina" (a de antes recomenda
+  sempre o primeiro — `rec.sabe`). A lista é por modo e em memória; a da
+  garrafeira só enquanto for a mesma aberta. Com a garrafeira há agora dois
+  passos, e os números voltaram.
 - **A pergunta livre** (13/10/2026, o quarto modo, ✨, migração 54; o dono
   das apps: "sugestões sem ter por base uma carta, uma garrafeira ou um
   catálogo … o prato, o preço (mínimo e máximo), um campo de observações …

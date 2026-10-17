@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="244">
+<body data-build="245">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone-claro.png" alt="">
@@ -372,7 +372,19 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
         <p class="ws-note">Sem fotografia, a IA sugere de memória; com ela, escolhe entre os vinhos que lá estão. Os que o Catálogo tem aparecem com os dados dele; os outros são confirmados na net e só entram no Catálogo com fontes.</p>
       </div>
 
-      <div class="ws-sem-garrafeira ws-sem-livre">
+      <!-- Escolher eu os vinhos (17/10/2026): até 5, pelo nome, e a IA diz
+           qual acompanha melhor o prato (ver `wsEscPintar` no app.js). A
+           caixa nunca é reescrita por JS; as duas à volta dela são. Antes do
+           orçamento, que se esconde com vinhos escolhidos — depois, a caixa
+           saltava para cima ao escolher o primeiro. -->
+      <div class="ws-sem-carta ws-sem-livre">
+        <div class="ws-card-label ws-passo"><span class="ws-num"></span>Escolher eu os vinhos <em>(opcional — até 5, e a IA diz qual acompanha melhor o prato)</em></div>
+        <div id="ws-esc-lista" class="ws-esc-lista"></div>
+        <input type="text" id="ws-esc-q" placeholder="Procura pelo nome ou produtor…" autocomplete="off" oninput="wsEscPintar()">
+        <div id="ws-esc-res" class="ws-esc-res"></div>
+      </div>
+
+      <div class="ws-sem-garrafeira ws-sem-livre ws-orc-passo">
         <div class="ws-card-label ws-passo"><span class="ws-num"></span>Orçamento máximo por garrafa <em>(opcional — desliza)</em></div>
         <div class="orc-picker">
           <button type="button" class="orc-arrow" onclick="wsOrcamentoMover(-1)" aria-label="Valor anterior">
