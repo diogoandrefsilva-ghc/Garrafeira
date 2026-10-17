@@ -795,6 +795,41 @@ Depois dela, publicar a `garrafeira-carta` e a `vinho-info`
 não tem ficam `pendente` (a `garrafeira-carta` pergunta-lhe antes,
 `livreSonda`).
 
+### Migração 56 — Identificar vinhos numa fotografia (já aplicada)
+
+`db/migracao-identificar.sql`, depois da 40, da 54 e da 55. Faz:
+- `garrafeira.cartas.fonte` (`'carta'` | `'prateleira'`, por omissão
+  `'carta'`) e `garrafeira.cartas.livre` (o índice de cada vinho lido → a
+  linha de `livre_vinhos` que o foi procurar);
+- `garrafeira.livre_vinhos.fotos` (quantas vezes se viu numa fotografia);
+- uma nova versão da `garrafeira.livre_registar` (a mesma assinatura): um
+  vinho com `"foto": true` conta nas `fotos` e não nas `vezes`, e o
+  `sugerido` junta-se em vez de se substituir;
+- `garrafeira.livre_vinho_json` e `livre_lista` com as `fotos` (a lista
+  ordena-se pelas duas contas somadas), e a `garrafeira.livre_estados(ids)`
+  (quem entra) — o estado dos vinhos que a app mandou procurar.
+Ensaiada a 17/10/2026 num bloco desfeito (um `RAISE` no fim), contra a base
+real: um vinho inventado lido numa foto ficou `a_verificar` com `fotos` 1 e
+`vezes` 0; sugerido a seguir pela pergunta livre, ficou com as duas contas e
+o `sugerido` das duas; o "Quinta do Crasto Reserva Vinhas Velhas" ligou ao
+#216 (`no_catalogo`). O `CHECK` da `fonte` acrescenta-se num `DO` sem `DROP`
+(o MCP pára num `DROP` à espera de confirmação).
+E a pergunta livre com uma fotografia: `garrafeira.livre_pedidos.estado`
+(`'pendente'` | `'pronto'` | `'erro'`, por omissão `'pronto'`), `.erro` e
+`.foto` (o que se leu), e a `garrafeira.livre_ler` a devolvê-los. Ensaiada
+no mesmo dia num bloco desfeito: um pedido com foto nasce `pendente`, os 3
+pedidos que já lá estavam ficam `pronto`, e a `livre_ler` traz a `foto`.
+Depois dela, publicar a `garrafeira-carta` (as acções `identificar` e
+`identificar_procurar`, e a `livre` com `imagens`). A `vinho-info` não muda.
+Aplicada a 17/10/2026 pelo MCP (`garrafeira_56_identificar`) e confirmada:
+as cartas que já lá estavam ficaram `carta`, os pedidos livres `pronto`, a
+`livre_estados` executa-se como `authenticated` e não como `anon`, e a
+`livre_registar` continua só da service role. A `garrafeira-carta` foi
+publicada no mesmo dia (versão 9, pelo commit `b33f04e`) e arranca — um
+`net.http_post` com o token da service role recebe o 403 dela. A app nova sem a migração
+continua a mostrar as cartas anteriores das Sugestões (o filtro da `fonte`
+recusa-se e lêem-se todas), mas o Identificar não lê.
+
 ### Migração 55 — a casta escrita no nome do vinho da carta (já aplicada)
 
 `db/migracao-casta-no-nome.sql`, depois da 52 e da 54. Uma nova versão da

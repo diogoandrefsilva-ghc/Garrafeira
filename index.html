@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="235">
+<body data-build="236">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone-claro.png" alt="">
@@ -287,8 +287,14 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
         </div>
         <div class="ws-card-label ws-passo"><span class="ws-num"></span>Observações <em>(opcional — cor, casta, região, estilo…)</em></div>
         <textarea id="ws-obs" rows="2" maxlength="400" placeholder="ex: prefiro tinto do Douro, de Touriga Nacional; pouca madeira"></textarea>
+        <!-- A fotografia (17/10/2026, migração 56): numa loja, a IA escolhe
+             entre os vinhos da foto (ver `wsLivreImgPintar` no app.js). -->
+        <div class="ws-card-label ws-passo"><span class="ws-num"></span>Fotografia dos vinhos <em>(opcional — numa loja, a IA escolhe entre os da foto)</em></div>
+        <div id="ws-livre-img-grid" class="img-grid"></div>
+        <div id="ws-livre-img-meta" class="img-meta" style="display:none"></div>
+        <input type="file" id="ws-livre-img-input" accept="image/*" multiple style="display:none" onchange="wsLivreImagensEscolhidas(event)">
         <button class="btn prim full" id="ws-btn-livre" onclick="wsLivrePedir()" style="margin-top:18px">✨ Sugerir 5 vinhos</button>
-        <p class="ws-note">A IA sugere de memória. Os vinhos que o Catálogo tem aparecem com os dados dele; os outros são confirmados na net e só entram no Catálogo com fontes.</p>
+        <p class="ws-note">Sem fotografia, a IA sugere de memória; com ela, escolhe entre os vinhos que lá estão. Os que o Catálogo tem aparecem com os dados dele; os outros são confirmados na net e só entram no Catálogo com fontes.</p>
       </div>
 
       <div class="ws-sem-garrafeira ws-sem-livre">
@@ -331,6 +337,31 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
     <details class="ws-hist ws-so-carta" id="ws-hist" ontoggle="if(this.open)wsCarregarHistorico()">
       <summary>Cartas anteriores</summary>
       <div id="ws-historico"></div>
+    </details>
+  </section>
+
+  <!-- ═══ IDENTIFICAR VINHOS (17/10/2026, migração 56) ═══
+       Uma fotografia de uma prateleira, ou o print de um site → os vinhos
+       que o Catálogo conhece e os que não conhece. Abre-se pelo "+" do
+       Catálogo e não tem botão na barra (ver `idAbrir` no app.js). -->
+  <section class="sec" id="s-identificar">
+    <div class="id-barra">
+      <button type="button" class="bo-volta" onclick="idVoltar()">‹ Detalhe</button>
+      <span class="id-titulo">📸 Identificar vinhos</span>
+    </div>
+    <div class="ws-card">
+      <div class="ws-card-label">Fotografias ou prints <em>(até 4)</em></div>
+      <div id="id-img-grid" class="img-grid"></div>
+      <div id="id-img-meta" class="img-meta" style="display:none"></div>
+      <input type="file" id="id-img-input" accept="image/*" multiple style="display:none" onchange="idImagensEscolhidas(event)">
+      <p class="ws-note">A prateleira de uma loja, uma montra ou a página de uma loja online. Chega-te perto o suficiente para se lerem os rótulos ou as etiquetas.</p>
+      <button class="btn prim full" id="id-btn-ler" onclick="idLer()" style="margin-top:12px" disabled>📸 Identificar</button>
+      <div id="id-status" class="ws-note" style="display:none"></div>
+    </div>
+    <div id="id-resultado"></div>
+    <details class="ws-hist" id="id-hist" ontoggle="if(this.open)idCarregarHistorico()">
+      <summary>Identificações anteriores</summary>
+      <div id="id-historico"></div>
     </details>
   </section>
 
@@ -448,10 +479,13 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 
 <div class="fab-wrap ro-hide" id="fab-wrap">
   <div class="fab-menu" id="fab-menu">
-    <button class="fab-op" onclick="fabAcao('importar')">📷 Importar de imagens ou documentos</button>
-    <button class="fab-op" onclick="fabAcao('lote')">🔎 Atualização massiva</button>
+    <!-- IDENTIFICAR VINHOS (17/10/2026): só no Catálogo, a quem tem IA; a
+         quem não é curador é a única opção (`fabSincronizar`). -->
+    <button class="fab-op" id="fab-identificar" onclick="fabAcao('identificar')" style="display:none">📸 Identificar vinhos numa foto</button>
+    <button class="fab-op so-curador" onclick="fabAcao('importar')">📷 Importar de imagens ou documentos</button>
+    <button class="fab-op so-curador" onclick="fabAcao('lote')">🔎 Atualização massiva</button>
     <button class="fab-op desejo-only so-gar" onclick="fabAcao('desejo')">⭐ Adicionar à wishlist</button>
-    <button class="fab-op" onclick="fabAcao('novo')">🍷 Novo vinho</button>
+    <button class="fab-op so-curador" onclick="fabAcao('novo')">🍷 Novo vinho</button>
   </div>
   <button class="fab" onclick="fabToggle()" aria-label="Acrescentar vinhos">+</button>
 </div>

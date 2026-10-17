@@ -2082,10 +2082,12 @@ body.cat .fab-op.so-gar{display:none!important}
    cores daqui: o bordô dela é o `--vh`, o dourado o `--ou` (a nota do Vivino
    continua a ser a única coisa dourada). Tudo debaixo de `#s-sugestoes`: os
    nomes das classes vieram tal e qual, e nada disto pode pisar o resto da
-   app. Só no catálogo e só com IA (`body.sem-sugestoes`). */
+   app. Só no catálogo e só com IA (`body.sem-sugestoes`). As peças que o
+   Identificar vinhos também usa (17/10/2026) valem para as duas secções
+   (`:is(#s-sugestoes,#s-identificar)`). */
 body:not(.cat) .itabs .so-cat{display:none!important}
 body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
-#s-sugestoes .ws-card{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:16px 18px;margin-bottom:14px;box-shadow:var(--sh)}
+:is(#s-sugestoes,#s-identificar) .ws-card{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:16px 18px;margin-bottom:14px;box-shadow:var(--sh)}
 /* Os três modos (07/10/2026): de onde vêm os vinhos — uma carta, a minha
    garrafeira, o Catálogo. O que cada um mostra decide-o o `data-modo` da
    secção; os números dos passos são um contador, e um passo escondido
@@ -2111,9 +2113,9 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
 #s-sugestoes .ws-num::before{counter-increment:wsn;content:counter(wsn) ". "}
 #s-sugestoes .ws-passo{margin-top:18px}
 #s-sugestoes:not([data-modo=carta]) .ws-passo-prato{margin-top:0}
-#s-sugestoes .ws-card-label{font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-bottom:9px;line-height:1.45}
-#s-sugestoes .ws-card-label em{font-weight:500;text-transform:none;letter-spacing:0;font-style:italic}
-#s-sugestoes .ws-note{font-size:12.5px;color:var(--mu);line-height:1.55;margin:6px 0}
+:is(#s-sugestoes,#s-identificar) .ws-card-label{font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-bottom:9px;line-height:1.45}
+:is(#s-sugestoes,#s-identificar) .ws-card-label em{font-weight:500;text-transform:none;letter-spacing:0;font-style:italic}
+:is(#s-sugestoes,#s-identificar) .ws-note{font-size:12.5px;color:var(--mu);line-height:1.55;margin:6px 0}
 #s-sugestoes .ws-card input[type=text]{width:100%;padding:10px 12px;border:1px solid var(--bo);border-radius:9px;font-size:14.5px;
   font-family:inherit;background:var(--bg);color:var(--tx)}
 #s-sugestoes .ws-card input[type=text]:focus{outline:none;border-color:var(--vh);background:#fff;box-shadow:0 0 0 3px var(--vhp)}
@@ -2145,17 +2147,17 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
 #s-sugestoes .orc-dot{width:6px;height:6px;border-radius:50%;background:var(--bo2);transition:background .15s}
 #s-sugestoes .orc-dot.on{background:var(--vh)}
 /* as fotos da carta */
-#s-sugestoes .img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
-#s-sugestoes .img-add{aspect-ratio:1;border:2px dashed var(--bo2);border-radius:12px;display:flex;flex-direction:column;
+:is(#s-sugestoes,#s-identificar) .img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+:is(#s-sugestoes,#s-identificar) .img-add{aspect-ratio:1;border:2px dashed var(--bo2);border-radius:12px;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:5px;color:var(--mu);font-size:10.5px;line-height:1.3;text-align:center;
   cursor:pointer;padding:6px;background:var(--bg);transition:border-color .15s}
-#s-sugestoes .img-add:active{border-color:var(--vh)}
-#s-sugestoes .img-thumb{position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;border:1px solid var(--bo);background:var(--bg)}
-#s-sugestoes .img-thumb img{width:100%;height:100%;object-fit:cover;display:block}
-#s-sugestoes .img-thumb-del{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(20,10,12,.6);
+:is(#s-sugestoes,#s-identificar) .img-add:active{border-color:var(--vh)}
+:is(#s-sugestoes,#s-identificar) .img-thumb{position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;border:1px solid var(--bo);background:var(--bg)}
+:is(#s-sugestoes,#s-identificar) .img-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+:is(#s-sugestoes,#s-identificar) .img-thumb-del{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(20,10,12,.6);
   color:#fff;border:none;font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
-#s-sugestoes .img-meta{font-size:11.5px;color:var(--mu);margin-top:9px}
-#s-sugestoes .img-meta a{color:var(--vh);font-weight:600}
+:is(#s-sugestoes,#s-identificar) .img-meta{font-size:11.5px;color:var(--mu);margin-top:9px}
+:is(#s-sugestoes,#s-identificar) .img-meta a{color:var(--vh);font-weight:600}
 /* o resultado */
 #s-sugestoes .vinho-card{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;
   position:relative;box-shadow:var(--sh)}
@@ -2168,38 +2170,38 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
 #s-sugestoes .bg-ok{background:var(--vdp);color:var(--vd)}
 #s-sugestoes .bg-warn{background:var(--oup);color:var(--ou2)}
 #s-sugestoes .bg-bad{background:var(--dgp);color:var(--dg)}
-#s-sugestoes .carta-list{display:flex;flex-direction:column}
-#s-sugestoes .carta-item{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto auto;gap:8px;align-items:center;
+:is(#s-sugestoes,#s-identificar) .carta-list{display:flex;flex-direction:column}
+:is(#s-sugestoes,#s-identificar) .carta-item{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto auto;gap:8px;align-items:center;
   font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--bo)}
-#s-sugestoes .carta-item:last-child{border-bottom:none}
-#s-sugestoes .carta-check{width:16px;height:16px;margin:0;flex:0 0 auto;accent-color:var(--vh)}
-#s-sugestoes .carta-check-vazio{width:16px;height:16px}
+:is(#s-sugestoes,#s-identificar) .carta-item:last-child{border-bottom:none}
+:is(#s-sugestoes,#s-identificar) .carta-check{width:16px;height:16px;margin:0;flex:0 0 auto;accent-color:var(--vh)}
+:is(#s-sugestoes,#s-identificar) .carta-check-vazio{width:16px;height:16px}
 /* já procurado com IA nesta carta: um visto, não uma caixa */
-#s-sugestoes .carta-check-feito{width:16px;height:16px;display:flex;align-items:center;justify-content:center;color:var(--vd);font-weight:700;font-size:12px}
-#s-sugestoes .carta-nome{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is(#s-sugestoes,#s-identificar) .carta-check-feito{width:16px;height:16px;display:flex;align-items:center;justify-content:center;color:var(--vd);font-weight:700;font-size:12px}
+:is(#s-sugestoes,#s-identificar) .carta-nome{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* um vinho que o Catálogo conhece abre a página dele */
-#s-sugestoes .carta-nome.ligado{cursor:pointer}
+:is(#s-sugestoes,#s-identificar) .carta-nome.ligado{cursor:pointer}
 #s-sugestoes .carta-ver{color:var(--vh);font-weight:700;margin-left:4px}
-#s-sugestoes .carta-sub{display:block;color:var(--mu);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#s-sugestoes .carta-score{color:var(--mu);white-space:nowrap;font-weight:600;font-size:11.5px}
-#s-sugestoes .carta-score.conhecida{color:var(--ou2);text-decoration:none}
-#s-sugestoes .carta-score.sem-dados{font-weight:500;font-style:italic;opacity:.8}
-#s-sugestoes .carta-score.a-procurar{color:var(--vh);font-weight:500;font-style:italic}
+:is(#s-sugestoes,#s-identificar) .carta-sub{display:block;color:var(--mu);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is(#s-sugestoes,#s-identificar) .carta-score{color:var(--mu);white-space:nowrap;font-weight:600;font-size:11.5px}
+:is(#s-sugestoes,#s-identificar) .carta-score.conhecida{color:var(--ou2);text-decoration:none}
+:is(#s-sugestoes,#s-identificar) .carta-score.sem-dados{font-weight:500;font-style:italic;opacity:.8}
+:is(#s-sugestoes,#s-identificar) .carta-score.a-procurar{color:var(--vh);font-weight:500;font-style:italic}
 #s-sugestoes .carta-ano{color:var(--mu);font-weight:500;font-size:10.5px;margin-left:3px}
-#s-sugestoes .carta-preco{color:var(--mu);white-space:nowrap}
-#s-sugestoes .carta-preco.preco-barato,#s-sugestoes .carta-preco.preco-justo{color:var(--vd);font-weight:600}
-#s-sugestoes .carta-preco.preco-caro{color:var(--ou2);font-weight:600}
-#s-sugestoes .carta-preco.preco-muito_caro{color:var(--dg);font-weight:600}
+:is(#s-sugestoes,#s-identificar) .carta-preco{color:var(--mu);white-space:nowrap}
+:is(#s-sugestoes,#s-identificar) .carta-preco.preco-barato,:is(#s-sugestoes,#s-identificar) .carta-preco.preco-justo{color:var(--vd);font-weight:600}
+:is(#s-sugestoes,#s-identificar) .carta-preco.preco-caro{color:var(--ou2);font-weight:600}
+:is(#s-sugestoes,#s-identificar) .carta-preco.preco-muito_caro{color:var(--dg);font-weight:600}
 #s-sugestoes .carta-amigos{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;white-space:normal}
 #s-sugestoes .am-chip{font-size:10.5px;line-height:1.5;color:var(--vh);background:var(--vhp);border:1px solid #ecd3dc;border-radius:10px;
   padding:0 7px;cursor:pointer;white-space:nowrap}
 #s-sugestoes .am-legenda{margin:-4px 0 10px;font-size:11px}
-#s-sugestoes .tipo-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+:is(#s-sugestoes,#s-identificar) .tipo-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
 #s-sugestoes .tipo-legenda{display:flex;flex-wrap:wrap;gap:11px;margin:2px 0 12px}
 #s-sugestoes .tipo-legenda-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--mu)}
 /* os dois passos a seguir à carta: procurar informação e sugerir */
-#s-sugestoes .ws-acoes{margin-top:12px;display:flex;flex-direction:column;gap:8px}
-#s-sugestoes .ws-acoes .ws-note{margin:0}
+:is(#s-sugestoes,#s-identificar) .ws-acoes{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+:is(#s-sugestoes,#s-identificar) .ws-acoes .ws-note{margin:0}
 /* a caixa resumo: um <details> por vinho, só o primeiro aberto */
 #s-sugestoes .sug-titulo{margin:2px 4px 8px}
 #s-sugestoes .sug-titulo em{font-weight:500;text-transform:none;letter-spacing:0}
@@ -2236,15 +2238,45 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
 #s-sugestoes .sug-links{display:flex;gap:6px;margin-top:10px}
 #s-sugestoes .sug-links a.mini{text-decoration:none;color:inherit}
 /* as cartas anteriores: fechadas, como as garrafas por posicionar */
-#s-sugestoes .ws-hist{margin-top:6px}
-#s-sugestoes .ws-hist>summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;
+:is(#s-sugestoes,#s-identificar) .ws-hist{margin-top:6px}
+:is(#s-sugestoes,#s-identificar) .ws-hist>summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;
   padding:10px 4px}
-#s-sugestoes .hist-item{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);margin-bottom:10px;overflow:hidden}
-#s-sugestoes .hist-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
-#s-sugestoes .hist-prato{font-weight:600;font-size:14px}
-#s-sugestoes .hist-orc{font-weight:500;color:var(--mu);font-size:12px}
-#s-sugestoes .hist-top{font-size:12px;color:var(--mu);margin-top:2px}
-#s-sugestoes .hist-data{font-size:11px;color:var(--mu);white-space:nowrap}
+:is(#s-sugestoes,#s-identificar) .hist-item{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);margin-bottom:10px;overflow:hidden}
+:is(#s-sugestoes,#s-identificar) .hist-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
+:is(#s-sugestoes,#s-identificar) .hist-prato{font-weight:600;font-size:14px}
+:is(#s-sugestoes,#s-identificar) .hist-orc{font-weight:500;color:var(--mu);font-size:12px}
+:is(#s-sugestoes,#s-identificar) .hist-top{font-size:12px;color:var(--mu);margin-top:2px}
+/* a pergunta livre com uma fotografia: os vinhos que se leram, fechados
+   debaixo da sugestão (sem o visto de procurar — uma coluna a menos) */
+#s-sugestoes .ws-livre-foto{margin:4px 0 10px;background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:4px 14px}
+#s-sugestoes .ws-livre-foto>summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;padding:9px 0}
+#s-sugestoes .ws-card .ws-livre-foto{border:none;padding:0;margin:6px 0 0;background:none}
+#s-sugestoes .carta-item.ws-foto-item{grid-template-columns:auto minmax(0,1fr) auto auto}
+:is(#s-sugestoes,#s-identificar) .hist-data{font-size:11px;color:var(--mu);white-space:nowrap}
+
+/* ── IDENTIFICAR VINHOS NUMA FOTOGRAFIA (17/10/2026) ──
+   Usa as peças das Sugestões — as fotos, as linhas da carta, o histórico
+   (os `:is(#s-sugestoes,#s-identificar)` de cima). Daqui só o que é dele: a
+   barra com o voltar (sem botão na barra dos separadores, nada lá acende),
+   os dois grupos, e por baixo de cada cartão do Catálogo o que se leu na
+   foto, em letra pequena e sem caixa — o cartão é que é o vinho. */
+#s-identificar .id-barra{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+#s-identificar .id-titulo{font-family:var(--fd);font-weight:600;font-size:18px;min-width:0}
+#s-identificar .id-tit{margin:4px 4px 8px}
+#s-identificar .id-entre{margin:-4px 4px 10px}
+#s-identificar .id-grupo{font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin:18px 4px 9px}
+#s-identificar .id-grupo b{color:var(--tx)}
+#s-identificar .id-conh{margin-bottom:14px}
+#s-identificar .id-lido{font-size:12px;color:var(--mu);line-height:1.5;margin:-4px 8px 0}
+#s-identificar .id-pr{font-weight:600;color:var(--tx)}
+#s-identificar .id-pr.ok{color:var(--vd)}
+#s-identificar .id-pr.caro{color:var(--ou2)}
+#s-identificar .id-pr.mau{color:var(--dg)}
+#s-identificar .id-novo{display:block;color:#1d4a3b;font-weight:600;margin-top:2px}
+#s-identificar .carta-sub.id-falta{white-space:normal;color:var(--dg)}
+/* um vinho lido sem cor pede-a no lugar do ponto (é a chave do Catálogo) */
+#s-identificar .id-cor{font-size:11.5px;padding:2px 4px;border:1px solid var(--bo2);border-radius:7px;background:var(--bg);
+  color:var(--tx);font-family:inherit;max-width:78px}
 
 /* ── IMPORTAR DE IMAGENS OU DOCUMENTOS ──
    O topo de cada vinho lido: o que se leu, de que ficheiro, e "Este é:" — o

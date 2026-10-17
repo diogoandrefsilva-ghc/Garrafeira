@@ -1834,8 +1834,10 @@ function wsAbrir(){
   if(!WS_INIT){
     WS_INIT=true;
     wsRenderImgGrid();
+    wsLivreImgPintar();
     wsOrcamentoInit();
     wsRetomarPendente();
+    wsLivreRetomar();
   }
   wsModoAplicar();
   const h=document.getElementById('ws-hist');
@@ -1880,27 +1882,30 @@ function wsModoAplicar(){
 // ── As fotos da carta (mais do que uma, se o menu não couber numa só) ──
 let _wsImagens=[]; // [{base64, mime}]
 const WS_MAX_IMAGENS=6;
-function wsRenderImgGrid(){
-  const grid=document.getElementById('ws-img-grid');
-  if(!grid)return;
-  const thumbs=_wsImagens.map((img,i)=>`
+/* A grelha das fotografias — a carta, a pergunta livre com uma foto e o
+   Identificar vinhos usam a mesma: as miniaturas com o ✕ e, enquanto
+   cabe, o quadrado de tirar ou escolher. */
+const FOTO_ADD_SVG='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>';
+function fotosGridPintar(gridId,metaId,imgs,max,inputId,remover,limpar){
+  const grid=document.getElementById(gridId);
+  if(grid)grid.innerHTML=imgs.map((img,i)=>`
     <div class="img-thumb">
       <img src="data:${img.mime};base64,${img.base64}" alt="">
-      <button type="button" class="img-thumb-del" onclick="wsRemoverImagem(${i})" aria-label="Remover">✕</button>
-    </div>`).join('');
-  const podeAdicionar=_wsImagens.length<WS_MAX_IMAGENS;
-  grid.innerHTML=thumbs+(podeAdicionar?`
-    <div class="img-add" onclick="document.getElementById('ws-img-input').click()">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-      <div>${_wsImagens.length?'Mais uma':'Tirar foto / escolher'}</div>
+      <button type="button" class="img-thumb-del" onclick="${remover}(${i})" aria-label="Remover">✕</button>
+    </div>`).join('')+(imgs.length<max?`
+    <div class="img-add" onclick="document.getElementById('${inputId}').click()">
+      ${FOTO_ADD_SVG}
+      <div>${imgs.length?'Mais uma':'Tirar foto / escolher'}</div>
     </div>`:'');
-  const meta=document.getElementById('ws-img-meta');
-  if(_wsImagens.length){
-    meta.style.display='block';
-    meta.innerHTML=`${_wsImagens.length} foto${_wsImagens.length>1?'s':''} · <a href="#" onclick="event.preventDefault();wsLimparImagens()">limpar</a>`;
-  }else{
-    meta.style.display='none';
+  const meta=document.getElementById(metaId);
+  if(meta){
+    meta.style.display=imgs.length?'block':'none';
+    meta.innerHTML=imgs.length?`${imgs.length} foto${imgs.length>1?'s':''} · <a href="#" onclick="event.preventDefault();${limpar}()">limpar</a>`:'';
   }
+}
+function wsRenderImgGrid(){
+  if(!document.getElementById('ws-img-grid'))return;
+  fotosGridPintar('ws-img-grid','ws-img-meta',_wsImagens,WS_MAX_IMAGENS,'ws-img-input','wsRemoverImagem','wsLimparImagens');
   document.getElementById('ws-btn-ler').disabled=_wsImagens.length===0||!!_wsPollTimer;
 }
 function wsRemoverImagem(i){_wsImagens.splice(i,1);wsRenderImgGrid();}
@@ -2568,7 +2573,10 @@ async function wsCarregarHistorico(){
   if(!box)return;
   box.innerHTML='<p class="ws-note">A carregar…</p>';
   try{
-    const rows=await sbReq('GET',`cartas?select=id,prato,orcamento,estado,vinhos,recomendacao,rec_estado,erro,criado_em&order=criado_em.desc&limit=30`);
+    // As fotografias do Identificar vinhos vivem na mesma tabela (migração
+    // 56, `fonte`); sem a coluna, o filtro recusa-se e lêem-se todas.
+    const q='cartas?select=id,prato,orcamento,estado,vinhos,recomendacao,rec_estado,erro,criado_em&order=criado_em.desc&limit=30';
+    const rows=await sbReq('GET',q+'&fonte=eq.carta').catch(()=>sbReq('GET',q));
     if(!rows||!rows.length){box.innerHTML='<p class="ws-note">Ainda não leste nenhuma carta.</p>';return;}
     box.innerHTML=rows.map(wsHistItemHTML).join('');
   }catch(e){box.innerHTML='<p class="ws-note">Não foi possível carregar as cartas anteriores.</p>';}
@@ -3178,24 +3186,90 @@ function wsLivreValores(){
   if(min!=null&&max!=null&&min>max)[min,max]=[max,min];
   return {prato:document.getElementById('ws-prato').value.trim(),min,max,obs:(document.getElementById('ws-obs')||{}).value||''};
 }
+/* A PERGUNTA LIVRE COM UMA FOTOGRAFIA (17/10/2026, migração 56) — o dono
+   das apps: "enviar uma fotografia de vinhos (que tirei tipo no
+   supermercado) e perguntar à IA, para o que vou almoçar ou jantar, qual é
+   o vinho mais recomendado". É opcional: com fotos, a IA escolhe ENTRE os
+   vinhos da foto (lidos como no Identificar, e com a ficha do Catálogo dos
+   que ele conhece) — a `garrafeira-carta` faz isso quando o pedido traz
+   `imagens`. A resposta é uma pergunta livre como as outras (lê-se pela
+   `livre_ler`, e desenha-se com o mesmo `wsLivreHTML`), só que nasce
+   `pendente` — ler a foto leva tempo —, sonda-se (`wsLivreEsperarFoto`) e
+   sobrevive a recarregar a página (`gf_ws_livre_foto`). Sem memória: cada
+   fotografia é outra pergunta. */
+let _wsLivreImagens=[];
+const WS_LIVRE_FOTO_KEY='gf_ws_livre_foto';
+function wsLivreImgPintar(){
+  fotosGridPintar('ws-livre-img-grid','ws-livre-img-meta',_wsLivreImagens,ID_MAX_FOTOS,'ws-livre-img-input','wsLivreRemoverImagem','wsLivreLimparImagens');
+  wsLivreBotao();
+}
+function wsLivreRemoverImagem(i){_wsLivreImagens.splice(i,1);wsLivreImgPintar();}
+function wsLivreLimparImagens(){_wsLivreImagens=[];wsLivreImgPintar();}
+async function wsLivreImagensEscolhidas(ev){
+  const files=Array.from(ev.target.files||[]);
+  ev.target.value='';
+  if(!files.length)return;
+  const espaco=Math.max(0,ID_MAX_FOTOS-_wsLivreImagens.length);
+  let falhas=0;
+  for(const f of files.slice(0,espaco)){
+    try{_wsLivreImagens.push(await idProcessarImagem(f));}
+    catch(e){try{_wsLivreImagens.push(await wsProcessarImagem(f));}catch(_){falhas++;}}
+  }
+  if(falhas)toast(`Não consegui ler ${falhas>1?'algumas fotos':'uma foto'} — tenta outra vez`,1);
+  else if(files.length>espaco)toast(`Só cabem ${ID_MAX_FOTOS} fotos de cada vez`,1);
+  wsLivreImgPintar();
+}
+// Para o "pedir outra vez": são as mesmas fotos?
+function wsLivreFotosSig(){return _wsLivreImagens.map(im=>im.base64.length+':'+im.base64.slice(-24)).join('|');}
+// Até a função acabar de ler a foto e escolher (lança com o erro dela).
+async function wsLivreEsperarFoto(st,ja){
+  const inicio=Date.now();
+  while(WS_LIVRE===st){
+    if(!ja)await new Promise(r=>setTimeout(r,3000));
+    ja=false;
+    if(WS_LIVRE!==st)return;
+    let p=null;
+    try{p=await sbRpc('livre_ler',{p_id:st.id});}catch(e){}
+    if(p&&p.estado==='erro')throw new Error(p.erro||'Não consegui ler a fotografia — tenta outra vez.');
+    if(p&&p.estado!=='pendente')return;
+    if(Date.now()-inicio>3*60*1000)throw new Error('Está a demorar demasiado — tenta outra vez daqui a pouco.');
+  }
+}
+// Uma escolha a partir de uma foto que ficou a meio (recarregou-se a página).
+async function wsLivreRetomar(){
+  let id=null;try{id=localStorage.getItem(WS_LIVRE_FOTO_KEY);}catch(e){}
+  if(!id||WS_LIVRE)return;
+  const st={estado:'pendente',q:{prato:'',min:null,max:null,obs:'',palavras:[],chavePrato:'',fotos:''},
+    id:Number(id),pedido:null,memoria:false,erro:'',inicio:0,foto:true};
+  WS_LIVRE=st;wsLivreBotao();wsDesenhar();
+  try{await wsLivreEsperarFoto(st,true);await wsLivreLer(st);st.estado='ok';st.q.prato=(st.pedido&&st.pedido.prato)||'';}
+  catch(e){st.estado='erro';st.erro=e.message;}
+  try{localStorage.removeItem(WS_LIVRE_FOTO_KEY);}catch(e){}
+  if(WS_LIVRE!==st)return;
+  wsLivreBotao();
+  if(WS_MODO==='livre')wsDesenhar();
+  if(st.estado==='ok'&&wsLivreAConfirmar(st))wsLivreSondar(st);
+}
 function wsLivreBotao(){
   const b=document.getElementById('ws-btn-livre');
   if(!b)return;
-  const st=WS_LIVRE;
+  const st=WS_LIVRE, foto=_wsLivreImagens.length>0;
   b.disabled=!!(st&&st.estado==='pendente');
-  b.textContent=st&&st.estado==='pendente'?'✨ A pensar…':st&&st.estado==='ok'?'✨ Pedir outra vez':'✨ Sugerir 5 vinhos';
+  b.textContent=st&&st.estado==='pendente'?(st.foto?'📸 A ler a foto…':'✨ A pensar…')
+    :foto?'📸 Escolher entre os vinhos da foto':st&&st.estado==='ok'?'✨ Pedir outra vez':'✨ Sugerir 5 vinhos';
 }
 async function wsLivrePedir(){
   if(WS_LIVRE&&WS_LIVRE.estado==='pendente')return;
   if(!podeUsarIA()){toast('As sugestões usam IA, e a IA não está incluída no teu acesso',1);return;}
   const q=wsLivreValores();
   if(!q.prato){toast('Diz primeiro o que vais comer',1);document.getElementById('ws-prato').focus();return;}
-  const chavePrato=wsLivreChavePrato(q.prato), palavras=wsLivreObsPalavras(q.obs);
-  // Pedir OUTRA vez (o mesmo prato e o mesmo preço) obriga a mais detalhe:
-  // sem uma palavra nova nas observações, a resposta era a mesma.
+  const chavePrato=wsLivreChavePrato(q.prato), palavras=wsLivreObsPalavras(q.obs), fotos=wsLivreFotosSig();
+  // Pedir OUTRA vez (o mesmo prato e o mesmo preço — e as mesmas fotos)
+  // obriga a mais detalhe: sem uma palavra nova nas observações, a resposta
+  // era a mesma.
   const ant=WS_LIVRE;
   if(ant&&ant.estado==='ok'&&(ant.q.chavePrato||chave(ant.q.prato))===(chavePrato||chave(q.prato))&&ant.q.min===q.min&&ant.q.max===q.max
-     &&palavras.every(w=>ant.q.palavras.includes(w))){
+     &&(ant.q.fotos||'')===fotos&&palavras.every(w=>ant.q.palavras.includes(w))){
     ant.pedeDetalhe=true;
     wsDesenhar();
     const o=document.getElementById('ws-obs');
@@ -3204,19 +3278,26 @@ async function wsLivrePedir(){
     return;
   }
   clearTimeout(_wsLivreTimer);
-  const st={estado:'pendente',q:Object.assign({chavePrato,palavras},q),id:null,pedido:null,memoria:false,erro:'',inicio:0};
+  const st={estado:'pendente',q:Object.assign({chavePrato,palavras,fotos},q),id:null,pedido:null,memoria:false,erro:'',inicio:0,foto:!!fotos};
   WS_LIVRE=st;
   wsLivreBotao();wsDesenhar();
   try{
-    const d=await wsChamar({acao:'livre',prato:q.prato,precoMin:q.min,precoMax:q.max,observacoes:q.obs.trim(),chavePrato});
+    const corpo={acao:'livre',prato:q.prato,precoMin:q.min,precoMax:q.max,observacoes:q.obs.trim(),chavePrato};
+    if(st.foto)corpo.imagens=_wsLivreImagens.map(im=>({data:im.base64,mime:im.mime}));
+    const d=await wsChamar(corpo);
     if(!d.id)throw new Error(d.error||'Resposta inesperada — tenta outra vez.');
     st.id=d.id;st.memoria=!!d.memoria;
+    if(d.pendente){
+      try{localStorage.setItem(WS_LIVRE_FOTO_KEY,String(d.id));}catch(e){}
+      await wsLivreEsperarFoto(st);
+    }else if(st.foto)st.semFoto=true;   // uma função antiga: respondeu sem olhar para a foto
     await wsLivreLer(st);
     st.estado='ok';
   }catch(e){
     st.estado='erro';
     st.erro=/acção desconhecida/.test(e.message)?'A função `garrafeira-carta` publicada no Supabase ainda não sabe fazer a pergunta livre.':e.message;
   }
+  if(st.foto)try{localStorage.removeItem(WS_LIVRE_FOTO_KEY);}catch(e){}
   if(WS_LIVRE!==st)return;
   wsLivreBotao();
   if(WS_MODO==='livre'){
@@ -3244,6 +3325,22 @@ async function wsLivreLer(st){
       const r=await sbRpc('carta_ligar',{p_pedidos:falta.map(v=>({nome:v.nome,produtor:v.produtor||'',ano:v.ano??null,tipo:v.tipo||null}))});
       (Array.isArray(r)?r:[]).forEach((l,i)=>{if(l&&l.id!=null&&IDXV[-Number(l.id)])st.cat.set(Number(falta[i].id),-Number(l.id));});
     }catch(e){}
+  }
+  /* Na garrafeira de quem (17/10/2026, o dono: "para os vinhos que já
+     existissem no Catálogo ou na garrafeira de alguém, colocava lá essa
+     nota"): a minha, e as dos amigos das Prendas de Anos — as marcas da
+     carta (`marcas_amigos`, ver "A exceção: as marcas dos amigos"). As
+     garrafeiras de mais ninguém: cada um vê a sua. Pede-se uma vez por
+     vinho (a sondagem volta aqui de 5 em 5 segundos). */
+  if(!st.marcas){st.marcas=new Map();st.marcasPedidas=new Set();}
+  const semMarca=vs.filter(v=>!st.marcasPedidas.has(Number(v.id)));
+  if(semMarca.length&&_sbSession){
+    semMarca.forEach(v=>st.marcasPedidas.add(Number(v.id)));
+    try{
+      const d=await sbRpc('marcas_amigos',{p_pedidos:semMarca.map(v=>({nome:v.nome,produtor:v.produtor||'',ano:v.ano??null,tipo:v.tipo||null,
+        catalogo_id:st.cat.has(Number(v.id))?-st.cat.get(Number(v.id)):(v.catalogo_id!=null?Number(v.catalogo_id):null)}))});
+      if(Array.isArray(d))d.forEach((m,i)=>{if(m)st.marcas.set(Number(semMarca[i].id),m);});
+    }catch(e){semMarca.forEach(v=>st.marcasPedidas.delete(Number(v.id)));}
   }
 }
 function wsLivreAConfirmar(st){
@@ -3276,27 +3373,66 @@ function wsLivreDataTxt(iso){
 function wsLivreHTML(){
   const st=WS_LIVRE;
   if(!st)return '';
-  if(st.estado==='pendente')return `<div class="ws-card"><p class="ws-note">✨ A pensar em 5 vinhos para «${esc(st.q.prato)}»…</p></div>`;
+  if(st.estado==='pendente'){
+    const para=st.q.prato?` para «${esc(st.q.prato)}»`:'';
+    return `<div class="ws-card"><p class="ws-note">${st.foto
+      ?`📸 A ler a foto e a escolher${para} — pode demorar um minuto; podes sair da app.`
+      :`✨ A pensar em 5 vinhos${para}…`}</p></div>`;
+  }
   if(st.estado==='erro')return `<div class="ws-card"><p class="ws-note" style="color:var(--dg)">${esc(st.erro)}</p></div>`;
   const p=st.pedido||{};
   const sug=(Array.isArray(p.sugestoes)?p.sugestoes:[]).filter(s=>st.vinhos.has(Number(s.v)));
-  if(!sug.length)return '<div class="ws-card"><p class="ws-note">A IA não sugeriu nenhum vinho que eu conseguisse ler. Tenta outra vez, com outras palavras.</p></div>';
+  const foto=p.foto&&typeof p.foto==='object'?p.foto:null;
+  if(!sug.length){
+    return foto
+      ?`<div class="ws-card"><p class="ws-note">📸 ${esc(foto.semSugestao||'Nenhum dos vinhos da foto combina com este pedido.')}</p>${wsLivreFotoHTML(foto,true)}</div>`
+      :'<div class="ws-card"><p class="ws-note">A IA não sugeriu nenhum vinho que eu conseguisse ler. Tenta outra vez, com outras palavras.</p></div>';
+  }
   const n=wsLivreAConfirmar(st);
   const eur=x=>String(Math.round(Number(x)))+' €';
   const preco=p.preco_min!=null&&p.preco_max!=null?`${eur(p.preco_min)} a ${eur(p.preco_max)}`
     :p.preco_max!=null?`até ${eur(p.preco_max)}`:p.preco_min!=null?`a partir de ${eur(p.preco_min)}`:'';
   const notas=[];
+  if(st.semFoto)notas.push('⚠️ A função publicada no Supabase ainda não lê fotografias — esta é a sugestão sem olhar para a foto.');
+  if(foto){
+    const fv=Array.isArray(foto.vinhos)?foto.vinhos:[];
+    const conh=fv.filter(v=>v.cat!=null&&IDXV[-Number(v.cat)]).length;
+    notas.push(`📸 Li ${fv.length===1?'1 vinho':fv.length+' vinhos'} na fotografia; ${!conh?'o Catálogo não conhece nenhum':'o Catálogo conhece '+(conh===fv.length?(fv.length===1?'esse':'todos'):conh)}. A escolha é entre eles.${foto.aviso?' '+esc(foto.aviso):''}`);
+  }
   if(st.memoria)notas.push(`É a resposta de um pedido igual de ${esc(wsLivreDataTxt(p.criado_em))} — o mesmo prato, o mesmo preço e as mesmas observações dão a mesma sugestão durante uma semana.`);
   if(n)notas.push(`🔎 A confirmar na net ${n===1?'1 vinho que o Catálogo ainda não tem':n+' vinhos que o Catálogo ainda não tem'} — se tudo o que interessa vier com fonte, ${n===1?'entra':'entram'} no Catálogo.`);
-  return `<div class="ws-card-label sug-titulo">A sugestão · ${esc(p.prato||st.q.prato)}${preco?` · ${preco}`:''}${sug.length>1?' <em>— toca num vinho para ver porquê</em>':''}</div>`
+  if(st.marcas&&st.marcas.size)notas.push('Dos amigos das Prendas de Anos: 🍾 tem na garrafeira · ⭐ bebeu e deu nota · 💭 está na wishlist · 🎁 já foi prenda. Toca numa marca para ver o pormenor.');
+  return `<div class="ws-card-label sug-titulo">${foto?'Da fotografia':'A sugestão'} · ${esc(p.prato||st.q.prato)}${preco?` · ${preco}`:''}${sug.length>1?' <em>— toca num vinho para ver porquê</em>':''}</div>`
     +notas.map(t=>`<p class="ws-note sug-entre">${t}</p>`).join('')
     +sug.map((s,k)=>wsLivreSugHTML(st,s,k)).join('')
-    +`<p class="ws-note ws-livre-outra${st.pedeDetalhe?' aviso':''}">Queres outra resposta? Acrescenta mais detalhe nas <b>observações</b> (uma casta, uma região, um estilo…) e pede outra vez.</p>`;
+    +(foto?wsLivreFotoHTML(foto,false):'')
+    +`<p class="ws-note ws-livre-outra${st.pedeDetalhe?' aviso':''}">Queres outra resposta? Acrescenta mais detalhe nas <b>observações</b> (uma casta, uma região, um estilo…)${foto?' ou tira outra fotografia,':''} e pede outra vez.</p>`;
+}
+// Os vinhos que se leram na fotografia: os que o Catálogo conhece abrem a
+// página do vinho. Fechada debaixo da sugestão; aberta quando não houve.
+function wsLivreFotoHTML(foto,aberta){
+  const fv=Array.isArray(foto.vinhos)?foto.vinhos:[];
+  if(!fv.length)return '';
+  const linhas=fv.map(v=>{
+    const cat=v.cat!=null?IDXV[-Number(v.cat)]:null, tipo=v.tipo||(cat&&cat.tipo)||'';
+    const sub=[v.produtor||(cat&&cat.produtor),v.ano,v.regiao||(cat&&cat.regiao)].filter(Boolean).map(y=>esc(String(y))).join(' · ');
+    const nome=cat?`<span class="carta-nome ligado" onclick="verVinho(${cat.id})">${esc(cat.nome||v.nome)}<span class="carta-ver">›</span>`
+      :`<span class="carta-nome">${esc(v.nome||'')}`;
+    const est=cat?(wsNotaHTML(cat,v,'carta-score conhecida')||'<span class="carta-score">no Catálogo</span>')
+      :'<span class="carta-score sem-dados">fora do Catálogo</span>';
+    return `<div class="carta-item ws-foto-item"><span class="tipo-dot" style="background:${wsTipoCor(tipo)}" title="${esc(tipo||'Cor desconhecida')}"></span>
+      ${nome}${sub?`<span class="carta-sub">${sub}</span>`:''}</span>${est}<span class="carta-preco">${v.preco!=null?wsEur(Number(v.preco)):''}</span></div>`;
+  }).join('');
+  return `<details class="ws-livre-foto"${aberta?' open':''}><summary>${fv.length===1?'O vinho que li na foto':`Os ${fv.length} vinhos que li na foto`}</summary>
+    <div class="carta-list">${linhas}</div></details>`;
 }
 // Um vinho que o Catálogo tem: como no modo Catálogo. Um que não tem: o que
 // a IA disse (o preço dito como de memória) e em que pé está a confirmação.
 function wsLivreSugHTML(st,s,k){
   const x=st.vinhos.get(Number(s.v)), cid=st.cat.get(Number(s.v)), v=cid?IDXV[cid]:null;
+  // Escolhido de uma fotografia: o que se leu nela (o preço da etiqueta).
+  const foto=st.pedido&&st.pedido.foto, lido=foto&&Array.isArray(foto.vinhos)&&Number.isInteger(s.i)?foto.vinhos[s.i]:null;
+  const marcas=wsMarcasHTML(st.marcas&&st.marcas.get(Number(s.v)));
   const marca=k===0?'<span class="sug-marca topo">🏆 Melhor escolha</span>':'';
   const razao=s.razao?`<p class="vinho-txt"><strong>Porquê:</strong> ${esc(s.razao)}</p>`:'';
   if(v){
@@ -3307,17 +3443,21 @@ function wsLivreSugHTML(st,s,k){
     return `<details class="vinho-card sug-det${k===0?' destaque':''}"${k===0?' open':''}>
       <summary class="sug-sum"><span class="sug-pos">${k+1}</span>
         <span class="sug-cab">${marca}<span class="vinho-nome">${esc(v.nome||'Vinho')}</span>
-          ${sub?`<span class="vinho-sub">${sub}</span>`:''}${v.produtor?`<span class="vinho-sub sug-prod">${esc(v.produtor)}</span>`:''}</span>
+          ${sub?`<span class="vinho-sub">${sub}</span>`:''}${v.produtor?`<span class="vinho-sub sug-prod">${esc(v.produtor)}</span>`:''}${marcas}</span>
         <span class="sug-dir"><span class="vinho-preco"${pr&&pr.loja?` title="${esc(precoFonteTxt(pr))}"`:''}>${wsEur(pr?pr.preco:null)}</span>${nota}</span>
       </summary>
       <div class="sug-corpo">
         ${t||novo?`<div class="sug-extra">${novo}${t||''}</div>`:''}${razao}
+        ${lido&&lido.preco!=null?`<p class="ws-note">📷 ${idPrecoHTML(Number(lido.preco),v)}</p>`:''}
         <div class="sug-links"><button type="button" class="mini" onclick="verVinho(${v.id})">Ver a ficha</button>${viv?`<a class="mini" href="${esc(viv)}" target="_blank" rel="noopener">Vivino ↗</a>`:''}</div>
       </div></details>`;
   }
   const sg=x.sugerido||{};
-  const sub=[x.tipo,x.regiao||sg.regiao,(sg.castas||[]).join(', ')].filter(Boolean).map(y=>esc(String(y))).join(' · ');
-  const preco=typeof sg.preco==='number'?`<span class="vinho-preco" title="Preço aproximado, dito pela IA de memória">~${wsEur(sg.preco)}</span>`:'';
+  // Da foto: o que se leu, e o preço da etiqueta; de memória: o que a IA disse.
+  const sub=(lido?[x.tipo,lido.ano,x.regiao||lido.regiao]:[x.tipo,x.regiao||sg.regiao,(sg.castas||[]).join(', ')])
+    .filter(Boolean).map(y=>esc(String(y))).join(' · ');
+  const preco=lido?(lido.preco!=null?`<span class="vinho-preco" title="O preço da etiqueta, na fotografia">${wsEur(Number(lido.preco))}</span>`:'')
+    :typeof sg.preco==='number'?`<span class="vinho-preco" title="Preço aproximado, dito pela IA de memória">~${wsEur(sg.preco)}</span>`:'';
   const est=x.estado==='a_verificar'?'<span class="ws-livre-est">🔎 A confirmar na net…</span>'
     :x.estado==='pendente'?'<span class="ws-livre-est">Ainda por confirmar na net.</span>'
     :x.estado==='por_carregar'||x.estado==='descartado'?`<span class="ws-livre-est">Não ficou no Catálogo${x.falta&&x.falta.length&&x.estado==='por_carregar'?': faltou '+esc(x.falta.join(', ')):''}.</span>`
@@ -3325,13 +3465,404 @@ function wsLivreSugHTML(st,s,k){
   return `<details class="vinho-card sug-det ws-livre-fora${k===0?' destaque':''}"${k===0?' open':''}>
     <summary class="sug-sum"><span class="sug-pos">${k+1}</span>
       <span class="sug-cab">${marca}<span class="vinho-nome">${esc(x.nome||'Vinho')}</span>
-        ${sub?`<span class="vinho-sub">${sub}</span>`:''}${x.produtor?`<span class="vinho-sub sug-prod">${esc(x.produtor)}</span>`:''}</span>
+        ${sub?`<span class="vinho-sub">${sub}</span>`:''}${x.produtor?`<span class="vinho-sub sug-prod">${esc(x.produtor)}</span>`:''}${marcas}</span>
       <span class="sug-dir">${preco}<span class="sug-nota"><span class="sem-dados">fora do Catálogo</span></span></span>
     </summary>
     <div class="sug-corpo">
       ${est?`<div class="sug-extra">${est}</div>`:''}${razao}
-      <p class="ws-note">O que está aqui é o que a IA disse de memória — o preço é aproximado.</p>
+      <p class="ws-note">${lido?'Está na fotografia, mas o Catálogo ainda não o conhece: a razão é o que a IA sabe dele.'
+        :'O que está aqui é o que a IA disse de memória — o preço é aproximado.'}</p>
     </div></details>`;
+}
+
+/* ── IDENTIFICAR VINHOS NUMA FOTOGRAFIA (17/10/2026, migração 56) ─────
+   O dono das apps: "estou no supermercado ou num site e tiro fotografia ou
+   print a apanhar vários vinhos, e a app dizia quais conhecia (com um card
+   resumo do que encontrou e link para o detalhe) e dizia quais não
+   conhecia (com opção de pesquisar detalhe adicional — para adicionar ao
+   Catálogo)". Para já é uma opção do "+" no Catálogo (o dono: "a futuro,
+   vou pensar numa página inicial com A minha Garrafeira, Catálogo,
+   Sugestões e esta nova Identificar Vinhos") — por isso é uma SECÇÃO
+   (`#s-identificar`) sem botão na barra dos separadores, e não um modal: a
+   página do vinho abre por cima dela, como abre por cima do Detalhe.
+   Quase tudo já existia:
+   - LER é a leitura da carta (`garrafeira-carta`, `acao:'identificar'`),
+     com outra instrução — rótulos e etiquetas de prateleira — e numa linha
+     de `garrafeira.cartas` com `fonte:'prateleira'`; sonda-se como a carta,
+     e sobrevive a sair da app (`gf_id_pendente`);
+   - CONHEÇO: a ligação de cada vinho lido ao Catálogo é a da carta
+     (`carta_ligar`, com a cor), e cada um mostra-se com o cartão do Detalhe
+     do Catálogo (o selo diz se o tenho), com o que se leu na foto por baixo
+     — o preço da etiqueta face ao preço que conta (`precoPrincipal`), que
+     numa loja é 1×, não os 2 a 3× de um restaurante;
+   - NÃO CONHEÇO: escolhem-se até 5 (10 por fotografia) para procurar com
+     fontes (`acao:'identificar_procurar'`) — a confirmação da pergunta
+     livre: só nascem no Catálogo com o produtor, as castas, o preço, a
+     imagem e o Vivino COM FONTE (o dono: "só com fontes"); o resto vai ao
+     Backoffice, aos "Sugeridos pela IA". Lê-se o estado pela
+     `livre_estados` de 5 em 5 segundos, até 4 minutos. Só a quem edita (a
+     `vinho-info` só atende editores); um vinho lido sem cor pede-a aqui,
+     que a cor é a chave do Catálogo. */
+const ID_MAX_FOTOS=4;
+const ID_PROC_MAX=5, ID_PROC_TOTAL=10;   // de cada vez · por fotografia (o `ID_PROC_*` da função)
+const ID_PENDENTE_KEY='gf_id_pendente';
+const ID_COLS='id,estado,vinhos,aviso,erro,livre,fotos,criado_em';
+const ID_POLL_MS=3000, ID_POLL_MAX_MS=3*60*1000;
+const ID_LIVRE_MS=5000, ID_LIVRE_MAX_MS=4*60*1000;
+let _idImagens=[];   // [{base64, mime}]
+let ID=null;         // a identificação que está no ecrã
+let _idPollTimer=null,_idPollInicio=0,_idLivreTimer=null;
+
+function idAbrir(){
+  if(!modoCat())return;
+  if(!podeUsarIA()){toast('Identificar vinhos usa IA, e a IA não está incluída no teu acesso',1);return;}
+  tab('identificar');
+}
+// O `tab('identificar')` chega aqui.
+function idMostrar(){
+  idRenderImgGrid();
+  idDesenhar();
+  if(!_idPollTimer){
+    let id=null;try{id=localStorage.getItem(ID_PENDENTE_KEY);}catch(e){}
+    if(id)idIniciarPolling(id);
+  }
+  const h=document.getElementById('id-hist');if(h&&h.open)idCarregarHistorico();
+}
+function idVoltar(){tab('detalhe',tabBotao('detalhe'));}
+
+// ── As fotografias (a mesma moldura das da carta) ──
+function idRenderImgGrid(){
+  fotosGridPintar('id-img-grid','id-img-meta',_idImagens,ID_MAX_FOTOS,'id-img-input','idRemoverImagem','idLimparImagens');
+  const b=document.getElementById('id-btn-ler');
+  if(b)b.disabled=!_idImagens.length||!!_idPollTimer;
+}
+function idRemoverImagem(i){_idImagens.splice(i,1);idRenderImgGrid();}
+function idLimparImagens(){_idImagens=[];idRenderImgGrid();}
+/* Mais resolução do que a carta (1280): numa prateleira os rótulos são
+   pequenos, e o que não se lê não se identifica. */
+async function idProcessarImagem(file){
+  const MAX=2048;
+  const bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});
+  let{width,height}=bitmap;
+  if(width>MAX||height>MAX){const k=MAX/Math.max(width,height);width=Math.round(width*k);height=Math.round(height*k);}
+  const canvas=document.createElement('canvas');
+  canvas.width=width;canvas.height=height;
+  canvas.getContext('2d').drawImage(bitmap,0,0,width,height);
+  return{base64:canvas.toDataURL('image/jpeg',0.85).split(',')[1],mime:'image/jpeg'};
+}
+async function idImagensEscolhidas(ev){
+  const files=Array.from(ev.target.files||[]);
+  ev.target.value='';
+  if(!files.length)return;
+  const aProcessar=files.slice(0,Math.max(0,ID_MAX_FOTOS-_idImagens.length));
+  let falhas=0;
+  for(const f of aProcessar){
+    idStatus(`A preparar a foto ${_idImagens.length+1}…`);
+    try{_idImagens.push(await idProcessarImagem(f));}
+    catch(e){try{_idImagens.push(await wsProcessarImagem(f));}catch(_){falhas++;}}
+  }
+  idStatus(falhas?`Não consegui ler ${falhas>1?'algumas fotos':'uma foto'} — tenta outra vez.`
+    :files.length>aProcessar.length?`Só cabem ${ID_MAX_FOTOS} fotos de cada vez.`:'',!!falhas||files.length>aProcessar.length);
+  idRenderImgGrid();
+}
+function idStatus(txt,erro){
+  const s=document.getElementById('id-status');
+  if(!s)return;
+  s.style.display=txt?'block':'none';
+  s.style.color=erro?'var(--dg)':'var(--mu)';
+  s.textContent=txt||'';
+}
+
+// ── Ler: a função responde já com o `id`, e sonda-se a linha ──
+async function idLer(){
+  if(!_idImagens.length){toast('Tira primeiro uma foto',1);return;}
+  if(!podeUsarIA()){toast('A IA não está incluída no teu acesso',1);return;}
+  const b=document.getElementById('id-btn-ler');
+  if(b)b.disabled=true;
+  idStatus('A enviar as fotos…');
+  clearTimeout(_idLivreTimer);
+  ID=null;idDesenhar();
+  try{
+    const d=await wsChamar({acao:'identificar',imagens:_idImagens.map(im=>({data:im.base64,mime:im.mime}))});
+    if(!d.id)throw new Error(d.error||'Resposta inesperada — tenta outra vez.');
+    try{localStorage.setItem(ID_PENDENTE_KEY,String(d.id));}catch(e){}
+    idIniciarPolling(d.id);
+  }catch(e){
+    idStatus(/acção desconhecida/.test(e.message)?'A função `garrafeira-carta` publicada no Supabase ainda não sabe identificar vinhos.':e.message,1);
+    if(b)b.disabled=false;
+  }
+}
+function idIniciarPolling(id){
+  clearTimeout(_idPollTimer);
+  _idPollInicio=Date.now();
+  _idPollTimer=-1;   // "a sondar", já antes do primeiro tick
+  const b=document.getElementById('id-btn-ler');if(b)b.disabled=true;
+  idStatus('A ler os rótulos — podes sair da app, a leitura continua…');
+  idPollTick(id);
+}
+async function idPollTick(id){
+  if(Date.now()-_idPollInicio>ID_POLL_MAX_MS){
+    idPollTerminar();idStatus('Está a demorar demasiado — tenta outra vez daqui a pouco.',1);return;
+  }
+  try{
+    const rows=await sbReq('GET',`cartas?id=eq.${encodeURIComponent(id)}&select=${ID_COLS}`);
+    const row=rows&&rows[0];
+    if(!row){idPollTerminar();idStatus('');return;}
+    if(row.estado==='lida'){
+      idPollTerminar();idStatus('');
+      await idAbrirRow(row,true);
+      const h=document.getElementById('id-hist');if(h&&h.open)idCarregarHistorico();
+      return;
+    }
+    if(row.estado==='erro'){
+      idPollTerminar();idStatus(row.erro||'Não consegui ler esta fotografia — tenta outra vez.',1);return;
+    }
+  }catch(e){ /* um soluço de rede: tenta no próximo */ }
+  _idPollTimer=setTimeout(()=>idPollTick(id),ID_POLL_MS);
+}
+function idPollTerminar(){
+  clearTimeout(_idPollTimer);_idPollTimer=null;
+  try{localStorage.removeItem(ID_PENDENTE_KEY);}catch(e){}
+  const b=document.getElementById('id-btn-ler');if(b)b.disabled=!_idImagens.length;
+}
+// Ao voltar à app (ecrã desbloqueado), sonda já.
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible')return;
+  if(_idPollTimer){
+    let id=null;try{id=localStorage.getItem(ID_PENDENTE_KEY);}catch(e){}
+    if(id){clearTimeout(_idPollTimer);idPollTick(id);}
+  }
+});
+
+// ── A identificação no ecrã ──
+async function idAbrirRow(row,rolar){
+  clearTimeout(_idLivreTimer);
+  const livre={};
+  if(row.livre&&typeof row.livre==='object')Object.entries(row.livre).forEach(([k,v])=>{livre[k]=Number(v)||0;});
+  ID={id:row.id,vinhos:Array.isArray(row.vinhos)?row.vinhos:[],aviso:row.aviso||'',criado_em:row.criado_em,
+    ligados:[],ligado:false,sel:new Set(),cores:{},livre,estados:new Map(),aProcurar:false,erro:'',inicio:0};
+  idDesenhar();
+  await idLigar(ID);
+  if(ID&&ID.id===row.id){
+    await idLerEstados(ID);
+    if(rolar){const el=document.getElementById('id-resultado');if(el&&tabAtiva==='identificar')wsRolar(el);}
+    if(idAConfirmar(ID))idSondar(ID);
+  }
+}
+async function idLigar(c){
+  try{await catCarregar();}catch(e){}
+  try{
+    const r=await sbRpc('carta_ligar',{p_pedidos:c.vinhos.map(wsPedido)});
+    c.ligados=Array.isArray(r)?r:[];
+  }catch(e){c.ligados=[];}
+  c.ligado=true;
+  if(ID===c)idDesenhar();
+}
+// O vinho do Catálogo deste vinho lido: o que a ligação achou, ou o que
+// nasceu (ou se achou) ao procurá-lo com fontes.
+function idCatDe(c,i){
+  const l=c.ligados[i];
+  if(l&&l.id!=null&&IDXV[-Number(l.id)])return IDXV[-Number(l.id)];
+  const x=c.estados.get(c.livre[i]);
+  if(x&&x.catalogo_id&&['criado','no_catalogo','carregado'].includes(x.estado))return IDXV[-Number(x.catalogo_id)]||null;
+  return null;
+}
+async function idLerEstados(c){
+  const ids=Object.values(c.livre).filter(n=>n>0);
+  if(!ids.length)return;
+  try{
+    const r=await sbRpc('livre_estados',{p_ids:ids});
+    (Array.isArray(r)?r:[]).forEach(x=>c.estados.set(Number(x.id),x));
+  }catch(e){}
+  if(ID===c)idDesenhar();
+}
+function idAConfirmar(c){
+  return Object.entries(c.livre).filter(([i,n])=>{
+    const x=c.estados.get(n);return n>0&&!idCatDe(c,Number(i))&&(!x||x.estado==='a_verificar');
+  }).length;
+}
+// Enquanto há vinhos a confirmar na net: ler outra vez, e reler o Catálogo
+// quando algum lá nasceu.
+function idSondar(c){
+  clearTimeout(_idLivreTimer);
+  if(!c.inicio)c.inicio=Date.now();
+  _idLivreTimer=setTimeout(async()=>{
+    if(ID!==c)return;
+    const antes=[...c.estados.values()].filter(x=>x.catalogo_id).length;
+    await idLerEstados(c);
+    if([...c.estados.values()].filter(x=>x.catalogo_id).length>antes){
+      CAT_VINHOS=null;
+      try{await catCarregar();}catch(e){}
+      if(ID===c)idDesenhar();
+      renderFiltrados();
+    }
+    if(ID===c&&idAConfirmar(c)&&Date.now()-c.inicio<ID_LIVRE_MAX_MS)idSondar(c);
+  },ID_LIVRE_MS);
+}
+
+// ── Procurar com fontes os que o Catálogo não tem ──
+function idCorDe(c,i){return c.vinhos[i].tipo||c.cores[i]||'';}
+function idPodeProcurar(c,i){
+  return !(String(i) in c.livre)&&!idCatDe(c,i)&&!!idCorDe(c,i);
+}
+function idProcRestam(c){return ID_PROC_TOTAL-Object.keys(c.livre).length;}
+function idSelToggle(el){
+  const c=ID;if(!c)return;
+  const i=parseInt(el.dataset.i,10);
+  const max=Math.min(ID_PROC_MAX,idProcRestam(c));
+  if(el.checked){
+    if(c.sel.size>=max){el.checked=false;toast(`Escolhe no máximo ${max} de cada vez`,1);return;}
+    c.sel.add(i);
+  }else c.sel.delete(i);
+  idDesenhar();
+}
+function idCorEscolher(el){
+  const c=ID;if(!c)return;
+  const i=parseInt(el.dataset.i,10);
+  if(TIPOS.includes(el.value))c.cores[i]=el.value;else{delete c.cores[i];c.sel.delete(i);}
+  idDesenhar();
+}
+async function idProcurar(){
+  const c=ID;
+  if(!c||!c.sel.size||c.aProcurar)return;
+  if(!souEditor()){toast('Procurar informação é só para quem edita a sua garrafeira',1);return;}
+  const idx=[...c.sel];
+  const cores={};idx.forEach(i=>{if(!c.vinhos[i].tipo&&c.cores[i])cores[i]=c.cores[i];});
+  c.aProcurar=true;c.erro='';
+  idDesenhar();
+  try{
+    const d=await wsChamar({acao:'identificar_procurar',id:c.id,indices:idx,cores});
+    if(!d.livre)throw new Error(d.error||'Resposta inesperada — tenta outra vez.');
+    Object.entries(d.livre).forEach(([k,v])=>{c.livre[k]=Number(v)||0;});
+    if(Array.isArray(d.vinhos))c.vinhos=d.vinhos;
+    c.sel.clear();
+    await idLerEstados(c);
+    // Um que o Catálogo já tinha por outro nome: relê-se para o mostrar.
+    if([...c.estados.values()].some(x=>x.catalogo_id&&!IDXV[-Number(x.catalogo_id)])){
+      CAT_VINHOS=null;try{await catCarregar();}catch(e){}
+    }
+    c.inicio=0;
+    if(idAConfirmar(c))idSondar(c);
+  }catch(e){
+    c.erro=/acção desconhecida/.test(e.message)?'A função `garrafeira-carta` publicada no Supabase ainda não sabe procurar estes vinhos.':e.message;
+  }
+  c.aProcurar=false;
+  if(ID===c)idDesenhar();
+}
+
+// ── O desenho ──
+/* O preço da foto face ao preço que conta: numa loja é 1× (não os 2 a 3×
+   de um restaurante — `wsAvaliarPreco`). ±10 % é "em linha". */
+function idPrecoHTML(preco,v){
+  if(!(preco>0))return '';
+  const p=precoPrincipal(v);
+  const txt=`${esc(wsEur(preco))} na foto`;
+  if(!p||!(p.preco>0))return txt;
+  const r=preco/p.preco, pct=Math.round(Math.abs(r-1)*100);
+  const ref=` (${p.loja?esc(precoFonteTxt(p,true))+' · ':''}${esc(wsEur(p.preco))})`;
+  if(r<0.9)return `${txt} · <span class="id-pr ok">${pct} % abaixo da referência</span>${ref}`;
+  if(r>1.1)return `${txt} · <span class="id-pr ${r>1.5?'mau':'caro'}">${pct} % acima da referência</span>${ref}`;
+  return `${txt} · <span class="id-pr">em linha com a referência</span>${ref}`;
+}
+function idDesenhar(){
+  const box=document.getElementById('id-resultado');
+  if(!box)return;
+  const c=ID;
+  if(!c){box.innerHTML='';return;}
+  const n=c.vinhos.length;
+  const idx=c.vinhos.map((v,i)=>i);
+  const conh=c.ligado?idx.filter(i=>idCatDe(c,i)):[], desc=c.ligado?idx.filter(i=>!idCatDe(c,i)):[];
+  const data=wsLivreDataTxt(c.criado_em);
+  let html=`<div class="ws-card-label id-tit">Na fotografia${data?' de '+esc(data):''} · ${n} vinho${n===1?'':'s'}${c.ligado?` · ${conh.length} no Catálogo`:''}</div>`;
+  if(c.aviso)html+=`<p class="ws-note id-entre">⚠️ ${esc(c.aviso)}</p>`;
+  if(!c.ligado){box.innerHTML=html+'<div class="ws-card"><p class="ws-note">A ver o que o Catálogo sabe…</p></div>';return;}
+  if(conh.length){
+    html+=`<div class="id-grupo">Conheço <b>${conh.length}</b></div>`
+      +conh.map(i=>idConhecidoHTML(c,i)).join('');
+  }
+  if(desc.length)html+=`<div class="id-grupo">Não conheço <b>${desc.length}</b></div>`+idDesconhecidosHTML(c,desc);
+  box.innerHTML=html;
+}
+function idConhecidoHTML(c,i){
+  const v=c.vinhos[i], cat=idCatDe(c,i), x=c.estados.get(c.livre[i]);
+  const lido=[`«${esc(v.nome)}»`,v.ano&&String(v.ano)!==String(cat.ano||'')
+    ?`a da foto é a <b>${esc(String(v.ano))}</b>; no Catálogo, ${cat.ano?'a '+esc(String(cat.ano)):'sem colheita'}`:''].filter(Boolean).join(' · ');
+  const pr=idPrecoHTML(v.preco!=null?Number(v.preco):null,cat);
+  const novo=x&&x.estado==='criado'?'<span class="id-novo">✨ Entrou agora no Catálogo</span>':'';
+  return `<div class="id-conh">${vinhoCardHTML(cat)}
+    <div class="id-lido">📷 ${lido}${pr?`<br>${pr}`:''}${novo}</div></div>`;
+}
+function idDesconhecidosHTML(c,desc){
+  const restam=idProcRestam(c), editor=souEditor();
+  const linhas=desc.map(i=>{
+    const v=c.vinhos[i], n=c.livre[i], x=n>0?c.estados.get(n):null, cor=idCorDe(c,i);
+    const sub=[v.produtor,v.ano,v.regiao].filter(Boolean).map(y=>esc(String(y))).join(' · ');
+    let est='';
+    if(String(i) in c.livre){
+      est=n===0?'<span class="carta-score">não deu para procurar este nome</span>'
+        :!x||x.estado==='a_verificar'?'<span class="carta-score a-procurar">🔎 a confirmar…</span>'
+        :x.estado==='pendente'?'<span class="carta-score">por confirmar</span>'
+        :x.estado==='descartado'?'<span class="carta-score">descartado</span>'
+        :'<span class="carta-score">no Backoffice</span>';
+    }
+    const falta=x&&x.estado==='por_carregar'&&x.falta&&x.falta.length
+      ?`<span class="carta-sub id-falta">Não entrou no Catálogo: faltou ${esc(x.falta.join(', '))}.</span>`:'';
+    const pode=editor&&idPodeProcurar(c,i)&&(c.sel.has(i)||restam-c.sel.size>0)&&!c.aProcurar;
+    const visto=String(i) in c.livre?'<span class="carta-check-feito" title="Já procurado">✓</span>'
+      :pode?`<input type="checkbox" class="carta-check" data-i="${i}" ${c.sel.has(i)?'checked':''} onchange="idSelToggle(this)" aria-label="Procurar informação">`
+      :'<span class="carta-check-vazio"></span>';
+    // Sem cor não se procura: é a chave do Catálogo. Pede-se aqui.
+    const ponto=cor||!editor||String(i) in c.livre
+      ?`<span class="tipo-dot" style="background:${wsTipoCor(cor)}" title="${esc(cor||'Cor desconhecida')}"></span>`
+      :`<select class="id-cor" data-i="${i}" onchange="idCorEscolher(this)" aria-label="A cor do vinho"><option value="">cor?</option>${TIPOS.map(t=>`<option${c.cores[i]===t?' selected':''}>${esc(t)}</option>`).join('')}</select>`;
+    return `<div class="carta-item">
+      ${visto}${ponto}
+      <span class="carta-nome">${esc(v.nome||'')}${sub?`<span class="carta-sub">${sub}</span>`:''}${falta}</span>
+      ${est||'<span></span>'}
+      <span class="carta-preco">${v.preco!=null?wsEur(Number(v.preco)):''}</span>
+    </div>`;
+  }).join('');
+  const procuraveis=desc.filter(i=>idPodeProcurar(c,i)).length;
+  const acoes=!editor?'<p class="ws-note">Procurar informação é só para quem edita a sua garrafeira.</p>'
+    :restam<=0?`<p class="ws-note">Já procuraste ${ID_PROC_TOTAL} vinhos desta fotografia.</p>`
+    :procuraveis||c.sel.size?`<p class="ws-note">Escolhe até ${Math.min(ID_PROC_MAX,restam)} para procurar na net. Só entram no Catálogo se o produtor, as castas, o preço, a imagem e o Vivino vierem com fonte — os outros ficam para o admin, no Backoffice.</p>
+      <button type="button" class="btn ghost" onclick="idProcurar()" ${!c.sel.size||c.aProcurar?'disabled':''}>🔎 ${c.aProcurar?'A pedir…':`Procurar informação (${c.sel.size}/${Math.min(ID_PROC_MAX,restam)})`}</button>`
+    :'';
+  return `<div class="ws-card">
+    <div class="carta-list">${linhas}</div>
+    ${c.erro?`<p class="ws-note" style="color:var(--dg)">${esc(c.erro)}</p>`:''}
+    ${idAConfirmar(c)?'<p class="ws-note">🔎 A confirmar na net — pode demorar um minuto ou dois. Os que vierem com fonte passam para cima.</p>':''}
+    ${acoes?`<div class="ws-acoes">${acoes}</div>`:''}
+  </div>`;
+}
+
+// ── As identificações anteriores (as minhas, como as cartas) ──
+async function idCarregarHistorico(){
+  const box=document.getElementById('id-historico');
+  if(!box)return;
+  box.innerHTML='<p class="ws-note">A carregar…</p>';
+  try{
+    const rows=await sbReq('GET',`cartas?fonte=eq.prateleira&select=id,estado,vinhos,erro,criado_em&order=criado_em.desc&limit=30`);
+    if(!rows||!rows.length){box.innerHTML='<p class="ws-note">Ainda não identificaste nenhuma fotografia.</p>';return;}
+    box.innerHTML=rows.map(r=>{
+      const vs=Array.isArray(r.vinhos)?r.vinhos:[];
+      const d=new Date(r.criado_em);
+      const dataFmt=isNaN(d)?'':d.toLocaleDateString('pt-PT',{day:'2-digit',month:'short',year:'numeric'});
+      const txt=r.estado==='pendente'?'⏳ a ler…':r.estado==='erro'?'⚠️ '+esc(r.erro||'falhou')
+        :esc(vs.slice(0,3).map(v=>v.nome).join(' · ')+(vs.length>3?` · +${vs.length-3}`:''));
+      return `<div class="hist-item"><div class="hist-head"${r.estado==='lida'?` onclick="idAbrirHist(${r.id})"`:''}>
+        <div><div class="hist-prato">${vs.length} vinho${vs.length===1?'':'s'}</div><div class="hist-top">${txt}</div></div>
+        <div class="hist-data">${dataFmt}</div></div></div>`;
+    }).join('');
+  }catch(e){
+    box.innerHTML=`<p class="ws-note">${/fonte/.test(String(e&&e.message))?'Falta a migração 56 no Supabase (db/migracao-identificar.sql).':'Não foi possível carregar as identificações anteriores.'}</p>`;
+  }
+}
+async function idAbrirHist(id){
+  try{
+    const rows=await sbReq('GET',`cartas?id=eq.${id}&select=${ID_COLS}`);
+    if(rows&&rows[0])await idAbrirRow(rows[0],true);
+  }catch(e){toast('Não foi possível abrir: '+(e.message||e),1);}
 }
 
 /* ── NAVEGAÇÃO ─────────────────────────────────────────────────────── */
@@ -3352,6 +3883,7 @@ function tab(nome,btn){
   if(nome==='consumidos')renderConsumidos();
   if(nome==='desejos')renderDesejos();
   if(nome==='sugestoes')wsAbrir();
+  if(nome==='identificar')idMostrar();
   if(nome==='backoffice')boAbrir();
   if(nome==='cfg')renderCfg();
   fabSincronizar();
@@ -3396,8 +3928,8 @@ async function abrirEcraInicial(){
 }
 function restaurarTab(){
   let t=null;try{t=localStorage.getItem('gf_tab');}catch(e){}
-  // As Sugestões e o Backoffice são do catálogo, e a app abre sempre na garrafeira.
-  if(!t||t==='garrafeira'||t==='sugestoes'||t==='backoffice')return;
+  // As Sugestões, o Identificar e o Backoffice são do catálogo, e a app abre sempre na garrafeira.
+  if(!t||t==='garrafeira'||t==='sugestoes'||t==='identificar'||t==='backoffice')return;
   if(t==='desejos'&&!TEM_DESEJO)return;   // a migração 15 ainda não correu
   if(t==='locais'&&!temLocaisDesenhados())return;
   if(t==='consumidos'&&!temConsumidos())return;
@@ -5182,7 +5714,7 @@ function sincronizarTabs(){
   document.body.classList.toggle('sem-sugestoes',semS);
   if((semL&&tabAtiva==='locais')||(semC&&tabAtiva==='consumidos'))
     tab('garrafeira',document.querySelector('.itabs .it'));
-  if(semS&&tabAtiva==='sugestoes')
+  if(semS&&(tabAtiva==='sugestoes'||tabAtiva==='identificar'))
     tab('detalhe',document.querySelector(`.itabs .it[onclick^="tab('detalhe'"]`));
 }
 function renderLista(){
@@ -7779,6 +8311,7 @@ function fabAcao(tipo){
   if(tipo==='lote')loteAbrir();
   if(tipo==='importar')importarAbrir();
   if(tipo==='desejo')novoDesejo();
+  if(tipo==='identificar')idAbrir();
 }
 
 function abrirNovoVinho(){
@@ -11294,10 +11827,14 @@ function fabSincronizar(){
   /* O "+" só onde se acrescenta alguma coisa (o dono das apps, 30/09/2026):
      no Detalhe da garrafeira (novo vinho, atualização massiva, importar) e
      na Wishlist (e aí vai direto a "Adicionar à wishlist"). Nem no Resumo,
-     nem em Locais, Consumidos ou Definições. No Catálogo, no Detalhe e só
-     aos curadores (vinho novo, atualização massiva, importar). */
-  const ha=modoCat()?(tabAtiva==='detalhe'&&catPodeCriar())
+     nem em Locais, Consumidos ou Definições. No Catálogo, no Detalhe: aos
+     curadores (vinho novo, atualização massiva, importar) e a quem tem IA
+     (Identificar vinhos, 17/10/2026 — só essa opção a quem não é curador). */
+  const ha=modoCat()?(tabAtiva==='detalhe'&&(catPodeCriar()||podeUsarIA()))
     :(tabAtiva==='detalhe'||(tabAtiva==='desejos'&&TEM_DESEJO));
+  document.querySelectorAll('#fab-menu .so-curador').forEach(b=>{b.style.display=modoCat()&&!catPodeCriar()?'none':'';});
+  const fi=document.getElementById('fab-identificar');
+  if(fi)fi.style.display=modoCat()&&podeUsarIA()?'':'none';
   // No Catálogo quem decide é o `catPodeCriar`, não a garrafeira aberta: um
   // curador com uma garrafeira emprestada à vista continua a ter o "+".
   if(w)w.classList.toggle('ro-hide',!modoCat());
@@ -11950,7 +12487,7 @@ const BO_PAGINAS=[
   {id:'alertas',ic:'⚠️',t:'Alertas',d:'Um campo que não bate certo com o catálogo',n:'rep',abrir:()=>boRepCarregar('aberto')},
   {id:'comentarios',ic:'💬',t:'Comentários sobre vinhos',d:'“Algo não está bem?” na página do vinho',n:'vinho',abrir:()=>boComentarios('vinho','aberto')},
   {id:'sugestoes',ic:'💡',t:'Sugestões de melhoria',d:'Ideias e coisas que não funcionam',n:'sugestao',abrir:()=>boComentarios('sugestao','aberto')},
-  {id:'livres',ic:'✨',t:'Sugeridos pela IA',d:'Vinhos da pergunta livre que não ficaram no Catálogo',n:'livre',abrir:()=>boLivreCarregar()},
+  {id:'livres',ic:'✨',t:'Sugeridos pela IA',d:'Vinhos da pergunta livre ou de uma fotografia que não ficaram no Catálogo',n:'livre',abrir:()=>boLivreCarregar()},
   {grupo:'O Vivino e as garrafeiras'},
   {id:'vivino',ic:'🍇',t:'Links do Vivino por validar',d:'O que o script propõe e pede uma decisão',n:'viv',abrir:()=>boVivLista('pendente')},
   {id:'glinks',ic:'🔗',t:'Links do Vivino nas garrafeiras',d:'Os links das garrafeiras × os do catálogo',abrir:()=>{}},
@@ -13042,7 +13579,8 @@ function boLivreHTML(x,i){
   return `<div class="fcard bcl">
     <div class="bcl-cab"><div class="bcl-tt"><span class="bo-nome">${esc(x.nome||'(sem nome)')}</span>
       ${sub?`<span class="bo-sub">${esc(sub)}</span>`:''}
-      <span class="bo-sub">Sugerido ${x.vezes===1?'uma vez':x.vezes+' vezes'}${pratos?` · para ${esc(pratos)}`:''}${typeof sg.preco==='number'?` · a IA disse ~${esc(wsEur(sg.preco))}`:''}</span></div></div>
+      ${x.vezes>0?`<span class="bo-sub">Sugerido ${x.vezes===1?'uma vez':x.vezes+' vezes'}${pratos?` · para ${esc(pratos)}`:''}${typeof sg.preco==='number'?` · a IA disse ~${esc(wsEur(sg.preco))}`:''}</span>`:''}
+      ${x.fotos>0?`<span class="bo-sub">📸 Visto ${x.fotos===1?'numa fotografia':'em '+x.fotos+' fotografias'}${!x.vezes&&pratos?` · para ${esc(pratos)}`:''}${sg.foto&&typeof sg.foto.preco==='number'?` · ${esc(wsEur(sg.foto.preco))} na etiqueta`:''}${sg.foto&&sg.foto.nome&&sg.foto.nome!==x.nome?` · lido «${esc(sg.foto.nome)}»`:''}</span>`:''}</div></div>
     <div class="bcl-dif n-erro${x.estado==='por_carregar'?'':' aceite'}">
       ${x.falta&&x.falta.length?`<div class="bcl-dcab"><b>Faltou:</b><span>${esc(x.falta.join(' · '))}</span></div>`:''}
       <div class="bcl-vals">${x.verificado?campos:'<div class="bcl-val vazio"><span class="bcl-txt">A procura não trouxe nada.</span></div>'}</div>
@@ -16584,6 +17122,7 @@ async function ptrDados(){
   renderLista();renderCfg();
   if(tabAtiva==='consumidos')renderConsumidos();
   if(tabAtiva==='backoffice')boAbrir();
+  if(tabAtiva==='identificar'&&ID){await idLigar(ID);await idLerEstados(ID);}
   comentariosAvisos(false);
 }
 // O `index.html` do servidor diz que versão lá está. Sem `?` no endereço:
@@ -16616,7 +17155,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='235';
+const APP_BUILD='236';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
