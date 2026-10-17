@@ -2076,14 +2076,17 @@ body.cat .it.on{background:#1d4a3b;box-shadow:0 4px 12px -4px rgba(29,74,59,.8)}
 /* O CABEÇALHO DAS FERRAMENTAS (17/10/2026, o dono: "faz cabeçalhos
    próprios"). As Sugestões e o Identificar herdavam o verde do Catálogo, o
    "Catálogo ⇄" e a barra dos separadores sem nada aceso. São ferramentas e
-   não sítios: o cabeçalho é de PAPEL, como os cards delas no ecrã inicial,
-   com o G bordô e o nome delas, sem o ⇄ nem a barra (`body.ferr`, posto
-   pelo `tab()`). O filete dourado fica — é o que o liga aos outros dois.
+   não sítios: o cabeçalho é do CREME do ecrã inicial (o fundo da página,
+   com os mesmos pontinhos — o dono: "aquele creme que temos no ecrã
+   inicial"), com o G bordô e o nome delas, sem o ⇄ nem a barra
+   (`body.ferr`, posto pelo `tab()`). A sombra e o filete dourado é que o
+   separam da página — e o filete liga-o aos outros dois.
    Vem DEPOIS do `body.cat>header`: a mesma especificidade, ganha este. */
 .hdr-ferr{display:none;min-width:0}
 body.ferr .hdr-sitio,body.ferr .modo-ic,body.ferr .itabs{display:none!important}
 body.ferr .hdr-ferr{display:block}
-body.ferr>header{background:var(--card);color:var(--tx);box-shadow:0 2px 18px rgba(78,18,40,.09)}
+body.ferr>header{background:var(--bg);background-image:radial-gradient(circle at 1px 1px,rgba(78,18,40,.045) 1px,transparent 0);
+  background-size:22px 22px;color:var(--tx);box-shadow:0 2px 18px rgba(78,18,40,.1)}
 body.ferr .escudo{filter:none}
 body.ferr button.escudo{color:var(--vh)}
 body.ferr .escudo .esc-claro{display:none}

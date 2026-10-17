@@ -242,8 +242,9 @@ app.js (`inicio*`/`INI_*`) e no style.css (`.ini-*`); `#s-inicio` no
 - **As duas ferramentas têm o cabeçalho delas** (17/10/2026, o dono:
   "ficam com o cabeçalho do catálogo, fica esquisito"). Vivem no catálogo
   (é de lá que leem os vinhos), mas não são ele: com `body.ferr` (posto
-  pelo `tab()`, `FERRAMENTAS`) o cabeçalho é de PAPEL, como os cards delas
-  aqui, com o G bordô (`icone.png`; o claro esconde-se), o nome
+  pelo `tab()`, `FERRAMENTAS`) o cabeçalho é do CREME daqui (o fundo da
+  página, com os pontinhos; o dono: "aquele creme que temos no ecrã
+  inicial"), com o G bordô (`icone.png`; o claro esconde-se), o nome
   ("Sugestões", "Identificar vinhos") e uma linha por baixo, sem o ⇄ nem a
   barra dos separadores; o filete dourado fica. O ‹ G volta para onde se
   veio (`cabVoltar`: o Identificar aberto pelo "+" volta ao Detalhe, o
