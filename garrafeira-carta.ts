@@ -439,8 +439,17 @@ async function ordenarCarta(vinhos: any[], ligados: any[], prato: string, orcame
    preço (são garrafas que já se têm), mas há o MOMENTO de cada uma — a
    janela de consumo: um vinho no ponto, sobretudo a fechar a janela, vem
    antes de um ainda cedo. No CATÁLOGO há o preço de referência (o das lojas,
-   o `precoPrincipal` da app) e a relação preço/qualidade. */
+   o `precoPrincipal` da app) e a relação preço/qualidade.
+   OS VINHOS ESCOLHIDOS À MÃO (`escolhidos: true`, 17/10/2026, o dono: "marcar
+   manualmente até 5 vinhos … para que a IA sugerisse qual dos 5 melhor
+   acompanha com o prato"): a pessoa já escolheu a lista e está indecisa
+   entre eles. O modelo ordena-os TODOS, recomenda só o melhor (dois se
+   estiverem mesmo empatados) e, se nenhum combinar, diz-o (`nenhum`, com o
+   `aviso`) em vez de recomendar um à força — o `rankingDe` punha o
+   primeiro como recomendado. Uma app antiga não manda a marca e fica como
+   era. */
 const MAX_LISTA = 20;
+const MAX_ESCOLHIDOS = 5;   // o `WS_ESC_MAX` da app
 const MODOS_LISTA = ["garrafeira", "catalogo"];
 const LISTA_TIMEOUT_MS = 55_000;
 const CUSTO_LISTA_EUR = 0.003;
@@ -497,15 +506,21 @@ function linhaDaLista(f: any, i: number, modo: string): string {
     f.prova ? `prova: ${f.prova}` : "",
   ].filter(Boolean).join(" | ");
 }
-function promptLista(modo: string, linhas: string[], prato: string, orcamento: number | null) {
+function promptLista(modo: string, linhas: string[], prato: string, orcamento: number | null, escolhidos = false) {
   const casa = modo === "garrafeira";
+  const n = linhas.length, um = n === 1;
   const regraNota = `a NOTA do Vivino: um vinho com nota alta fica à frente de um com nota
      baixa, e um vinho "SEM NOTA" NUNCA fica à frente de um que combine e
      tenha nota de 3.8 ou mais`;
-  return `És um escanção em Portugal. ${casa
-    ? "Estes são os vinhos que esta pessoa tem em casa, na sua garrafeira"
-    : `Estes são vinhos de um catálogo, para comprar${orcamento ? ` (até ${orcamento} € por garrafa pelo preço de referência das lojas, com uma folga de ${MARGEM_ORCAMENTO} €)` : ""}`},
-com os factos que se sabem de cada um:
+  const intro = escolhidos
+    ? (um
+      ? `Esta pessoa quer saber se este vinho${casa ? ", que tem em casa," : ", de um catálogo,"} serve para o prato`
+      : `Esta pessoa está indecisa entre estes ${n} vinhos${casa ? ", que tem em casa" : ", que escolheu de um catálogo para comprar"}`)
+    : casa
+      ? "Estes são os vinhos que esta pessoa tem em casa, na sua garrafeira"
+      : `Estes são vinhos de um catálogo, para comprar${orcamento ? ` (até ${orcamento} € por garrafa pelo preço de referência das lojas, com uma folga de ${MARGEM_ORCAMENTO} €)` : ""}`;
+  return `És um escanção em Portugal. ${intro},
+com os factos que se sabem de ${um ? "ele" : "cada um"}:
 
 ${linhas.join("\n")}
 
@@ -514,11 +529,14 @@ ${prato ? `O prato a acompanhar é: "${prato}".` : casa
     : "Não foi indicado nenhum prato — escolhe vinhos versáteis e bem avaliados."}
 
 Devolve APENAS um objeto JSON com esta forma exata:
-{"ranking": [{"i": number, "razao": string}], "recomendados": [number]}
+{"ranking": [{"i": number, "razao": string}], "recomendados": [number]${escolhidos ? `, "aviso": string` : ""}}
 
 Regras:
-- "ranking": até ${MAX_RANKING} vinhos da lista, do melhor para o pior para este
-  prato, pelo número entre [ ].
+${escolhidos
+    ? `- "ranking": ${um ? "o vinho da lista" : `TODOS os ${n} vinhos da lista, do que melhor acompanha este prato
+  para o que pior acompanha`}, pelo número entre [ ].`
+    : `- "ranking": até ${MAX_RANKING} vinhos da lista, do melhor para o pior para este
+  prato, pelo número entre [ ].`}
 - Critérios, por esta ordem:
   1. harmonização com o prato (cor, corpo, acidez, taninos, castas, o que o
      vinho diz harmonizar) — um vinho que não combina fica sempre atrás;
@@ -531,23 +549,30 @@ ${casa
     : `  2. ${regraNota};
   3. a relação preço/qualidade (a nota face ao preço de referência);`}
   4. em igualdade, dá prioridade aos PORTUGUESES.
-- "recomendados": os 2 ou 3 primeiros do ranking que recomendarias mesmo
+${escolhidos
+    ? `- "recomendados": ${um ? "[o número do vinho] se combinar bem com o prato" : `o que melhor acompanha o prato — só esse (dois só se
+  estiverem mesmo empatados)`}; [] se ${um ? "não combinar" : "nenhum combinar bem"}. Não
+  recomendes ${um ? "o vinho" : "um"} só para dar uma resposta: a pessoa prefere saber.
+- "aviso": só se ${um ? "não combinar" : "nenhum combinar bem"}, uma frase honesta a dizê-lo e o
+  que procurar em vez disso (cor, casta, estilo); senão "".`
+    : `- "recomendados": os 2 ou 3 primeiros do ranking que recomendarias mesmo
   (só 1 se só um combinar; [] se nenhum combinar) — não recomendes um só
-  para chegar a três.
+  para chegar a três.`}
 - "razao": uma a duas frases concretas, em português, sobre porque está
   nessa posição para este prato, apoiadas nos factos dados — com honestidade:
   o que joga a favor e, se houver, o que joga contra; um bom vinho que é
   melhor para outro prato di-lo ("é mais para assados"). Não elogies por
   elogiar. Não cites notas nem preços que não estejam na lista, e não
-  inventes castas nem características.
+  inventes castas nem características${escolhidos ? "; de um vinho de que se saiba pouco, di-lo em vez de adivinhar" : ""}.
 Responde só com o JSON.`;
 }
 async function sugerirLista(body: any, quem: string): Promise<{ status: number; corpo: Record<string, unknown> }> {
   const t0 = Date.now();
   const modo = String(body.modo);
   const prato = s(body.prato, 200);
-  const orc = modo === "catalogo" ? numOuNull(body.orcamento, 1, 10000) : null;
-  const factos = (body.vinhos as unknown[]).slice(0, MAX_LISTA).map(normFactos);
+  const escolhidos = body.escolhidos === true;
+  const orc = modo === "catalogo" && !escolhidos ? numOuNull(body.orcamento, 1, 10000) : null;
+  const factos = (body.vinhos as unknown[]).slice(0, escolhidos ? MAX_ESCOLHIDOS : MAX_LISTA).map(normFactos);
   const linhas: string[] = [];
   const validos = new Set<number>(), comNota = new Set<number>();
   factos.forEach((f, i) => {
@@ -564,22 +589,28 @@ async function sugerirLista(body: any, quem: string): Promise<{ status: number; 
   const timer = setTimeout(() => ctrl.abort(), LISTA_TIMEOUT_MS);
   try {
     const modelos = await candidatosModelo(ctrl.signal);
-    const g = await gerar([[modelos[0], 1024], [MODELO_LEVE, 0]], [{ text: promptLista(modo, linhas, prato, orc) }], ctrl.signal);
+    const g = await gerar([[modelos[0], 1024], [MODELO_LEVE, 0]], [{ text: promptLista(modo, linhas, prato, orc, escolhidos) }], ctrl.signal);
     const j = g.texto ? extrairJson(g.texto) : null;
     if (!j || typeof j !== "object") {
-      await registar("erro", { passo: "sugerir", modo, erro: g.erro || "ilegível", modelo: g.modelo || null, candidatos: linhas.length,
+      await registar("erro", { passo: "sugerir", modo, escolhidos, erro: g.erro || "ilegível", modelo: g.modelo || null, candidatos: linhas.length,
         ms: Date.now() - t0, ...(g.usage ? { usageMetadata: g.usage } : {}) }, quem);
       return { status: 502, corpo: { error: g.status === 429 || g.status === 503
         ? "o serviço está com muita procura agora — espera um minuto e tenta outra vez"
         : "não consegui fazer a sugestão agora — tenta outra vez" } };
     }
     const sugestoes = rankingDe(j, validos, comNota);
+    // Escolhidos à mão: "nenhum combina" é uma resposta, e não se lhe põe
+    // por cima um recomendado à força (o `rankingDe` põe o primeiro).
+    const nenhum = escolhidos && sugestoes.length > 0 && Array.isArray(j.recomendados) && j.recomendados.length === 0;
+    if (nenhum) sugestoes.forEach((x) => { x.recomendado = false; });
+    const aviso = nenhum ? s(j.aviso, 300) : "";
     await registar("ok", {
-      passo: "sugerir", modo, modelo: g.modelo, candidatos: linhas.length, sugestoes: sugestoes.length,
-      prato, orcamento: orc, chamadas_gemini: g.chamadas,
+      passo: "sugerir", modo, escolhidos, modelo: g.modelo, candidatos: linhas.length, sugestoes: sugestoes.length,
+      ...(escolhidos ? { nenhum } : {}), prato, orcamento: orc, chamadas_gemini: g.chamadas,
       ...(g.usage ? { usageMetadata: g.usage } : {}), custo_estimado_eur: CUSTO_LISTA_EUR, ms: Date.now() - t0,
     }, quem);
-    return { status: 200, corpo: { estado: sugestoes.length ? "ok" : "nenhum-combina", sugestoes, modelo: g.modelo } };
+    return { status: 200, corpo: { estado: sugestoes.length ? "ok" : "nenhum-combina", sugestoes, modelo: g.modelo,
+      ...(escolhidos ? { nenhum, aviso } : {}) } };
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";
     await registar("erro", { passo: "sugerir", modo, erro: String(err.message).slice(0, 300), ms: Date.now() - t0 }, quem);

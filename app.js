@@ -1871,6 +1871,8 @@ function wsModo(m){
   if(!WS_MODOS.includes(m)||m===WS_MODO)return;
   WS_MODO=m;
   try{localStorage.setItem(WS_MODO_KEY,m);}catch(e){}
+  // a procura dos escolhidos é de um modo: noutro, o texto procurava noutra lista
+  const q=document.getElementById('ws-esc-q');if(q)q.value='';
   wsModoAplicar();
   if(m==='carta'){const h=document.getElementById('ws-hist');if(h&&h.open)wsCarregarHistorico();}
 }
@@ -1887,6 +1889,7 @@ function wsModoAplicar(){
   // scroll dela perdeu-se — volta a centrar-se no valor escolhido.
   const t=document.getElementById('ws-orc-track');
   if(t&&WS_MODO!=='garrafeira')requestAnimationFrame(()=>wsOrcamentoScrollParaIndice(t,_wsOrcamentoIdx,false));
+  wsEscPintar();
   wsListaNota();
   wsListaBotao();
   wsLivreBotao();
@@ -2933,6 +2936,12 @@ function wsFactos(v,modo){
 function wsListaNota(){
   const el=document.getElementById('ws-lista-nota');
   if(!el)return;
+  const ne=wsEscModo(WS_MODO)?wsEscVinhos(WS_MODO).length:0;
+  if(ne){
+    el.textContent=ne===1?'A IA diz se o vinho que escolheste combina com o prato.'
+      :`A IA diz qual dos ${ne} vinhos que escolheste acompanha melhor o prato.`;
+    return;
+  }
   if(WS_MODO==='garrafeira'){
     const n=wsGarrafeiraVinhos().length, nome=nomeGarrafeira();
     el.textContent=n?`Entre os ${n} vinho${n===1?'':'s'} com garrafas ${nome?`em «${nome}»`:'na garrafeira'}.`
@@ -2944,8 +2953,10 @@ function wsListaBotao(){
   if(!b)return;
   const st=wsListaAtual(WS_MODO);
   const pend=!!(st&&st.estado==='pendente');
+  const ne=wsEscModo(WS_MODO)?wsEscVinhos(WS_MODO).length:0;
   b.disabled=pend||(WS_MODO==='garrafeira'&&!wsGarrafeiraVinhos().length);
-  b.textContent=pend?'🍷 A escolher…':st&&st.estado==='ok'?'🍷 Sugerir outra vez':'🍷 Sugerir';
+  b.textContent=pend?'🍷 A escolher…':ne===1?'🍷 Combina com o prato?':ne?'🍷 Qual destes combina melhor?'
+    :st&&st.estado==='ok'&&!st.escolha?'🍷 Sugerir outra vez':'🍷 Sugerir';
 }
 // O resultado deste modo — o da garrafeira só enquanto for a mesma aberta.
 function wsListaAtual(modo){
@@ -2972,6 +2983,19 @@ async function wsSugerirLista(){
     catch(e){toast('Não foi possível abrir o catálogo: '+(e.message||e),1);return;}
   }
   const prato=document.getElementById('ws-prato').value.trim();
+  const escolhidos=wsEscVinhos(modo);
+  if(escolhidos.length){
+    if(!prato){
+      toast('Escreve primeiro o prato — é com ele que a IA compara os vinhos',1);
+      document.getElementById('ws-prato').focus();
+      return;
+    }
+    const st={modo,ga:GA_ID,prato,orcamento:null,universo:escolhidos,achados:null,afina:{tipo:[],regiao:[],casta:[]},
+      vinhos:escolhidos.slice(),total:escolhidos.length,cortados:false,estado:'pendente',erro:'',rec:null,escolha:true};
+    WS_LISTA[modo]=st;
+    await wsListaPedir(st);
+    return;
+  }
   const orc=modo==='catalogo'?wsOrcamentoValor():null;
   const universo=wsUniverso(modo,orc);
   const st={modo,ga:GA_ID,prato,orcamento:orc,universo,achados:null,afina:{tipo:[],regiao:[],casta:[]},
@@ -3040,8 +3064,11 @@ async function wsListaPedir(st){
   wsListaBotao();
   if(WS_MODO===modo)wsDesenhar();
   try{
-    const d=await wsChamar({acao:'sugerir',modo,prato:st.prato,orcamento:st.orcamento,vinhos:st.vinhos.map(v=>wsFactos(v,modo))});
-    st.rec={estado:d.estado||'ok',sugestoes:Array.isArray(d.sugestoes)?d.sugestoes:[]};
+    const d=await wsChamar({acao:'sugerir',modo,prato:st.prato,orcamento:st.orcamento,vinhos:st.vinhos.map(v=>wsFactos(v,modo)),
+      ...(st.escolha?{escolhidos:true}:{})});
+    // `sabe`: a função publicada já conhece os escolhidos (responde com o `nenhum`)
+    st.rec={estado:d.estado||'ok',sugestoes:Array.isArray(d.sugestoes)?d.sugestoes:[],
+      nenhum:!!d.nenhum,aviso:String(d.aviso||''),sabe:'nenhum' in d};
     st.estado='ok';
   }catch(e){
     st.estado='erro';
@@ -3091,11 +3118,14 @@ function wsListaHTML(modo){
       <button class="btn full" style="margin-top:8px" onclick="wsSugerirNaMesma()">🍷 Pedir à IA na mesma</button></div>`;
   }
   if(st.estado==='pendente'){
-    return `<div class="ws-card"><p class="ws-note">🍷 A escolher entre ${n} vinho${n===1?'':'s'} ${cat?'do Catálogo':'da garrafeira'}${st.prato?` para ${esc(st.prato)}`:''}…</p></div>`;
+    return `<div class="ws-card"><p class="ws-note">🍷 ${st.escolha
+      ?(n===1?`A ver se o vinho que escolheste combina com ${esc(st.prato)}`:`A comparar os ${n} vinhos que escolheste para ${esc(st.prato)}`)
+      :`A escolher entre ${n} vinho${n===1?'':'s'} ${cat?'do Catálogo':'da garrafeira'}${st.prato?` para ${esc(st.prato)}`:''}`}…</p></div>`;
   }
   if(st.estado==='erro')return `<div class="ws-card"><p class="ws-note" style="color:var(--dg)">${esc(st.erro)}</p></div>`;
   const rec=st.rec||{};
   const sug=(Array.isArray(rec.sugestoes)?rec.sugestoes:[]).filter(s=>st.vinhos[s.i]);
+  if(st.escolha&&sug.length)return wsEscHTML(st,sug);
   if(!sug.length){
     const txt=rec.estado==='vazio'
       ?(cat?(st.orcamento!=null?`Nenhum vinho do Catálogo de que se saiba alguma coisa cabe em ${wsEur(st.orcamento)} (com ${WS_MARGEM} € de margem).`
@@ -3118,7 +3148,8 @@ function wsListaHTML(modo){
 function wsListaSugHTML(st,s,k){
   const v0=st.vinhos[s.i], v=IDXV[v0.id]||v0, cat=st.modo==='catalogo';
   const sub=[v.tipo,v.regiao,v.ano,(v.castas||[]).join(', ')].filter(Boolean).map(x=>esc(String(x))).join(' · ');
-  const marca=k===0&&s.recomendado?`<span class="sug-marca topo">🏆 Melhor escolha</span>`:s.recomendado?'<span class="sug-marca">Recomendado</span>':'';
+  const marca=st.escolha?wsEscMarca(st,s,k)
+    :k===0&&s.recomendado?`<span class="sug-marca topo">🏆 Melhor escolha</span>`:s.recomendado?'<span class="sug-marca">Recomendado</span>':'';
   const nota=wsNotaHTML(v,v,'sug-nota')||'<span class="sug-nota"><span class="sem-dados">sem nota</span></span>';
   let dir;
   if(cat){
@@ -3154,6 +3185,140 @@ function wsListaSugHTML(st,s,k){
       <div class="sug-links"><button type="button" class="mini" onclick="verVinho(${v.id})">Ver a ficha</button>${viv?`<a class="mini" href="${esc(viv)}" target="_blank" rel="noopener">Vivino ↗</a>`:''}</div>
     </div>
   </details>`;
+}
+
+/* ── ESCOLHER EU OS VINHOS: QUAL DESTES? (17/10/2026) ──
+   O dono das apps: "apesar de termos lá a pesquisa pelo prato … era fixe
+   que pudesse marcar manualmente até 5 vinhos (talvez pesquisando pelo
+   nome) para que a IA sugerisse qual dos 5 melhor acompanha com o prato".
+   Nos dois modos sem carta, um passo a mais: procura-se pelo nome (o nome,
+   o produtor, a casa-mãe e o ano, com as siglas — `wsEscAlvo`) e toca-se
+   para pôr na lista, até `WS_ESC_MAX`. Com vinhos escolhidos, o "Sugerir"
+   salta a procura do prato e o orçamento (o passo do orçamento esconde-se,
+   `data-escolha` na secção) e vão SÓ esses à mesma `acao:'sugerir'`, com
+   `escolhidos:true`: a função ordena-os todos, recomenda o melhor e, se
+   nenhum combinar, diz-o (`nenhum`, o "menos mau") em vez de recomendar
+   um à força. O prato passa a ser obrigatório — é a pergunta.
+   - Uma lista por modo, em memória; a da garrafeira só enquanto for a
+     mesma aberta (como o resultado, `wsListaAtual`).
+   - Na garrafeira, os vinhos com garrafas; no Catálogo, qualquer linha —
+     cada colheita é uma, que é a nota dela que vai à IA.
+   - A caixa de procura vive no `index.html` e nunca é reescrita (o cursor
+     perdia-se a meio de uma palavra, como na procura dos filtros); quem se
+     repinta são as duas caixas à volta dela. */
+const WS_ESC_MAX=5, WS_ESC_RES=6;
+const WS_ESC={garrafeira:{ga:null,ids:[]},catalogo:{ids:[]}};
+function wsEscModo(m){return m==='garrafeira'||m==='catalogo';}
+function wsEscUniverso(modo){return modo==='garrafeira'?wsGarrafeiraVinhos():(CAT_VINHOS||[]);}
+// Os escolhidos que ainda existem (uma garrafa bebida, um Catálogo relido).
+function wsEscVinhos(modo){
+  const e=WS_ESC[modo];
+  if(!e)return [];
+  if(modo==='garrafeira'&&e.ga!==GA_ID){e.ga=GA_ID;e.ids=[];}
+  e.ids=e.ids.filter(id=>IDXV[id]&&(modo!=='garrafeira'||stockDe(id)>0));
+  return e.ids.map(id=>IDXV[id]);
+}
+function wsEscAlvo(v){return ' '+siglas(chave([v.nome,v.produtor,casaMaeDe(v),v.ano].join(' ')));}
+// Todos os termos têm de lá estar; à frente o nome que começa pelo que se
+// escreveu, depois os termos no princípio de uma palavra, depois a nota.
+function wsEscResultados(modo,q){
+  const termos=siglas(chave(q)).split(/\s+/).filter(Boolean);
+  if(termos.join('').length<2)return null;
+  const ja=new Set(WS_ESC[modo].ids), nq=termos.join(' '), xs=[];
+  wsEscUniverso(modo).forEach(v=>{
+    if(ja.has(v.id))return;
+    const a=wsEscAlvo(v);
+    if(!termos.every(t=>a.includes(t)))return;
+    const s=(siglas(chave(v.nome)).startsWith(nq)?10:0)+termos.filter(t=>a.includes(' '+t)).length;
+    xs.push({v,s});
+  });
+  xs.sort((a,b)=>b.s-a.s||String(a.v.nome).localeCompare(String(b.v.nome),'pt')
+    ||(notaVivinoNum(b.v)||0)-(notaVivinoNum(a.v)||0)||(Number(b.v.ano)||0)-(Number(a.v.ano)||0));
+  return {lista:xs.slice(0,WS_ESC_RES).map(x=>x.v),total:xs.length};
+}
+// A linha de um vinho: a cor, o nome com o ano, por baixo o produtor e a
+// região; à direita a nota e — no Catálogo o preço, na garrafeira as garrafas.
+function wsEscLinhaHTML(v,modo){
+  const sub=[v.produtor,v.regiao].filter(Boolean).map(x=>esc(String(x))).join(' · ');
+  const x=notaVivino(v), cat=modo==='catalogo';
+  const p=cat?precoPrincipal(v):null, g=cat?0:stockDe(v.id);
+  return `<span class="tipo-dot" style="background:${wsTipoCor(v.tipo)}" title="${esc(v.tipo||'Cor desconhecida')}"></span>
+    <span class="ws-esc-nome"><b>${esc(v.nome||'Vinho')}</b>${v.ano?` <span class="ws-esc-ano">${esc(String(v.ano))}</span>`:''}${sub?`<span class="carta-sub">${sub}</span>`:''}</span>
+    <span class="ws-esc-dir">${x?`<span class="sug-nota">★ ${x.nota.toFixed(1)}</span>`:''}<span class="carta-preco">${cat?(p?wsEur(p.preco):''):`${g} gar.`}</span></span>`;
+}
+function wsEscPintar(){
+  const sec=document.getElementById('s-sugestoes'), inp=document.getElementById('ws-esc-q');
+  const box=document.getElementById('ws-esc-lista'), res=document.getElementById('ws-esc-res');
+  if(!sec||!inp||!box||!res)return;
+  const modo=WS_MODO;
+  if(!wsEscModo(modo)){delete sec.dataset.escolha;box.innerHTML='';res.innerHTML='';return;}
+  const vs=wsEscVinhos(modo), cheio=vs.length>=WS_ESC_MAX, tinha=!!sec.dataset.escolha;
+  if(vs.length)sec.dataset.escolha='1';else delete sec.dataset.escolha;
+  // a roda do orçamento esteve escondida: volta a centrar-se (ver `wsModoAplicar`)
+  const t=document.getElementById('ws-orc-track');
+  if(tinha&&!vs.length&&t&&modo==='catalogo')requestAnimationFrame(()=>wsOrcamentoScrollParaIndice(t,_wsOrcamentoIdx,false));
+  inp.disabled=cheio;
+  inp.placeholder=cheio?`Já tens ${WS_ESC_MAX} — tira um para pôr outro`
+    :'Procura pelo nome ou produtor…';
+  box.innerHTML=vs.map(v=>`<div class="ws-esc-item">${wsEscLinhaHTML(v,modo)}
+    <button type="button" class="ws-esc-del" onclick="wsEscTirar(${v.id})" aria-label="Tirar da lista">✕</button></div>`).join('');
+  if(cheio||!inp.value.trim()){res.innerHTML='';return;}
+  if(modo==='catalogo'&&!CAT_VINHOS){
+    res.innerHTML='<p class="ws-note">A abrir o Catálogo…</p>';
+    catCarregar().then(wsEscPintar).catch(e=>{res.innerHTML=`<p class="ws-note">Não foi possível abrir o Catálogo: ${esc(e.message||String(e))}</p>`;});
+    return;
+  }
+  const r=wsEscResultados(modo,inp.value);
+  if(!r){res.innerHTML='';return;}
+  res.innerHTML=r.lista.length
+    ?r.lista.map(v=>`<button type="button" class="ws-esc-op" onclick="wsEscPor(${v.id})">${wsEscLinhaHTML(v,modo)}</button>`).join('')
+      +(r.total>r.lista.length?`<p class="ws-note">E mais ${r.total-r.lista.length} — escreve mais para afinar.</p>`:'')
+    :`<p class="ws-note">Nenhum vinho ${modo==='catalogo'?'do Catálogo':'com garrafas na garrafeira'} com este nome.</p>`;
+}
+function wsEscPor(id){
+  const modo=WS_MODO;
+  if(!wsEscModo(modo))return;
+  const vs=wsEscVinhos(modo), e=WS_ESC[modo];
+  if(vs.length>=WS_ESC_MAX||e.ids.includes(id)||!IDXV[id])return;
+  e.ids.push(id);
+  const inp=document.getElementById('ws-esc-q');
+  inp.value='';
+  wsEscMudou();
+  // o teclado fica aberto para o seguinte (com a lista cheia, a caixa desliga-se)
+  if(!inp.disabled)inp.focus();
+}
+function wsEscTirar(id){
+  const e=WS_ESC[WS_MODO];
+  if(!e)return;
+  e.ids=e.ids.filter(x=>x!==id);
+  wsEscMudou();
+}
+function wsEscMudou(){
+  wsEscPintar();
+  wsListaNota();
+  wsListaBotao();
+}
+// O resultado: TODOS os escolhidos pela ordem da IA (um que ela tenha
+// deixado de fora vai no fim, sem porquê) e, se nenhum combina, di-lo.
+function wsEscHTML(st,sug){
+  const n=st.vinhos.length, rec=st.rec||{};
+  const todos=sug.concat(st.vinhos.map((v,i)=>i).filter(i=>!sug.some(s=>s.i===i)).map(i=>({i,razao:'',recomendado:false})));
+  return `<div class="ws-card-label sug-titulo">${n===1?'Combina?':'Qual destes'} · ${esc(st.prato)}${n>1?' <em>— toca num vinho para ver porquê</em>':''}</div>
+    <p class="ws-note sug-entre">${n===1?'O vinho que escolheste':`Entre os ${n} vinhos que escolheste`} ${st.modo==='catalogo'?'no Catálogo':'na garrafeira'}.</p>
+    ${rec.nenhum?`<p class="ws-note ws-esc-aviso">⚠️ ${n===1?'Não é o ideal para este prato.':'Nenhum combina bem com este prato.'}${rec.aviso?' '+esc(rec.aviso):''}</p>`:''}`
+    +todos.map((s,k)=>wsListaSugHTML(st,s,k)).join('');
+}
+/* Com um vinho só, "Combina" ou "Não é o ideal" — e só quando a função
+   publicada já conhece os escolhidos (`rec.sabe`): a de antes recomenda
+   sempre o primeiro, e com um vinho isso era dizer que combina à força. */
+function wsEscMarca(st,s,k){
+  const rec=st.rec||{};
+  if(st.vinhos.length===1){
+    if(!rec.sabe)return '';
+    return rec.nenhum?'<span class="sug-marca">Não é o ideal</span>':s.recomendado?'<span class="sug-marca topo">✓ Combina</span>':'';
+  }
+  if(rec.nenhum)return k===0?'<span class="sug-marca">O menos mau</span>':'';
+  return k===0&&s.recomendado?'<span class="sug-marca topo">🏆 Melhor escolha</span>':s.recomendado?'<span class="sug-marca">Também boa</span>':'';
 }
 
 /* ── A PERGUNTA LIVRE: só o prato (13/10/2026, migração 54) ──
@@ -17398,7 +17563,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='244';
+const APP_BUILD='245';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
