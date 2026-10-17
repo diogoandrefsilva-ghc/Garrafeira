@@ -11121,6 +11121,9 @@ async function pqLinks(mais){
     pedido.excluir=P.links.map(l=>l.url);
   }
   if(P.id.ano)pedido.ano=P.id.ano;
+  // A cor separa o tinto do branco do mesmo nome (ver "OS LINKS QUE SÃO DESTE
+  // VINHO" na `vinho-info`): o que for de outra cor vem à parte, em `fora`.
+  if(P.id.tipo)pedido.tipo=P.id.tipo;
   const prod=P.id.produtor||(P.novo?document.getElementById('e-produtor')?.value.trim():'')||'';
   if(prod)pedido.produtor=prod;
   P.corre=mais?'links+':'links';pqPintar();
@@ -11135,17 +11138,20 @@ async function pqLinks(mais){
   if(PQ!==P)return;
   P.corre='';
   if(!ok){toast('Procurar links: '+d.error,1);pqPintar();return;}
+  // Os que a função deixou de fora (outra cor, sem o nome) vão para a mesma
+  // lista com a marca `fora`: mostram-se fechados, e marcam-se na mesma.
   const novos=Array.isArray(d.links)?d.links:[];
+  const fora=(Array.isArray(d.fora)?d.fora:[]).map(l=>({...l,fora:l.porque||'nome'}));
   const viv=d.vivino&&typeof d.vivino==='object'?d.vivino:null;
   P.linksProx=d.proximo&&typeof d.proximo==='object'?d.proximo:null;
   P.linksMax=Number(d.escolher)||2;
   if(mais){
-    P.links=P.links.concat(novos);
+    P.links=P.links.concat(novos,fora);
     P.linksVivino=P.linksVivino||viv;
     if(!novos.length)toast('Não vieram links novos'+(P.linksProx?' — podes tentar a página seguinte':''),1);
   }else{
-    P.links=novos;P.linksVivino=viv;P.linksMarca=[];
-    if(!novos.length)toast('A pesquisa não trouxe links que se possam abrir',1);
+    P.links=novos.concat(fora);P.linksVivino=viv;P.linksMarca=[];
+    if(!novos.length)toast(fora.length?'Os links que vieram parecem ser de outro vinho':'A pesquisa não trouxe links que se possam abrir',1);
   }
   P.linksVer=true;
   pqPintar();
@@ -11175,31 +11181,54 @@ function pqLinksGrupo(l){
   return l.grupo==='lojas'?'Nas lojas (Garrafeira Nacional, Granvine, Vinha.pt, Portugal Vineyards, Wine Radar)'
     :l.grupo==='web'?`Na internet${Number(l.pagina)>1?' · página '+l.pagina:''}`:'';
 }
+// O que a `vinho-info` deixou de fora, e porquê (`l.fora`: uma cor, ou "nome").
+const PQ_FORA_COR={Tinto:['um tinto','tintos'],Branco:['um branco','brancos'],'Rosé':['um rosé','rosés'],
+  Espumante:['um espumante','espumantes'],Licoroso:['um Porto ou licoroso','Portos ou licorosos']};
+function pqForaHTML(L){
+  const conta={};
+  L.forEach(l=>{conta[l.fora]=(conta[l.fora]||0)+1;});
+  return Object.keys(conta).map(k=>{
+    const n=conta[k];
+    return k==='nome'?`${n} sem o nome deste`:`${n} ${n===1?(PQ_FORA_COR[k]||[k])[0].replace(/^um /,''):(PQ_FORA_COR[k]||[,k])[1]}`;
+  }).join(' · ');
+}
+function pqLinkItemHTML(P,l,i){
+  const h=l.historico;
+  const marcas=[];
+  if(l.fora)marcas.push(l.fora==='nome'?'o título não tem o nome deste vinho'
+    :`o título diz que é ${(PQ_FORA_COR[l.fora]||['outro vinho'])[0]}`);
+  if(l.outraCor)marcas.push(`o resumo fala de ${(PQ_FORA_COR[l.outraCor]||['outro vinho'])[0]}`);
+  if(l.outroAno)marcas.push(`parece ser da colheita ${esc(String(l.outroAno))}`);
+  if(h&&h.tentativas){
+    if(!h.lidas&&h.tentativas>=3)marcas.push(`<b>este site não deixou ler ${h.tentativas} de ${h.tentativas} vezes</b>`);
+    else marcas.push(`site lido ${h.lidas} de ${h.tentativas} ${h.tentativas===1?'vez':'vezes'}`);
+  }
+  return `<label class="ia-esc pq-link"><input type="checkbox"${(P.linksMarca||[]).includes(i)?' checked':''} onchange="pqLinkMarcar(this,${i})">
+      <span><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.titulo||l.url)}</a>
+      <i>${esc(l.site)}${l.snippet?' — '+esc(l.snippet):''}</i>${marcas.length?`<i class="pq-link-m">${marcas.join(' · ')}</i>`:''}</span></label>`;
+}
 function pqLinksHTML(P){
-  const L=P.links;
+  const L=P.links.map((l,i)=>({l,i}));
+  const bons=L.filter(x=>!x.l.fora),fora=L.filter(x=>x.l.fora);
   let grupo=null;
-  const lista=L.length?L.map((l,i)=>{
+  const lista=bons.length?bons.map(({l,i})=>{
     const g=pqLinksGrupo(l);
     const cab=g&&g!==grupo?`<div class="pq-grupo">${esc(g)}</div>`:'';
     grupo=g||grupo;
-    const h=l.historico;
-    const marcas=[];
-    if(l.outroAno)marcas.push(`parece ser da colheita ${esc(String(l.outroAno))}`);
-    if(h&&h.tentativas){
-      if(!h.lidas&&h.tentativas>=3)marcas.push(`<b>este site não deixou ler ${h.tentativas} de ${h.tentativas} vezes</b>`);
-      else marcas.push(`site lido ${h.lidas} de ${h.tentativas} ${h.tentativas===1?'vez':'vezes'}`);
-    }
-    return `${cab}<label class="ia-esc pq-link"><input type="checkbox"${(P.linksMarca||[]).includes(i)?' checked':''} onchange="pqLinkMarcar(this,${i})">
-      <span><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.titulo||l.url)}</a>
-      <i>${esc(l.site)}${l.snippet?' — '+esc(l.snippet):''}</i>${marcas.length?`<i class="pq-link-m">${marcas.join(' · ')}</i>`:''}</span></label>`;
-  }).join(''):'<p class="note">Não veio nenhum link que se possa abrir.</p>';
+    return cab+pqLinkItemHTML(P,l,i);
+  }).join(''):`<p class="note">${fora.length?'Os links que vieram parecem ser de outro vinho.':'Não veio nenhum link que se possa abrir.'}</p>`;
+  // Fechados, e marcam-se na mesma: se a regra errou, o link não se perdeu.
+  const foraAberto=fora.some(x=>(P.linksMarca||[]).includes(x.i));
+  const foraHTML=fora.length?`<details class="pq-campos pq-fora"${foraAberto?' open':''}><summary>Deixei de fora ${fora.length}
+    ${fora.length===1?'link que parece':'links que parecem'} de outro vinho (${esc(pqForaHTML(fora.map(x=>x.l)))})</summary>
+    <div class="pq-links">${fora.map(({l,i})=>pqLinkItemHTML(P,l,i)).join('')}</div></details>`:'';
   const px=P.linksProx;
   const mais=px?`<button class="btn ghost pq-mais" onclick="pqLinks(true)">➕ ${px.fase==='web'&&px.pagina===1?'Mais links (na internet)':'Mais 5 links'}</button>`:'';
   const viv=P.linksVivino?`<p class="note">🍷 O Vivino não se deixa abrir, mas o link e a nota que o Google mostra
     (<a href="${esc(P.linksVivino.url)}" target="_blank" rel="noopener">${esc(P.linksVivino.titulo||'Vivino')}</a>) vão com a pesquisa.</p>`:'';
   return `<p class="pq-q">Que páginas são deste vinho?</p>
     <p class="note">Abre os links para confirmar e marca até ${P.linksMax}. A IA lê só essas páginas; para outras, voltas aqui a seguir.</p>
-    <div class="pq-links">${lista}</div>${mais}${viv}
+    <div class="pq-links">${lista}</div>${foraHTML}${mais}${viv}
     <label for="pq-sites">Ou cola o link de uma página que já tenhas</label>
     <textarea id="pq-sites" rows="2" oninput="pqLinksContar()" placeholder="https://…">${esc(P.sites.join('\n'))}</textarea>
     ${pqCamposHTML(P)}${pqOpcoesHTML(P)}
@@ -17369,7 +17398,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='243';
+const APP_BUILD='244';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

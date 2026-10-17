@@ -1390,6 +1390,11 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:.55;margin-left:auto
 .mbox .ia-esc.pq-link a{font-weight:600;color:var(--vh);word-break:break-word}
 .mbox .ia-esc.pq-link i{font-size:11px;line-height:1.35;margin-top:2px}
 .mbox .ia-esc.pq-link i.pq-link-m{color:var(--tx)}
+/* Os links que a `vinho-info` achou de outro vinho (outra cor, sem o nome):
+   fechados por baixo da lista, e apagados — escolhem-se na mesma. */
+.pq-fora{margin-top:10px}
+.pq-fora summary{color:var(--mu)}
+.mbox .pq-fora .ia-esc.pq-link a{color:var(--mu)}
 /* O site de onde a IA tirou o valor, no rótulo da opção ("IA · garrafeiranacional.com"):
    um domínio lê-se em minúsculas, e é um link. */
 .ia-op i a{color:var(--in);text-transform:none;letter-spacing:0;font-weight:600}

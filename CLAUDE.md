@@ -2991,6 +2991,23 @@ lista diz de onde veio cada grupo (`pqLinksGrupo`). Cada toque é UMA consulta
 Serper; a resposta diz qual é a seguinte (`proximo`, `null` no fim). Se as
 lojas não tiverem nada, a mesma chamada passa logo à página 1 da internet (e
 o registo conta 2 consultas).
+**Só os links que são deste vinho** (17/10/2026, o dono: "aparecem sites
+nada a ver … principalmente a confusão branco/tinto"). Desde a fase 4 dos
+nomes a cor já não está no nome ("Quinta do Cardo Reserva" é o tinto e o
+branco), e a consulta só levava o nome, o ano e o produtor. Agora a app manda
+a cor (`tipo`), que vai na consulta (`LINK_COR_Q`: "(tinto OR red)"…), e
+cada resultado passa pela `linkDesteVinho` (secção "OS LINKS QUE SÃO DESTE
+VINHO" na `vinho-info`): fica de fora o que diz OUTRA cor no título ou no
+endereço sem dizer a nossa (num Tinto, Branco ou Rosé; um espumante ou um
+Porto também é outro vinho), e o que não tem no título nem no endereço uma
+palavra que distinga este vinho (a do nome que não é do produtor nem de
+gama). Uma palavra de cor do nome ou do produtor ("Monte Branco") não conta;
+o resumo do Google só marca ("o resumo fala de um branco"). Os que ficam vão
+por ordem das palavras do nome e do produtor que têm, e em empate pela do
+Google. Os de fora vêm em `fora` e a app mostra-os fechados por baixo
+("Deixei de fora 3 links que parecem de outro vinho", `pqLinkItemHTML`) —
+marcam-se na mesma, se a regra errar —, e o `sync_log` guarda os mostrados e
+os de fora com o porquê (`mostrados`, `fora`).
 
 A nota que CONTA — no crachá do cartão e da grelha, na página do vinho, na
 ordenação dentro dos grupos, no filtro por Vivino, no "A completar" e na PDF
