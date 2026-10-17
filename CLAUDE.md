@@ -193,6 +193,11 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `fonte` e o `livre` de `garrafeira.cartas`, as `fotos` de
   `garrafeira.livre_vinhos` e a `livre_estados` (ver "Identificar vinhos
   numa fotografia").
+  `migracao-palavra-mal-lida.sql` é a 57: uma palavra mal lida no nome —
+  "Castro Reserva" lido numa foto liga ao "Crasto Reserva" do Catálogo
+  (`garrafeira.carta_achar`, `palavra_mal_lida`; ver "As Sugestões").
+  `migracao-livre-anteriores.sql` é a 58: os pedidos anteriores da pergunta
+  livre (`garrafeira.livre_meus`; ver "As Sugestões" › "A pergunta livre").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1413,6 +1418,18 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
    Trincadeira) não responde por um "Mouchão Alicante Bouschet". A pergunta
    livre passa pela mesma `carta_achar`, e por isso um vinho assim já não
    vai confirmar-se na net nem nasce outra linha ao lado.
+   **E uma palavra mal lida também** (migração 57, 17/10/2026, o dono das
+   apps: "achei estranho não ter feito match com o Vinho Crasto Reserva" —
+   a foto foi lida "Castro Reserva"). Sem nada antes, liga à linha da mesma
+   cor cuja chave tem as mesmas palavras menos uma, e essa uma está mal lida
+   (`garrafeira.palavra_mal_lida`): as mesmas letras noutra ordem com a
+   primeira e a última no sítio ("Castro"/"Crasto"), ou uma letra trocada, a
+   mais ou a menos (a regra do `parUmaLetra` dos parecidos). Só palavras de
+   5 letras ou mais e chaves de duas palavras ou mais; nunca quando a
+   palavra lida é outro produtor que o Catálogo conhece ("Carvalhais" e
+   "Carvalhas" são dois); e só se sobrar UM vinho. A leitura das fotos
+   (`promptPrateleira`) pede também o nome letra a letra, sem o corrigir
+   para uma palavra que o modelo conheça melhor.
 3. **Procurar informação, até 5 de cada vez** (`wsDetalhe`): os vistos da
    lista (nenhum vem marcado) vão ao "Procurar informação" com IA de sempre —
    a `vinho-info`, com o motor do plano de cada um — e **o que se encontrar
@@ -1555,6 +1572,14 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
     não pede — diz para acrescentar detalhe e põe o cursor lá.
   - Enquanto há vinhos a confirmar, a app relê o pedido (`livre_ler`) de 5
     em 5 segundos, até 4 minutos, e relê o Catálogo quando algum nasceu.
+  - **Pedidos anteriores** (migração 58, 17/10/2026, o dono: "corri uma
+    sugestão para Fraldinha e não vejo guardada"): no fim do modo, como as
+    "Cartas anteriores" (`wsLivreCarregarHistorico`, `#ws-livre-hist`). Os
+    MEUS, pela `garrafeira.livre_meus` (as tabelas não se leem pela API):
+    o prato, o preço, a foto e o primeiro recomendado. Abrir um põe-no no
+    ecrã (`wsLivreAbrirHist`, a `livre_ler` de sempre, com o que o Catálogo
+    sabe HOJE e a data à cabeça); não se abre outro com um pedido a correr.
+    Um pedido respondido pela memória é de quem o fez primeiro.
   - **Com uma fotografia** (17/10/2026, migração 56, o dono: "enviar uma
     fotografia de vinhos (que tirei tipo no supermercado) e perguntar à IA,
     para o que vou almoçar ou jantar, qual é o vinho mais recomendado"): o

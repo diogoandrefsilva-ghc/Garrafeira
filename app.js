@@ -1856,6 +1856,7 @@ function wsAbrir(){
   wsModoAplicar();
   const h=document.getElementById('ws-hist');
   if(h&&h.open&&WS_MODO==='carta')wsCarregarHistorico();
+  if(WS_MODO==='livre')wsLivreHistRefrescar();
 }
 
 /* ── O modo: de onde vêm os vinhos ──
@@ -1873,6 +1874,7 @@ function wsModo(m){
   try{localStorage.setItem(WS_MODO_KEY,m);}catch(e){}
   wsModoAplicar();
   if(m==='carta'){const h=document.getElementById('ws-hist');if(h&&h.open)wsCarregarHistorico();}
+  if(m==='livre')wsLivreHistRefrescar();
 }
 function wsModoAplicar(){
   const sec=document.getElementById('s-sugestoes');
@@ -3259,6 +3261,7 @@ async function wsLivreRetomar(){
   try{await wsLivreEsperarFoto(st,true);await wsLivreLer(st);st.estado='ok';st.q.prato=(st.pedido&&st.pedido.prato)||'';}
   catch(e){st.estado='erro';st.erro=e.message;}
   try{localStorage.removeItem(WS_LIVRE_FOTO_KEY);}catch(e){}
+  wsLivreHistRefrescar();
   if(WS_LIVRE!==st)return;
   wsLivreBotao();
   if(WS_MODO==='livre')wsDesenhar();
@@ -3312,6 +3315,7 @@ async function wsLivrePedir(){
     st.erro=/acção desconhecida/.test(e.message)?'A função `garrafeira-carta` publicada no Supabase ainda não sabe fazer a pergunta livre.':e.message;
   }
   if(st.foto)try{localStorage.removeItem(WS_LIVRE_FOTO_KEY);}catch(e){}
+  if(st.id)wsLivreHistRefrescar();
   if(WS_LIVRE!==st)return;
   wsLivreBotao();
   if(WS_MODO==='livre'){
@@ -3384,6 +3388,78 @@ function wsLivreDataTxt(iso){
   const d=new Date(iso);
   return isNaN(d)?'':d.toLocaleDateString('pt-PT',{day:'numeric',month:'long'});
 }
+function wsLivrePrecoTxt(min,max){
+  const eur=x=>String(Math.round(Number(x)))+' €';
+  return min!=null&&max!=null?`${eur(min)} a ${eur(max)}`:max!=null?`até ${eur(max)}`:min!=null?`a partir de ${eur(min)}`:'';
+}
+
+/* ── Os pedidos anteriores (17/10/2026, migração 58) ──
+   O dono das apps: "corri uma sugestão para Fraldinha e não vejo guardada".
+   Estava guardada (`livre_pedidos`), mas a app só sabia do pedido que estava
+   no ecrã. São os MEUS, pela `livre_meus` (as tabelas da pergunta livre não
+   se leem pela API), e abrir um põe-no no ecrã no lugar do de agora, lido
+   pela `livre_ler` com o que o Catálogo sabe HOJE — como as cartas
+   anteriores. Não se abre outro com um pedido a correr. */
+function wsLivreHistRefrescar(){
+  const h=document.getElementById('ws-livre-hist');
+  if(h&&h.open)wsLivreCarregarHistorico();
+}
+async function wsLivreCarregarHistorico(){
+  const box=document.getElementById('ws-livre-historico');
+  if(!box)return;
+  if(!box.innerHTML)box.innerHTML='<p class="ws-note">A carregar…</p>';
+  try{
+    const rows=await sbRpc('livre_meus',{p_limite:30});
+    if(!Array.isArray(rows)||!rows.length){box.innerHTML='<p class="ws-note">Ainda não fizeste nenhuma pergunta livre.</p>';return;}
+    box.innerHTML=rows.map(wsLivreHistItemHTML).join('');
+  }catch(e){
+    box.innerHTML=`<p class="ws-note">${/livre_meus/.test(String(e&&e.message))?'Falta a migração 58 no Supabase (db/migracao-livre-anteriores.sql).':'Não foi possível carregar os pedidos anteriores.'}</p>`;
+  }
+}
+function wsLivreHistItemHTML(r){
+  const preco=wsLivrePrecoTxt(r.preco_min,r.preco_max);
+  const d=new Date(r.criado_em);
+  const dataFmt=isNaN(d)?'':d.toLocaleDateString('pt-PT',{day:'2-digit',month:'short',year:'numeric'});
+  const foto=r.foto?`📸 ${r.lidos!=null?(r.lidos===1?'1 vinho na foto':r.lidos+' vinhos na foto'):'com foto'} · `:'';
+  const txt=r.estado==='pendente'?(r.foto?'⏳ a ler a foto…':'⏳ a pensar…'):r.estado==='erro'?'⚠️ '+esc(r.erro||'falhou')
+    :r.top?`${r.top_combina==='serve'?'≈':'🍷'} ${esc(r.top)}${r.n>1?` <span class="hist-orc">+${r.n-1}</span>`:''}`
+    :r.foto?'nenhum da foto combina':'sem sugestão';
+  return `<div class="hist-item">
+    <div class="hist-head"${r.estado!=='erro'?` onclick="wsLivreAbrirHist(${Number(r.id)})"`:''}>
+      <div>
+        <div class="hist-prato">${esc(r.prato||'(sem prato)')}${preco?` <span class="hist-orc">· ${esc(preco)}</span>`:''}</div>
+        <div class="hist-top">${foto}${txt}</div>
+      </div>
+      <div class="hist-data">${dataFmt}</div>
+    </div>
+  </div>`;
+}
+async function wsLivreAbrirHist(id){
+  if(WS_LIVRE&&WS_LIVRE.estado==='pendente'){toast('Espera que acabe o pedido que está a correr',1);return;}
+  // O formulário fica como está: "pedir outra vez" compara com o pedido do
+  // ecrã, e este não traz as observações (só as palavras delas ficam na BD).
+  const st={estado:'ok',q:{prato:'',min:null,max:null,obs:'',palavras:[],chavePrato:'',fotos:''},
+    id:Number(id),pedido:null,memoria:false,erro:'',inicio:0,foto:false,hist:true};
+  try{await wsLivreLer(st);}
+  catch(e){toast('Não foi possível abrir este pedido',1);return;}
+  const p=st.pedido;
+  st.foto=!!p.foto;
+  if(p.estado==='erro'){st.estado='erro';st.erro=p.erro||'Este pedido falhou.';}
+  else if(p.estado==='pendente')st.estado='pendente';
+  clearTimeout(_wsLivreTimer);
+  WS_LIVRE=st;
+  wsLivreBotao();wsDesenhar();
+  const el=document.getElementById('ws-resultado');
+  if(el)wsRolar(el);
+  if(st.estado==='pendente'){
+    try{await wsLivreEsperarFoto(st,true);await wsLivreLer(st);st.estado='ok';}
+    catch(e){st.estado='erro';st.erro=e.message;}
+    if(WS_LIVRE!==st)return;
+    wsLivreBotao();
+    if(WS_MODO==='livre')wsDesenhar();
+  }
+  if(st.estado==='ok'&&wsLivreAConfirmar(st))wsLivreSondar(st);
+}
 function wsLivreHTML(){
   const st=WS_LIVRE;
   if(!st)return '';
@@ -3403,10 +3479,9 @@ function wsLivreHTML(){
       :'<div class="ws-card"><p class="ws-note">A IA não sugeriu nenhum vinho que eu conseguisse ler. Tenta outra vez, com outras palavras.</p></div>';
   }
   const n=wsLivreAConfirmar(st);
-  const eur=x=>String(Math.round(Number(x)))+' €';
-  const preco=p.preco_min!=null&&p.preco_max!=null?`${eur(p.preco_min)} a ${eur(p.preco_max)}`
-    :p.preco_max!=null?`até ${eur(p.preco_max)}`:p.preco_min!=null?`a partir de ${eur(p.preco_min)}`:'';
+  const preco=wsLivrePrecoTxt(p.preco_min,p.preco_max);
   const notas=[];
+  if(st.hist)notas.push(`🕘 Pedido de ${esc(wsLivreDataTxt(p.criado_em))} — com o que o Catálogo sabe hoje.`);
   if(st.semFoto)notas.push('⚠️ A função publicada no Supabase ainda não lê fotografias — esta é a sugestão sem olhar para a foto.');
   if(foto){
     const fv=Array.isArray(foto.vinhos)?foto.vinhos:[];
@@ -17369,7 +17444,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='243';
+const APP_BUILD='244';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

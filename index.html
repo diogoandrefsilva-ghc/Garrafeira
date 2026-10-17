@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="243">
+<body data-build="244">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone-claro.png" alt="">
@@ -412,6 +412,12 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
     <details class="ws-hist ws-so-carta" id="ws-hist" ontoggle="if(this.open)wsCarregarHistorico()">
       <summary>Cartas anteriores</summary>
       <div id="ws-historico"></div>
+    </details>
+    <!-- Os pedidos anteriores da pergunta livre (migração 58): os MEUS, pela
+         `livre_meus` — ver `wsLivreCarregarHistorico` no app.js. -->
+    <details class="ws-hist ws-so-livre" id="ws-livre-hist" ontoggle="if(this.open)wsLivreCarregarHistorico()">
+      <summary>Pedidos anteriores</summary>
+      <div id="ws-livre-historico"></div>
     </details>
   </section>
 
