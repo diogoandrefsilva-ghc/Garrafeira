@@ -1518,9 +1518,11 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
     Sugerir" com ela (17/10/2026, o dono) — com foto são os 3 melhores, não
     5: numa prateleira de 5 a 7, cinco era quase todos.
   - **Mais do que um prato** (o dono: "que vinho escolho para acompanhar
-    sushi mas que também não seja má escolha para uma massada de peixe"):
-    os dois prompts (`promptLivre`, `promptLivreFoto`) mandam pôr à frente
-    o que serve bem TODOS, e a razão dizer como se porta com cada um.
+    sushi mas que também não seja má escolha para uma massada de peixe" —
+    "sushi" no prato, o resto nas observações): os dois prompts
+    (`promptLivre`, `promptLivreFoto`) mandam pôr à frente o que serve bem
+    TODOS, venha o segundo prato no prato ou nas observações, e a razão
+    dizer como se porta com cada um.
   - **Na garrafeira de quem** (o dono: "para os vinhos que já existissem no
     Catálogo ou na garrafeira de alguém, colocava lá essa nota"): as
     sugestões livres, com ou sem foto, levam as marcas da carta
