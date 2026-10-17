@@ -795,7 +795,7 @@ Depois dela, publicar a `garrafeira-carta` e a `vinho-info`
 não tem ficam `pendente` (a `garrafeira-carta` pergunta-lhe antes,
 `livreSonda`).
 
-### Migração 56 — Identificar vinhos numa fotografia (por aplicar)
+### Migração 56 — Identificar vinhos numa fotografia (já aplicada)
 
 `db/migracao-identificar.sql`, depois da 40, da 54 e da 55. Faz:
 - `garrafeira.cartas.fonte` (`'carta'` | `'prateleira'`, por omissão
@@ -820,7 +820,13 @@ E a pergunta livre com uma fotografia: `garrafeira.livre_pedidos.estado`
 no mesmo dia num bloco desfeito: um pedido com foto nasce `pendente`, os 3
 pedidos que já lá estavam ficam `pronto`, e a `livre_ler` traz a `foto`.
 Depois dela, publicar a `garrafeira-carta` (as acções `identificar` e
-`identificar_procurar`, e a `livre` com `imagens`). A `vinho-info` não muda. A app nova sem a migração
+`identificar_procurar`, e a `livre` com `imagens`). A `vinho-info` não muda.
+Aplicada a 17/10/2026 pelo MCP (`garrafeira_56_identificar`) e confirmada:
+as cartas que já lá estavam ficaram `carta`, os pedidos livres `pronto`, a
+`livre_estados` executa-se como `authenticated` e não como `anon`, e a
+`livre_registar` continua só da service role. A `garrafeira-carta` foi
+publicada no mesmo dia (versão 9, pelo commit `b33f04e`) e arranca — um
+`net.http_post` com o token da service role recebe o 403 dela. A app nova sem a migração
 continua a mostrar as cartas anteriores das Sugestões (o filtro da `fonte`
 recusa-se e lêem-se todas), mas o Identificar não lê.
 
