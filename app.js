@@ -3907,7 +3907,7 @@ async function idAbrirHist(id){
 
 /* ── NAVEGAÇÃO ─────────────────────────────────────────────────────── */
 let tabAtiva='garrafeira';
-const ORDEM_TABS=['garrafeira','detalhe','locais','consumidos','desejos','sugestoes','backoffice','cfg'];
+const ORDEM_TABS=['garrafeira','detalhe','locais','consumidos','desejos','backoffice','cfg'];
 function tab(nome,btn){
   const deInicio=tabAtiva==='inicio';
   tabAtiva=nome;
@@ -4057,6 +4057,8 @@ function inicioDesenhar(){
   const b=document.getElementById('ini-garrafas');
   if(b)b.innerHTML=[{tipo:'Branco',ano:'2022'},{tipo:'Rosé',ano:'2023'},{tipo:'Tinto',ano:'2019'}]
     .map(v=>garrafaSVG(v)).join('');
+  const m=document.getElementById('ini-mini');
+  if(m)m.innerHTML=[{tipo:'Tinto'},{tipo:'Branco'},{tipo:'Rosé'}].map(v=>garrafaSVG(v,true)).join('');
 }
 async function inicioIr(dest){
   if(INI_A_IR)return;
@@ -4073,7 +4075,7 @@ async function inicioIr(dest){
     tab(t,tabBotao(t));
   }
   else if(dest==='catalogo')tab('detalhe',tabBotao('detalhe'));
-  else if(dest==='sugestoes')tab('sugestoes',tabBotao('sugestoes'));
+  else if(dest==='sugestoes')tab('sugestoes');
   else if(dest==='identificar')idAbrir('inicio');
 }
 // A procura é UM nó só (o mesmo <input>, o mesmo estado), que se muda de
@@ -17295,7 +17297,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='239';
+const APP_BUILD='240';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

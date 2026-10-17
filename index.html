@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="239">
+<body data-build="240">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone-claro.png" alt="">
@@ -129,9 +129,6 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
          (`body.sem-desejo`, ver `detetarDesejo`). Fica ANTES do ⚙️ porque o
          `restaurarTab` casa a posição do botão com o `ORDEM_TABS`. -->
     <button class="it desejo-only so-gar" onclick="tab('desejos',this)"><span class="ic">⭐</span> Wishlist</button>
-    <!-- AS SUGESTÕES (a WineSelection, 30/09/2026): só no catálogo e só com
-         IA (`body.sem-sugestoes`). Também antes do ⚙️, pela mesma razão. -->
-    <button class="it so-cat it-sugestoes" onclick="tab('sugestoes',this)"><span class="ic">🍽️</span> Sugestões</button>
     <!-- O BACKOFFICE do Catálogo (05/10/2026): o que vivia na WineCatalog —
          Duplicados, Produtores, Nomes, Alertas, Comentários, Vivino… Só no
          catálogo e só ao admin do catálogo (`body.adm-cat`). Antes do ⚙️,
@@ -178,14 +175,23 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
         <!-- As ferramentas usam IA: sem ela não aparecem (`body.sem-sugestoes`). -->
         <div class="ini-ferr">
           <button type="button" class="ini-c ini-f" id="ini-sugestoes" onclick="inicioIr('sugestoes')">
-            <span class="ini-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.5 3h9c0 4.6-1.6 8.2-4.5 8.2S6.5 7.6 6.5 3z"/><path d="M11 11.2V19"/><path d="M7.5 21h7"/><path d="M19.5 3v4"/><path d="M17.5 5h4"/><path d="M18 11.5v2.4"/><path d="M16.8 12.7h2.4"/></svg></span>
+            <!-- A carta com o vinho escolhido marcado, e o copo. -->
+            <span class="ini-fd" aria-hidden="true"><span class="ini-fg">
+              <span class="ini-carta"><span class="cab"></span><span></span><span class="m"></span><span class="esc"><span></span><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg></span><span class="m"></span><span class="c"></span></span>
+              <svg class="ini-copo" viewBox="0 0 24 32"><path class="vidro" d="M5 3h14c0 7-2.6 12.4-7 12.4S5 10 5 3z"/><path class="vinho" d="M6.2 8.5h11.6c-.9 3.6-3 5.6-5.8 5.6s-4.9-2-5.8-5.6z"/><path d="M12 15.4V27M7.5 29h9"/></svg>
+            </span></span>
             <span class="ini-fb">
               <span class="ini-t">Sugestões</span>
               <span class="ini-s">Uma carta, um prato ou só a pergunta: que vinho?</span>
             </span>
           </button>
           <button type="button" class="ini-c ini-f" id="ini-identificar" onclick="inicioIr('identificar')">
-            <span class="ini-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 8V5a2 2 0 0 1 2-2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M21 16v3a2 2 0 0 1-2 2h-3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M11 6.5h2v2.2c0 .9 1.6 1.6 1.6 3.3V16.5a1 1 0 0 1-1 1h-3.2a1 1 0 0 1-1-1V12c0-1.7 1.6-2.4 1.6-3.3z"/></svg></span>
+            <!-- A mira sobre três garrafas: duas que conheço, uma que não. -->
+            <span class="ini-fd" aria-hidden="true"><span class="ini-fg">
+              <svg class="ini-mira" viewBox="0 0 104 72"><path d="M2 20V8a6 6 0 0 1 6-6h12M84 2h12a6 6 0 0 1 6 6v12M102 52v12a6 6 0 0 1-6 6H84M20 70H8a6 6 0 0 1-6-6V52"/></svg>
+              <span class="ini-mini" id="ini-mini"></span>
+              <span class="ini-sim s1">✓</span><span class="ini-sim s2">✓</span><span class="ini-nao">?</span>
+            </span></span>
             <span class="ini-novo" id="ini-novo">Novo</span>
             <span class="ini-fb">
               <span class="ini-t">Identificar</span>
@@ -312,7 +318,13 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
        As fotos da carta, o prato e o orçamento vão à Edge Function
        `garrafeira-carta`, que só LÊ a carta; a lista, o "Procurar
        informação" e a sugestão vêm a seguir. Ver "SUGESTÕES" no app.js. -->
+  <!-- As Sugestões abrem-se pelo ecrã inicial (17/10/2026): sem separador,
+       com a volta ao início, como o Identificar. -->
   <section class="sec" id="s-sugestoes" data-modo="carta">
+    <div class="id-barra">
+      <button type="button" class="bo-volta" onclick="inicioAbrir()">‹ Início</button>
+      <span class="id-titulo">🍽️ Sugestões</span>
+    </div>
     <div class="ws-modos" role="tablist" aria-label="Sugerir a partir de">
       <button type="button" class="ws-modo on" data-modo="carta" role="tab" aria-selected="true" onclick="wsModo('carta')"><span class="ws-modo-ic">📖</span>Uma carta de vinhos</button>
       <button type="button" class="ws-modo" data-modo="garrafeira" role="tab" aria-selected="false" onclick="wsModo('garrafeira')"><span class="ws-modo-ic">🍾</span>A minha garrafeira</button>

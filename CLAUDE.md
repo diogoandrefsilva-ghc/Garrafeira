@@ -214,10 +214,13 @@ app.js (`inicio*`/`INI_*`) e no style.css (`.ini-*`); `#s-inicio` no
   filete dourado em baixo) e um desenho: os fundos das garrafas com a pele
   do móvel dos Locais (`.mvg.v-*` — o mesmo número na mesma cor é o mesmo
   vinho, e um lugar vazio) e três garrafas da `garrafaSVG` com a colheita.
-  Sugestões e Identificar são cards de papel lado a lado, com um ícone
-  bordô — só com IA, como os separadores delas (`body.sem-sugestoes`). O
-  "Novo" do Identificar sai depois de ele se abrir uma vez neste aparelho
-  (`gf_identificar_visto`).
+  Sugestões e Identificar são cards de papel lado a lado, cada um com o seu
+  desenho num quadro em tom de papel (`.ini-fd`): a carta com o vinho
+  escolhido marcado e o copo; a mira sobre três garrafas, duas com ✓ e uma
+  com ? (o dono: com o ícone sozinho tinham "muito espaço livre") — só com
+  IA, como elas (`body.sem-sugestoes`). O "Novo" do Identificar fica meio
+  fora do cartão, em cima (dentro do quadro tapava o desenho), e sai depois
+  de ele se abrir uma vez neste aparelho (`gf_identificar_visto`).
 - **O card da garrafeira diz a garrafeira aberta**: "2 vinhos · 3 garrafas"
   (as que têm stock, como o Resumo), e o nome dela quando não é minha
   ("Partilhada contigo") ou quando tenho mais do que uma.
@@ -232,6 +235,10 @@ app.js (`inicio*`/`INI_*`) e no style.css (`.ini-*`); `#s-inicio` no
   — `tabGarrafeiraOk`); o Catálogo abre no Detalhe, como pelo ⇄; as
   Sugestões e o Identificar no deles, e o Identificar aberto daqui tem
   "‹ Início" em vez de "‹ Detalhe" (`ID_VOLTA`).
+- **As Sugestões deixaram de ter separador** (o dono: "não justifica ter o
+  separador sugestões dentro do catálogo, já está cá fora"): abrem-se só
+  pelo card, e a secção tem a barra do Identificar com "‹ Início". Saíram
+  também do `ORDEM_TABS`, que casa a POSIÇÃO de cada botão.
 - **O Catálogo só se lê quando se toca num dos três cards dele** (~380 KB
   da primeira vez), com a roda no lugar da seta (`.a-abrir`); se não se
   deixar ler, fica-se aqui, com o toast.
@@ -1124,8 +1131,9 @@ mais simples e mais seguro.
 "Quero incluir na garrafeira o catálogo de vinhos" — a WineCatalog passa a
 ser o back-office. **Tocar no título do cabeçalho ("Garrafeira ⇄") troca
 para o Catálogo** (`modoAlternar`, `MODO`): o cabeçalho fica verde-garrafa,
-o título passa a "Catálogo", e só ficam o Resumo, o Detalhe, as **Sugestões**
-(ver abaixo) e as Definições (abre no Detalhe). Não se
+o título passa a "Catálogo", e só ficam o Resumo, o Detalhe e as
+Definições (abre no Detalhe; as **Sugestões**, ver abaixo, abrem-se pelo ecrã
+inicial). Não se
 grava ao trocar: a app abre no ecrã inicial (desde 17/10/2026 — ver "O ecrã
 inicial"), a não ser que se escolha outra coisa em **Definições › Ao abrir a
 app** (06/10/2026, o dono das apps: garrafeira ou catálogo, e Resumo,
@@ -1598,10 +1606,11 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
   admin), e abrir uma põe-na no lugar da de agora, com o que o Catálogo sabe
   HOJE. As cartas de antes de 03/10/2026 ficaram no schema `wineselection`
   e já não aparecem.
-- **Só no catálogo** (`.so-cat`): o separador vive lá — também o modo da
-  garrafeira, que lê os vinhos da garrafeira aberta.
+- **Vivem no catálogo**: o card do ecrã inicial passa ao Catálogo antes de
+  as abrir (desde 17/10/2026 sem separador, com "‹ Início") — também o modo
+  da garrafeira, que lê os vinhos da garrafeira aberta.
 - **Só com IA** (`body.sem-sugestoes`, no `sincronizarTabs`): quem é `sem_ia`
-  não vê o separador, e a `garrafeira-carta` pergunta o mesmo à BD
+  não vê o card, e a `garrafeira-carta` pergunta o mesmo à BD
   (`plano_ia()`). O "Procurar informação" é a `vinho-info`, que só atende
   EDITORES.
 - **As marcas dos amigos** (🍾 🍷 💭 🎁) são da `garrafeira.marcas_amigos`
@@ -1673,8 +1682,8 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
 `#s-backoffice`.
 - **Só no catálogo e só ao admin do catálogo** (`.so-cat` +
   `body.adm-cat`, ligado pelo `boSincronizar` no `carregar()` a partir do
-  `EU.admin_catalogo`). Fica antes do ⚙️ e está no `ORDEM_TABS`; como as
-  Sugestões, não se restaura (a app abre na garrafeira).
+  `EU.admin_catalogo`). Fica antes do ⚙️ e está no `ORDEM_TABS`; não se
+  restaura ao abrir a app.
 - **Duas camadas**: o HUB (`boHub`, `BO_PAGINAS`: uma pastilha por tema em
   quatro grupos — arrumar o catálogo · o que chega das garrafeiras · o
   Vivino e as garrafeiras · registo e definições) e a PÁGINA de cada tema

@@ -177,22 +177,51 @@ body.inicio>header,body.inicio .itabs{display:none}
 /* As ferramentas: só com IA, como os separadores delas. */
 .ini-ferr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 body.sem-sugestoes .ini-ferr{display:none}
-.ini-f{height:196px;box-sizing:border-box;padding:16px;border-radius:var(--r2);border:1px solid var(--bo);background:var(--card);
+.ini-f{box-sizing:border-box;padding:8px;border-radius:var(--r2);border:1px solid var(--bo);background:var(--card);
   color:var(--tx);display:flex;flex-direction:column;box-shadow:var(--sh)}
-.ini-ic{width:44px;height:44px;flex-shrink:0;border-radius:12px;background:var(--vhp);color:var(--vh);
-  display:flex;align-items:center;justify-content:center}
-.ini-ic svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-.ini-novo{position:absolute;top:16px;right:16px;padding:3px 8px;border-radius:99px;background:var(--vh);color:#fff;
-  font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;line-height:1.3}
-.ini-fb{margin-top:auto;display:flex;flex-direction:column}
+/* Meio fora do cartão, em cima, como o selo dos cartões do Catálogo: dentro
+   do quadro tapava o desenho. */
+.ini-novo{position:absolute;z-index:1;top:-9px;right:14px;padding:3px 8px;border-radius:99px;background:var(--vh);color:#fff;
+  font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;line-height:1.3;
+  box-shadow:0 2px 6px -2px rgba(78,18,40,.55)}
+.ini-fb{margin-top:auto;padding:12px 8px 6px;display:flex;flex-direction:column}
 .ini-f .ini-t{margin-top:0;font-size:20px;line-height:1.12;letter-spacing:0;color:var(--tx)}
 .ini-f .ini-s{margin-top:6px;font-size:12px;color:var(--mu)}
+/* O desenho de cada ferramenta (17/10/2026, o dono: "muito espaço livre"
+   com o ícone sozinho): um quadro em tom de papel, como os dois de cima
+   têm o deles. O grupo tem medidas fixas e fica ao centro. */
+.ini-fd{position:relative;display:block;height:84px;border-radius:12px;background:var(--bg2);overflow:hidden}
+.ini-fg{position:absolute;left:50%;top:0;width:108px;height:84px;margin-left:-54px}
+.ini-carta{position:absolute;left:4px;top:8px;width:60px;height:70px;box-sizing:border-box;padding:9px 8px;border-radius:5px;
+  background:var(--card);box-shadow:0 1px 2px rgba(78,18,40,.08),0 8px 18px -10px rgba(78,18,40,.45);transform:rotate(-6deg);
+  display:flex;flex-direction:column;gap:6px}
+.ini-carta>span{display:block;height:3px;border-radius:2px;background:var(--bo)}
+.ini-carta>.cab{width:26px;height:4px;background:var(--vh);opacity:.75}
+.ini-carta>.m{width:80%}.ini-carta>.c{width:62%}
+.ini-carta>.esc{height:auto;margin:0 -4px;padding:3px 4px;border-radius:3px;background:var(--vhp);display:flex;align-items:center;gap:3px}
+.ini-carta>.esc>span{flex:1;height:3px;border-radius:2px;background:var(--vh2)}
+.ini-carta>.esc>svg{width:8px;height:8px;fill:var(--ou)}
+.ini-copo{position:absolute;left:66px;top:24px;width:38px;height:52px;fill:none;stroke:var(--vh);stroke-width:1.3;
+  stroke-linecap:round;stroke-linejoin:round}
+.ini-copo .vidro{fill:var(--card)}.ini-copo .vinho{fill:#5e1226;stroke:none}
+.ini-mira{position:absolute;left:2px;top:6px;width:104px;height:72px;fill:none;stroke:var(--vh);stroke-width:2.4;stroke-linecap:round}
+.ini-mini svg{position:absolute;top:30px;width:20px;height:37px}
+.ini-mini svg:nth-child(1){left:22px}
+.ini-mini svg:nth-child(2){left:44px;top:26px}
+.ini-mini svg:nth-child(3){left:66px}
+.ini-sim,.ini-nao{position:absolute;display:flex;align-items:center;justify-content:center;width:16px;height:16px;box-sizing:border-box;
+  border-radius:50%;font-size:9px;font-weight:700;line-height:1}
+.ini-sim{background:var(--vd);color:#fff;border:2px solid var(--bg2)}
+.ini-nao{background:var(--card);color:var(--mu);border:1.5px solid var(--bo2);font-family:var(--fd);font-size:10px}
+.ini-sim.s1{left:34px;top:22px}
+.ini-sim.s2{left:56px;top:18px}
+.ini-nao{left:78px;top:22px}
 /* A abrir o Catálogo pela primeira vez (~380 KB): a roda no lugar da seta. */
 .ini-c.a-abrir{pointer-events:none}
 .ini-c.a-abrir::before{content:'';position:absolute;z-index:2;top:22px;right:22px;width:20px;height:20px;box-sizing:border-box;
   border-radius:50%;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;animation:sp .8s linear infinite}
 .ini-g.a-abrir .ini-seta{visibility:hidden}
-.ini-f.a-abrir::before{top:28px;right:16px;border-color:var(--bo2);border-top-color:var(--vh)}
+.ini-f.a-abrir::before{top:18px;right:18px;border-color:var(--bo2);border-top-color:var(--vh)}
 .ini-f.a-abrir .ini-novo{visibility:hidden}
 
 /* ── STAT CARDS ─────────────────────────────────────────────────── */
@@ -2172,7 +2201,6 @@ body.cat .fab-op.so-gar{display:none!important}
    Identificar vinhos também usa (17/10/2026) valem para as duas secções
    (`:is(#s-sugestoes,#s-identificar)`). */
 body:not(.cat) .itabs .so-cat{display:none!important}
-body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
 :is(#s-sugestoes,#s-identificar) .ws-card{background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:16px 18px;margin-bottom:14px;box-shadow:var(--sh)}
 /* Os três modos (07/10/2026): de onde vêm os vinhos — uma carta, a minha
    garrafeira, o Catálogo. O que cada um mostra decide-o o `data-modo` da
@@ -2352,8 +2380,9 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
    barra com o voltar (sem botão na barra dos separadores, nada lá acende),
    os dois grupos, e por baixo de cada cartão do Catálogo o que se leu na
    foto, em letra pequena e sem caixa — o cartão é que é o vinho. */
-#s-identificar .id-barra{display:flex;align-items:center;gap:10px;margin:0 0 12px}
-#s-identificar .id-titulo{font-family:var(--fd);font-weight:600;font-size:18px;min-width:0}
+/* A barra de volta também é a das Sugestões (sem separador desde 17/10/2026). */
+:is(#s-sugestoes,#s-identificar) .id-barra{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+:is(#s-sugestoes,#s-identificar) .id-titulo{font-family:var(--fd);font-weight:600;font-size:18px;min-width:0}
 #s-identificar .id-tit{margin:4px 4px 8px}
 #s-identificar .id-entre{margin:-4px 4px 10px}
 #s-identificar .id-grupo{font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin:18px 4px 9px}
