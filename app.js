@@ -1834,8 +1834,10 @@ function wsAbrir(){
   if(!WS_INIT){
     WS_INIT=true;
     wsRenderImgGrid();
+    wsLivreImgPintar();
     wsOrcamentoInit();
     wsRetomarPendente();
+    wsLivreRetomar();
   }
   wsModoAplicar();
   const h=document.getElementById('ws-hist');
@@ -1880,27 +1882,30 @@ function wsModoAplicar(){
 // ── As fotos da carta (mais do que uma, se o menu não couber numa só) ──
 let _wsImagens=[]; // [{base64, mime}]
 const WS_MAX_IMAGENS=6;
-function wsRenderImgGrid(){
-  const grid=document.getElementById('ws-img-grid');
-  if(!grid)return;
-  const thumbs=_wsImagens.map((img,i)=>`
+/* A grelha das fotografias — a carta, a pergunta livre com uma foto e o
+   Identificar vinhos usam a mesma: as miniaturas com o ✕ e, enquanto
+   cabe, o quadrado de tirar ou escolher. */
+const FOTO_ADD_SVG='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>';
+function fotosGridPintar(gridId,metaId,imgs,max,inputId,remover,limpar){
+  const grid=document.getElementById(gridId);
+  if(grid)grid.innerHTML=imgs.map((img,i)=>`
     <div class="img-thumb">
       <img src="data:${img.mime};base64,${img.base64}" alt="">
-      <button type="button" class="img-thumb-del" onclick="wsRemoverImagem(${i})" aria-label="Remover">✕</button>
-    </div>`).join('');
-  const podeAdicionar=_wsImagens.length<WS_MAX_IMAGENS;
-  grid.innerHTML=thumbs+(podeAdicionar?`
-    <div class="img-add" onclick="document.getElementById('ws-img-input').click()">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-      <div>${_wsImagens.length?'Mais uma':'Tirar foto / escolher'}</div>
+      <button type="button" class="img-thumb-del" onclick="${remover}(${i})" aria-label="Remover">✕</button>
+    </div>`).join('')+(imgs.length<max?`
+    <div class="img-add" onclick="document.getElementById('${inputId}').click()">
+      ${FOTO_ADD_SVG}
+      <div>${imgs.length?'Mais uma':'Tirar foto / escolher'}</div>
     </div>`:'');
-  const meta=document.getElementById('ws-img-meta');
-  if(_wsImagens.length){
-    meta.style.display='block';
-    meta.innerHTML=`${_wsImagens.length} foto${_wsImagens.length>1?'s':''} · <a href="#" onclick="event.preventDefault();wsLimparImagens()">limpar</a>`;
-  }else{
-    meta.style.display='none';
+  const meta=document.getElementById(metaId);
+  if(meta){
+    meta.style.display=imgs.length?'block':'none';
+    meta.innerHTML=imgs.length?`${imgs.length} foto${imgs.length>1?'s':''} · <a href="#" onclick="event.preventDefault();${limpar}()">limpar</a>`:'';
   }
+}
+function wsRenderImgGrid(){
+  if(!document.getElementById('ws-img-grid'))return;
+  fotosGridPintar('ws-img-grid','ws-img-meta',_wsImagens,WS_MAX_IMAGENS,'ws-img-input','wsRemoverImagem','wsLimparImagens');
   document.getElementById('ws-btn-ler').disabled=_wsImagens.length===0||!!_wsPollTimer;
 }
 function wsRemoverImagem(i){_wsImagens.splice(i,1);wsRenderImgGrid();}
@@ -3181,24 +3186,90 @@ function wsLivreValores(){
   if(min!=null&&max!=null&&min>max)[min,max]=[max,min];
   return {prato:document.getElementById('ws-prato').value.trim(),min,max,obs:(document.getElementById('ws-obs')||{}).value||''};
 }
+/* A PERGUNTA LIVRE COM UMA FOTOGRAFIA (17/10/2026, migração 56) — o dono
+   das apps: "enviar uma fotografia de vinhos (que tirei tipo no
+   supermercado) e perguntar à IA, para o que vou almoçar ou jantar, qual é
+   o vinho mais recomendado". É opcional: com fotos, a IA escolhe ENTRE os
+   vinhos da foto (lidos como no Identificar, e com a ficha do Catálogo dos
+   que ele conhece) — a `garrafeira-carta` faz isso quando o pedido traz
+   `imagens`. A resposta é uma pergunta livre como as outras (lê-se pela
+   `livre_ler`, e desenha-se com o mesmo `wsLivreHTML`), só que nasce
+   `pendente` — ler a foto leva tempo —, sonda-se (`wsLivreEsperarFoto`) e
+   sobrevive a recarregar a página (`gf_ws_livre_foto`). Sem memória: cada
+   fotografia é outra pergunta. */
+let _wsLivreImagens=[];
+const WS_LIVRE_FOTO_KEY='gf_ws_livre_foto';
+function wsLivreImgPintar(){
+  fotosGridPintar('ws-livre-img-grid','ws-livre-img-meta',_wsLivreImagens,ID_MAX_FOTOS,'ws-livre-img-input','wsLivreRemoverImagem','wsLivreLimparImagens');
+  wsLivreBotao();
+}
+function wsLivreRemoverImagem(i){_wsLivreImagens.splice(i,1);wsLivreImgPintar();}
+function wsLivreLimparImagens(){_wsLivreImagens=[];wsLivreImgPintar();}
+async function wsLivreImagensEscolhidas(ev){
+  const files=Array.from(ev.target.files||[]);
+  ev.target.value='';
+  if(!files.length)return;
+  const espaco=Math.max(0,ID_MAX_FOTOS-_wsLivreImagens.length);
+  let falhas=0;
+  for(const f of files.slice(0,espaco)){
+    try{_wsLivreImagens.push(await idProcessarImagem(f));}
+    catch(e){try{_wsLivreImagens.push(await wsProcessarImagem(f));}catch(_){falhas++;}}
+  }
+  if(falhas)toast(`Não consegui ler ${falhas>1?'algumas fotos':'uma foto'} — tenta outra vez`,1);
+  else if(files.length>espaco)toast(`Só cabem ${ID_MAX_FOTOS} fotos de cada vez`,1);
+  wsLivreImgPintar();
+}
+// Para o "pedir outra vez": são as mesmas fotos?
+function wsLivreFotosSig(){return _wsLivreImagens.map(im=>im.base64.length+':'+im.base64.slice(-24)).join('|');}
+// Até a função acabar de ler a foto e escolher (lança com o erro dela).
+async function wsLivreEsperarFoto(st,ja){
+  const inicio=Date.now();
+  while(WS_LIVRE===st){
+    if(!ja)await new Promise(r=>setTimeout(r,3000));
+    ja=false;
+    if(WS_LIVRE!==st)return;
+    let p=null;
+    try{p=await sbRpc('livre_ler',{p_id:st.id});}catch(e){}
+    if(p&&p.estado==='erro')throw new Error(p.erro||'Não consegui ler a fotografia — tenta outra vez.');
+    if(p&&p.estado!=='pendente')return;
+    if(Date.now()-inicio>3*60*1000)throw new Error('Está a demorar demasiado — tenta outra vez daqui a pouco.');
+  }
+}
+// Uma escolha a partir de uma foto que ficou a meio (recarregou-se a página).
+async function wsLivreRetomar(){
+  let id=null;try{id=localStorage.getItem(WS_LIVRE_FOTO_KEY);}catch(e){}
+  if(!id||WS_LIVRE)return;
+  const st={estado:'pendente',q:{prato:'',min:null,max:null,obs:'',palavras:[],chavePrato:'',fotos:''},
+    id:Number(id),pedido:null,memoria:false,erro:'',inicio:0,foto:true};
+  WS_LIVRE=st;wsLivreBotao();wsDesenhar();
+  try{await wsLivreEsperarFoto(st,true);await wsLivreLer(st);st.estado='ok';st.q.prato=(st.pedido&&st.pedido.prato)||'';}
+  catch(e){st.estado='erro';st.erro=e.message;}
+  try{localStorage.removeItem(WS_LIVRE_FOTO_KEY);}catch(e){}
+  if(WS_LIVRE!==st)return;
+  wsLivreBotao();
+  if(WS_MODO==='livre')wsDesenhar();
+  if(st.estado==='ok'&&wsLivreAConfirmar(st))wsLivreSondar(st);
+}
 function wsLivreBotao(){
   const b=document.getElementById('ws-btn-livre');
   if(!b)return;
-  const st=WS_LIVRE;
+  const st=WS_LIVRE, foto=_wsLivreImagens.length>0;
   b.disabled=!!(st&&st.estado==='pendente');
-  b.textContent=st&&st.estado==='pendente'?'✨ A pensar…':st&&st.estado==='ok'?'✨ Pedir outra vez':'✨ Sugerir 5 vinhos';
+  b.textContent=st&&st.estado==='pendente'?(st.foto?'📸 A ler a foto…':'✨ A pensar…')
+    :foto?'📸 Escolher entre os vinhos da foto':st&&st.estado==='ok'?'✨ Pedir outra vez':'✨ Sugerir 5 vinhos';
 }
 async function wsLivrePedir(){
   if(WS_LIVRE&&WS_LIVRE.estado==='pendente')return;
   if(!podeUsarIA()){toast('As sugestões usam IA, e a IA não está incluída no teu acesso',1);return;}
   const q=wsLivreValores();
   if(!q.prato){toast('Diz primeiro o que vais comer',1);document.getElementById('ws-prato').focus();return;}
-  const chavePrato=wsLivreChavePrato(q.prato), palavras=wsLivreObsPalavras(q.obs);
-  // Pedir OUTRA vez (o mesmo prato e o mesmo preço) obriga a mais detalhe:
-  // sem uma palavra nova nas observações, a resposta era a mesma.
+  const chavePrato=wsLivreChavePrato(q.prato), palavras=wsLivreObsPalavras(q.obs), fotos=wsLivreFotosSig();
+  // Pedir OUTRA vez (o mesmo prato e o mesmo preço — e as mesmas fotos)
+  // obriga a mais detalhe: sem uma palavra nova nas observações, a resposta
+  // era a mesma.
   const ant=WS_LIVRE;
   if(ant&&ant.estado==='ok'&&(ant.q.chavePrato||chave(ant.q.prato))===(chavePrato||chave(q.prato))&&ant.q.min===q.min&&ant.q.max===q.max
-     &&palavras.every(w=>ant.q.palavras.includes(w))){
+     &&(ant.q.fotos||'')===fotos&&palavras.every(w=>ant.q.palavras.includes(w))){
     ant.pedeDetalhe=true;
     wsDesenhar();
     const o=document.getElementById('ws-obs');
@@ -3207,19 +3278,26 @@ async function wsLivrePedir(){
     return;
   }
   clearTimeout(_wsLivreTimer);
-  const st={estado:'pendente',q:Object.assign({chavePrato,palavras},q),id:null,pedido:null,memoria:false,erro:'',inicio:0};
+  const st={estado:'pendente',q:Object.assign({chavePrato,palavras,fotos},q),id:null,pedido:null,memoria:false,erro:'',inicio:0,foto:!!fotos};
   WS_LIVRE=st;
   wsLivreBotao();wsDesenhar();
   try{
-    const d=await wsChamar({acao:'livre',prato:q.prato,precoMin:q.min,precoMax:q.max,observacoes:q.obs.trim(),chavePrato});
+    const corpo={acao:'livre',prato:q.prato,precoMin:q.min,precoMax:q.max,observacoes:q.obs.trim(),chavePrato};
+    if(st.foto)corpo.imagens=_wsLivreImagens.map(im=>({data:im.base64,mime:im.mime}));
+    const d=await wsChamar(corpo);
     if(!d.id)throw new Error(d.error||'Resposta inesperada — tenta outra vez.');
     st.id=d.id;st.memoria=!!d.memoria;
+    if(d.pendente){
+      try{localStorage.setItem(WS_LIVRE_FOTO_KEY,String(d.id));}catch(e){}
+      await wsLivreEsperarFoto(st);
+    }else if(st.foto)st.semFoto=true;   // uma função antiga: respondeu sem olhar para a foto
     await wsLivreLer(st);
     st.estado='ok';
   }catch(e){
     st.estado='erro';
     st.erro=/acção desconhecida/.test(e.message)?'A função `garrafeira-carta` publicada no Supabase ainda não sabe fazer a pergunta livre.':e.message;
   }
+  if(st.foto)try{localStorage.removeItem(WS_LIVRE_FOTO_KEY);}catch(e){}
   if(WS_LIVRE!==st)return;
   wsLivreBotao();
   if(WS_MODO==='livre'){
@@ -3247,6 +3325,22 @@ async function wsLivreLer(st){
       const r=await sbRpc('carta_ligar',{p_pedidos:falta.map(v=>({nome:v.nome,produtor:v.produtor||'',ano:v.ano??null,tipo:v.tipo||null}))});
       (Array.isArray(r)?r:[]).forEach((l,i)=>{if(l&&l.id!=null&&IDXV[-Number(l.id)])st.cat.set(Number(falta[i].id),-Number(l.id));});
     }catch(e){}
+  }
+  /* Na garrafeira de quem (17/10/2026, o dono: "para os vinhos que já
+     existissem no Catálogo ou na garrafeira de alguém, colocava lá essa
+     nota"): a minha, e as dos amigos das Prendas de Anos — as marcas da
+     carta (`marcas_amigos`, ver "A exceção: as marcas dos amigos"). As
+     garrafeiras de mais ninguém: cada um vê a sua. Pede-se uma vez por
+     vinho (a sondagem volta aqui de 5 em 5 segundos). */
+  if(!st.marcas){st.marcas=new Map();st.marcasPedidas=new Set();}
+  const semMarca=vs.filter(v=>!st.marcasPedidas.has(Number(v.id)));
+  if(semMarca.length&&_sbSession){
+    semMarca.forEach(v=>st.marcasPedidas.add(Number(v.id)));
+    try{
+      const d=await sbRpc('marcas_amigos',{p_pedidos:semMarca.map(v=>({nome:v.nome,produtor:v.produtor||'',ano:v.ano??null,tipo:v.tipo||null,
+        catalogo_id:st.cat.has(Number(v.id))?-st.cat.get(Number(v.id)):(v.catalogo_id!=null?Number(v.catalogo_id):null)}))});
+      if(Array.isArray(d))d.forEach((m,i)=>{if(m)st.marcas.set(Number(semMarca[i].id),m);});
+    }catch(e){semMarca.forEach(v=>st.marcasPedidas.delete(Number(v.id)));}
   }
 }
 function wsLivreAConfirmar(st){
@@ -3279,27 +3373,66 @@ function wsLivreDataTxt(iso){
 function wsLivreHTML(){
   const st=WS_LIVRE;
   if(!st)return '';
-  if(st.estado==='pendente')return `<div class="ws-card"><p class="ws-note">✨ A pensar em 5 vinhos para «${esc(st.q.prato)}»…</p></div>`;
+  if(st.estado==='pendente'){
+    const para=st.q.prato?` para «${esc(st.q.prato)}»`:'';
+    return `<div class="ws-card"><p class="ws-note">${st.foto
+      ?`📸 A ler a foto e a escolher${para} — pode demorar um minuto; podes sair da app.`
+      :`✨ A pensar em 5 vinhos${para}…`}</p></div>`;
+  }
   if(st.estado==='erro')return `<div class="ws-card"><p class="ws-note" style="color:var(--dg)">${esc(st.erro)}</p></div>`;
   const p=st.pedido||{};
   const sug=(Array.isArray(p.sugestoes)?p.sugestoes:[]).filter(s=>st.vinhos.has(Number(s.v)));
-  if(!sug.length)return '<div class="ws-card"><p class="ws-note">A IA não sugeriu nenhum vinho que eu conseguisse ler. Tenta outra vez, com outras palavras.</p></div>';
+  const foto=p.foto&&typeof p.foto==='object'?p.foto:null;
+  if(!sug.length){
+    return foto
+      ?`<div class="ws-card"><p class="ws-note">📸 ${esc(foto.semSugestao||'Nenhum dos vinhos da foto combina com este pedido.')}</p>${wsLivreFotoHTML(foto,true)}</div>`
+      :'<div class="ws-card"><p class="ws-note">A IA não sugeriu nenhum vinho que eu conseguisse ler. Tenta outra vez, com outras palavras.</p></div>';
+  }
   const n=wsLivreAConfirmar(st);
   const eur=x=>String(Math.round(Number(x)))+' €';
   const preco=p.preco_min!=null&&p.preco_max!=null?`${eur(p.preco_min)} a ${eur(p.preco_max)}`
     :p.preco_max!=null?`até ${eur(p.preco_max)}`:p.preco_min!=null?`a partir de ${eur(p.preco_min)}`:'';
   const notas=[];
+  if(st.semFoto)notas.push('⚠️ A função publicada no Supabase ainda não lê fotografias — esta é a sugestão sem olhar para a foto.');
+  if(foto){
+    const fv=Array.isArray(foto.vinhos)?foto.vinhos:[];
+    const conh=fv.filter(v=>v.cat!=null&&IDXV[-Number(v.cat)]).length;
+    notas.push(`📸 Li ${fv.length===1?'1 vinho':fv.length+' vinhos'} na fotografia; ${!conh?'o Catálogo não conhece nenhum':'o Catálogo conhece '+(conh===fv.length?(fv.length===1?'esse':'todos'):conh)}. A escolha é entre eles.${foto.aviso?' '+esc(foto.aviso):''}`);
+  }
   if(st.memoria)notas.push(`É a resposta de um pedido igual de ${esc(wsLivreDataTxt(p.criado_em))} — o mesmo prato, o mesmo preço e as mesmas observações dão a mesma sugestão durante uma semana.`);
   if(n)notas.push(`🔎 A confirmar na net ${n===1?'1 vinho que o Catálogo ainda não tem':n+' vinhos que o Catálogo ainda não tem'} — se tudo o que interessa vier com fonte, ${n===1?'entra':'entram'} no Catálogo.`);
-  return `<div class="ws-card-label sug-titulo">A sugestão · ${esc(p.prato||st.q.prato)}${preco?` · ${preco}`:''}${sug.length>1?' <em>— toca num vinho para ver porquê</em>':''}</div>`
+  if(st.marcas&&st.marcas.size)notas.push('Dos amigos das Prendas de Anos: 🍾 tem na garrafeira · ⭐ bebeu e deu nota · 💭 está na wishlist · 🎁 já foi prenda. Toca numa marca para ver o pormenor.');
+  return `<div class="ws-card-label sug-titulo">${foto?'Da fotografia':'A sugestão'} · ${esc(p.prato||st.q.prato)}${preco?` · ${preco}`:''}${sug.length>1?' <em>— toca num vinho para ver porquê</em>':''}</div>`
     +notas.map(t=>`<p class="ws-note sug-entre">${t}</p>`).join('')
     +sug.map((s,k)=>wsLivreSugHTML(st,s,k)).join('')
-    +`<p class="ws-note ws-livre-outra${st.pedeDetalhe?' aviso':''}">Queres outra resposta? Acrescenta mais detalhe nas <b>observações</b> (uma casta, uma região, um estilo…) e pede outra vez.</p>`;
+    +(foto?wsLivreFotoHTML(foto,false):'')
+    +`<p class="ws-note ws-livre-outra${st.pedeDetalhe?' aviso':''}">Queres outra resposta? Acrescenta mais detalhe nas <b>observações</b> (uma casta, uma região, um estilo…)${foto?' ou tira outra fotografia,':''} e pede outra vez.</p>`;
+}
+// Os vinhos que se leram na fotografia: os que o Catálogo conhece abrem a
+// página do vinho. Fechada debaixo da sugestão; aberta quando não houve.
+function wsLivreFotoHTML(foto,aberta){
+  const fv=Array.isArray(foto.vinhos)?foto.vinhos:[];
+  if(!fv.length)return '';
+  const linhas=fv.map(v=>{
+    const cat=v.cat!=null?IDXV[-Number(v.cat)]:null, tipo=v.tipo||(cat&&cat.tipo)||'';
+    const sub=[v.produtor||(cat&&cat.produtor),v.ano,v.regiao||(cat&&cat.regiao)].filter(Boolean).map(y=>esc(String(y))).join(' · ');
+    const nome=cat?`<span class="carta-nome ligado" onclick="verVinho(${cat.id})">${esc(cat.nome||v.nome)}<span class="carta-ver">›</span>`
+      :`<span class="carta-nome">${esc(v.nome||'')}`;
+    const est=cat?(wsNotaHTML(cat,v,'carta-score conhecida')||'<span class="carta-score">no Catálogo</span>')
+      :'<span class="carta-score sem-dados">fora do Catálogo</span>';
+    return `<div class="carta-item ws-foto-item"><span class="tipo-dot" style="background:${wsTipoCor(tipo)}" title="${esc(tipo||'Cor desconhecida')}"></span>
+      ${nome}${sub?`<span class="carta-sub">${sub}</span>`:''}</span>${est}<span class="carta-preco">${v.preco!=null?wsEur(Number(v.preco)):''}</span></div>`;
+  }).join('');
+  return `<details class="ws-livre-foto"${aberta?' open':''}><summary>${fv.length===1?'O vinho que li na foto':`Os ${fv.length} vinhos que li na foto`}</summary>
+    <div class="carta-list">${linhas}</div></details>`;
 }
 // Um vinho que o Catálogo tem: como no modo Catálogo. Um que não tem: o que
 // a IA disse (o preço dito como de memória) e em que pé está a confirmação.
 function wsLivreSugHTML(st,s,k){
   const x=st.vinhos.get(Number(s.v)), cid=st.cat.get(Number(s.v)), v=cid?IDXV[cid]:null;
+  // Escolhido de uma fotografia: o que se leu nela (o preço da etiqueta).
+  const foto=st.pedido&&st.pedido.foto, lido=foto&&Array.isArray(foto.vinhos)&&Number.isInteger(s.i)?foto.vinhos[s.i]:null;
+  const marcas=wsMarcasHTML(st.marcas&&st.marcas.get(Number(s.v)));
   const marca=k===0?'<span class="sug-marca topo">🏆 Melhor escolha</span>':'';
   const razao=s.razao?`<p class="vinho-txt"><strong>Porquê:</strong> ${esc(s.razao)}</p>`:'';
   if(v){
@@ -3310,17 +3443,21 @@ function wsLivreSugHTML(st,s,k){
     return `<details class="vinho-card sug-det${k===0?' destaque':''}"${k===0?' open':''}>
       <summary class="sug-sum"><span class="sug-pos">${k+1}</span>
         <span class="sug-cab">${marca}<span class="vinho-nome">${esc(v.nome||'Vinho')}</span>
-          ${sub?`<span class="vinho-sub">${sub}</span>`:''}${v.produtor?`<span class="vinho-sub sug-prod">${esc(v.produtor)}</span>`:''}</span>
+          ${sub?`<span class="vinho-sub">${sub}</span>`:''}${v.produtor?`<span class="vinho-sub sug-prod">${esc(v.produtor)}</span>`:''}${marcas}</span>
         <span class="sug-dir"><span class="vinho-preco"${pr&&pr.loja?` title="${esc(precoFonteTxt(pr))}"`:''}>${wsEur(pr?pr.preco:null)}</span>${nota}</span>
       </summary>
       <div class="sug-corpo">
         ${t||novo?`<div class="sug-extra">${novo}${t||''}</div>`:''}${razao}
+        ${lido&&lido.preco!=null?`<p class="ws-note">📷 ${idPrecoHTML(Number(lido.preco),v)}</p>`:''}
         <div class="sug-links"><button type="button" class="mini" onclick="verVinho(${v.id})">Ver a ficha</button>${viv?`<a class="mini" href="${esc(viv)}" target="_blank" rel="noopener">Vivino ↗</a>`:''}</div>
       </div></details>`;
   }
   const sg=x.sugerido||{};
-  const sub=[x.tipo,x.regiao||sg.regiao,(sg.castas||[]).join(', ')].filter(Boolean).map(y=>esc(String(y))).join(' · ');
-  const preco=typeof sg.preco==='number'?`<span class="vinho-preco" title="Preço aproximado, dito pela IA de memória">~${wsEur(sg.preco)}</span>`:'';
+  // Da foto: o que se leu, e o preço da etiqueta; de memória: o que a IA disse.
+  const sub=(lido?[x.tipo,lido.ano,x.regiao||lido.regiao]:[x.tipo,x.regiao||sg.regiao,(sg.castas||[]).join(', ')])
+    .filter(Boolean).map(y=>esc(String(y))).join(' · ');
+  const preco=lido?(lido.preco!=null?`<span class="vinho-preco" title="O preço da etiqueta, na fotografia">${wsEur(Number(lido.preco))}</span>`:'')
+    :typeof sg.preco==='number'?`<span class="vinho-preco" title="Preço aproximado, dito pela IA de memória">~${wsEur(sg.preco)}</span>`:'';
   const est=x.estado==='a_verificar'?'<span class="ws-livre-est">🔎 A confirmar na net…</span>'
     :x.estado==='pendente'?'<span class="ws-livre-est">Ainda por confirmar na net.</span>'
     :x.estado==='por_carregar'||x.estado==='descartado'?`<span class="ws-livre-est">Não ficou no Catálogo${x.falta&&x.falta.length&&x.estado==='por_carregar'?': faltou '+esc(x.falta.join(', ')):''}.</span>`
@@ -3328,12 +3465,13 @@ function wsLivreSugHTML(st,s,k){
   return `<details class="vinho-card sug-det ws-livre-fora${k===0?' destaque':''}"${k===0?' open':''}>
     <summary class="sug-sum"><span class="sug-pos">${k+1}</span>
       <span class="sug-cab">${marca}<span class="vinho-nome">${esc(x.nome||'Vinho')}</span>
-        ${sub?`<span class="vinho-sub">${sub}</span>`:''}${x.produtor?`<span class="vinho-sub sug-prod">${esc(x.produtor)}</span>`:''}</span>
+        ${sub?`<span class="vinho-sub">${sub}</span>`:''}${x.produtor?`<span class="vinho-sub sug-prod">${esc(x.produtor)}</span>`:''}${marcas}</span>
       <span class="sug-dir">${preco}<span class="sug-nota"><span class="sem-dados">fora do Catálogo</span></span></span>
     </summary>
     <div class="sug-corpo">
       ${est?`<div class="sug-extra">${est}</div>`:''}${razao}
-      <p class="ws-note">O que está aqui é o que a IA disse de memória — o preço é aproximado.</p>
+      <p class="ws-note">${lido?'Está na fotografia, mas o Catálogo ainda não o conhece: a razão é o que a IA sabe dele.'
+        :'O que está aqui é o que a IA disse de memória — o preço é aproximado.'}</p>
     </div></details>`;
 }
 
@@ -3394,22 +3532,7 @@ function idVoltar(){tab('detalhe',tabBotao('detalhe'));}
 
 // ── As fotografias (a mesma moldura das da carta) ──
 function idRenderImgGrid(){
-  const grid=document.getElementById('id-img-grid');
-  if(!grid)return;
-  grid.innerHTML=_idImagens.map((img,i)=>`
-    <div class="img-thumb">
-      <img src="data:${img.mime};base64,${img.base64}" alt="">
-      <button type="button" class="img-thumb-del" onclick="idRemoverImagem(${i})" aria-label="Remover">✕</button>
-    </div>`).join('')+(_idImagens.length<ID_MAX_FOTOS?`
-    <div class="img-add" onclick="document.getElementById('id-img-input').click()">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-      <div>${_idImagens.length?'Mais uma':'Tirar foto / escolher'}</div>
-    </div>`:'');
-  const meta=document.getElementById('id-img-meta');
-  if(meta){
-    meta.style.display=_idImagens.length?'block':'none';
-    meta.innerHTML=_idImagens.length?`${_idImagens.length} foto${_idImagens.length>1?'s':''} · <a href="#" onclick="event.preventDefault();idLimparImagens()">limpar</a>`:'';
-  }
+  fotosGridPintar('id-img-grid','id-img-meta',_idImagens,ID_MAX_FOTOS,'id-img-input','idRemoverImagem','idLimparImagens');
   const b=document.getElementById('id-btn-ler');
   if(b)b.disabled=!_idImagens.length||!!_idPollTimer;
 }
@@ -13457,7 +13580,7 @@ function boLivreHTML(x,i){
     <div class="bcl-cab"><div class="bcl-tt"><span class="bo-nome">${esc(x.nome||'(sem nome)')}</span>
       ${sub?`<span class="bo-sub">${esc(sub)}</span>`:''}
       ${x.vezes>0?`<span class="bo-sub">Sugerido ${x.vezes===1?'uma vez':x.vezes+' vezes'}${pratos?` · para ${esc(pratos)}`:''}${typeof sg.preco==='number'?` · a IA disse ~${esc(wsEur(sg.preco))}`:''}</span>`:''}
-      ${x.fotos>0?`<span class="bo-sub">📸 Visto ${x.fotos===1?'numa fotografia':'em '+x.fotos+' fotografias'} (Identificar vinhos)${sg.foto&&typeof sg.foto.preco==='number'?` · ${esc(wsEur(sg.foto.preco))} na etiqueta`:''}${sg.foto&&sg.foto.nome&&sg.foto.nome!==x.nome?` · lido «${esc(sg.foto.nome)}»`:''}</span>`:''}</div></div>
+      ${x.fotos>0?`<span class="bo-sub">📸 Visto ${x.fotos===1?'numa fotografia':'em '+x.fotos+' fotografias'}${!x.vezes&&pratos?` · para ${esc(pratos)}`:''}${sg.foto&&typeof sg.foto.preco==='number'?` · ${esc(wsEur(sg.foto.preco))} na etiqueta`:''}${sg.foto&&sg.foto.nome&&sg.foto.nome!==x.nome?` · lido «${esc(sg.foto.nome)}»`:''}</span>`:''}</div></div>
     <div class="bcl-dif n-erro${x.estado==='por_carregar'?'':' aceite'}">
       ${x.falta&&x.falta.length?`<div class="bcl-dcab"><b>Faltou:</b><span>${esc(x.falta.join(' · '))}</span></div>`:''}
       <div class="bcl-vals">${x.verificado?campos:'<div class="bcl-val vazio"><span class="bcl-txt">A procura não trouxe nada.</span></div>'}</div>

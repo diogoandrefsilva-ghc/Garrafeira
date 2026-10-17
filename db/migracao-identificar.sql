@@ -38,6 +38,20 @@
 --     lista do Backoffice ordena-se pelas duas contas somadas;
 --   · `garrafeira.livre_estados(ids)`: os vinhos dados (para a app saber em
 --     que pé está a confirmação dos que mandou procurar). Nunca quem pediu.
+--
+-- E a PERGUNTA LIVRE COM UMA FOTOGRAFIA (17/10/2026, o dono das apps: "na
+-- parte da perguntar à IA, era muito giro que eu pudesse enviar uma
+-- fotografia de vinhos (que tirei tipo no supermercado) e perguntar à IA,
+-- para o que vou almoçar ou jantar, qual é o vinho mais recomendado"): a
+-- IA escolhe ENTRE os vinhos da foto, e a resposta guarda-se como uma
+-- pergunta livre (`livre_pedidos`, com os recomendados em `livre_vinhos`).
+-- Como a foto leva tempo a ler, o pedido nasce `pendente` e a app sonda-o:
+--   · `garrafeira.livre_pedidos.estado` ('pendente' | 'pronto' | 'erro', por
+--     omissão 'pronto' — os pedidos de antes estão prontos), `.erro` e
+--     `.foto` (o que se leu: os vinhos, com a linha do Catálogo de cada um,
+--     e o aviso). Um pedido com foto tem a chave `foto#…`, que nunca é a de
+--     outro pedido: não há memória para fotografias;
+--   · `garrafeira.livre_ler` devolve o `estado`, o `erro` e a `foto`.
 -- Idempotente.
 -- =====================================================================
 
@@ -174,3 +188,39 @@ END;
 $$;
 REVOKE ALL ON FUNCTION garrafeira.livre_lista(boolean) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION garrafeira.livre_lista(boolean) TO authenticated;
+
+-- ── A pergunta livre com uma fotografia ──────────────────────────────
+ALTER TABLE garrafeira.livre_pedidos ADD COLUMN IF NOT EXISTS estado text NOT NULL DEFAULT 'pronto';
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'livre_pedidos_estado_check'
+                    AND conrelid = 'garrafeira.livre_pedidos'::regclass) THEN
+    ALTER TABLE garrafeira.livre_pedidos ADD CONSTRAINT livre_pedidos_estado_check CHECK (estado IN ('pendente', 'pronto', 'erro'));
+  END IF;
+END $$;
+ALTER TABLE garrafeira.livre_pedidos ADD COLUMN IF NOT EXISTS erro text;
+-- {fotos, vinhos: [{nome, produtor, ano, tipo, regiao, preco, cat}], aviso}
+ALTER TABLE garrafeira.livre_pedidos ADD COLUMN IF NOT EXISTS foto jsonb;
+
+-- A da 54, com o estado, o erro e a foto.
+CREATE OR REPLACE FUNCTION garrafeira.livre_ler(p_id bigint)
+  RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER
+  SET search_path = garrafeira, public
+AS $$
+DECLARE p garrafeira.livre_pedidos;
+BEGIN
+  IF NOT garrafeira.is_allowed() THEN RAISE EXCEPTION 'Sem acesso.'; END IF;
+  SELECT * INTO p FROM garrafeira.livre_pedidos WHERE id = p_id;
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  RETURN jsonb_build_object(
+    'id', p.id, 'prato', p.prato, 'preco_min', p.preco_min, 'preco_max', p.preco_max,
+    'criado_em', p.criado_em, 'sugestoes', p.sugestoes,
+    'estado', p.estado, 'erro', p.erro, 'foto', p.foto,
+    'vinhos', COALESCE((SELECT jsonb_agg(garrafeira.livre_vinho_json(l))
+                          FROM garrafeira.livre_vinhos l
+                         WHERE l.id IN (SELECT (e ->> 'v')::bigint FROM jsonb_array_elements(p.sugestoes) e
+                                         WHERE (e ->> 'v') ~ '^\d+$')), '[]'::jsonb));
+END;
+$$;
+REVOKE ALL ON FUNCTION garrafeira.livre_ler(bigint) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION garrafeira.livre_ler(bigint) TO authenticated, service_role;

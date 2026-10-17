@@ -814,8 +814,13 @@ real: um vinho inventado lido numa foto ficou `a_verificar` com `fotos` 1 e
 o `sugerido` das duas; o "Quinta do Crasto Reserva Vinhas Velhas" ligou ao
 #216 (`no_catalogo`). O `CHECK` da `fonte` acrescenta-se num `DO` sem `DROP`
 (o MCP pára num `DROP` à espera de confirmação).
+E a pergunta livre com uma fotografia: `garrafeira.livre_pedidos.estado`
+(`'pendente'` | `'pronto'` | `'erro'`, por omissão `'pronto'`), `.erro` e
+`.foto` (o que se leu), e a `garrafeira.livre_ler` a devolvê-los. Ensaiada
+no mesmo dia num bloco desfeito: um pedido com foto nasce `pendente`, os 3
+pedidos que já lá estavam ficam `pronto`, e a `livre_ler` traz a `foto`.
 Depois dela, publicar a `garrafeira-carta` (as acções `identificar` e
-`identificar_procurar`). A `vinho-info` não muda. A app nova sem a migração
+`identificar_procurar`, e a `livre` com `imagens`). A `vinho-info` não muda. A app nova sem a migração
 continua a mostrar as cartas anteriores das Sugestões (o filtro da `fonte`
 recusa-se e lêem-se todas), mas o Identificar não lê.
 

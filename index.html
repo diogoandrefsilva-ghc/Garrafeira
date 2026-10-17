@@ -287,8 +287,14 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
         </div>
         <div class="ws-card-label ws-passo"><span class="ws-num"></span>Observações <em>(opcional — cor, casta, região, estilo…)</em></div>
         <textarea id="ws-obs" rows="2" maxlength="400" placeholder="ex: prefiro tinto do Douro, de Touriga Nacional; pouca madeira"></textarea>
+        <!-- A fotografia (17/10/2026, migração 56): numa loja, a IA escolhe
+             entre os vinhos da foto (ver `wsLivreImgPintar` no app.js). -->
+        <div class="ws-card-label ws-passo"><span class="ws-num"></span>Fotografia dos vinhos <em>(opcional — numa loja, a IA escolhe entre os da foto)</em></div>
+        <div id="ws-livre-img-grid" class="img-grid"></div>
+        <div id="ws-livre-img-meta" class="img-meta" style="display:none"></div>
+        <input type="file" id="ws-livre-img-input" accept="image/*" multiple style="display:none" onchange="wsLivreImagensEscolhidas(event)">
         <button class="btn prim full" id="ws-btn-livre" onclick="wsLivrePedir()" style="margin-top:18px">✨ Sugerir 5 vinhos</button>
-        <p class="ws-note">A IA sugere de memória. Os vinhos que o Catálogo tem aparecem com os dados dele; os outros são confirmados na net e só entram no Catálogo com fontes.</p>
+        <p class="ws-note">Sem fotografia, a IA sugere de memória; com ela, escolhe entre os vinhos que lá estão. Os que o Catálogo tem aparecem com os dados dele; os outros são confirmados na net e só entram no Catálogo com fontes.</p>
       </div>
 
       <div class="ws-sem-garrafeira ws-sem-livre">

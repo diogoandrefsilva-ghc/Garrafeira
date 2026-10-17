@@ -2246,6 +2246,12 @@ body.sem-sugestoes .itabs .it-sugestoes{display:none!important}
 :is(#s-sugestoes,#s-identificar) .hist-prato{font-weight:600;font-size:14px}
 :is(#s-sugestoes,#s-identificar) .hist-orc{font-weight:500;color:var(--mu);font-size:12px}
 :is(#s-sugestoes,#s-identificar) .hist-top{font-size:12px;color:var(--mu);margin-top:2px}
+/* a pergunta livre com uma fotografia: os vinhos que se leram, fechados
+   debaixo da sugestão (sem o visto de procurar — uma coluna a menos) */
+#s-sugestoes .ws-livre-foto{margin:4px 0 10px;background:var(--card);border:1px solid var(--bo);border-radius:var(--r);padding:4px 14px}
+#s-sugestoes .ws-livre-foto>summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;padding:9px 0}
+#s-sugestoes .ws-card .ws-livre-foto{border:none;padding:0;margin:6px 0 0;background:none}
+#s-sugestoes .carta-item.ws-foto-item{grid-template-columns:auto minmax(0,1fr) auto auto}
 :is(#s-sugestoes,#s-identificar) .hist-data{font-size:11px;color:var(--mu);white-space:nowrap}
 
 /* ── IDENTIFICAR VINHOS NUMA FOTOGRAFIA (17/10/2026) ──

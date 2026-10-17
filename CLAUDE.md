@@ -1494,6 +1494,34 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
     não pede — diz para acrescentar detalhe e põe o cursor lá.
   - Enquanto há vinhos a confirmar, a app relê o pedido (`livre_ler`) de 5
     em 5 segundos, até 4 minutos, e relê o Catálogo quando algum nasceu.
+  - **Com uma fotografia** (17/10/2026, migração 56, o dono: "enviar uma
+    fotografia de vinhos (que tirei tipo no supermercado) e perguntar à IA,
+    para o que vou almoçar ou jantar, qual é o vinho mais recomendado"): o
+    passo 4, opcional (até 4 fotos, `_wsLivreImagens`). Com fotos, a
+    `garrafeira-carta` (`acao:'livre'` com `imagens` → `livreFotoPedido`)
+    lê-as como o Identificar (`lerVinhosDaFoto`), liga-as ao Catálogo com a
+    ficha e pede ao modelo os 3 melhores ENTRE os vinhos da foto
+    (`promptLivreFoto`): dos que o Catálogo conhece com os factos de lá (a
+    nota do Vivino pesa), dos outros com o que ele sabe — e nunca um que não
+    reconheça. Fora do preço pedido (com a margem do orçamento) não vai ao
+    modelo. Guarda-se como uma pergunta livre: os 3 em `livre_vinhos`
+    (`foto: true`, e os que o Catálogo não tem vão à confirmação), e em
+    `livre_pedidos.foto` o que se leu (cada vinho com a sua linha do
+    Catálogo, `cat`). Ler leva tempo: o pedido nasce `pendente` e a app
+    sonda a `livre_ler` (`wsLivreEsperarFoto`, retomada ao recarregar —
+    `gf_ws_livre_foto`). Sem memória (a chave é `foto#…`); "pedir outra vez"
+    com as mesmas fotos obriga a mais detalhe, como sem elas. A resposta
+    diz quantos vinhos se leram e quantos o Catálogo conhece, cada
+    sugestão traz o preço da etiqueta face ao preço que conta (o
+    `idPrecoHTML` do Identificar), e por baixo, fechados, "Os N vinhos que
+    li na foto".
+  - **Na garrafeira de quem** (o dono: "para os vinhos que já existissem no
+    Catálogo ou na garrafeira de alguém, colocava lá essa nota"): as
+    sugestões livres, com ou sem foto, levam as marcas da carta
+    (`marcas_amigos`: 🍾 na garrafeira, ⭐ bebeu e deu nota, 💭 na wishlist,
+    🎁 prenda — a minha, "tu", e as dos amigos das Prendas de Anos). As
+    garrafeiras de mais ninguém: cada um vê a sua. Pedem-se uma vez por
+    vinho (`st.marcasPedidas`), não a cada leitura da sondagem.
 - **O orçamento vai até 70 €** (07/10/2026, o dono: "só estamos a permitir
   ir até 50 €"): Sem limite · 10 · 15 · 20 · 25 · 30 · 40 · 50 · 60 · 70 —
   `WS_ORCAMENTO_OPCOES` no app.js e as `.orc-item` do `index.html`, os dois

@@ -844,45 +844,57 @@ Regras:
   caso contrário null.
 - Nunca inventes: na dúvida, null.`;
 
+/* A leitura de uma fotografia de vinhos: o Identificar e a pergunta livre
+   com uma foto passam os dois por aqui. Devolve os vinhos (cada um uma vez
+   só — nome, colheita e cor) e o aviso, ou o erro já dito para a app. */
+async function lerVinhosDaFoto(partsImg: unknown[], nFotos: number, modelos: string[], signal: AbortSignal) {
+  // Ler não precisa de pensar (o "200 vazio" da carta).
+  const g = await gerar(modelos.map((m) => [m, 0] as [string, number]), [...partsImg, { text: promptPrateleira(nFotos) }], signal);
+  const base = { modelo: g.modelo, usage: g.usage, chamadas: g.chamadas };
+  if (!g.texto) {
+    return { ...base, vinhos: [] as any[], aviso: null as string | null, naoLidas: 0, falhou: g.erro || "sem resposta do modelo",
+      erro: g.status === 429 || g.status === 503 ? "o serviço está com muita procura agora — espera um minuto e tenta outra vez" : g.erro };
+  }
+  const j = extrairJson(g.texto);
+  if (!j) {
+    return { ...base, vinhos: [] as any[], aviso: null as string | null, naoLidas: 0, falhou: "json: " + g.texto.slice(0, 300),
+      erro: "não percebi a resposta do modelo — tenta uma foto mais nítida" };
+  }
+  const vistos = new Set<string>();
+  const vinhos = (Array.isArray(j.vinhos) ? j.vinhos : []).map(normVinhoCarta).filter((v: any) => {
+    if (!v) return false;
+    const k = `${String(v.nome).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim()}|${v.ano ?? ""}|${v.tipo ?? ""}`;
+    return vistos.has(k) ? false : (vistos.add(k), true);
+  }).slice(0, ID_MAX_VINHOS) as any[];
+  const naoLidas = Math.max(0, Math.min(200, Math.round(Number(j.naoLidas) || 0)));
+  const aviso = [j.aviso ? s(j.aviso, 200) : "",
+    naoLidas ? `${naoLidas === 1 ? "Um vinho ficou" : naoLidas + " vinhos ficaram"} por ler — aproxima-te dos rótulos ou das etiquetas e tira outra foto.` : ""]
+    .filter(Boolean).join(" ") || null;
+  return { ...base, vinhos, aviso, naoLidas, falhou: "",
+    erro: vinhos.length ? "" : (aviso || "não consegui ler vinhos nesta fotografia — aproxima-te dos rótulos ou das etiquetas") };
+}
+
 async function lerPrateleira(id: number, quem: string, partsImg: unknown[], nFotos: number) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), PROC_TIMEOUT_MS);
   const t0 = Date.now();
   try {
     const modelos = await candidatosModelo(ctrl.signal);
-    // Ler não precisa de pensar (o "200 vazio" da carta).
-    const g = await gerar(modelos.map((m) => [m, 0] as [string, number]), [...partsImg, { text: promptPrateleira(nFotos) }], ctrl.signal);
-    if (!g.texto) {
-      await registar("erro", { passo: "identificar", erro: g.erro, ms: Date.now() - t0, ...(g.usage ? { usageMetadata: g.usage } : {}) }, quem);
-      await atualizarCarta(id, quem, { estado: "erro",
-        erro: g.status === 429 || g.status === 503 ? "o serviço está com muita procura agora — espera um minuto e tenta outra vez" : g.erro });
+    const l = await lerVinhosDaFoto(partsImg, nFotos, modelos, ctrl.signal);
+    if (l.falhou) {
+      await registar("erro", { passo: "identificar", erro: l.falhou, modelo: l.modelo || null, ms: Date.now() - t0,
+        ...(l.usage ? { usageMetadata: l.usage } : {}) }, quem);
+      await atualizarCarta(id, quem, { estado: "erro", erro: l.erro });
       return;
     }
-    const j = extrairJson(g.texto);
-    if (!j) {
-      await registar("erro", { passo: "identificar", erro: "json", modelo: g.modelo, amostra: g.texto.slice(0, 600), ms: Date.now() - t0 }, quem);
-      await atualizarCarta(id, quem, { estado: "erro", erro: "não percebi a resposta do modelo — tenta uma foto mais nítida" });
-      return;
-    }
-    // O mesmo vinho (nome, colheita e cor) uma vez só, mesmo que o modelo o repita.
-    const vistos = new Set<string>();
-    const vinhos = (Array.isArray(j.vinhos) ? j.vinhos : []).map(normVinhoCarta).filter((v: any) => {
-      if (!v) return false;
-      const k = `${String(v.nome).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim()}|${v.ano ?? ""}|${v.tipo ?? ""}`;
-      return vistos.has(k) ? false : (vistos.add(k), true);
-    }).slice(0, ID_MAX_VINHOS);
-    const naoLidas = Math.max(0, Math.min(200, Math.round(Number(j.naoLidas) || 0)));
-    const aviso = [j.aviso ? s(j.aviso, 200) : "",
-      naoLidas ? `${naoLidas === 1 ? "Um vinho ficou" : naoLidas + " vinhos ficaram"} por ler — aproxima-te dos rótulos ou das etiquetas e tira outra foto.` : ""]
-      .filter(Boolean).join(" ") || null;
     await registar("ok", {
-      passo: "identificar", modelo: g.modelo, fotos: nFotos, vinhos: vinhos.length, nao_lidas: naoLidas,
-      chamadas_gemini: g.chamadas, ...(g.usage ? { usageMetadata: g.usage } : {}),
+      passo: "identificar", modelo: l.modelo, fotos: nFotos, vinhos: l.vinhos.length, nao_lidas: l.naoLidas,
+      chamadas_gemini: l.chamadas, ...(l.usage ? { usageMetadata: l.usage } : {}),
       custo_estimado_eur: CUSTO_LEITURA_EUR, ms: Date.now() - t0,
     }, quem);
-    await atualizarCarta(id, quem, vinhos.length
-      ? { estado: "lida", vinhos, aviso }
-      : { estado: "erro", erro: aviso || "não consegui ler vinhos nesta fotografia — aproxima-te dos rótulos ou das etiquetas" });
+    await atualizarCarta(id, quem, l.vinhos.length
+      ? { estado: "lida", vinhos: l.vinhos, aviso: l.aviso }
+      : { estado: "erro", erro: l.erro });
   } catch (e) {
     const err = e as Error, timeout = err.name === "AbortError";
     await registar("erro", { passo: "identificar", erro: timeout ? "timeout" : String(err.message).slice(0, 300), ms: Date.now() - t0 }, quem);
@@ -941,6 +953,202 @@ async function identificarProcurar(body: any, quem: string, auth: string): Promi
   return { status: 200, corpo: { livre, ...(mudou ? { vinhos } : {}) } };
 }
 
+/* ── A PERGUNTA LIVRE COM UMA FOTOGRAFIA (17/10/2026, migração 56) ──
+   O dono das apps: "na parte da perguntar à IA, era muito giro que eu
+   pudesse enviar uma fotografia de vinhos (que tirei tipo no supermercado)
+   e perguntar à IA, para o que vou almoçar ou jantar, qual é o vinho mais
+   recomendado". A IA escolhe ENTRE os vinhos da foto — lidos como no
+   Identificar (`lerVinhosDaFoto`) e ligados ao Catálogo, cuja ficha vai no
+   pedido (a nota do Vivino, as castas, a harmonização); dos que o Catálogo
+   não conhece pode usar o que sabe, como na pergunta livre de sempre, e a
+   app di-lo. A resposta guarda-se como uma pergunta livre (`livre_pedidos`,
+   os recomendados em `livre_vinhos`, com `foto: true`), e a app mostra-a
+   com o mesmo desenho; os recomendados que o Catálogo não tem vão à
+   confirmação (só nascem lá com fontes). Ler a foto leva tempo: o pedido
+   nasce `pendente`, o trabalho segue em segundo plano e a app sonda a
+   `livre_ler`. Sem memória — cada fotografia é outra pergunta (a chave é
+   `foto#…`, que nunca se repete). */
+const LIVRE_FOTO_N = 3;
+const COR_TIPO: Record<string, string> = { tinto: "Tinto", branco: "Branco", rose: "Rosé", espumante: "Espumante", frisante: "Frisante", licoroso: "Licoroso" };
+// As fotografias de um pedido → as partes para o Gemini, ou o erro.
+function partesImagens(imagens: unknown, max: number): { parts: unknown[]; erro: string } {
+  if (!Array.isArray(imagens) || imagens.length === 0 || imagens.length > max) return { parts: [], erro: `envia entre 1 e ${max} fotografias` };
+  let total = 0;
+  const parts: unknown[] = [];
+  for (const img of imagens as any[]) {
+    const data = img && typeof img.data === "string" ? img.data : null;
+    if (!data || data.length > 6_000_000) return { parts: [], erro: "uma das fotos está em falta ou é demasiado grande" };
+    total += data.length;
+    if (total > 20_000_000) return { parts: [], erro: "fotos demasiado grandes no total — tenta menos fotos" };
+    parts.push({ inline_data: { mime_type: /^image\/[a-z+.-]+$/i.test(String(img.mime)) ? img.mime : "image/jpeg", data } });
+  }
+  return { parts, erro: "" };
+}
+// Um vinho da foto, para o modelo: o que se leu e, se o Catálogo o conhece, a ficha.
+function linhaDaFoto(i: number, v: any, l: any): string {
+  const f = l && l.id != null ? l.ficha : null;
+  const nv = f ? notaVivino(f) : null;
+  return [
+    `[${i}] ${v.nome}`,
+    (v.produtor || l?.produtor) ? `produtor: ${v.produtor || l.produtor}` : "",
+    v.ano ? `colheita: ${v.ano}` : "",
+    (v.tipo || f?.tipo) ? `cor: ${v.tipo || f.tipo}` : "",
+    (v.regiao || f?.regiao) ? `região: ${v.regiao || f.regiao}` : "",
+    v.preco != null ? `preço na foto: ${v.preco}€` : "",
+    !f || !sabeAlgo(f) ? "(o Catálogo não o conhece)"
+      : [nv ? `Vivino ${nv.nota}/5${nv.de === "global" ? " (todas as colheitas)" : ""}` : "SEM NOTA",
+         numOuNull(f.preco_medio) != null ? `preço de referência ~${numOuNull(f.preco_medio)}€` : "",
+         Array.isArray(f.castas) && f.castas.length ? `castas: ${f.castas.slice(0, 6).join(", ")}` : "",
+         f.estilo ? `estilo: ${s(f.estilo, 40)}` : "",
+         f.harmonizacao ? `harmoniza com: ${s(f.harmonizacao, 240)}` : "",
+         f.notas_prova ? `prova: ${s(f.notas_prova, 200)}` : ""].filter(Boolean).join(" | "),
+  ].filter(Boolean).join(" | ");
+}
+function promptLivreFoto(prato: string, min: number | null, max: number | null, obs: string, linhas: string[]) {
+  const preco = min != null && max != null ? `entre ${min} € e ${max} €`
+    : max != null ? `até ${max} €` : min != null ? `a partir de ${min} €` : "sem limite de preço";
+  return `És um escanção em Portugal. Numa loja, alguém fotografou estes vinhos e quer saber qual levar para acompanhar:
+"${prato}".
+
+Preço por garrafa: ${preco}.
+${obs ? `Observações de quem pergunta (segue-as): "${obs}".` : "Sem observações."}
+
+Os vinhos da fotografia — o índice, o que se leu e, quando o Catálogo o conhece, os factos de lá:
+${linhas.join("\n")}
+
+Escolhe os ${LIVRE_FOTO_N} melhores para este prato (menos, se não houver ${LIVRE_FOTO_N} que combinem), pela
+ordem: o primeiro é o que mais recomendas. Só índices desta lista.
+
+Devolve APENAS um objeto JSON com esta forma exata:
+{"sugestoes": [{"i": number, "tipo": "Tinto"|"Branco"|"Rosé"|"Espumante"|"Licoroso"|"Frisante"|null, "razao": string}],
+ "aviso": string|null}
+
+Regras:
+- Dos vinhos com factos do Catálogo, usa esses factos — a nota do Vivino pesa.
+- Dos que o Catálogo não conhece, podes usar o que sabes do vinho, do produtor
+  e da região; mas não escolhas um vinho que não reconheces.
+- Respeita o preço pedido quando o preço na foto se vê.
+- "tipo": a cor do vinho, quando a souberes.
+- "razao": uma a duas frases concretas, em português, sobre porque combina
+  com o prato (corpo, acidez, taninos, castas, estilo).
+- "aviso": só se nenhum vinho da foto combinar com o prato — diz porquê.
+Responde só com o JSON.`;
+}
+async function livreFotoPedido(body: any, quem: string, auth: string): Promise<{ status: number; corpo: Record<string, unknown> }> {
+  const prato = s(body.prato, 200);
+  if (!prato) return { status: 400, corpo: { error: "diz o prato" } };
+  const im = partesImagens(body.imagens, ID_MAX_FOTOS);
+  if (im.erro) return { status: 400, corpo: { error: im.erro } };
+  let min = numOuNull(body.precoMin, 0, 10000), max = numOuNull(body.precoMax, 1, 10000);
+  if (min === 0) min = null;
+  if (min != null && max != null && min > max) [min, max] = [max, min];
+  const obs = s(body.observacoes, 400);
+  const n = (body.imagens as unknown[]).length;
+  const r = await sb("livre_pedidos", { method: "POST", headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ chave: `foto#${crypto.randomUUID()}`, prato, preco_min: min, preco_max: max, obs_chave: obsChave(obs),
+      quem, sugestoes: [], estado: "pendente", foto: { fotos: n } }) });
+  const id = r.ok ? (await r.json())?.[0]?.id : null;
+  if (typeof id !== "number") {
+    await registar("erro", { passo: "livre_foto", erro: "criar " + r.status }, quem);
+    return { status: 502, corpo: { error: r.status === 400 ? "falta a migração 56 no Supabase (db/migracao-identificar.sql)" : "não consegui começar — tenta outra vez" } };
+  }
+  EdgeRuntime.waitUntil(livreFoto(id, im.parts, n, prato, min, max, obs, quem, auth));
+  return { status: 202, corpo: { id, pendente: true } };
+}
+async function livreFoto(id: number, partsImg: unknown[], nFotos: number, prato: string, min: number | null, max: number | null,
+  obs: string, quem: string, auth: string) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), PROC_TIMEOUT_MS);
+  const t0 = Date.now();
+  const fechar = async (patch: Record<string, unknown>) => {
+    try {
+      await sb(`livre_pedidos?id=eq.${id}`, { method: "PATCH", headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ ...patch, ultimo_em: new Date().toISOString() }) });
+    } catch (_) { /**/ }
+  };
+  let usage: Usage | null = null, chamadas = 0, modelo = "";
+  let aVerificar: any[] = [];
+  try {
+    const modelos = await candidatosModelo(ctrl.signal);
+    const l = await lerVinhosDaFoto(partsImg, nFotos, modelos, ctrl.signal);
+    usage = l.usage; chamadas = l.chamadas; modelo = l.modelo;
+    if (!l.vinhos.length) {
+      await registar("erro", { passo: "livre_foto", erro: l.falhou || "sem vinhos", modelo: modelo || null, ms: Date.now() - t0,
+        ...(usage ? { usageMetadata: usage } : {}) }, quem);
+      await fechar({ estado: "erro", erro: l.erro });
+      return;
+    }
+    // A linha do Catálogo de cada um, com a ficha (com um tecto próprio).
+    let ligados: any[] = [];
+    const cl = new AbortController(), onAbort = () => cl.abort();
+    ctrl.signal.addEventListener("abort", onAbort);
+    const tl = setTimeout(() => cl.abort(), 20_000);
+    try { ligados = await ligarComFicha(l.vinhos, cl.signal); } catch (_) { /* segue sem */ }
+    finally { clearTimeout(tl); ctrl.signal.removeEventListener("abort", onAbort); }
+    const foto = { fotos: nFotos, aviso: l.aviso, vinhos: l.vinhos.map((v: any, i: number) => ({ ...v, cat: ligados[i]?.id ?? null })) };
+    // Fora do preço pedido (com a margem do orçamento) não vai ao modelo.
+    const cabeP = (p: number | null) => p == null || ((max == null || p <= max + MARGEM_ORCAMENTO) && (min == null || p >= min - MARGEM_ORCAMENTO));
+    const cand = l.vinhos.map((_: any, i: number) => i).filter((i: number) => cabeP(l.vinhos[i].preco ?? null));
+    if (!cand.length) {
+      await registar("ok", { passo: "livre_foto", modelo, fotos: nFotos, vinhos: l.vinhos.length, candidatos: 0, chamadas_gemini: chamadas,
+        ...(usage ? { usageMetadata: usage } : {}), custo_estimado_eur: CUSTO_LEITURA_EUR, ms: Date.now() - t0 }, quem);
+      await fechar({ estado: "pronto", modelo, foto: { ...foto, semSugestao: "nenhum dos vinhos da foto está dentro do preço pedido" } });
+      return;
+    }
+    const g = await gerar([[modelos[0], 1024], [MODELO_LEVE, 0]],
+      [{ text: promptLivreFoto(prato, min, max, obs, cand.map((i: number) => linhaDaFoto(i, l.vinhos[i], ligados[i]))) }], ctrl.signal);
+    usage = somar(usage, g.usage); chamadas += g.chamadas;
+    const j = g.texto ? extrairJson(g.texto) : null;
+    if (!j) {
+      await registar("erro", { passo: "livre_foto", erro: g.erro || "json", modelo: g.modelo || modelo || null, ms: Date.now() - t0,
+        ...(usage ? { usageMetadata: usage } : {}) }, quem);
+      await fechar({ estado: "erro", foto, erro: g.status === 429 || g.status === 503
+        ? "o serviço está com muita procura agora — espera um minuto e tenta outra vez" : "não consegui escolher agora — tenta outra vez" });
+      return;
+    }
+    const validos = new Set<number>(cand);
+    const sug: { i: number; razao: string; tipo: string | null }[] = [];
+    for (const x of Array.isArray(j.sugestoes) ? j.sugestoes : []) {
+      const i = Number(x?.i);
+      if (!validos.has(i) || sug.some((y) => y.i === i)) continue;
+      sug.push({ i, razao: s(x?.razao, 400), tipo: TIPOS.includes(x?.tipo) ? x.tipo : null });
+      if (sug.length >= LIVRE_FOTO_N) break;
+    }
+    // Os recomendados, como na pergunta livre: uma linha cada um (ligada ao
+    // Catálogo pelo nome de lá, quando o tem), e a cor que se souber.
+    const pv = sug.map((x) => {
+      const v = l.vinhos[x.i], lg = ligados[x.i]?.id != null ? ligados[x.i] : null;
+      return { nome: lg?.nome || v.nome, produtor: lg?.produtor || v.produtor || "", ano: v.ano ?? null,
+        tipo: v.tipo || lg?.ficha?.tipo || COR_TIPO[lg?.cor] || x.tipo, regiao: v.regiao || "", foto: true,
+        sugerido: { foto: { nome: v.nome, ...(v.preco != null ? { preco: v.preco } : {}) } } };
+    });
+    let regs: any[] = [];
+    if (pv.length) {
+      const rr = await sb("rpc/livre_registar", { method: "POST", signal: ctrl.signal, body: JSON.stringify({ p_vinhos: pv, p_prato: prato }) });
+      if (!rr.ok) throw new Error("não consegui guardar a sugestão (" + rr.status + ")");
+      regs = await rr.json();
+    }
+    const sugestoes = sug.map((x, k) => regs[k] ? { v: regs[k].id, razao: x.razao, recomendado: k === 0, i: x.i } : null).filter(Boolean);
+    aVerificar = regs.filter((r) => r && r.verificar);
+    await fechar({ estado: "pronto", sugestoes, modelo: g.modelo,
+      foto: sugestoes.length ? foto : { ...foto, semSugestao: j.aviso ? s(j.aviso, 300) : "nenhum dos vinhos da foto combina com este prato" } });
+    await registar("ok", {
+      passo: "livre_foto", modelo: g.modelo, modelo_leitura: modelo, prato, preco_min: min, preco_max: max, observacoes: !!obs,
+      fotos: nFotos, vinhos: l.vinhos.length, candidatos: cand.length, sugeridos: sugestoes.length,
+      no_catalogo: regs.filter((r) => r && r.catalogo_id).length, verificar: aVerificar.length,
+      chamadas_gemini: chamadas, ...(usage ? { usageMetadata: usage } : {}),
+      custo_estimado_eur: CUSTO_LEITURA_EUR + CUSTO_LIVRE_EUR, ms: Date.now() - t0,
+    }, quem);
+  } catch (e) {
+    const err = e as Error, timeout = err.name === "AbortError";
+    aVerificar = [];
+    await registar("erro", { passo: "livre_foto", erro: timeout ? "timeout" : String(err.message).slice(0, 300), ms: Date.now() - t0 }, quem);
+    await fechar({ estado: "erro", erro: timeout ? "demorou demasiado a ler a fotografia — tenta outra vez, ou uma foto mais nítida" : (err.message || "erro inesperado") });
+  } finally { clearTimeout(timer); }
+  // Fora do prazo da leitura: as confirmações só arrancam (ver `livreVerificar`).
+  if (aVerificar.length) await livreVerificar(aVerificar, auth, quem);
+}
+
 /* ── A base de dados ── */
 async function sb(path: string, init: RequestInit = {}, perfil = "garrafeira", auth = "Bearer " + SB_SRV) {
   return await fetch(`${SB_URL}/rest/v1/${path}`, {
@@ -995,6 +1203,7 @@ async function registar(estado: string, detalhe: Record<string, unknown>, quem: 
         // Recusado antes de se saber o que era → `entrada`.
         funcionalidade: detalhe.passo === "sugerir" ? `sugerir-${String(detalhe.modo ?? "garrafeira")}`
           : detalhe.passo === "livre" ? "sugerir-livre"
+          : detalhe.passo === "livre_foto" ? "sugerir-livre-foto"
           : String(detalhe.passo ?? "").startsWith("identificar") ? "identificar"
           : detalhe.passo === "recomendar" ? "recomendar"
           : (detalhe.passo === "autorizacao" || detalhe.passo === "excecao_inicial") ? "entrada"
@@ -1255,25 +1464,20 @@ Deno.serve(async (req) => {
     }
 
     if (body?.acao === "livre") {
-      const r = await livrePedido(body, quem!, authHeader);
+      // Com fotografias, a IA escolhe entre os vinhos da foto (ver "A PERGUNTA
+      // LIVRE COM UMA FOTOGRAFIA").
+      const r = Array.isArray(body.imagens) && body.imagens.length
+        ? await livreFotoPedido(body, quem!, authHeader)
+        : await livrePedido(body, quem!, authHeader);
       return json(r.corpo, r.status);
     }
 
     // Identificar vinhos numa fotografia (ver "IDENTIFICAR VINHOS NUMA FOTOGRAFIA").
     if (body?.acao === "identificar") {
       const imagens = body.imagens;
-      if (!Array.isArray(imagens) || imagens.length === 0 || imagens.length > ID_MAX_FOTOS) {
-        return json({ error: `envia entre 1 e ${ID_MAX_FOTOS} fotografias` }, 400);
-      }
-      let total = 0;
-      const partsImg: unknown[] = [];
-      for (const img of imagens) {
-        const data = img && typeof img.data === "string" ? img.data : null;
-        if (!data || data.length > 6_000_000) return json({ error: "uma das fotos está em falta ou é demasiado grande" }, 400);
-        total += data.length;
-        if (total > 20_000_000) return json({ error: "fotos demasiado grandes no total — tenta menos fotos" }, 400);
-        partsImg.push({ inline_data: { mime_type: /^image\/[a-z+.-]+$/i.test(String(img.mime)) ? img.mime : "image/jpeg", data } });
-      }
+      const im = partesImagens(imagens, ID_MAX_FOTOS);
+      if (im.erro) return json({ error: im.erro }, 400);
+      const partsImg = im.parts;
       const r = await sb("cartas", { method: "POST", headers: { Prefer: "return=representation" }, signal: ctrl.signal,
         body: JSON.stringify({ quem, fotos: imagens.length, fonte: "prateleira" }) });
       const id = r.ok ? (await r.json())?.[0]?.id : null;
