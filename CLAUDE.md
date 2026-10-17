@@ -1557,6 +1557,25 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
     li na foto". O botão diz "✨ Sugerir 5 vinhos" sem foto e só "📸
     Sugerir" com ela (17/10/2026, o dono) — com foto são os 3 melhores, não
     5: numa prateleira de 5 a 7, cinco era quase todos.
+  - **O veredicto honesto** (17/10/2026, o dono, depois de experimentar com
+    sushi: "a resposta do Gemini foi sempre para me satisfazer … faltou uma
+    resposta mais honesta: 'este vinho é muito bom, mas mais apropriado para
+    bacalhau ou assados'"). O pedido era "os 3 melhores" e "porque combina",
+    e com 4 vinhos na foto saíam 3 elogiados. Agora o `promptLivreFoto` pede
+    um veredicto de CADA vinho — `combina`: "bem", "serve" ou "mal" — e uma
+    nota com o que joga a favor E contra (e, num bom vinho para outra coisa,
+    para quê). Só se recomenda o que combina "bem"; sem nenhum, no máximo um
+    "serve", que a app chama "O menos mau" (e mostra o `avisoIA`: o que
+    procurar em vez disso). A regra vai no pedido e confere-se em código
+    (`VEREDICTOS`): um "mal" nunca é sugestão, e uma resposta sem veredicto
+    nenhum é um erro, não "nenhum combina". A resposta diz "Para «sushi»: 2
+    combinam bem, 1 serve e 1 não é para isto" (`wsLivreVeredictos`), e a
+    lista da foto passa a "O que acho de cada vinho da foto", aberta, com o
+    veredicto de cada um, os que combinam primeiro (`foto.vinhos[i].combina`/
+    `nota`; `foraPreco` nos que o preço deixou de fora). Os outros pedidos
+    que escolhem numa lista (a carta, a garrafeira, o Catálogo) e o de
+    memória levam a mesma regra na razão — o senão, se houver, e não
+    recomendar um só para chegar a três.
   - **Mais do que um prato** (o dono: "que vinho escolho para acompanhar
     sushi mas que também não seja má escolha para uma massada de peixe" —
     "sushi" no prato, o resto nas observações): os dois prompts

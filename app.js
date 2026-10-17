@@ -3394,7 +3394,7 @@ function wsLivreHTML(){
   const foto=p.foto&&typeof p.foto==='object'?p.foto:null;
   if(!sug.length){
     return foto
-      ?`<div class="ws-card"><p class="ws-note">📸 ${esc(foto.semSugestao||'Nenhum dos vinhos da foto combina com este pedido.')}</p>${wsLivreFotoHTML(foto,true)}</div>`
+      ?`<div class="ws-card"><p class="ws-note">📸 ${esc(foto.semSugestao||'Nenhum dos vinhos da foto combina com este pedido.')}</p>${wsLivreFotoHTML(foto,()=>true)}</div>`
       :'<div class="ws-card"><p class="ws-note">A IA não sugeriu nenhum vinho que eu conseguisse ler. Tenta outra vez, com outras palavras.</p></div>';
   }
   const n=wsLivreAConfirmar(st);
@@ -3406,7 +3406,11 @@ function wsLivreHTML(){
   if(foto){
     const fv=Array.isArray(foto.vinhos)?foto.vinhos:[];
     const conh=fv.filter(v=>v.cat!=null&&IDXV[-Number(v.cat)]).length;
-    notas.push(`📸 Li ${fv.length===1?'1 vinho':fv.length+' vinhos'} na fotografia; ${!conh?'o Catálogo não conhece nenhum':'o Catálogo conhece '+(conh===fv.length?(fv.length===1?'esse':'todos'):conh)}. A escolha é entre eles.${foto.aviso?' '+esc(foto.aviso):''}`);
+    notas.push(`📸 Li ${fv.length===1?'1 vinho':fv.length+' vinhos'} na fotografia; ${!conh?'o Catálogo não conhece nenhum':'o Catálogo conhece '+(conh===fv.length?(fv.length===1?'esse':'todos'):conh)}.${foto.aviso?' '+esc(foto.aviso):''}`);
+    // O veredicto honesto (ver "O VEREDICTO HONESTO" na `garrafeira-carta`).
+    const vc=wsLivreVeredictos(fv);
+    if(vc)notas.push(`Para «${esc(p.prato||st.q.prato)}»: ${vc}.`);
+    if(sug.length&&sug[0].combina==='serve'&&foto.avisoIA)notas.push('⚠️ '+esc(foto.avisoIA));
   }
   if(st.memoria)notas.push(`É a resposta de um pedido igual de ${esc(wsLivreDataTxt(p.criado_em))} — o mesmo prato, o mesmo preço e as mesmas observações dão a mesma sugestão durante uma semana.`);
   if(n)notas.push(`🔎 A confirmar na net ${n===1?'1 vinho que o Catálogo ainda não tem':n+' vinhos que o Catálogo ainda não tem'} — se tudo o que interessa vier com fonte, ${n===1?'entra':'entram'} no Catálogo.`);
@@ -3414,25 +3418,42 @@ function wsLivreHTML(){
   return `<div class="ws-card-label sug-titulo">${foto?'Da fotografia':'A sugestão'} · ${esc(p.prato||st.q.prato)}${preco?` · ${preco}`:''}${sug.length>1?' <em>— toca num vinho para ver porquê</em>':''}</div>`
     +notas.map(t=>`<p class="ws-note sug-entre">${t}</p>`).join('')
     +sug.map((s,k)=>wsLivreSugHTML(st,s,k)).join('')
-    +(foto?wsLivreFotoHTML(foto,false):'')
+    +(foto?wsLivreFotoHTML(foto,fv=>fv.some(v=>v.combina)):'')
     +`<p class="ws-note ws-livre-outra${st.pedeDetalhe?' aviso':''}">Queres outra resposta? Acrescenta mais detalhe nas <b>observações</b> (uma casta, uma região, um estilo…)${foto?' ou tira outra fotografia,':''} e pede outra vez.</p>`;
 }
-// Os vinhos que se leram na fotografia: os que o Catálogo conhece abrem a
-// página do vinho. Fechada debaixo da sugestão; aberta quando não houve.
-function wsLivreFotoHTML(foto,aberta){
+// "1 combina bem, 2 servem e 1 não é para isto" — a contagem dos veredictos.
+const WS_VER={bem:{ic:'✓',txt:'Combina bem'},serve:{ic:'≈',txt:'Serve, mas não é o ideal'},mal:{ic:'✗',txt:'Não é para isto'}};
+function wsLivreVeredictos(fv){
+  const n=k=>fv.filter(v=>v.combina===k).length;
+  const b=n('bem'),sv=n('serve'),m=n('mal');
+  if(!b&&!sv&&!m)return '';
+  return [b?`${b} combina${b>1?'m':''} bem`:'nenhum combina mesmo bem',sv?`${sv} serve${sv>1?'m':''}`:'',m?`${m} não ${m>1?'são':'é'} para isto`:'']
+    .filter(Boolean).join(', ').replace(/, ([^,]*)$/,' e $1');
+}
+// Os vinhos que se leram na fotografia, com o veredicto de cada um (os que
+// combinam primeiro); os que o Catálogo conhece abrem a página do vinho.
+// Abre-se quando há veredictos — é a resposta honesta sobre cada um.
+function wsLivreFotoHTML(foto,abrir){
   const fv=Array.isArray(foto.vinhos)?foto.vinhos:[];
   if(!fv.length)return '';
-  const linhas=fv.map(v=>{
+  const ordem={bem:0,serve:1,mal:2};
+  const lista=fv.slice().sort((a,b)=>(a.combina?ordem[a.combina]:a.foraPreco?4:3)-(b.combina?ordem[b.combina]:b.foraPreco?4:3));
+  const linhas=lista.map(v=>{
     const cat=v.cat!=null?IDXV[-Number(v.cat)]:null, tipo=v.tipo||(cat&&cat.tipo)||'';
     const sub=[v.produtor||(cat&&cat.produtor),v.ano,v.regiao||(cat&&cat.regiao)].filter(Boolean).map(y=>esc(String(y))).join(' · ');
     const nome=cat?`<span class="carta-nome ligado" onclick="verVinho(${cat.id})">${esc(cat.nome||v.nome)}<span class="carta-ver">›</span>`
       :`<span class="carta-nome">${esc(v.nome||'')}`;
     const est=cat?(wsNotaHTML(cat,v,'carta-score conhecida')||'<span class="carta-score">no Catálogo</span>')
       :'<span class="carta-score sem-dados">fora do Catálogo</span>';
+    const w=WS_VER[v.combina];
+    const ver=w?`<span class="carta-sub ws-ver ${v.combina}"><b>${w.ic} ${w.txt}</b>${v.nota?' — '+esc(v.nota):''}</span>`
+      :v.foraPreco?'<span class="carta-sub ws-ver">Fora do preço pedido.</span>':'';
     return `<div class="carta-item ws-foto-item"><span class="tipo-dot" style="background:${wsTipoCor(tipo)}" title="${esc(tipo||'Cor desconhecida')}"></span>
-      ${nome}${sub?`<span class="carta-sub">${sub}</span>`:''}</span>${est}<span class="carta-preco">${v.preco!=null?wsEur(Number(v.preco)):''}</span></div>`;
+      ${nome}${sub?`<span class="carta-sub">${sub}</span>`:''}${ver}</span>${est}<span class="carta-preco">${v.preco!=null?wsEur(Number(v.preco)):''}</span></div>`;
   }).join('');
-  return `<details class="ws-livre-foto"${aberta?' open':''}><summary>${fv.length===1?'O vinho que li na foto':`Os ${fv.length} vinhos que li na foto`}</summary>
+  const comVer=fv.some(v=>v.combina);
+  return `<details class="ws-livre-foto"${abrir(fv)?' open':''}><summary>${comVer?'O que acho de cada vinho da foto'
+    :fv.length===1?'O vinho que li na foto':`Os ${fv.length} vinhos que li na foto`}</summary>
     <div class="carta-list">${linhas}</div></details>`;
 }
 // Um vinho que o Catálogo tem: como no modo Catálogo. Um que não tem: o que
@@ -3442,7 +3463,8 @@ function wsLivreSugHTML(st,s,k){
   // Escolhido de uma fotografia: o que se leu nela (o preço da etiqueta).
   const foto=st.pedido&&st.pedido.foto, lido=foto&&Array.isArray(foto.vinhos)&&Number.isInteger(s.i)?foto.vinhos[s.i]:null;
   const marcas=wsMarcasHTML(st.marcas&&st.marcas.get(Number(s.v)));
-  const marca=k===0?'<span class="sug-marca topo">🏆 Melhor escolha</span>':'';
+  const marca=s.combina==='serve'?'<span class="sug-marca">O menos mau</span>'
+    :k===0?'<span class="sug-marca topo">🏆 Melhor escolha</span>':'';
   const razao=s.razao?`<p class="vinho-txt"><strong>Porquê:</strong> ${esc(s.razao)}</p>`:'';
   if(v){
     const sub=[v.tipo,v.regiao,v.ano,(v.castas||[]).join(', ')].filter(Boolean).map(y=>esc(String(y))).join(' · ');
@@ -17273,7 +17295,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='238';
+const APP_BUILD='239';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;

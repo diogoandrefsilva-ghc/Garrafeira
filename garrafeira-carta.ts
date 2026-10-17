@@ -323,11 +323,15 @@ Regras:
      num restaurante);
   4. em igualdade, dá prioridade aos PORTUGUESES.
 - "recomendados": os 2 ou 3 primeiros do ranking que recomendarias mesmo a
-  quem está à mesa (só 1 se só um combinar; [] se nenhum combinar).
+  quem está à mesa (só 1 se só um combinar; [] se nenhum combinar). Numa
+  carta, o normal é poucos combinarem MESMO bem com um prato concreto: não
+  recomendes um só para chegar a três.
 - "razao": uma a duas frases concretas, em português, sobre porque está
-  nessa posição para este prato, apoiadas nos factos dados. Não cites notas
-  nem preços que não estejam na lista, e não inventes castas nem
-  características.
+  nessa posição para este prato, apoiadas nos factos dados — com honestidade:
+  o que joga a favor e, se houver, o que joga contra; um bom vinho que é
+  melhor para outro prato di-lo ("é mais para assados"). Não elogies por
+  elogiar. Não cites notas nem preços que não estejam na lista, e não
+  inventes castas nem características.
 Responde só com o JSON.`;
 }
 
@@ -528,11 +532,14 @@ ${casa
   3. a relação preço/qualidade (a nota face ao preço de referência);`}
   4. em igualdade, dá prioridade aos PORTUGUESES.
 - "recomendados": os 2 ou 3 primeiros do ranking que recomendarias mesmo
-  (só 1 se só um combinar; [] se nenhum combinar).
+  (só 1 se só um combinar; [] se nenhum combinar) — não recomendes um só
+  para chegar a três.
 - "razao": uma a duas frases concretas, em português, sobre porque está
-  nessa posição para este prato, apoiadas nos factos dados. Não cites notas
-  nem preços que não estejam na lista, e não inventes castas nem
-  características.
+  nessa posição para este prato, apoiadas nos factos dados — com honestidade:
+  o que joga a favor e, se houver, o que joga contra; um bom vinho que é
+  melhor para outro prato di-lo ("é mais para assados"). Não elogies por
+  elogiar. Não cites notas nem preços que não estejam na lista, e não
+  inventes castas nem características.
 Responde só com o JSON.`;
 }
 async function sugerirLista(body: any, quem: string): Promise<{ status: number; corpo: Record<string, unknown> }> {
@@ -648,7 +655,8 @@ Regras:
   massada de peixe"), o primeiro é o que serve bem TODOS, e a razão diz
   como se porta com cada um.
 - "razao": uma a duas frases concretas, em português, sobre porque combina
-  com o prato (corpo, acidez, taninos, castas, estilo).
+  com o prato (corpo, acidez, taninos, castas, estilo) — e, se houver um
+  senão, di-lo. Não elogies por elogiar.
 Responde só com o JSON.`;
 }
 function normLivre(raw: unknown): Record<string, any> | null {
@@ -973,6 +981,15 @@ async function identificarProcurar(body: any, quem: string, auth: string): Promi
    `livre_ler`. Sem memória — cada fotografia é outra pergunta (a chave é
    `foto#…`, que nunca se repete). */
 const LIVRE_FOTO_N = 3;
+/* O VEREDICTO HONESTO (17/10/2026, o dono das apps, depois de experimentar
+   com sushi: "a sensação que fico é que a resposta do Gemini foi sempre para
+   me satisfazer … faltou uma resposta mais honesta: 'este vinho é muito bom,
+   mas mais apropriado para bacalhau ou assados'"). O pedido era "os 3
+   melhores" e "porque combina": com 4 vinhos na foto, 3 saíam elogiados. Agora
+   cada vinho leva um veredicto — "bem", "serve" ou "mal" — e uma nota com o
+   que joga a favor E contra; só se recomenda o que combina bem (sem nenhum,
+   no máximo um "serve", dito como o menos mau). */
+const VEREDICTOS = ["bem", "serve", "mal"];
 const COR_TIPO: Record<string, string> = { tinto: "Tinto", branco: "Branco", rose: "Rosé", espumante: "Espumante", frisante: "Frisante", licoroso: "Licoroso" };
 // As fotografias de um pedido → as partes para o Gemini, ou o erro.
 function partesImagens(imagens: unknown, max: number): { parts: unknown[]; erro: string } {
@@ -1020,26 +1037,42 @@ ${obs ? `Observações de quem pergunta (segue-as): "${obs}".` : "Sem observaç�
 Os vinhos da fotografia — o índice, o que se leu e, quando o Catálogo o conhece, os factos de lá:
 ${linhas.join("\n")}
 
-Escolhe os ${LIVRE_FOTO_N} melhores para este prato (menos, se não houver ${LIVRE_FOTO_N} que combinem), pela
-ordem: o primeiro é o que mais recomendas. Só índices desta lista.
+Diz, de CADA vinho da lista, se serve para este prato — com honestidade,
+como um escanção que não tem nada para vender. Numa prateleira, o normal é
+só 1 ou 2 combinarem mesmo bem com um prato concreto, e às vezes nenhum: um
+bom vinho pode não ser o vinho para ESTE prato.
 
 Devolve APENAS um objeto JSON com esta forma exata:
-{"sugestoes": [{"i": number, "tipo": "Tinto"|"Branco"|"Rosé"|"Espumante"|"Licoroso"|"Frisante"|null, "razao": string}],
- "aviso": string|null}
+{"vinhos": [{"i": number, "combina": "bem"|"serve"|"mal",
+  "tipo": "Tinto"|"Branco"|"Rosé"|"Espumante"|"Licoroso"|"Frisante"|null, "nota": string}],
+ "recomendados": [number], "aviso": string|null}
 
 Regras:
-- Dos vinhos com factos do Catálogo, usa esses factos — a nota do Vivino pesa.
-- Dos que o Catálogo não conhece, podes usar o que sabes do vinho, do produtor
-  e da região; mas não escolhas um vinho que não reconheces.
+- "vinhos": todos os vinhos da lista, pelo número entre [ ], cada um com:
+  · "combina": "bem" (escolhê-lo-ias para este prato), "serve" (não estraga
+    a refeição, mas não é a escolha certa) ou "mal" (não é vinho para isto);
+  · "nota": uma a duas frases concretas, em português, com o que joga A
+    FAVOR e o que joga CONTRA para este prato (corpo, acidez, taninos,
+    madeira, doçura, castas). Se é um bom vinho mas para outra coisa, diz
+    para quê ("muito bom, mas com esta madeira é mais para bacalhau ou
+    assados"). Não elogies por elogiar.
+- "recomendados": até ${LIVRE_FOTO_N} números, pela ordem — o primeiro é o que
+  levarias —, SÓ de vinhos "bem". Sem nenhum "bem", no máximo UM "serve",
+  e a nota dele diz que é o menos mau. [] se nenhum servir.
+- Dos vinhos com factos do Catálogo, usa esses factos — a nota do Vivino
+  pesa entre os que combinam.
+- Dos que o Catálogo não conhece, podes usar o que sabes do vinho, do
+  produtor e da região. Um que não reconheces julga-se pelo que se lê (cor,
+  região, castas, menção) e a nota di-lo — e não o recomendes às cegas.
 - Respeita o preço pedido quando o preço na foto se vê.
 - Se o prato ou as observações falarem de mais do que um prato (o prato
   "sushi" e, nas observações, "que também não seja má escolha para uma
-  massada de peixe"), o primeiro é o que serve bem TODOS, e a razão diz
-  como se porta com cada um.
+  massada de peixe"), o veredicto é para TODOS: "bem" só se servir bem os
+  dois, e a nota diz como se porta com cada um.
 - "tipo": a cor do vinho, quando a souberes.
-- "razao": uma a duas frases concretas, em português, sobre porque combina
-  com o prato (corpo, acidez, taninos, castas, estilo).
-- "aviso": só se nenhum vinho da foto combinar com o prato — diz porquê.
+- "aviso": se nenhum combinar bem, uma frase honesta a dizê-lo e o que
+  procurar em vez disso (ex.: "para sushi, procura um Alvarinho ou um
+  espumante bruto"); senão null.
 Responde só com o JSON.`;
 }
 async function livreFotoPedido(body: any, quem: string, auth: string): Promise<{ status: number; corpo: Record<string, unknown> }> {
@@ -1114,14 +1147,32 @@ async function livreFoto(id: number, partsImg: unknown[], nFotos: number, prato:
         ? "o serviço está com muita procura agora — espera um minuto e tenta outra vez" : "não consegui escolher agora — tenta outra vez" });
       return;
     }
+    // O veredicto de cada vinho (ver "O VEREDICTO HONESTO", acima) e os
+    // recomendados — só "bem", e sem nenhum "bem" no máximo UM "serve". A
+    // regra vai no pedido e confere-se aqui: um "mal" nunca é sugestão.
     const validos = new Set<number>(cand);
-    const sug: { i: number; razao: string; tipo: string | null }[] = [];
-    for (const x of Array.isArray(j.sugestoes) ? j.sugestoes : []) {
+    const ver = new Map<number, { combina: string; nota: string; tipo: string | null }>();
+    for (const x of Array.isArray(j.vinhos) ? j.vinhos : []) {
       const i = Number(x?.i);
-      if (!validos.has(i) || sug.some((y) => y.i === i)) continue;
-      sug.push({ i, razao: s(x?.razao, 400), tipo: TIPOS.includes(x?.tipo) ? x.tipo : null });
-      if (sug.length >= LIVRE_FOTO_N) break;
+      if (!validos.has(i) || ver.has(i) || !VEREDICTOS.includes(x?.combina)) continue;
+      ver.set(i, { combina: x.combina, nota: s(x?.nota, 400), tipo: TIPOS.includes(x?.tipo) ? x.tipo : null });
     }
+    // Uma resposta sem veredicto nenhum não quer dizer "nenhum combina": é uma
+    // resposta fora do formato.
+    if (!ver.size) {
+      await registar("erro", { passo: "livre_foto", erro: "sem veredictos", modelo: g.modelo || null, amostra: g.texto.slice(0, 400),
+        ms: Date.now() - t0, ...(usage ? { usageMetadata: usage } : {}) }, quem);
+      await fechar({ estado: "erro", foto, erro: "não consegui escolher agora — tenta outra vez" });
+      return;
+    }
+    const pedidos = (Array.isArray(j.recomendados) ? j.recomendados : []).map((x: unknown) => Number(x))
+      .filter((i: number, k: number, a: number[]) => ver.has(i) && a.indexOf(i) === k);
+    let recs = pedidos.filter((i: number) => ver.get(i)!.combina === "bem").slice(0, LIVRE_FOTO_N);
+    if (!recs.length) recs = pedidos.filter((i: number) => ver.get(i)!.combina === "serve").slice(0, 1);
+    const sug = recs.map((i: number) => ({ i, razao: ver.get(i)!.nota, tipo: ver.get(i)!.tipo, combina: ver.get(i)!.combina }));
+    // Na lista dos vinhos da foto, o veredicto de cada um.
+    foto.vinhos = foto.vinhos.map((v: any, i: number) => ver.has(i) ? { ...v, combina: ver.get(i)!.combina, nota: ver.get(i)!.nota }
+      : validos.has(i) ? v : { ...v, foraPreco: true });
     // Os recomendados, como na pergunta livre: uma linha cada um (ligada ao
     // Catálogo pelo nome de lá, quando o tem), e a cor que se souber.
     const pv = sug.map((x) => {
@@ -1136,13 +1187,16 @@ async function livreFoto(id: number, partsImg: unknown[], nFotos: number, prato:
       if (!rr.ok) throw new Error("não consegui guardar a sugestão (" + rr.status + ")");
       regs = await rr.json();
     }
-    const sugestoes = sug.map((x, k) => regs[k] ? { v: regs[k].id, razao: x.razao, recomendado: k === 0, i: x.i } : null).filter(Boolean);
+    const sugestoes = sug.map((x, k) => regs[k] ? { v: regs[k].id, razao: x.razao, recomendado: k === 0, i: x.i, combina: x.combina } : null).filter(Boolean);
     aVerificar = regs.filter((r) => r && r.verificar);
     await fechar({ estado: "pronto", sugestoes, modelo: g.modelo,
-      foto: sugestoes.length ? foto : { ...foto, semSugestao: j.aviso ? s(j.aviso, 300) : "nenhum dos vinhos da foto combina com este prato" } });
+      foto: { ...foto, ...(j.aviso ? { avisoIA: s(j.aviso, 300) } : {}),
+        ...(sugestoes.length ? {} : { semSugestao: j.aviso ? s(j.aviso, 300) : "nenhum dos vinhos da foto combina com este prato" }) } });
     await registar("ok", {
       passo: "livre_foto", modelo: g.modelo, modelo_leitura: modelo, prato, preco_min: min, preco_max: max, observacoes: !!obs,
       fotos: nFotos, vinhos: l.vinhos.length, candidatos: cand.length, sugeridos: sugestoes.length,
+      veredictos: { bem: [...ver.values()].filter((x) => x.combina === "bem").length,
+        serve: [...ver.values()].filter((x) => x.combina === "serve").length, mal: [...ver.values()].filter((x) => x.combina === "mal").length },
       no_catalogo: regs.filter((r) => r && r.catalogo_id).length, verificar: aVerificar.length,
       chamadas_gemini: chamadas, ...(usage ? { usageMetadata: usage } : {}),
       custo_estimado_eur: CUSTO_LEITURA_EUR + CUSTO_LIVRE_EUR, ms: Date.now() - t0,
