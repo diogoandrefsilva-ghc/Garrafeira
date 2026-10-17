@@ -185,6 +185,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `winecatalog.forca`) e a origem de cada linha do Catálogo
   (`winecatalog.vinhos.nasceu_de`, e o `nasceu_de`/`alterado_de` da
   `catalogo_vinhos`) — ver "As Sugestões" › "A pergunta livre".
+  `migracao-casta-no-nome.sql` é a 55: a casta escrita no nome — "Soalheiro
+  Alvarinho" — liga à linha do Catálogo que é só dessa casta ("Soalheiro",
+  100% Alvarinho) (`garrafeira.carta_achar`; ver "As Sugestões").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1334,6 +1337,14 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
    que o Catálogo conhece (o oficial ou uma grafia, casas-mãe incluídas) e
    procura-se outra vez com ele. Só fica a linha DESSE produtor ou de uma
    casa dele: "Assobio Sogrape" não liga ao Assobio.
+   **E a casta colada ao nome também** (migração 55, 17/10/2026, o dono das
+   apps: a pergunta livre sugeriu o "Soalheiro Alvarinho" e o Catálogo
+   tem-no como "Soalheiro"). Sem nada antes, liga à linha cuja chave é a do
+   vinho menos umas palavras, quando essas palavras são EXATAMENTE as castas
+   dela: o "Soalheiro" é 100% Alvarinho, liga; o "Mouchão" (Alicante e
+   Trincadeira) não responde por um "Mouchão Alicante Bouschet". A pergunta
+   livre passa pela mesma `carta_achar`, e por isso um vinho assim já não
+   vai confirmar-se na net nem nasce outra linha ao lado.
 3. **Procurar informação, até 5 de cada vez** (`wsDetalhe`): os vistos da
    lista (nenhum vem marcado) vão ao "Procurar informação" com IA de sempre —
    a `vinho-info`, com o motor do plano de cada um — e **o que se encontrar

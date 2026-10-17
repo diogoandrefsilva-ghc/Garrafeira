@@ -795,6 +795,25 @@ Depois dela, publicar a `garrafeira-carta` e a `vinho-info`
 não tem ficam `pendente` (a `garrafeira-carta` pergunta-lhe antes,
 `livreSonda`).
 
+### Migração 55 — a casta escrita no nome do vinho da carta (já aplicada)
+
+`db/migracao-casta-no-nome.sql`, depois da 52 e da 54. Uma nova versão da
+`garrafeira.carta_achar` (a da 52, com um passo 3): quando nada liga, procura
+a linha do Catálogo cuja chave é a do pedido menos umas palavras, e essas
+palavras são exatamente as castas dela (sem as de cor). Foi o "Soalheiro
+Alvarinho" da pergunta livre (17/10/2026), que não ligava ao "Soalheiro"
+(#451, 100% Alvarinho). No fim, as `livre_vinhos` "por carregar" que agora
+ligam passam a `no_catalogo`. Ver o `CLAUDE.md`, "As Sugestões".
+Ensaiada a 17/10/2026 em funções temporárias (`pg_temp`), contra a base
+real: nas cartas guardadas e nas sugestões livres (328 vinhos) só mudou o
+Soalheiro; com cada vinho do Catálogo escrito "nome + castas" (422), com o
+produtor ligaram 416 à própria linha e nenhum a outro vinho (o único caso
+foi um par dos Duplicados, o Quinta da Bacalhôa); com uma casta que não é a
+dele, nenhum ligou. Ler as 328 passou de 1,55 s a 1,73 s. Aplicada no mesmo
+dia pelo MCP e confirmada: a sugestão #13 passou a `no_catalogo` com o
+#451, e a `carta_achar` continua sem se executar como `anon` nem como
+`authenticated`.
+
 ### Migração 52 — o produtor escrito no nome do vinho da carta (já aplicada)
 
 `db/migracao-carta-produtor.sql`, depois da 40 e da 43. Cria a
@@ -893,6 +912,8 @@ Numa base de dados limpa:
 21. **`migracao-sugestao-livre.sql`** — a pergunta livre das Sugestões e a
    origem de cada linha do Catálogo (migração 54). Depois da 31, da 40 e da
    52.
+22. **`migracao-casta-no-nome.sql`** — a casta escrita no nome de um vinho
+   da carta ou da pergunta livre (migração 55). Depois da 52 e da 54.
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)
