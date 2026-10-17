@@ -1677,6 +1677,19 @@ e um vinho desconhecido entra no Catálogo
   (até 4 minutos), e um que nasceu sobe para "Conheço" ("✨ Entrou agora no
   Catálogo"). Um vinho já procurado (por uma foto ou pela pergunta livre) não
   se volta a procurar — diz em que pé ficou.
+- **A quem corrige o catálogo, "＋ Adicionar ao Catálogo"** (17/10/2026, o
+  dono das apps: "simplesmente aparecesse a opção adicionar ao catálogo …
+  pede vinho, cor, ano, produtor — já pré-preenchido — e depois segue o
+  circuito normal da pesquisa"). Aos curadores e ao admin do catálogo
+  (`catPodeCriar`) cada vinho que não conheço é uma linha com esse botão, em
+  vez do visto e do "Procurar informação" com fontes (`idAdicionar`/
+  `idAdicionarHTML`): abre o vinho novo no Catálogo, compacto, com o nome, o
+  ano, a cor e o produtor da foto, e daí o Procurar informação ou o
+  Preencher à mão de sempre. Criado (ou, se a `criar` disser que já lá está,
+  aberto esse), sobe para "Conheço" (`ID_ADD` → `c.criados`, no
+  `catGuardarNovo`); se já tinha sido procurado com fontes, a linha de
+  `livre_vinhos` fica `carregado` (`BO_LIVRE_A`, como no Backoffice).
+  Quem não é curador continua com a procura com fontes, a seguir.
 - **Só a quem edita** (`souEditor`; a função confirma `is_editor()`): a
   `vinho-info` só atende editores, e sem eles a linha ficava "por carregar"
   com uma falta que não é do vinho. Como na pergunta livre, a procura usa

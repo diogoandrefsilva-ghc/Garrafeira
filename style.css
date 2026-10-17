@@ -2410,6 +2410,8 @@ body:not(.cat) .itabs .so-cat{display:none!important}
 #s-identificar .id-pr.caro{color:var(--ou2)}
 #s-identificar .id-pr.mau{color:var(--dg)}
 #s-identificar .id-novo{display:block;color:#1d4a3b;font-weight:600;margin-top:2px}
+#s-identificar .carta-item.id-add-item{grid-template-columns:auto minmax(0,1fr) auto}
+#s-identificar .id-add{font-size:12.5px;padding:7px 11px;white-space:nowrap}
 #s-identificar .carta-sub.id-falta{white-space:normal;color:var(--dg)}
 /* um vinho lido sem cor pede-a no lugar do ponto (é a chave do Catálogo) */
 #s-identificar .id-cor{font-size:11.5px;padding:2px 4px;border:1px solid var(--bo2);border-radius:7px;background:var(--bg);

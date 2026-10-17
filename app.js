@@ -1640,6 +1640,8 @@ async function catGuardarNovo(){
     _iaExtraNovo=null;FORM_CAT=false;FORM_COLH=null;
     // Um sugerido pela IA que o Backoffice mandou acrescentar: fica `carregado`.
     const livre=BO_LIVRE_A;BO_LIVRE_A=null;
+    const idAdd=ID_ADD;ID_ADD=null;
+    if(idAdd&&r&&r.id){(idAdd.c.criados=idAdd.c.criados||{})[idAdd.i]=Number(r.id);}
     if(livre&&r&&r.id)sbRpc('livre_marcar',{p_id:livre.id,p_estado:'carregado',p_catalogo_id:r.id})
       .then(()=>{if(BO_PAG==='livres')boLivreCarregar();boContar();}).catch(()=>{});
     fecharModal('modal-edit');
@@ -1650,6 +1652,7 @@ async function catGuardarNovo(){
     // (que estava na colheita de onde ela nasceu) passa para ela.
     if(nv&&colh)CAT_COLH[catFamChave(nv)]=nv.cat_id;
     renderLista();
+    if(idAdd&&ID===idAdd.c)idDesenhar();
     toast(nv&&colh?`Colheita ${nv.ano} no catálogo ✓`:'No catálogo ✓');
     if(nv)verVinho(-r.id);
   }catch(e){
@@ -1667,6 +1670,8 @@ async function catGuardarNovo(){
         const qual=`«${c.nome}»${c.ano?' '+c.ano:' (sem colheita)'}${c.produtor?' · '+c.produtor:''}`;
         if(confirm(`O Catálogo já tem este vinho: ${qual}.\n\nAbrir esse em vez de criar outro?`)){
           _iaExtraNovo=null;FORM_CAT=false;FORM_COLH=null;
+          // Era um vinho da fotografia: afinal conheço-o.
+          if(ID_ADD){(ID_ADD.c.criados=ID_ADD.c.criados||{})[ID_ADD.i]=-id;if(ID===ID_ADD.c)idDesenhar();ID_ADD=null;}
           fecharModal('modal-edit');verVinho(id);
         }
         return;
@@ -3700,6 +3705,7 @@ async function idLigar(c){
 // O vinho do Catálogo deste vinho lido: o que a ligação achou, ou o que
 // nasceu (ou se achou) ao procurá-lo com fontes.
 function idCatDe(c,i){
+  if(c.criados&&c.criados[i]&&IDXV[-c.criados[i]])return IDXV[-c.criados[i]];
   const l=c.ligados[i];
   if(l&&l.id!=null&&IDXV[-Number(l.id)])return IDXV[-Number(l.id)];
   const x=c.estados.get(c.livre[i]);
@@ -3831,7 +3837,46 @@ function idConhecidoHTML(c,i){
   return `<div class="id-conh">${vinhoCardHTML(cat)}
     <div class="id-lido">📷 ${lido}${pr?`<br>${pr}`:''}${novo}</div></div>`;
 }
+/* "Adicionar ao Catálogo" (17/10/2026, o dono das apps: "nos vinhos que não
+   se conhece, o ideal era que simplesmente aparecesse a opção adicionar ao
+   catálogo … pede vinho, cor, ano, produtor — já pré-preenchido com o que se
+   sabe — e depois segue o circuito normal da pesquisa"). A quem corrige o
+   catálogo (`catPodeCriar`), cada vinho que não conheço é uma linha com o
+   botão, que abre o vinho novo no Catálogo, compacto, com o nome, o ano, a
+   cor e o produtor da foto: daí o Procurar informação ou o Preencher à mão
+   de sempre. Criado, passa a "Conheço" (`ID_ADD`, no `catGuardarNovo`); se
+   já tinha sido procurado com fontes, a linha da sugestão fica `carregado`
+   (`BO_LIVRE_A`), como no Backoffice. Aos outros fica a procura com fontes. */
+let ID_ADD=null;   // {c, i}: o vinho lido que o formulário aberto vem acrescentar
+function idAdicionar(i){
+  const c=ID, v=c&&c.vinhos[i];
+  if(!v||!catPodeCriar())return;
+  abrirEditarVinho(0,'catalogo');
+  ID_ADD={c,i};
+  const n=c.livre[i];
+  if(n>0)BO_LIVRE_A={id:n,nome:v.nome};
+  const por=(eid,val)=>{const e=document.getElementById(eid);if(e&&val!=null)e.value=val;};
+  por('e-nome',v.nome||'');por('e-ano',v.ano||'');por('e-produtor',v.produtor||'');
+  const cor=idCorDe(c,i);
+  if(TIPOS.includes(cor))por('e-tipo',cor);
+  janelaSincronizarForm();
+}
+function idAdicionarHTML(c,desc){
+  const linhas=desc.map(i=>{
+    const v=c.vinhos[i], n=c.livre[i], x=n>0?c.estados.get(n):null, cor=idCorDe(c,i);
+    const sub=[v.produtor,v.ano,v.regiao,v.preco!=null?wsEur(Number(v.preco)):''].filter(Boolean).map(y=>esc(String(y))).join(' · ');
+    const acao=x&&x.estado==='a_verificar'?'<span class="carta-score a-procurar">🔎 a confirmar…</span>'
+      :`<button type="button" class="btn ghost id-add" onclick="idAdicionar(${i})">＋ Adicionar ao Catálogo</button>`;
+    return `<div class="carta-item id-add-item">
+      <span class="tipo-dot" style="background:${wsTipoCor(cor)}" title="${esc(cor||'Cor desconhecida')}"></span>
+      <span class="carta-nome">${esc(v.nome||'')}${sub?`<span class="carta-sub">${sub}</span>`:''}</span>
+      ${acao}
+    </div>`;
+  }).join('');
+  return `<div class="ws-card"><div class="carta-list">${linhas}</div></div>`;
+}
 function idDesconhecidosHTML(c,desc){
+  if(catPodeCriar())return idAdicionarHTML(c,desc);
   const restam=idProcRestam(c), editor=souEditor();
   const linhas=desc.map(i=>{
     const v=c.vinhos[i], n=c.livre[i], x=n>0?c.estados.get(n):null, cor=idCorDe(c,i);
@@ -8520,6 +8565,7 @@ function abrirEditarVinho(id,modo,colheitaDe){
   const titulo=fc?'Nova colheita no catálogo':noCat?'Novo vinho no catálogo':catEd?'Corrigir no catálogo':conv?'Passar para a garrafeira':id?'Editar vinho':paraDesejo?'Novo vinho na wishlist':'Novo vinho';
   const rotulo=noCat?'Criar no catálogo':catEd?'Guardar no catálogo':conv?'Passar para a garrafeira':id?'Guardar':paraDesejo?'Adicionar à wishlist':'Adicionar à garrafeira';
   _catBaseNovo=null;
+  ID_ADD=null;         // o vinho da fotografia é só do formulário que o abriu (`idAdicionar`)
   BO_LIVRE_A=null;     // o sugerido do Backoffice é só do formulário que o abriu (`boLivreAcrescentar`)
   _iaExtraNovo=null;   // o que a procura trouxe é de UM formulário, não fica de um para o outro
   _precosProcura=null;_imagemDocNovo=null;
@@ -17323,7 +17369,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='241';
+const APP_BUILD='242';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
