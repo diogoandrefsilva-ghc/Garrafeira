@@ -76,6 +76,13 @@ body>header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2
 .brand{display:flex;align-items:center;gap:11px;min-width:0}
 .escudo{width:36px;height:36px;flex-shrink:0;filter:drop-shadow(0 1px 3px rgba(0,0,0,.35))}
 .escudo img{width:100%;height:100%;object-fit:contain;display:block}
+/* O G é um BOTÃO: volta ao ecrã inicial (17/10/2026). O ‹ à frente é o que
+   o diz — um logótipo que leva a algum lado não se adivinha. */
+button.escudo{width:auto;display:flex;align-items:center;gap:1px;margin-left:-6px;border:0;padding:0;background:none;color:#fff;
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
+button.escudo img{width:36px;height:36px}
+.escudo-v{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;opacity:.72}
+button.escudo:focus-visible{outline:2px solid var(--ou);outline-offset:3px;border-radius:8px}
 .brand h1{font-family:var(--fd);font-weight:600;font-size:22px;letter-spacing:.3px;line-height:1.1;white-space:nowrap}
 .brand p{font-size:11px;opacity:.72;font-weight:300;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
@@ -108,6 +115,85 @@ html,body{overflow-x:clip}
    que faziam a barra ir a scroll horizontal. */
 @media(max-width:460px){.it .ic{display:none}.it{padding:7px 6px;font-size:11px}}
 .note{font-size:12px;color:var(--mu);line-height:1.65}
+
+/* ── O ECRÃ INICIAL (17/10/2026) ───────────────────────────────────
+   O mockup A que o dono escolheu: os dois SÍTIOS em cards grandes, com a
+   cor dos cabeçalhos deles (bordô a garrafeira, verde-garrafa o Catálogo,
+   e o filete dourado em baixo), e as duas FERRAMENTAS em papel, lado a
+   lado. Sem o cabeçalho nem os separadores: é a entrada, não mais um
+   separador. Num ecrã largo fica a 560px ao centro — esticados a toda a
+   largura, os cards eram faixas. */
+body.inicio>header,body.inicio .itabs{display:none}
+.ini{max-width:560px;margin:0 auto;padding-top:8px}
+.ini-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.ini-marca{display:flex;align-items:center;gap:10px;min-width:0}
+.ini-marca img{width:34px;height:34px;display:block;flex-shrink:0}
+.ini-marca span{font-family:var(--fd);font-weight:600;font-size:21px;letter-spacing:.3px;color:var(--vh)}
+.ini-cfg{width:44px;height:44px;flex-shrink:0;border-radius:50%;border:1px solid var(--bo);background:var(--card);color:var(--mu);
+  display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;box-shadow:var(--sh);-webkit-tap-highlight-color:transparent}
+.ini-cfg:hover{color:var(--vh)}
+.ini-cfg svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ini-ola{margin-top:22px;font-size:10.5px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;color:var(--mu)}
+.ini-h{margin-top:4px;font-family:var(--fd);font-weight:600;font-size:31px;line-height:1.12;letter-spacing:.1px;color:var(--tx)}
+.ini-cards{margin-top:20px;display:flex;flex-direction:column;gap:12px}
+/* Os quatro são botões: primeiro o que o botão traz de casa. */
+.ini-c{position:relative;display:block;width:100%;margin:0;border:0;padding:0;font:inherit;text-align:left;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;transition:transform .12s}
+@media(hover:hover){.ini-c:hover{transform:translateY(-1px)}}
+.ini-c:active{transform:scale(.985)}
+.ini-c:focus-visible{outline:3px solid var(--ou);outline-offset:2px}
+.ini-g{height:184px;border-radius:var(--r2);overflow:hidden;color:#fff}
+.ini-gar{background:linear-gradient(160deg,#3d0e20 0%,var(--vhd) 50%,#8d2748 130%);
+  box-shadow:0 2px 6px rgba(78,18,40,.08),0 18px 40px -18px rgba(78,18,40,.6)}
+.ini-cat{background:linear-gradient(160deg,#0f2a22 0%,#1d4a3b 50%,#2f6e57 130%);
+  box-shadow:0 2px 6px rgba(15,42,34,.08),0 18px 40px -18px rgba(15,42,34,.6)}
+.ini-g::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--ou),transparent);opacity:.75}
+.ini-txt{position:relative;box-sizing:border-box;height:100%;width:210px;max-width:62%;padding:18px 0 16px 20px;
+  display:flex;flex-direction:column}
+.ini-txt>span,.ini-fb>span{display:block}
+.ini-k{font-size:10.5px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;color:rgba(255,255,255,.7);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ini-t{margin-top:6px;font-family:var(--fd);font-weight:600;font-size:26px;line-height:1.08;letter-spacing:.2px}
+.ini-s{margin-top:8px;font-size:12.5px;line-height:1.4;color:rgba(255,255,255,.8)}
+.ini-p{margin-top:auto;font-size:11px;color:rgba(255,255,255,.62)}
+.ini-seta{position:absolute;z-index:1;top:16px;right:16px;width:32px;height:32px;box-sizing:border-box;border-radius:50%;
+  background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.24);display:flex;align-items:center;justify-content:center}
+.ini-seta svg{width:16px;height:16px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* A estante da garrafeira: os fundos das garrafas com a pele do móvel dos
+   Locais (`.mvg.v-*`) — o mesmo número na mesma cor é o mesmo vinho. Some
+   para a esquerda, para não brigar com o texto. */
+.ini-rack{position:absolute;display:block;right:-12px;bottom:18px;width:186px;height:100px;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 42%);mask-image:linear-gradient(90deg,transparent 0,#000 42%)}
+.ini-rack .mvg,.ini-rack .mvg.vazia{width:34px;height:34px;font-size:11px;cursor:inherit}
+/* Três garrafas do Catálogo (a `garrafaSVG`), com a colheita no rótulo. */
+.ini-garrafas{position:absolute;display:block;inset:0;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,transparent 52%,#000 66%);
+  mask-image:linear-gradient(90deg,transparent 0,transparent 52%,#000 66%)}
+.ini-garrafas svg{position:absolute;width:62px;height:115px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.35))}
+.ini-garrafas svg:nth-child(1){right:90px;top:82px}
+.ini-garrafas svg:nth-child(2){right:6px;top:88px}
+.ini-garrafas svg:nth-child(3){right:45px;top:66px;width:68px;height:126px;filter:drop-shadow(0 8px 12px rgba(0,0,0,.4))}
+/* As ferramentas: só com IA, como os separadores delas. */
+.ini-ferr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+body.sem-sugestoes .ini-ferr{display:none}
+.ini-f{height:196px;box-sizing:border-box;padding:16px;border-radius:var(--r2);border:1px solid var(--bo);background:var(--card);
+  color:var(--tx);display:flex;flex-direction:column;box-shadow:var(--sh)}
+.ini-ic{width:44px;height:44px;flex-shrink:0;border-radius:12px;background:var(--vhp);color:var(--vh);
+  display:flex;align-items:center;justify-content:center}
+.ini-ic svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ini-novo{position:absolute;top:16px;right:16px;padding:3px 8px;border-radius:99px;background:var(--vh);color:#fff;
+  font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;line-height:1.3}
+.ini-fb{margin-top:auto;display:flex;flex-direction:column}
+.ini-f .ini-t{margin-top:0;font-size:20px;line-height:1.12;letter-spacing:0;color:var(--tx)}
+.ini-f .ini-s{margin-top:6px;font-size:12px;color:var(--mu)}
+/* A abrir o Catálogo pela primeira vez (~380 KB): a roda no lugar da seta. */
+.ini-c.a-abrir{pointer-events:none}
+.ini-c.a-abrir::before{content:'';position:absolute;z-index:2;top:22px;right:22px;width:20px;height:20px;box-sizing:border-box;
+  border-radius:50%;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;animation:sp .8s linear infinite}
+.ini-g.a-abrir .ini-seta{visibility:hidden}
+.ini-f.a-abrir::before{top:28px;right:16px;border-color:var(--bo2);border-top-color:var(--vh)}
+.ini-f.a-abrir .ini-novo{visibility:hidden}
 
 /* ── STAT CARDS ─────────────────────────────────────────────────── */
 .g4{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;margin-bottom:18px}
