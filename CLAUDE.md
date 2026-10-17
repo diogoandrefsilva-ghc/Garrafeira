@@ -38,8 +38,9 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `supabase functions deploy garrafeira-imagens`.
 - `garrafeira-carta.ts` — a Edge Function das Sugestões: lê a carta e faz
   a sugestão — da carta, da garrafeira, do Catálogo ou só do prato (a
-  pergunta livre, migração 54) (migração 40; ver "As Sugestões"). Deploy:
-  `supabase functions deploy garrafeira-carta`.
+  pergunta livre, migração 54) (migração 40; ver "As Sugestões"). E lê as
+  fotografias do Identificar vinhos (migração 56; ver "Identificar vinhos
+  numa fotografia"). Deploy: `supabase functions deploy garrafeira-carta`.
 - `garrafeira-push.ts` — a Edge Function das notificações push (a chave
   pública VAPID para a app, e o envio da caixa de saída `push_avisos`; ver
   "Comentários e sugestões"). Deploy: `supabase functions deploy garrafeira-push`.
@@ -188,6 +189,10 @@ decisão que segura tudo o resto, ao lado do "vinho ≠ garrafa".
   `migracao-casta-no-nome.sql` é a 55: a casta escrita no nome — "Soalheiro
   Alvarinho" — liga à linha do Catálogo que é só dessa casta ("Soalheiro",
   100% Alvarinho) (`garrafeira.carta_achar`; ver "As Sugestões").
+  `migracao-identificar.sql` é a 56: Identificar vinhos numa fotografia — a
+  `fonte` e o `livre` de `garrafeira.cartas`, as `fotos` de
+  `garrafeira.livre_vinhos` e a `livre_estados` (ver "Identificar vinhos
+  numa fotografia").
   `migracao-paginas-sites.sql` é a 30: `paginas_por_site`, que sites
   deixam a `vinho-info` ler as páginas (ver "A procura da IA" › "Procurar
   links").
@@ -1145,8 +1150,10 @@ ou catálogo, e Resumo, Detalhe ou onde se ficou — `abrirEcraInicial`, no
 - **O "+" só onde se acrescenta** (`fabSincronizar`): o Detalhe da
   garrafeira e a Wishlist (aí vai direto a "Adicionar à wishlist"). Nem no
   Resumo (o separador "Garrafeira" passou a chamar-se **Resumo**), nem em
-  Locais, Consumidos, Definições. No catálogo, no Detalhe e só aos
-  curadores (ver "A atualização massiva e a importação no Catálogo").
+  Locais, Consumidos, Definições. No catálogo, no Detalhe: aos curadores
+  (ver "A atualização massiva e a importação no Catálogo") e a quem tem IA,
+  que lá encontra o **Identificar vinhos numa foto** — a quem não é
+  curador, é a única opção do menu (as outras são `.so-curador`).
 - **O Resumo do catálogo** (30/09/2026, o dono) é o MESMO `renderResumo`
   sobre o catálogo inteiro (`cat`), com três diferenças: sem **Valor
   estimado**; os cartões **Tintos** e **Brancos** (abrem "Vinhos por cor");
@@ -1505,6 +1512,61 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
 - **As marcas dos amigos** (🍾 🍷 💭 🎁) são da `garrafeira.marcas_amigos`
   (ver "A exceção: as marcas dos amigos").
 
+### Identificar vinhos numa fotografia (17/10/2026, migração 56)
+O dono das apps: "estou no supermercado ou num site e tiro fotografia ou
+print a apanhar vários vinhos, e a app dizia quais conhecia (com um card
+resumo do que encontrou e link para o detalhe) e dizia quais não conhecia
+(com opção de pesquisar detalhe adicional — para adicionar ao Catálogo)".
+Decidido com ele: "para já coloca apenas uma opção no +, quando estamos no
+catálogo" (a futuro, uma página inicial com A minha Garrafeira, Catálogo,
+Sugestões e Identificar Vinhos), e um vinho desconhecido entra no Catálogo
+"só com fontes". Secção "IDENTIFICAR VINHOS NUMA FOTOGRAFIA" no app.js
+(`id*`/`ID_*`), na `garrafeira-carta.ts` e no style.css.
+- **Abre-se pelo "+" do Detalhe do Catálogo** ("📸 Identificar vinhos numa
+  foto", `fabAcao('identificar')` → `idAbrir`), a quem tem IA. É uma SECÇÃO
+  (`#s-identificar`) sem botão na barra dos separadores — nada lá acende, e
+  a secção tem o seu "‹ Detalhe" — e não um modal: a página do vinho abre
+  por cima dela como por cima do Detalhe (um modal ficava por cima da
+  página). Não se restaura ao abrir a app (`restaurarTab`), e sem IA volta
+  ao Detalhe (`sincronizarTabs`).
+- **Ler é a leitura da carta com outra instrução** (`acao:'identificar'`,
+  `promptPrateleira`, até 4 fotos encolhidas a 2048 px — os rótulos de uma
+  prateleira são pequenos): o rótulo e a etiqueta da prateleira (ou o texto
+  de um site) juntos num vinho, várias garrafas iguais são um vinho, a cor
+  pelo que está escrito ou pelo vidro, o preço da etiqueta, e um rótulo que
+  não se lê NÃO entra — conta em `naoLidas`, que a app diz ("2 vinhos
+  ficaram por ler — aproxima-te"). Sem ordem nem sugestão. Fica numa linha
+  de `garrafeira.cartas` com `fonte:'prateleira'` (as Sugestões filtram
+  `fonte=eq.carta` nas "Cartas anteriores"), em segundo plano, e a app sonda-a
+  (`gf_id_pendente`), como a carta.
+- **Conheço**: a ligação de cada vinho lido é a da carta (`carta_ligar`, com
+  a cor — e por isso o produtor e a casta no nome também ligam). Cada um é o
+  cartão do Detalhe do Catálogo (`vinhoCardHTML`: o selo diz se o tenho, e
+  tocar abre a página), e por baixo, em letra pequena, o que se leu: o nome,
+  a colheita quando não é a da linha ("a da foto é a 2021; no Catálogo, a
+  2019") e **o preço da etiqueta face ao preço que conta** (`idPrecoHTML`,
+  ±10 % é "em linha"; numa loja é 1×, não os 2 a 3× de um restaurante).
+- **Não conheço**: escolhem-se até 5 (10 por fotografia, `ID_PROC_*` nos
+  dois lados) para **Procurar informação** (`acao:'identificar_procurar'`),
+  que é a confirmação da pergunta livre tal e qual: uma linha em
+  `livre_vinhos` (`livre_registar` com `foto:true`) e a `vinho-info` com o
+  `livreId`, que só faz nascer a linha no Catálogo com o produtor, as
+  castas, o preço, a imagem e o Vivino COM FONTE; o resto fica "por
+  carregar" e vai ao Backoffice, aos **Sugeridos pela IA**, com o que
+  faltou. O índice de cada vinho lido → a linha de `livre_vinhos` fica em
+  `cartas.livre`; a app lê o estado pela `livre_estados` de 5 em 5 segundos
+  (até 4 minutos), e um que nasceu sobe para "Conheço" ("✨ Entrou agora no
+  Catálogo"). Um vinho já procurado (por uma foto ou pela pergunta livre) não
+  se volta a procurar — diz em que pé ficou.
+- **Só a quem edita** (`souEditor`; a função confirma `is_editor()`): a
+  `vinho-info` só atende editores, e sem eles a linha ficava "por carregar"
+  com uma falta que não é do vinho. Como na pergunta livre, a procura usa
+  sempre o pacote completo (é o que dá as fontes).
+- **Um vinho lido sem cor pede-a** no lugar do ponto (`idCorEscolher`): a cor
+  é a chave do Catálogo, e a `livre_registar` recusa sem ela. Vai no pedido
+  (`cores`) e fica gravada na linha da leitura.
+- **Identificações anteriores**: as minhas linhas com `fonte=eq.prateleira`.
+
 ### O Backoffice: o que vivia na WineCatalog (05/10/2026)
 O dono das apps: "enriquecer a app da Garrafeira com as features que neste
 momento temos apenas na WineCatalog, nomeadamente os separadores
@@ -1758,6 +1820,10 @@ CATÁLOGO" no app.js (`bo*`/`BO_*`, ids `bo-`), o CSS debaixo de
   `catGuardarNovo`). **Descartar** é para um vinho inventado (não se volta
   a procurar). A `livre_lista` volta a perguntar ao Catálogo por cada um
   antes de responder: um que entrou por outro caminho sai sozinho.
+  **E os que se viram numa fotografia** (o Identificar vinhos, migração 56)
+  caem na mesma lista: "📸 Visto em N fotografias", com o preço da etiqueta
+  e o nome como se leu (`sugerido.foto`). O `vezes` conta as sugestões da
+  IA e o `fotos` as fotografias; a lista ordena-se pelas duas somadas.
 - **Ficou de fora** a password temporária (já está nas Definições da
   Garrafeira, para o dono da conta) e o que só corre no PC (o painel, o
   script do Vivino e das lojas).

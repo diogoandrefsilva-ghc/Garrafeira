@@ -43,6 +43,13 @@
 // ligam ao Catálogo, ou vão à `vinho-info` para nascer lá (só com fontes).
 // Ver "AS SUGESTÕES LIVRES".
 //
+// E IDENTIFICAR (`acao: "identificar"`, 17/10/2026, migração 56): fotografias
+// de uma prateleira ou prints de um site → os vinhos que lá estão, numa
+// linha de `garrafeira.cartas` com `fonte: "prateleira"`; e
+// `acao: "identificar_procurar"` manda os que o Catálogo não tem à
+// confirmação da pergunta livre (só nascem lá com fontes). Ver "IDENTIFICAR
+// VINHOS NUMA FOTOGRAFIA".
+//
 // Quem pode: quem tem IA na Garrafeira (`garrafeira.plano_ia()` 'gratis' ou
 // 'premium', perguntado com o JWT de quem chamou) — o mesmo que vê o
 // separador. A linha escreve-se com a service role, sempre com `quem=eq.` no
@@ -779,6 +786,161 @@ async function livrePedido(body: any, quem: string, auth: string): Promise<{ sta
   } finally { clearTimeout(timer); }
 }
 
+/* ── IDENTIFICAR VINHOS NUMA FOTOGRAFIA (17/10/2026, migração 56) ──
+   O dono das apps: "estou no supermercado ou num site e tiro fotografia ou
+   print a apanhar vários vinhos, e a app dizia quais conhecia … e quais não
+   conhecia (com opção de pesquisar detalhe adicional — para adicionar ao
+   Catálogo)". É a leitura da carta com outra instrução — rótulos e
+   etiquetas de prateleira, não as linhas de uma carta — e sem ordem nem
+   sugestão (não há prato nem orçamento). Fica numa linha de
+   `garrafeira.cartas` com `fonte: "prateleira"`; a ligação ao Catálogo
+   faz-a a app (`carta_ligar`).
+   Procurar um que o Catálogo não tem (`acao: "identificar_procurar"`) é a
+   confirmação da pergunta livre, tal e qual: uma linha em
+   `garrafeira.livre_vinhos` (`livre_registar`, com `foto: true`) e a
+   `vinho-info` com o `livreId`, que só o faz nascer no Catálogo com os
+   campos principais COM FONTE (o dono: "só com fontes"); o resto vai ao
+   Backoffice. Escolhe-os a pessoa, até `ID_PROC_MAX` de cada vez e
+   `ID_PROC_TOTAL` por fotografia — cada um é uma procura com o pacote
+   completo. Só a quem edita: a `vinho-info` só atende editores, e sem eles
+   a linha ficava "por carregar" com uma falta que não é do vinho. */
+const ID_MAX_FOTOS = 4;
+const ID_MAX_VINHOS = 40;
+const ID_PROC_MAX = 5;
+const ID_PROC_TOTAL = 10;
+const promptPrateleira = (n: number) => `${n > 1
+  ? `Aqui estão ${n} fotografias (ou prints de um site) com vinhos — prateleiras de uma loja ou de um supermercado, uma montra, ou a página de uma loja online. Trata-as em conjunto.`
+  : "Aqui está uma fotografia (ou um print de um site) com vinhos — a prateleira de uma loja ou de um supermercado, uma montra, ou a página de uma loja online."}
+Identifica CADA vinho diferente que se consegue ler (até ${ID_MAX_VINHOS}). Várias
+garrafas iguais são um vinho só; o mesmo vinho em duas fotos também. Não
+avalies nem recomendes nada — só lê o que lá está.
+
+Devolve APENAS um objeto JSON com esta forma exata:
+{"vinhos": [{"nome": string, "produtor": string|null, "ano": number|null,
+  "tipo": "Tinto"|"Branco"|"Rosé"|"Espumante"|"Licoroso"|"Frisante"|null,
+  "regiao": string|null, "preco": number|null}],
+ "naoLidas": number, "aviso": string|null}
+
+Regras:
+- Lê o RÓTULO da garrafa e, quando houver, a ETIQUETA da prateleira que lhe
+  corresponde (ou o texto do produto, num site): a etiqueta costuma trazer o
+  nome por extenso, a colheita e o preço. Junta as duas no mesmo vinho.
+- "nome": o nome do vinho como está no rótulo ou na etiqueta, sem o preço,
+  sem a capacidade ("75cl") e sem palavras de promoção.
+- "produtor": só se estiver escrito (no rótulo, na etiqueta, no site); null
+  se não aparecer. Nunca o deduzas de memória.
+- "ano": a colheita, só se estiver escrita; null caso contrário.
+- "tipo": a COR — pelo que está escrito ("Tinto", "Branco", "Rosé"…) ou,
+  sem isso, pela cor do vinho que se vê através do vidro. Um Vinho Verde não
+  é uma cor: diz se é branco, tinto ou rosé (na dúvida, Branco). Porto,
+  Moscatel e Madeira são Licoroso. null só se nada o deixar perceber.
+- "regiao": só se estiver escrita (Douro, Alentejo, Dão, Vinho Verde…).
+- "preco": o preço de UMA garrafa em euros, da etiqueta ou do site (com
+  desconto, se houver os dois); null se não se vir.
+- Uma garrafa cujo rótulo não se consegue ler NÃO entra: conta-a em
+  "naoLidas" (quantos vinhos diferentes ficaram por ler). Nunca adivinhes um
+  vinho pela forma da garrafa ou pelas cores do rótulo.
+- "aviso": preenche só se as fotos estiverem desfocadas ou sem vinhos —
+  caso contrário null.
+- Nunca inventes: na dúvida, null.`;
+
+async function lerPrateleira(id: number, quem: string, partsImg: unknown[], nFotos: number) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), PROC_TIMEOUT_MS);
+  const t0 = Date.now();
+  try {
+    const modelos = await candidatosModelo(ctrl.signal);
+    // Ler não precisa de pensar (o "200 vazio" da carta).
+    const g = await gerar(modelos.map((m) => [m, 0] as [string, number]), [...partsImg, { text: promptPrateleira(nFotos) }], ctrl.signal);
+    if (!g.texto) {
+      await registar("erro", { passo: "identificar", erro: g.erro, ms: Date.now() - t0, ...(g.usage ? { usageMetadata: g.usage } : {}) }, quem);
+      await atualizarCarta(id, quem, { estado: "erro",
+        erro: g.status === 429 || g.status === 503 ? "o serviço está com muita procura agora — espera um minuto e tenta outra vez" : g.erro });
+      return;
+    }
+    const j = extrairJson(g.texto);
+    if (!j) {
+      await registar("erro", { passo: "identificar", erro: "json", modelo: g.modelo, amostra: g.texto.slice(0, 600), ms: Date.now() - t0 }, quem);
+      await atualizarCarta(id, quem, { estado: "erro", erro: "não percebi a resposta do modelo — tenta uma foto mais nítida" });
+      return;
+    }
+    // O mesmo vinho (nome, colheita e cor) uma vez só, mesmo que o modelo o repita.
+    const vistos = new Set<string>();
+    const vinhos = (Array.isArray(j.vinhos) ? j.vinhos : []).map(normVinhoCarta).filter((v: any) => {
+      if (!v) return false;
+      const k = `${String(v.nome).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim()}|${v.ano ?? ""}|${v.tipo ?? ""}`;
+      return vistos.has(k) ? false : (vistos.add(k), true);
+    }).slice(0, ID_MAX_VINHOS);
+    const naoLidas = Math.max(0, Math.min(200, Math.round(Number(j.naoLidas) || 0)));
+    const aviso = [j.aviso ? s(j.aviso, 200) : "",
+      naoLidas ? `${naoLidas === 1 ? "Um vinho ficou" : naoLidas + " vinhos ficaram"} por ler — aproxima-te dos rótulos ou das etiquetas e tira outra foto.` : ""]
+      .filter(Boolean).join(" ") || null;
+    await registar("ok", {
+      passo: "identificar", modelo: g.modelo, fotos: nFotos, vinhos: vinhos.length, nao_lidas: naoLidas,
+      chamadas_gemini: g.chamadas, ...(g.usage ? { usageMetadata: g.usage } : {}),
+      custo_estimado_eur: CUSTO_LEITURA_EUR, ms: Date.now() - t0,
+    }, quem);
+    await atualizarCarta(id, quem, vinhos.length
+      ? { estado: "lida", vinhos, aviso }
+      : { estado: "erro", erro: aviso || "não consegui ler vinhos nesta fotografia — aproxima-te dos rótulos ou das etiquetas" });
+  } catch (e) {
+    const err = e as Error, timeout = err.name === "AbortError";
+    await registar("erro", { passo: "identificar", erro: timeout ? "timeout" : String(err.message).slice(0, 300), ms: Date.now() - t0 }, quem);
+    await atualizarCarta(id, quem, { estado: "erro",
+      erro: timeout ? "o modelo demorou demasiado a ler a fotografia — tenta outra vez, ou uma foto mais nítida" : (err.message || "erro inesperado") });
+  } finally { clearTimeout(timer); }
+}
+
+async function identificarProcurar(body: any, quem: string, auth: string): Promise<{ status: number; corpo: Record<string, unknown> }> {
+  const id = Number(body?.id);
+  if (!Number.isInteger(id)) return { status: 400, corpo: { error: "falta a identificação" } };
+  // A `vinho-info` só atende editores (ver acima).
+  try {
+    const re = await sb("rpc/is_editor", { method: "POST", body: "{}" }, "garrafeira", auth);
+    if (!re.ok || (await re.json()) !== true) return { status: 403, corpo: { error: "procurar informação é só para quem edita a sua garrafeira" } };
+  } catch (_) { return { status: 502, corpo: { error: "não consegui confirmar o teu acesso — tenta outra vez" } }; }
+  const r = await sb(`cartas?id=eq.${id}&quem=eq.${encodeURIComponent(quem)}&fonte=eq.prateleira&select=id,estado,vinhos,livre`);
+  const row = r.ok ? (await r.json())?.[0] : null;
+  if (!row) return { status: 404, corpo: { error: "não encontrei esta identificação" } };
+  if (row.estado !== "lida") return { status: 409, corpo: { error: "a fotografia ainda não foi lida" } };
+  const vinhos: any[] = Array.isArray(row.vinhos) ? row.vinhos.slice() : [];
+  const livre: Record<string, number> = { ...(row.livre && typeof row.livre === "object" ? row.livre : {}) };
+  // A cor de um vinho lido sem ela, escolhida na app: é a chave do Catálogo.
+  let mudou = false;
+  if (body.cores && typeof body.cores === "object") {
+    for (const [k, v] of Object.entries(body.cores)) {
+      const i = Number(k);
+      if (Number.isInteger(i) && vinhos[i] && !vinhos[i].tipo && TIPOS.includes(v as string)) { vinhos[i] = { ...vinhos[i], tipo: v }; mudou = true; }
+    }
+  }
+  const resta = ID_PROC_TOTAL - Object.keys(livre).length;
+  const indices: number[] = (Array.isArray(body.indices) ? body.indices : []).map((x: unknown) => Number(x));
+  const pedidos = [...new Set(indices)]
+    .filter((i) => Number.isInteger(i) && vinhos[i] && vinhos[i].tipo && !(String(i) in livre));
+  if (resta <= 0) return { status: 409, corpo: { error: `já procuraste ${ID_PROC_TOTAL} vinhos desta fotografia` } };
+  const lote = pedidos.slice(0, Math.min(ID_PROC_MAX, resta));
+  if (!lote.length) return { status: 400, corpo: { error: "escolhe os vinhos a procurar (com a cor)" } };
+  const rr = await sb("rpc/livre_registar", { method: "POST",
+    body: JSON.stringify({ p_prato: "", p_vinhos: lote.map((i) => {
+      const v = vinhos[i];
+      return { nome: v.nome, produtor: v.produtor || "", ano: v.ano ?? null, tipo: v.tipo, regiao: v.regiao || "", foto: true,
+        sugerido: { foto: { nome: v.nome, ...(v.preco != null ? { preco: v.preco } : {}) } } };
+    }) }) });
+  if (!rr.ok) {
+    await registar("erro", { passo: "identificar_procurar", erro: "livre_registar " + rr.status, carta: id }, quem);
+    return { status: 502, corpo: { error: "não consegui guardar o pedido — tenta outra vez" } };
+  }
+  const linhas: any[] = await rr.json();
+  // Um nome de que não sai chave nenhuma fica com 0: não se volta a tentar.
+  lote.forEach((i, k) => { livre[String(i)] = linhas[k] && typeof linhas[k].id === "number" ? linhas[k].id : 0; });
+  await atualizarCarta(id, quem, { livre, ...(mudou ? { vinhos } : {}) });
+  const aVerificar = linhas.filter((l) => l && l.verificar);
+  if (aVerificar.length) EdgeRuntime.waitUntil(livreVerificar(aVerificar, auth, quem));
+  await registar("ok", { passo: "identificar_procurar", carta: id, vinhos: lote.length, verificar: aVerificar.length,
+    no_catalogo: linhas.filter((l) => l && l.catalogo_id).length }, quem);
+  return { status: 200, corpo: { livre, ...(mudou ? { vinhos } : {}) } };
+}
+
 /* ── A base de dados ── */
 async function sb(path: string, init: RequestInit = {}, perfil = "garrafeira", auth = "Bearer " + SB_SRV) {
   return await fetch(`${SB_URL}/rest/v1/${path}`, {
@@ -833,6 +995,7 @@ async function registar(estado: string, detalhe: Record<string, unknown>, quem: 
         // Recusado antes de se saber o que era → `entrada`.
         funcionalidade: detalhe.passo === "sugerir" ? `sugerir-${String(detalhe.modo ?? "garrafeira")}`
           : detalhe.passo === "livre" ? "sugerir-livre"
+          : String(detalhe.passo ?? "").startsWith("identificar") ? "identificar"
           : detalhe.passo === "recomendar" ? "recomendar"
           : (detalhe.passo === "autorizacao" || detalhe.passo === "excecao_inicial") ? "entrada"
           : "ler",
@@ -1093,6 +1256,37 @@ Deno.serve(async (req) => {
 
     if (body?.acao === "livre") {
       const r = await livrePedido(body, quem!, authHeader);
+      return json(r.corpo, r.status);
+    }
+
+    // Identificar vinhos numa fotografia (ver "IDENTIFICAR VINHOS NUMA FOTOGRAFIA").
+    if (body?.acao === "identificar") {
+      const imagens = body.imagens;
+      if (!Array.isArray(imagens) || imagens.length === 0 || imagens.length > ID_MAX_FOTOS) {
+        return json({ error: `envia entre 1 e ${ID_MAX_FOTOS} fotografias` }, 400);
+      }
+      let total = 0;
+      const partsImg: unknown[] = [];
+      for (const img of imagens) {
+        const data = img && typeof img.data === "string" ? img.data : null;
+        if (!data || data.length > 6_000_000) return json({ error: "uma das fotos está em falta ou é demasiado grande" }, 400);
+        total += data.length;
+        if (total > 20_000_000) return json({ error: "fotos demasiado grandes no total — tenta menos fotos" }, 400);
+        partsImg.push({ inline_data: { mime_type: /^image\/[a-z+.-]+$/i.test(String(img.mime)) ? img.mime : "image/jpeg", data } });
+      }
+      const r = await sb("cartas", { method: "POST", headers: { Prefer: "return=representation" }, signal: ctrl.signal,
+        body: JSON.stringify({ quem, fotos: imagens.length, fonte: "prateleira" }) });
+      const id = r.ok ? (await r.json())?.[0]?.id : null;
+      if (typeof id !== "number") {
+        await registar("erro", { passo: "identificar", erro: "criar " + r.status }, quem);
+        return json({ error: r.status === 400 ? "falta a migração 56 no Supabase (db/migracao-identificar.sql)" : "não consegui começar a leitura — tenta outra vez" }, 502);
+      }
+      EdgeRuntime.waitUntil(lerPrateleira(id, quem!, partsImg, imagens.length));
+      return json({ id, estado: "pendente" }, 202);
+    }
+
+    if (body?.acao === "identificar_procurar") {
+      const r = await identificarProcurar(body, quem!, authHeader);
       return json(r.corpo, r.status);
     }
 
