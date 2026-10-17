@@ -643,6 +643,9 @@ Regras:
 - "tipo": a cor, com estas palavras. Um Vinho Verde diz-se pela cor.
 - "preco": o preço aproximado de uma garrafa numa loja, em euros, dentro do
   intervalo pedido.
+- Se o pedido falar de mais do que um prato ("sushi, mas que também não
+  seja má escolha para uma massada de peixe"), o primeiro é o que serve bem
+  TODOS, e a razão diz como se porta com cada um.
 - "razao": uma a duas frases concretas, em português, sobre porque combina
   com o prato (corpo, acidez, taninos, castas, estilo).
 Responde só com o JSON.`;
@@ -1028,6 +1031,9 @@ Regras:
 - Dos que o Catálogo não conhece, podes usar o que sabes do vinho, do produtor
   e da região; mas não escolhas um vinho que não reconheces.
 - Respeita o preço pedido quando o preço na foto se vê.
+- Se o pedido falar de mais do que um prato ("sushi, mas que também não
+  seja má escolha para uma massada de peixe"), o primeiro é o que serve bem
+  TODOS, e a razão diz como se porta com cada um.
 - "tipo": a cor do vinho, quando a souberes.
 - "razao": uma a duas frases concretas, em português, sobre porque combina
   com o prato (corpo, acidez, taninos, castas, estilo).
