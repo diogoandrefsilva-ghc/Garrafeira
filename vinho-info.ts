@@ -1441,6 +1441,80 @@ const TERMO_GENERICO = new Set(["tinto", "branco", "rose", "red", "white", "vinh
   "doc", "igp", "the", "and", "com", "dos", "das", "del", "los", "las", "les"]);
 const normTermo = (s: string) => " " + s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
   .replace(/[^a-z0-9]+/g, " ").trim() + " ";
+/* ── OS LINKS QUE SÃO DESTE VINHO (17/10/2026, o dono das apps: "no
+   Sugere-me sites aparecem sites nada a ver … principalmente a confusão
+   branco/tinto") ──
+   O "Procurar links" pedia ao Google o nome, o ano e o produtor — e desde a
+   fase 4 dos nomes a cor já não vive no nome ("Quinta do Cardo Reserva" é o
+   tinto e o branco), por isso vinham os dois; e qualquer página de produto
+   entrava na lista. Agora a cor vai na consulta (`LINK_COR_Q`) e cada
+   resultado passa por `linkDesteVinho` antes de se mostrar:
+   - a COR do título e do endereço: um branco quando se quer um tinto (ou um
+     espumante, ou um Porto, quando se quer um vinho tranquilo) é OUTRO
+     vinho — a regra do catálogo — e fica de fora. Só quando o resultado diz
+     outra cor E não diz a nossa; uma palavra de cor que está no nome ou no
+     produtor ("Monte Branco") não conta. O resumo do Google só MARCA: é
+     texto corrido, e lá diz-se, não se decide;
+   - o NOME: o título ou o endereço tem de ter uma palavra que distinga este
+     vinho (do nome e não do produtor, nem gama nem cor — "Esquecido", não
+     "Herdade"). Sem ela é outro vinho que o Google achou parecido;
+   - a ORDEM: primeiro os que têm mais palavras do nome e do produtor; em
+     empate, a do Google.
+   Os que ficam de fora vão na resposta (`fora`) e a app mostra-os fechados
+   por baixo da lista: se a regra errar, escolhe-se na mesma. A cor só se
+   confere num Tinto, Branco ou Rosé — num espumante ou num Porto, "branco"
+   e "rosé" fazem parte do vinho. */
+const COR_PALAVRAS: Record<string, string[]> = {
+  Tinto: ["tinto", "tintos", "red"],
+  Branco: ["branco", "brancos", "white", "blanco", "blanc", "blancs"],
+  "Rosé": ["rose", "roses", "rosado", "rosados"],
+  Espumante: ["espumante", "espumantes", "sparkling", "bruto", "brut", "champagne", "prosecco"],
+  Licoroso: ["porto", "port", "tawny", "ruby", "lbv", "licoroso", "licorosos"],
+};
+// No resumo, só frases: um tinto fala de "red fruits", um branco de "frutos brancos".
+const COR_FRASES: Record<string, RegExp> = {
+  Tinto: / (vinho|vino) tinto | red wine /,
+  Branco: / vinho branco | vino blanco | white wine /,
+  "Rosé": / (vinho|vino) (rose|rosado) | rose wine /,
+  Espumante: / espumante | sparkling wine /,
+};
+const LINK_COR_Q: Record<string, string> = {
+  Tinto: "(tinto OR red)", Branco: "(branco OR white)", "Rosé": "(rosé OR rosado)", Espumante: "(espumante OR sparkling)",
+};
+const LINK_VAZIAS = new Set(["vinho", "vinhos", "wine", "wines", "vino", "doc", "igp", "the", "and", "com",
+  "dos", "das", "del", "los", "las", "les", ...Object.values(COR_PALAVRAS).flat()]);
+// Contam na ordem, mas não dizem que vinho é ("Quinta", "Reserva").
+const LINK_GAMA = new Set(["quinta", "herdade", "monte", "casa", "adega", "vinha", "vinhas", "velhas", "reserva",
+  "grande", "colheita", "selecionada", "seleccionada", "garrafeira", "superior", "especial", "escolha", "edicao",
+  "limitada", "classico", "old", "vines", "estate", "reserve", "field", "blend", "tardia", "anos", "year", "years",
+  "vintage"]);
+const palavrasLink = (s: string) => [...new Set(normTermo(s).trim().split(" ")
+  .filter((w) => w.length >= 3 && !LINK_VAZIAS.has(w) && !/^(19|20)\d\d$/.test(w)))];
+function linkDesteVinho(r: Resultado, url: string, tipo: string, nome: string, produtor: string):
+  { fora?: string; resumo?: string; nota: number } {
+  let caminho = "";
+  try { caminho = decodeURIComponent(new URL(url).pathname); } catch { /* fica só o título */ }
+  const txt = normTermo(`${r.titulo} ${caminho}`);
+  const tem = (w: string) => txt.includes(` ${w} `) || (w.length >= 5 && txt.includes(` ${w}`));
+  let resumo: string | undefined;
+  if (tipo === "Tinto" || tipo === "Branco" || tipo === "Rosé") {
+    const nossas = new Set(COR_PALAVRAS[tipo]);
+    const doNome = new Set(normTermo(`${nome} ${produtor}`).trim().split(" ").filter((w) => !nossas.has(w)));
+    const cores = Object.keys(COR_PALAVRAS)
+      .filter((c) => COR_PALAVRAS[c].some((w) => !doNome.has(w) && txt.includes(` ${w} `)));
+    const outra = cores.find((c) => c === "Espumante" || c === "Licoroso") ?? (cores.includes(tipo) ? undefined : cores[0]);
+    if (outra) return { fora: outra, nota: 0 };
+    const s = normTermo(r.snippet);
+    if (!COR_FRASES[tipo].test(s)) resumo = Object.keys(COR_FRASES).find((c) => c !== tipo && COR_FRASES[c].test(s));
+  }
+  const pNome = palavrasLink(nome), pProd = palavrasLink(produtor);
+  const nomeD = pNome.filter((w) => !LINK_GAMA.has(w)), prodD = pProd.filter((w) => !LINK_GAMA.has(w));
+  const soNome = nomeD.filter((w) => !prodD.includes(w));
+  // Sem palavra que distinga ("As Velhas"), as do nome; só sem nenhuma, as do produtor.
+  const precisa = soNome.length ? soNome : nomeD.length ? nomeD : pNome.length ? pNome : prodD;
+  if (precisa.length && !precisa.some(tem)) return { fora: "nome", nota: 0 };
+  return { ...(resumo ? { resumo } : {}), nota: [...new Set([...pNome, ...pProd])].filter(tem).length };
+}
 /* Os trechos (a partir da linha `desde`, fora das já `usadas`) onde o nome
    aparece: cada um vai da linha do nome até ~`TRECHO_JANELA` caracteres
    depois (é lá que vêm as castas, o teor e a prova), os melhores primeiro
@@ -2956,7 +3030,8 @@ Deno.serve(async (req) => {
        à parte (`vivino`) e acompanha a pesquisa como resultado do Google
        (o link e as estrelas), sem outra consulta. Só no pacote completo: o
        Serper gasta créditos que se pagam. Regista-se como UMA pesquisa
-       Serper, sem modelo nenhum. */
+       Serper, sem modelo nenhum. Os resultados de outra cor ou sem o nome
+       deste vinho vão à parte (`fora`) — ver "OS LINKS QUE SÃO DESTE VINHO". */
     if (body?.links === true) {
       const lnome = String(body?.nome ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
       if (!nomeChega(lnome, texto(body?.produtor, 90))) return json({ error: "falta o nome do vinho" }, 400);
@@ -2967,14 +3042,20 @@ Deno.serve(async (req) => {
       if (!SEARCH_API_KEY) return json({ error: "a pesquisa de links não está configurada (falta SEARCH_API_KEY)" }, 503);
       const lano = anoValido(body?.ano);
       const lprod = texto(body?.produtor, 90);
+      const ltipo = daLista(body?.tipo, TIPOS);
       // Por passos (29/09/2026): primeiro só as lojas (`LINKS_LOJAS`), depois
       // — "Mais links" — a pesquisa geral, página a página. Cada passo é UMA
-      // consulta Serper; os links já mostrados (`excluir`) não se repetem.
+      // consulta Serper; os links já mostrados (`excluir`, com os que ficaram
+      // de fora) não se repetem.
       let fase: "lojas" | "web" = body?.fase === "web" ? "web" : "lojas";
       let pagina = Math.max(1, Math.min(LINKS_PAGINAS, Math.floor(Number(body?.pagina) || 1)));
-      const excluir = new Set<string>((Array.isArray(body?.excluir) ? body.excluir : []).slice(0, 60)
+      const excluir = new Set<string>((Array.isArray(body?.excluir) ? body.excluir : []).slice(0, 150)
         .map((u: unknown) => paginaDe(texto(u, 400))).filter(Boolean));
-      const base = [lnome, lano || "", lprod].filter(Boolean).join(" ");
+      // A cor vai na consulta (ver "OS LINKS QUE SÃO DESTE VINHO"), a não ser
+      // que o nome já a diga; o produtor, se o nome já o tem, não se repete.
+      const nomeN = normTermo(lnome);
+      const corQ = LINK_COR_Q[ltipo] && !(COR_PALAVRAS[ltipo] ?? []).some((w) => nomeN.includes(` ${w} `)) ? LINK_COR_Q[ltipo] : "";
+      const base = [lnome, lano || "", lprod && !nomeN.includes(normTermo(lprod)) ? lprod : "", corQ].filter(Boolean).join(" ");
       const qLojas = `${base} (${LINKS_LOJAS.map((d) => `site:${d}`).join(" OR ")})`;
       const qWeb = `${base} vinho`;
       const t0 = Date.now();
@@ -2982,21 +3063,34 @@ Deno.serve(async (req) => {
       const consultas: string[] = [];
       let vivino: Resultado | null = null;
       const links: Record<string, unknown>[] = [];
+      const fora: Record<string, unknown>[] = [];
       let semMais = false;
       const passo = async () => {
         const q = fase === "lojas" ? qLojas : qWeb;
         consultas.push(pagina > 1 ? `${q} [página ${pagina}]` : q);
         const rows = await serperConsulta(q, ctrl.signal, 10, fase === "web" ? pagina : 1);
         if (!rows.length) semMais = true;
-        const porSite: Record<string, number> = {};
-        for (const r of rows) {
-          if (doSite(r.url, "vivino.com")) { vivino = vivino ?? r; continue; }
+        const cands: { r: Resultado; url: string; site: string; d: ReturnType<typeof linkDesteVinho>; i: number }[] = [];
+        rows.forEach((r, i) => {
+          const d = linkDesteVinho(r, r.url, ltipo, lnome, lprod);
+          if (doSite(r.url, "vivino.com")) { if (!d.fora) vivino = vivino ?? r; return; }
           const url = paginaDe(r.url);
-          if (!url || excluir.has(url) || links.length >= LINKS_MOSTRAR) continue;
+          if (!url || excluir.has(url)) return;
           const site = siteDe(url);
-          if ((porSite[site] || 0) >= LINKS_POR_SITE) continue;
           // Uma página de procura, categoria ou marcas não tem o vinho: fica de fora.
-          if (!paginaDoResultado([{ ...r, url }], site)) continue;
+          if (!paginaDoResultado([{ ...r, url }], site)) return;
+          if (d.fora) {
+            excluir.add(url);
+            fora.push({ url, titulo: r.titulo, snippet: r.snippet, site, grupo: fase, pagina, porque: d.fora });
+            return;
+          }
+          cands.push({ r, url, site, d, i });
+        });
+        cands.sort((a, b) => b.d.nota - a.d.nota || a.i - b.i);
+        const porSite: Record<string, number> = {};
+        for (const { r, url, site, d } of cands) {
+          if (links.length >= LINKS_MOSTRAR) break;
+          if ((porSite[site] || 0) >= LINKS_POR_SITE) continue;
           excluir.add(url);
           porSite[site] = (porSite[site] || 0) + 1;
           // Um ano no título ou no endereço que não é o nosso: diz-se, não se decide.
@@ -3004,6 +3098,7 @@ Deno.serve(async (req) => {
           links.push({
             url, titulo: r.titulo, snippet: r.snippet, site, grupo: fase, pagina,
             ...(lano && anos.length && !anos.includes(lano) ? { outroAno: anos[0] } : {}),
+            ...(d.resumo ? { outraCor: d.resumo } : {}),
             ...(hist[site] ? { historico: hist[site] } : {}),
           });
         }
@@ -3021,11 +3116,14 @@ Deno.serve(async (req) => {
       const proximo = fase === "lojas" ? { fase: "web", pagina: 1 }
         : !semMais && pagina < LINKS_PAGINAS ? { fase: "web", pagina: pagina + 1 } : null;
       await registar("ok", {
-        passo: "links", nome: lnome, ano: lano, consultas, n: links.length, vivino: !!vivino, fase, pagina,
+        passo: "links", nome: lnome, ano: lano, tipo: ltipo || null, consultas, n: links.length, vivino: !!vivino, fase, pagina,
+        // O que se mostrou e o que ficou de fora (e porquê): é por aqui que se
+        // vê se a regra de "OS LINKS QUE SÃO DESTE VINHO" acerta.
+        mostrados: links.map((l) => l.url), fora: fora.map((f) => `${f.porque} ${f.url}`),
         modelo: "serper", pesquisa: "serper", serper_consultas: consultas.length,
         custo_estimado_eur: 0.001 * consultas.length, ms: Date.now() - t0,
       }, quem);
-      return json({ links, escolher: LINKS_ESCOLHER, proximo, ...(vivino ? { vivino } : {}) });
+      return json({ links, fora, escolher: LINKS_ESCOLHER, proximo, ...(vivino ? { vivino } : {}) });
     }
 
     /* ── LOTE: vários vinhos, uma chamada só ──
