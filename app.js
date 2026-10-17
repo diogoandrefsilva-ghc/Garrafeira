@@ -3544,14 +3544,13 @@ let _idImagens=[];   // [{base64, mime}]
 let ID=null;         // a identificação que está no ecrã
 let _idPollTimer=null,_idPollInicio=0,_idLivreTimer=null;
 
-// Volta-se para onde se veio: o Detalhe (o "+") ou o ecrã inicial.
+// Volta-se para onde se veio: o Detalhe (o "+") ou o ecrã inicial. É o ‹
+// do cabeçalho (`cabVoltar`), que o `tab()` diz para onde vai.
 let ID_VOLTA='detalhe';
 function idAbrir(origem){
   if(!modoCat())return;
   if(!podeUsarIA()){toast('Identificar vinhos usa IA, e a IA não está incluída no teu acesso',1);return;}
   ID_VOLTA=origem==='inicio'?'inicio':'detalhe';
-  const b=document.getElementById('id-volta');
-  if(b)b.textContent=ID_VOLTA==='inicio'?'‹ Início':'‹ Detalhe';
   try{localStorage.setItem(INI_VISTO_KEY,'1');}catch(e){}
   tab('identificar');
 }
@@ -3908,8 +3907,32 @@ async function idAbrirHist(id){
 /* ── NAVEGAÇÃO ─────────────────────────────────────────────────────── */
 let tabAtiva='garrafeira';
 const ORDEM_TABS=['garrafeira','detalhe','locais','consumidos','desejos','backoffice','cfg'];
+/* O CABEÇALHO DAS FERRAMENTAS (17/10/2026, o dono: "faz cabeçalhos
+   próprios — ficam com o cabeçalho do catálogo, fica esquisito"). As
+   Sugestões e o Identificar vivem no catálogo (é de lá que leem os vinhos),
+   mas não são ele: o cabeçalho é de papel, como os cards delas no ecrã
+   inicial, com o nome delas e sem o ⇄ nem a barra dos separadores
+   (`body.ferr`). O ‹ volta para onde se veio. */
+const FERRAMENTAS={
+  sugestoes:{t:'Sugestões',s:'Que vinho peço, abro ou compro?'},
+  identificar:{t:'Identificar vinhos',s:'Uma fotografia: o que conheço e o que não'}
+};
+function cabVoltar(){
+  if(tabAtiva==='identificar')idVoltar();
+  else inicioAbrir();
+}
+function cabPintar(nome){
+  const f=FERRAMENTAS[nome];
+  if(f){
+    document.getElementById('hdr-ferr-t').textContent=f.t;
+    document.getElementById('hdr-ferr-s').textContent=f.s;
+  }
+  const r=nome==='identificar'&&ID_VOLTA!=='inicio'?'Voltar ao Detalhe':'Ecrã inicial';
+  const b=document.getElementById('hdr-volta');
+  if(b){b.title=r;b.setAttribute('aria-label',r);}
+}
 function tab(nome,btn){
-  const deInicio=tabAtiva==='inicio';
+  const deInicio=tabAtiva==='inicio', deFerr=!!FERRAMENTAS[tabAtiva], ferr=!!FERRAMENTAS[nome];
   tabAtiva=nome;
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));
   document.getElementById('s-'+nome).classList.add('on');
@@ -3919,8 +3942,11 @@ function tab(nome,btn){
   if(nome!=='inicio')try{localStorage.setItem('gf_tab',nome);}catch(e){}
   if(!modoCat()&&TABS_GARRAFEIRA.includes(nome))TAB_GARRAFEIRA=nome;
   document.body.classList.toggle('inicio',nome==='inicio');
-  // Com o cabeçalho escondido não havia altura para medir.
-  if(deInicio&&nome!=='inicio')ajustarSticky();
+  document.body.classList.toggle('ferr',ferr);
+  cabPintar(nome);
+  // Com o cabeçalho escondido (ou o das ferramentas) não havia altura para
+  // medir.
+  if((deInicio||deFerr)&&nome!=='inicio'&&!ferr)ajustarSticky();
   if(nome==='inicio')renderInicio();
   if(nome==='garrafeira')renderResumo();
   if(nome==='detalhe'||nome==='locais'){posicionarFiltros(nome);renderFiltrados();}
@@ -17297,7 +17323,7 @@ async function ptrVersaoNova(){
    discordância for permanente. À segunda, diz-se o que se passa com um
    botão a fazer o que falta, que é sempre melhor do que fingir que está
    tudo bem. */
-const APP_BUILD='240';
+const APP_BUILD='241';
 (function verificarBuild(){
   const doHtml=document.body.getAttribute('data-build');
   if(doHtml===APP_BUILD)return;
@@ -17360,8 +17386,9 @@ async function sbInit(){
 // tamanho — por isso mede-se.
 function ajustarSticky(){
   const h=document.querySelector('body>header');
-  // Escondido (o ecrã inicial) mede 0: fica a medida de antes.
-  if(h&&h.offsetHeight)document.querySelector('.itabs').style.top=h.offsetHeight+'px';
+  // Escondido (o ecrã inicial) mede 0: fica a medida de antes. O das
+  // ferramentas não tem a barra por baixo, e a medida dele não lhe serve.
+  if(h&&h.offsetHeight&&!document.body.classList.contains('ferr'))document.querySelector('.itabs').style.top=h.offsetHeight+'px';
 }
 window.addEventListener('resize',ajustarSticky);
 window.addEventListener('resize',()=>{if(MAPA_POP_LOCAL&&MAPA_POP_ANCHOR)mapaPopupPos(MAPA_POP_ANCHOR);});

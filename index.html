@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-build="240">
+<body data-build="241">
 <!-- Splash de arranque (tapa o estado cru do HTML enquanto o login/dados carregam) -->
 <div id="gl-splash">
   <img class="gl-splash-logo" src="icone-claro.png" alt="">
@@ -95,9 +95,10 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
 <header>
   <div class="hdr">
     <div class="brand">
-      <!-- O G É A VOLTA AO ECRÃ INICIAL (17/10/2026): o ‹ diz que é por aqui. -->
-      <button type="button" class="escudo" onclick="inicioAbrir()" title="Ecrã inicial" aria-label="Ecrã inicial"><svg class="escudo-v" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><img src="icone-claro.png" alt=""></button>
-      <div style="min-width:0">
+      <!-- O G É A VOLTA AO ECRÃ INICIAL (17/10/2026): o ‹ diz que é por aqui.
+           Nas ferramentas é o G bordô, no papel (`cabVoltar`). -->
+      <button type="button" class="escudo" id="hdr-volta" onclick="cabVoltar()" title="Ecrã inicial" aria-label="Ecrã inicial"><svg class="escudo-v" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><img class="esc-claro" src="icone-claro.png" alt=""><img class="esc-cor" src="icone.png" alt=""></button>
+      <div class="hdr-sitio" style="min-width:0">
         <!-- O TÍTULO É O INTERRUPTOR entre a garrafeira e o catálogo
              (`modoAlternar`): um toque, à vista em todos os separadores. -->
         <div class="modo-sw" role="button" tabindex="0" onclick="modoAlternar()"
@@ -110,6 +111,14 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
              repetir "Garrafeira do Barrona" por baixo de "Garrafeira" não
              dizia nada a quem só tem a sua. -->
         <p id="hdr-garrafeira" style="display:none"></p>
+      </div>
+      <!-- O CABEÇALHO DAS FERRAMENTAS (17/10/2026, o dono: "faz cabeçalhos
+           próprios"): as Sugestões e o Identificar não são a garrafeira
+           nem o Catálogo, e o verde e o ⇄ deles ficavam esquisitos lá.
+           Escrito pelo `tab()` (`FERRAMENTAS`), à vista com `body.ferr`. -->
+      <div class="hdr-ferr">
+        <h1 id="hdr-ferr-t"></h1>
+        <p id="hdr-ferr-s"></p>
       </div>
     </div>
     <!-- O ⇄ no canto direito (30/09/2026, o dono): o título continua a
@@ -319,12 +328,8 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
        `garrafeira-carta`, que só LÊ a carta; a lista, o "Procurar
        informação" e a sugestão vêm a seguir. Ver "SUGESTÕES" no app.js. -->
   <!-- As Sugestões abrem-se pelo ecrã inicial (17/10/2026): sem separador,
-       com a volta ao início, como o Identificar. -->
+       com o cabeçalho delas (o ‹ volta ao início), como o Identificar. -->
   <section class="sec" id="s-sugestoes" data-modo="carta">
-    <div class="id-barra">
-      <button type="button" class="bo-volta" onclick="inicioAbrir()">‹ Início</button>
-      <span class="id-titulo">🍽️ Sugestões</span>
-    </div>
     <div class="ws-modos" role="tablist" aria-label="Sugerir a partir de">
       <button type="button" class="ws-modo on" data-modo="carta" role="tab" aria-selected="true" onclick="wsModo('carta')"><span class="ws-modo-ic">📖</span>Uma carta de vinhos</button>
       <button type="button" class="ws-modo" data-modo="garrafeira" role="tab" aria-selected="false" onclick="wsModo('garrafeira')"><span class="ws-modo-ic">🍾</span>A minha garrafeira</button>
@@ -413,12 +418,9 @@ setTimeout(function(){ if (window.glEsconderSplash) window.glEsconderSplash(); }
   <!-- ═══ IDENTIFICAR VINHOS (17/10/2026, migração 56) ═══
        Uma fotografia de uma prateleira, ou o print de um site → os vinhos
        que o Catálogo conhece e os que não conhece. Abre-se pelo "+" do
-       Catálogo e não tem botão na barra (ver `idAbrir` no app.js). -->
+       Catálogo e pelo ecrã inicial, e não tem botão na barra: tem o
+       cabeçalho dele, e o ‹ volta para onde se veio (ver `idAbrir`). -->
   <section class="sec" id="s-identificar">
-    <div class="id-barra">
-      <button type="button" class="bo-volta" id="id-volta" onclick="idVoltar()">‹ Detalhe</button>
-      <span class="id-titulo">📸 Identificar vinhos</span>
-    </div>
     <div class="ws-card">
       <div class="ws-card-label">Fotografias ou prints <em>(até 4)</em></div>
       <div id="id-img-grid" class="img-grid"></div>

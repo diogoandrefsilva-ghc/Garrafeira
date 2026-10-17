@@ -233,12 +233,24 @@ app.js (`inicio*`/`INI_*`) e no style.css (`.ini-*`); `#s-inicio` no
   garrafeira volta ao separador onde se estava nela (`TAB_GARRAFEIRA`, que
   o `tab()` acompanha; ao arrancar, o `gf_tab` que ficou, se ainda existir
   — `tabGarrafeiraOk`); o Catálogo abre no Detalhe, como pelo ⇄; as
-  Sugestões e o Identificar no deles, e o Identificar aberto daqui tem
-  "‹ Início" em vez de "‹ Detalhe" (`ID_VOLTA`).
+  Sugestões e o Identificar no deles, e o ‹ do Identificar aberto daqui
+  volta ao início em vez do Detalhe (`ID_VOLTA`).
 - **As Sugestões deixaram de ter separador** (o dono: "não justifica ter o
   separador sugestões dentro do catálogo, já está cá fora"): abrem-se só
-  pelo card, e a secção tem a barra do Identificar com "‹ Início". Saíram
-  também do `ORDEM_TABS`, que casa a POSIÇÃO de cada botão.
+  pelo card. Saíram também do `ORDEM_TABS`, que casa a POSIÇÃO de cada
+  botão.
+- **As duas ferramentas têm o cabeçalho delas** (17/10/2026, o dono:
+  "ficam com o cabeçalho do catálogo, fica esquisito"). Vivem no catálogo
+  (é de lá que leem os vinhos), mas não são ele: com `body.ferr` (posto
+  pelo `tab()`, `FERRAMENTAS`) o cabeçalho é de PAPEL, como os cards delas
+  aqui, com o G bordô (`icone.png`; o claro esconde-se), o nome
+  ("Sugestões", "Identificar vinhos") e uma linha por baixo, sem o ⇄ nem a
+  barra dos separadores; o filete dourado fica. O ‹ G volta para onde se
+  veio (`cabVoltar`: o Identificar aberto pelo "+" volta ao Detalhe, o
+  resto ao início), e o `title` di-lo (`cabPintar`). A barra "‹ Início ·
+  🍽️ Sugestões" que as secções tinham saiu. O `ajustarSticky` não mede
+  este cabeçalho (a barra está escondida, e a medida não lhe servia) e
+  remede ao sair dele.
 - **O Catálogo só se lê quando se toca num dos três cards dele** (~380 KB
   da primeira vez), com a roda no lugar da seta (`.a-abrir`); se não se
   deixar ler, fica-se aqui, com o toast.
@@ -1607,7 +1619,8 @@ a migração 40; o CSS debaixo de `#s-sugestoes`):
   HOJE. As cartas de antes de 03/10/2026 ficaram no schema `wineselection`
   e já não aparecem.
 - **Vivem no catálogo**: o card do ecrã inicial passa ao Catálogo antes de
-  as abrir (desde 17/10/2026 sem separador, com "‹ Início") — também o modo
+  as abrir (desde 17/10/2026 sem separador, com o cabeçalho delas — ver
+  "O ecrã inicial") — também o modo
   da garrafeira, que lê os vinhos da garrafeira aberta.
 - **Só com IA** (`body.sem-sugestoes`, no `sincronizarTabs`): quem é `sem_ia`
   não vê o card, e a `garrafeira-carta` pergunta o mesmo à BD
@@ -1630,10 +1643,10 @@ e um vinho desconhecido entra no Catálogo
 - **Abre-se pelo "+" do Detalhe do Catálogo** ("📸 Identificar vinhos numa
   foto", `fabAcao('identificar')` → `idAbrir`), a quem tem IA, e pelo card
   Identificar do ecrã inicial (aí o "‹" volta ao início). É uma SECÇÃO
-  (`#s-identificar`) sem botão na barra dos separadores — nada lá acende, e
-  a secção tem o seu "‹ Detalhe" — e não um modal: a página do vinho abre
-  por cima dela como por cima do Detalhe (um modal ficava por cima da
-  página). Não se restaura ao abrir a app (`restaurarTab`), e sem IA volta
+  (`#s-identificar`) sem botão na barra dos separadores — tem o cabeçalho
+  das ferramentas, sem a barra, e o ‹ volta ao Detalhe — e não um modal:
+  a página do vinho abre por cima dela como por cima do Detalhe (um modal
+  ficava por cima da página). Não se restaura ao abrir a app (`restaurarTab`), e sem IA volta
   ao Detalhe (`sincronizarTabs`).
 - **Ler é a leitura da carta com outra instrução** (`acao:'identificar'`,
   `promptPrateleira`, até 4 fotos encolhidas a 2048 px — os rótulos de uma

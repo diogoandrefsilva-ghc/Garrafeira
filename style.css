@@ -83,6 +83,7 @@ button.escudo{width:auto;display:flex;align-items:center;gap:1px;margin-left:-6p
 button.escudo img{width:36px;height:36px}
 .escudo-v{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;opacity:.72}
 button.escudo:focus-visible{outline:2px solid var(--ou);outline-offset:3px;border-radius:8px}
+.escudo .esc-cor{display:none}
 .brand h1{font-family:var(--fd);font-weight:600;font-size:22px;letter-spacing:.3px;line-height:1.1;white-space:nowrap}
 .brand p{font-size:11px;opacity:.72;font-weight:300;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
@@ -2072,6 +2073,24 @@ body.cat>header{background:linear-gradient(160deg,#0f2a22 0%,#1d4a3b 50%,#2f6e57
 body.cat .itabs .so-gar{display:none!important}
 body.sem-locais .itabs .it-locais,body.sem-consumidos .itabs .it-consumidos{display:none!important}
 body.cat .it.on{background:#1d4a3b;box-shadow:0 4px 12px -4px rgba(29,74,59,.8)}
+/* O CABEÇALHO DAS FERRAMENTAS (17/10/2026, o dono: "faz cabeçalhos
+   próprios"). As Sugestões e o Identificar herdavam o verde do Catálogo, o
+   "Catálogo ⇄" e a barra dos separadores sem nada aceso. São ferramentas e
+   não sítios: o cabeçalho é de PAPEL, como os cards delas no ecrã inicial,
+   com o G bordô e o nome delas, sem o ⇄ nem a barra (`body.ferr`, posto
+   pelo `tab()`). O filete dourado fica — é o que o liga aos outros dois.
+   Vem DEPOIS do `body.cat>header`: a mesma especificidade, ganha este. */
+.hdr-ferr{display:none;min-width:0}
+body.ferr .hdr-sitio,body.ferr .modo-ic,body.ferr .itabs{display:none!important}
+body.ferr .hdr-ferr{display:block}
+body.ferr>header{background:var(--card);color:var(--tx);box-shadow:0 2px 18px rgba(78,18,40,.09)}
+body.ferr .escudo{filter:none}
+body.ferr button.escudo{color:var(--vh)}
+body.ferr .escudo .esc-claro{display:none}
+body.ferr .escudo .esc-cor{display:block}
+.hdr-ferr p{color:var(--mu);opacity:1;font-weight:400}
+body.ferr .ptr{color:var(--vh)}
+body.ferr .ptr.pronto,body.ferr .ptr.a-correr{background:var(--vh);border-color:var(--vh);color:#fff}
 .bdg.cat-tens{background:#eaf3ee;color:#1d4a3b;border-color:#cfe3d7;font-weight:600}
 .bdg.cat-tens.desejo{background:var(--oup);color:var(--ou2);border-color:#ead7a4}
 .bdg.cat-tens.bebido{background:var(--bg2);color:var(--mu);border-color:var(--bo2)}
@@ -2376,13 +2395,10 @@ body:not(.cat) .itabs .so-cat{display:none!important}
 
 /* ── IDENTIFICAR VINHOS NUMA FOTOGRAFIA (17/10/2026) ──
    Usa as peças das Sugestões — as fotos, as linhas da carta, o histórico
-   (os `:is(#s-sugestoes,#s-identificar)` de cima). Daqui só o que é dele: a
-   barra com o voltar (sem botão na barra dos separadores, nada lá acende),
+   (os `:is(#s-sugestoes,#s-identificar)` de cima). Daqui só o que é dele:
    os dois grupos, e por baixo de cada cartão do Catálogo o que se leu na
-   foto, em letra pequena e sem caixa — o cartão é que é o vinho. */
-/* A barra de volta também é a das Sugestões (sem separador desde 17/10/2026). */
-:is(#s-sugestoes,#s-identificar) .id-barra{display:flex;align-items:center;gap:10px;margin:0 0 12px}
-:is(#s-sugestoes,#s-identificar) .id-titulo{font-family:var(--fd);font-weight:600;font-size:18px;min-width:0}
+   foto, em letra pequena e sem caixa — o cartão é que é o vinho. O título e
+   o voltar estão no cabeçalho das ferramentas (`body.ferr`). */
 #s-identificar .id-tit{margin:4px 4px 8px}
 #s-identificar .id-entre{margin:-4px 4px 10px}
 #s-identificar .id-grupo{font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin:18px 4px 9px}
