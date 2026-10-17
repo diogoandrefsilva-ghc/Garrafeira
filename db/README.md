@@ -795,6 +795,44 @@ Depois dela, publicar a `garrafeira-carta` e a `vinho-info`
 não tem ficam `pendente` (a `garrafeira-carta` pergunta-lhe antes,
 `livreSonda`).
 
+### Migração 58 — os pedidos anteriores da pergunta livre (já aplicada)
+
+`db/migracao-livre-anteriores.sql`, depois da 56. Cria a
+`garrafeira.livre_meus(p_limite)` (quem entra; SECURITY DEFINER): os MEUS
+pedidos da pergunta livre (`livre_pedidos.quem` = o meu email), do mais
+recente para o mais antigo, com o prato, o preço, se teve fotografia (e
+quantos vinhos se leram), o estado e o primeiro recomendado (o nome do
+Catálogo, quando o tem). E um índice por `quem`. Foi o "corri uma sugestão
+para Fraldinha e não vejo guardada" (17/10/2026): estava guardada, mas a app
+não tinha onde a mostrar. Aplicada no mesmo dia pelo MCP
+(`garrafeira_58_livre_anteriores`) e confirmada: com o JWT do dono devolve
+os 6 pedidos dele (o do Barrona não), executa-se como `authenticated` e não
+como `anon`.
+
+### Migração 57 — uma palavra mal lida no nome do vinho (já aplicada)
+
+`db/migracao-palavra-mal-lida.sql`, depois da 55 e da 56. A
+`garrafeira.palavra_mal_lida(a, b)` (as mesmas letras noutra ordem com a
+primeira e a última no sítio, ou uma letra trocada, a mais ou a menos; só
+palavras de 5 letras ou mais) e uma nova versão da `garrafeira.carta_achar`
+(a da 55, com um passo 4): quando nada liga, a linha do Catálogo da mesma
+cor cuja chave tem as mesmas palavras menos uma, e essa uma mal lida — desde
+que a palavra lida não seja outro produtor que o Catálogo conhece e que sobre
+um vinho só. Foi o "Castro Reserva" lido numa foto da pergunta livre
+(17/10/2026), que não ligava ao "Crasto Reserva" 2022 (#12). No fim, as
+`livre_vinhos` pendentes ou por carregar que agora ligam passam a
+`no_catalogo`, e os vinhos lidos nas fotos da pergunta livre ganham o `cat`.
+Ensaiada no mesmo dia em funções temporárias (`pg_temp`), contra a base
+real: nos 371 vinhos guardados só mudou o Castro Reserva; com cada vinho do
+Catálogo escrito com duas letras trocadas, 391 de 391 ligaram ao próprio
+vinho, e com uma letra a menos 351 de 392 (nenhum a outro vinho). Ler os 371
+passou de 2,5 s a 2,9 s. Aplicada no mesmo dia pelo MCP
+(`garrafeira_57_palavra_mal_lida`) e confirmada: a sugestão #31 passou a
+`no_catalogo` com o #12, o pedido #9 tem o `cat` 12 no Castro Reserva, a
+"Quinta dos Carvalhais Touriga Franca" não liga à das Carvalhas, e nem a
+`carta_achar` nem a `palavra_mal_lida` se executam como `anon` ou
+`authenticated`.
+
 ### Migração 56 — Identificar vinhos numa fotografia (já aplicada)
 
 `db/migracao-identificar.sql`, depois da 40, da 54 e da 55. Faz:
@@ -949,6 +987,13 @@ Numa base de dados limpa:
    52.
 22. **`migracao-casta-no-nome.sql`** — a casta escrita no nome de um vinho
    da carta ou da pergunta livre (migração 55). Depois da 52 e da 54.
+23. **`migracao-identificar.sql`** — Identificar vinhos numa fotografia e a
+   pergunta livre com uma foto (migração 56). Depois da 40, da 54 e da 55.
+24. **`migracao-palavra-mal-lida.sql`** — uma palavra mal lida no nome de um
+   vinho da carta, da foto ou da pergunta livre (migração 57). Depois da 55
+   e da 56.
+25. **`migracao-livre-anteriores.sql`** — os pedidos anteriores da pergunta
+   livre (migração 58). Depois da 56.
 
 (Numa base limpa, a migração 22 — `migracao-vivino-global.sql` — já está no
 `schema.sql`; só é precisa numa base que venha de antes.)

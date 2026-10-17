@@ -838,7 +838,9 @@ Regras:
   corresponde (ou o texto do produto, num site): a etiqueta costuma trazer o
   nome por extenso, a colheita e o preço. Junta as duas no mesmo vinho.
 - "nome": o nome do vinho como está no rótulo ou na etiqueta, sem o preço,
-  sem a capacidade ("75cl") e sem palavras de promoção.
+  sem a capacidade ("75cl") e sem palavras de promoção. Copia-o letra a
+  letra, como está impresso: não o corrijas para uma palavra parecida que
+  conheças melhor (um apelido, o nome de uma terra).
 - "produtor": só se estiver escrito (no rótulo, na etiqueta, no site); null
   se não aparecer. Nunca o deduzas de memória.
 - "ano": a colheita, só se estiver escrita; null caso contrário.
